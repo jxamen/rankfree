@@ -161,9 +161,9 @@
             <div class="card p-8 flex flex-col">
                 <div class="text-ink font-semibold" style="font-size:20px;">무료</div>
                 <div class="mt-3 font-display text-ink" style="font-size:36px;line-height:1;">0<span style="font-size:16px;" class="text-muted">원</span></div>
-                <p class="mt-2 text-muted" style="font-size:14px;">지금 바로 순위 확인</p>
+                <p class="mt-2 text-muted" style="font-size:14px;">순위체크로 시작</p>
                 <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:14px;">
-                    @foreach (['1회성 순위 조회','키워드 1개 추적','블로그 지수 조회'] as $li)
+                    @foreach (['순위체크 100개 무료','추천인 초대 시 최대 200개','플레이스 분석·경쟁분석 월 5회','블로그 아이디 분석'] as $li)
                     <li class="flex gap-2 text-body"><span style="color:var(--color-success);">✓</span>{{ $li }}</li>
                     @endforeach
                 </ul>
@@ -178,7 +178,7 @@
                 <div class="mt-3 font-display" style="font-size:36px;line-height:1;">29,000<span style="font-size:16px;" class="text-on-dark-soft">원/월</span></div>
                 <p class="mt-2 text-on-dark-soft" style="font-size:14px;">본격 순위 관리</p>
                 <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:14px;">
-                    @foreach (['키워드 무제한 추적','매일 자동 순위 기록·알림','경쟁사 30위 분석','공유 리포트'] as $li)
+                    @foreach (['순위체크 무제한','경쟁분석 자동 추적·알림','순위·추적 API 제공','키워드 트렌드 분석'] as $li)
                     <li class="flex gap-2 text-on-dark-soft"><span style="color:var(--color-badge-emerald);">✓</span>{{ $li }}</li>
                     @endforeach
                 </ul>
