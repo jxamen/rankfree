@@ -18,6 +18,8 @@ Route::get('/rank-check', [RankCheckController::class, 'check'])->name('rank.che
 
 // 순위 추적 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');
+// 경쟁 분석 공개 리포트 — 공유 토큰으로 비로그인 열람
+Route::get('/rc/{token}', [CompeteController::class, 'shared'])->name('compete.shared');
 
 // 인증
 Route::middleware('guest')->group(function () {

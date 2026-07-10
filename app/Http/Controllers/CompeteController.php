@@ -181,6 +181,24 @@ class CompeteController extends Controller
         ]);
     }
 
+    /** 공개 공유 리포트(로그인 불필요) — share_token 으로 열람. */
+    public function shared(string $token)
+    {
+        $slot = PlaceRankSlot::where('share_token', $token)->firstOrFail();
+        $ymd = PlaceSeoScore::where('slot_id', $slot->id)->max('ymd');
+        $ymd = $ymd instanceof \Illuminate\Support\Carbon ? $ymd->toDateString() : $ymd;
+        $data = $ymd ? $this->buildComparison($slot, $ymd) : ['rows' => collect(), 'mine' => null, 'explain' => null, 'dates' => collect()];
+
+        return view('compete.share', [
+            'slot' => $slot,
+            'ymd' => $ymd,
+            'dates' => $data['dates'],
+            'rows' => $data['rows'],
+            'mine' => $data['mine'],
+            'explain' => $data['explain'],
+        ]);
+    }
+
     /** 특정 매장 순위·점수 추이 — 모달 AJAX. */
     public function history(Request $request, PlaceRankSlot $slot, string $place)
     {

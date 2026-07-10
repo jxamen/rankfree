@@ -23,10 +23,15 @@
             <div class="font-display text-ink" style="font-size:22px;">{{ $slot->keyword }}</div>
             <div class="text-muted-soft" style="font-size:13px;">{{ $slot->place_name ?: ('ID '.$slot->place_id) }} @if ($ymd)· 분석일 {{ \Illuminate\Support\Carbon::parse($ymd)->format('Y.m.d') }}@endif</div>
         </div>
-        <form method="POST" action="{{ route('console.compete.analyze', $slot) }}" class="rf-analyze-form" data-keyword="{{ $slot->keyword }}">
-            @csrf
-            <button type="submit" class="btn btn-primary btn-sm">{{ $ymd ? '분석 갱신' : '분석 시작' }}</button>
-        </form>
+        <div class="flex items-center gap-2">
+            @if ($ymd && $slot->share_token)
+                <button type="button" class="rf-share-btn btn btn-secondary btn-sm" data-url="{{ route('compete.shared', $slot->share_token) }}" title="공유 링크 복사 (로그인 없이 열람)">공유</button>
+            @endif
+            <form method="POST" action="{{ route('console.compete.analyze', $slot) }}" class="rf-analyze-form" data-keyword="{{ $slot->keyword }}">
+                @csrf
+                <button type="submit" class="btn btn-primary btn-sm">{{ $ymd ? '분석 갱신' : '분석 시작' }}</button>
+            </form>
+        </div>
     </div>
 
     @unless ($ymd)
@@ -263,6 +268,22 @@
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(d => { Swal.fire({ toast: true, position: 'top-end', icon: d.ok ? 'success' : 'warning', title: d.message, showConfirmButton: false, timer: 1800 }).then(() => { if (d.redirect) location.href = d.redirect; else location.reload(); }); })
                 .catch(() => { Swal.fire({ icon: 'error', title: '분석에 실패했습니다', text: '잠시 후 다시 시도하세요.' }); });
+        });
+    });
+
+    // ---- 공유 링크 복사 ----
+    document.querySelectorAll('.rf-share-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const url = new URL(btn.dataset.url, location.origin).href;
+            function done() { Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: '공유 링크가 복사되었습니다', showConfirmButton: false, timer: 1600 }); }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done).catch(fallback);
+            } else { fallback(); }
+            function fallback() {
+                const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); done(); } catch (e) { Swal.fire({ icon: 'info', title: '링크를 복사하세요', text: url }); }
+                ta.remove();
+            }
         });
     });
 
