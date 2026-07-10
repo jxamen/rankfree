@@ -22,7 +22,7 @@
 .xw .xsc.n3{background:#eefcf3;border-color:#b7e9cd}.xw .xsc.n3 .v{color:#03a54a}
 .xw .xsec{border:1px solid #eef0f2;border-radius:8px;padding:12px 16px;margin-bottom:12px}
 .xw .xt{font-weight:700;color:#1f2937;margin-bottom:9px;font-size:.95rem}
-.xw .xrow{font-family:monospace;background:#fafbfc;border-radius:6px;padding:8px 12px}
+.xw .xrow{font-size:.82rem;background:#fafbfc;border-radius:6px;padding:7px 11px}
 .xw .xnote{color:#8a94a6;font-size:.78rem;margin-top:7px}
 .xw .xnote2{color:#adb5bd;font-size:.77rem;margin-top:6px}
 .xw table.xtb{width:100%;border-collapse:collapse}
@@ -131,9 +131,27 @@
     @if (! empty($rq['ctx']))
     <div class="rkg" style="margin-top:8px"><span class="rkl">🧭 방문 맥락</span>@foreach ($rq['ctx'] as $l => $c) <span class="rkc">{{ $l }} <b>{{ (int) $c }}</b></span>@endforeach</div>
     @endif
-    @if (! empty($rq['bloggers']))
-    <div class="rkg" style="margin-top:8px"><span class="rkl">✍ 블로그 리뷰어</span>@foreach ($rq['bloggers'] as $bl) <a class="rkc" href="https://blog.naver.com/{{ $bl['id'] }}" target="_blank" style="text-decoration:none">{{ $bl['n'] ?: $bl['id'] }}</a>@endforeach</div>
-    @endif
+  </div>
+  @endif
+  @if (! empty($x['bloggers_analyzed']))
+  <div class="xsec"><div class="xt">블로그 리뷰어 분석 <span class="mut">— 최근 블로그 리뷰 작성자의 블로그 품질(이웃·방문·활동)</span></div>
+    <table class="xtb"><thead><tr><th>블로거</th><th class="c">이웃수</th><th class="c">일방문</th><th class="c">주당 글</th><th class="c">평균 댓글</th><th class="c">활동</th><th class="c">블로그점수</th></tr></thead><tbody>
+    @foreach ($x['bloggers_analyzed'] as $bid => $b)
+      @if (! empty($b['ok']))
+      @php $yrs = ! empty($b['since_date']) ? round((time() - strtotime($b['since_date'])) / 31536000, 1) : null; @endphp
+      <tr>
+        <td><a href="https://blog.naver.com/{{ $bid }}" target="_blank">{{ $b['nick_name'] ?: $bid }}</a>@if (! empty($b['power_blog'])) <b class="ok" style="font-size:.7rem">파워</b>@endif<div class="sub">{{ mb_substr((string) $b['blog_name'], 0, 24) }}{{ ! empty($b['directory']) ? ' · '.$b['directory'] : '' }}</div></td>
+        <td class="c">{{ $b['subscriber_cnt'] !== null ? number_format((int) $b['subscriber_cnt']) : '–' }}</td>
+        <td class="c">{{ $b['day_visitor_avg'] !== null ? number_format((int) $b['day_visitor_avg']) : '–' }}</td>
+        <td class="c">{{ $b['post_per_week'] !== null ? (float) $b['post_per_week'] : '–' }}</td>
+        <td class="c">{{ $b['avg_comment'] !== null ? (float) $b['avg_comment'] : '–' }}</td>
+        <td class="c">{{ $yrs !== null ? $yrs.'년' : '–' }}</td>
+        <td class="c"><b>{{ $b['score'] !== null ? number_format((float) $b['score'], 1) : '–' }}</b></td>
+      </tr>
+      @endif
+    @endforeach
+    </tbody></table>
+    <div class="xnote">블로그점수 = 포스팅 빈도 25% + 댓글 반응 20% + 일방문 20% + 이웃수 25% + 활동기간 10% (절대 스케일 0~100). 좋은 블로거의 리뷰가 많을수록 블로그 리뷰 신호가 강합니다.</div>
   </div>
   @endif
   <div class="xnote2">※ N1·N2·N3은 관측 신호 기반 자체 추정치이며 네이버 공식 값이 아닙니다. place+·리뷰 키워드는 restaurant·hairshop 업종에서 제공됩니다.</div>

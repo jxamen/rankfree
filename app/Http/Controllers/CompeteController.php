@@ -199,6 +199,14 @@ class CompeteController extends Controller
             'review_quality' => $daily?->review_quality,
         ];
 
+        // 블로그 리뷰어 품질 분석(캐시 168h) — review_quality.bloggers
+        $rq = is_array($daily?->review_quality) ? $daily->review_quality : [];
+        if (! empty($rq['bloggers']) && is_array($rq['bloggers'])) {
+            @set_time_limit(120);
+            $ids = array_values(array_filter(array_map(fn ($b) => $b['id'] ?? '', $rq['bloggers'])));
+            $x['bloggers_analyzed'] = app(\App\Domain\Place\BlogAnalyzer::class)->analyzeMany($ids, 168, 5);
+        }
+
         return response()->json(['ok' => true, 'html' => view('compete._explain', ['x' => $x])->render()]);
     }
 
