@@ -117,10 +117,12 @@
     @endif
   </div>
   @endif
-  @if (! empty($x['review_quality']))
-  @php $rq = $x['review_quality']; @endphp
+  @php $rq = is_array($x['review_quality'] ?? null) ? $x['review_quality'] : []; @endphp
+  @if (isset($rq['photo_total']) || ! empty($rq['authority']) || ! empty($rq['ctx']) || ! empty($rq['bloggers']))
   <div class="xsec"><div class="xt">리뷰 품질 <span class="mut">— 최근 4주 방문자(영수증) 리뷰 기준</span></div>
-    <div class="xrow">사진 포함 <b>{{ (int) $rq['photo_n'] }}/{{ (int) $rq['photo_total'] }}</b> = <b>{{ round($rq['photo_ratio'] * 100) }}%</b> <span class="mut">· 사진 포함 리뷰 비율(신뢰도 참고 지표)</span></div>
+    @if (isset($rq['photo_total']) && (int) $rq['photo_total'] > 0)
+    <div class="xrow">사진 포함 <b>{{ (int) ($rq['photo_n'] ?? 0) }}/{{ (int) $rq['photo_total'] }}</b> = <b>{{ round(($rq['photo_ratio'] ?? 0) * 100) }}%</b> <span class="mut">· 사진 포함 리뷰 비율(신뢰도 참고 지표)</span></div>
+    @endif
     @if (! empty($rq['authority']))
     @php $au = $rq['authority']; @endphp
     <div class="xrow" style="margin-top:6px">인플루언서(팔로워≥100) <b>{{ (int) $au['infl'] }}명</b>@if (! empty($au['hi_infl']))(고평점 <b>{{ (int) $au['hi_infl'] }}</b>)@endif · 파워리뷰어(리뷰≥100) <b>{{ (int) $au['power'] }}명</b> · 평균 팔로워 <b>{{ number_format((int) $au['avg_fol']) }}</b></div>
