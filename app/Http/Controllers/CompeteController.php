@@ -38,6 +38,7 @@ class CompeteController extends Controller
     public function analyze(Request $request, PlaceRankSlot $slot, PlaceSeoAnalyzer $analyzer)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);
+        @set_time_limit(300); // 경쟁셋 상세 + 리뷰 수집은 수십 초 소요(동기)
 
         $res = $analyzer->analyze($slot, 10);
         if ($res['blocked']) {
