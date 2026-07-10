@@ -131,7 +131,7 @@
 {{-- 상세/추이 모달 (crm 형식 HTML 주입) --}}
 <div id="cmp-modal" class="hidden" style="position:fixed;inset:0;z-index:50;">
     <div id="cmp-modal-bg" style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-ink) 45%, transparent);"></div>
-    <div class="card" style="position:relative;max-width:900px;width:calc(100% - 32px);margin:5vh auto 0;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow-card);">
+    <div id="cmp-modal-card" class="card" style="position:relative;max-width:1200px;width:calc(100% - 32px);margin:4vh auto 0;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--shadow-card);">
         <div class="flex items-center justify-between px-5 border-b border-hairline-soft" style="height:52px;flex:none;">
             <span id="cmp-modal-title" class="text-ink font-semibold" style="font-size:15px;">상세</span>
             <button type="button" id="cmp-modal-close" class="btn btn-ghost btn-sm" title="닫기">✕</button>
@@ -177,17 +177,23 @@
     const explainUrl = @json(route('console.compete.explain', ['slot' => $slot->id, 'place' => '__PID__']));
     const historyUrl = @json(route('console.compete.history', ['slot' => $slot->id, 'place' => '__PID__']));
 
-    function load(url, name) {
+    const card = document.getElementById('cmp-modal-card');
+    function load(url, name, width) {
         title.textContent = name;
+        card.style.maxWidth = width;
         body.innerHTML = '<div style="color:var(--color-muted);padding:20px 0;">불러오는 중…</div>';
         openM();
-        fetch(url, { headers: { 'Accept': 'application/json' } })
-            .then(r => r.json())
-            .then(d => { body.innerHTML = (d && d.ok && d.html) ? d.html : '<div style="color:var(--color-muted);padding:20px 0;">데이터가 없습니다. 여러 날 분석하면 쌓입니다.</div>'; })
+        fetch(url, { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.text().then(t => ({ ok: r.ok, t })))
+            .then(({ ok, t }) => {
+                if (!ok) { body.innerHTML = '<div style="color:var(--color-error);padding:20px 0;">불러오기 실패 (' + t.slice(0, 200) + ')</div>'; return; }
+                let d; try { d = JSON.parse(t); } catch (e) { body.innerHTML = '<div style="color:var(--color-error);padding:20px 0;">응답 형식 오류</div>'; return; }
+                body.innerHTML = (d && d.ok && d.html) ? d.html : '<div style="color:var(--color-muted);padding:20px 0;">데이터가 없습니다. 여러 날 분석하면 쌓입니다.</div>';
+            })
             .catch(() => { body.innerHTML = '<div style="color:var(--color-error);padding:20px 0;">불러오기 실패</div>'; });
     }
-    document.querySelectorAll('.rf-detail-btn').forEach(b => b.addEventListener('click', () => load(explainUrl.replace('__PID__', b.dataset.place), '점수 근거 상세')));
-    document.querySelectorAll('.rf-trend-btn').forEach(b => b.addEventListener('click', () => load(historyUrl.replace('__PID__', b.dataset.place), '순위·점수 추이')));
+    document.querySelectorAll('.rf-detail-btn').forEach(b => b.addEventListener('click', () => load(explainUrl.replace('__PID__', b.dataset.place), '점수 근거 상세', '1200px')));
+    document.querySelectorAll('.rf-trend-btn').forEach(b => b.addEventListener('click', () => load(historyUrl.replace('__PID__', b.dataset.place), '순위·점수 추이', '1880px')));
 })();
 </script>
 @endsection
