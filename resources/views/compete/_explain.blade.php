@@ -39,6 +39,7 @@
 .xw .pplus2{display:inline-block;font-size:.74rem;font-weight:700;color:#fff;background:#03c75a;border-radius:4px;padding:1px 6px;letter-spacing:-.3px}
 .xw .repkw{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .xw .repkw>.mut{font-weight:700;margin-right:2px}
+.xw .repkw .rkc{background:#eefcf3;border-color:#a5e3c1;color:#03a54a;font-weight:700}
 .xw .rkg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}
 .xw .rkg .rkl{font-size:.78rem;color:#8a94a6;font-weight:700;min-width:84px}
 .xw .rkc{display:inline-block;font-size:.8rem;padding:3px 9px;border-radius:12px;border:1px solid #eef0f2;background:#fafbfc;color:#444}
@@ -60,10 +61,6 @@
     <div class="xsc"><span class="l">N1 유사도</span><span class="v">{{ $num($x['n1']) }}</span></div>
     <div class="xsc"><span class="l">N2 관련성</span><span class="v">{{ $num($x['n2']) }}</span></div>
     <div class="xsc n3"><span class="l">N3 랭킹</span><span class="v">{{ $num($x['n3']) }}</span></div>
-  </div>
-  <div class="xsec"><div class="xt">N3 랭킹 <span class="mut">— 실제 순위 기반</span></div>
-    <div class="xrow"><span class="mut">{{ $x['n3formula'] }}</span> <b>= {{ $num($x['n3']) }}</b></div>
-    <div class="xnote">순위가 곧 N3입니다(1위=100, 낮아질수록 로그 감쇠). N1·N2를 올리면 순위(N3)가 따라 오릅니다.</div>
   </div>
   <div class="xsec"><div class="xt">N1 유사도 <span class="mut">— 검색어↔업체정보 정합 (= {{ $num($x['n1']) }})</span></div>
     <table class="xtb"><thead><tr><th>요소</th><th class="c">매칭</th><th class="c">가중</th><th style="width:36%">기여</th></tr></thead><tbody>
