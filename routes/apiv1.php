@@ -15,9 +15,10 @@ Route::middleware('auth.ext')->group(function () {
     // 순위 추적
     Route::prefix('rank')->name('api.rank.')->group(function () {
         Route::get('/slots', [RankController::class, 'slots'])->name('slots');
-        Route::post('/slots', [RankController::class, 'store'])->name('store');
+        Route::post('/slots', [RankController::class, 'store'])->name('store');       // place + keywords[] 다건
         Route::post('/slots/{slot}/run', [RankController::class, 'run'])->name('run');
         Route::delete('/slots/{slot}', [RankController::class, 'destroy'])->name('destroy');
-        Route::get('/check', [RankController::class, 'check'])->name('check');
+        Route::post('/resolve', [RankController::class, 'resolve'])->name('resolve');  // 업체명·카테고리 자동조회
+        Route::get('/check', [RankController::class, 'check'])->name('check');         // 1회성 순위조회
     });
 });

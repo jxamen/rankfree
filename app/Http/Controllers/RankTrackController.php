@@ -21,21 +21,51 @@ class RankTrackController extends Controller
         ]);
     }
 
+    /** URL/ID 1개 + 키워드 N개 → 슬롯 N개. 업체명 자동조회. */
     public function store(Request $request, RankSlotService $service)
     {
         $data = $request->validate([
-            'keyword' => ['required', 'string', 'max:100'],
-            'place' => ['required', 'string', 'max:255'],
+            'place' => ['required', 'string', 'max:300'],
+            'keywords' => ['required', 'array', 'min:1'],
+            'keywords.*' => ['nullable', 'string', 'max:100'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
 
         try {
-            $service->add($request->user(), $data['keyword'], $data['place'], $data['label'] ?? null);
+            $res = $service->addMany($request->user(), $data['place'], $data['keywords'], $data['label'] ?? null);
         } catch (DomainException $e) {
-            return back()->withErrors(['place' => $e->getMessage()]);
+            return back()->withErrors(['place' => $e->getMessage()])->withInput();
         }
 
-        return back()->with('status', '추적 슬롯을 추가했습니다. "지금 확인"으로 순위를 갱신하세요.');
+        $n = count($res['created']);
+        $name = $res['place']['place_name'] ?: ($res['place']['place_id'] ? 'ID '.$res['place']['place_id'] : $data['place']);
+        $msg = $n > 0
+            ? "‘{$name}’ · 키워드 {$n}개 추적 추가됨. \"지금 확인\"으로 순위를 갱신하세요."
+            : '추가된 키워드가 없습니다.';
+        if (count($res['skipped'])) {
+            $msg .= ' (중복 제외: '.implode(', ', $res['skipped']).')';
+        }
+
+        return back()->with('status', $msg);
+    }
+
+    /** 업체명 미리보기(AJAX) — URL/ID 입력 시 업체명·카테고리 자동조회. */
+    public function resolve(Request $request, RankSlotService $service)
+    {
+        $input = trim((string) $request->query('place', ''));
+        if ($input === '') {
+            return response()->json(['ok' => false, 'message' => '플레이스 URL 또는 ID 를 입력하세요.'], 422);
+        }
+
+        $p = $service->resolvePlace($input);
+
+        return response()->json([
+            'ok' => (bool) ($p['place_id'] || $p['place_name']),
+            'place_id' => $p['place_id'],
+            'place_name' => $p['place_name'],
+            'category' => $p['category'],
+            'place_url' => $p['place_url'],
+        ]);
     }
 
     public function run(Request $request, PlaceRankSlot $slot, RankSlotService $service)

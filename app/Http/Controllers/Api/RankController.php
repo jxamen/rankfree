@@ -23,26 +23,50 @@ class RankController extends Controller
         return response()->json([
             'used' => $user->rankSlotsUsed(),
             'limit' => $user->rankSlotLimit(),
-            'slots' => $user->rankSlots()->latest()->get()->map(fn ($s) => $this->slotJson($s))->values(),
+            'slots' => $user->rankSlots()->with('records')->latest()->get()->map(fn ($s) => $this->slotJson($s))->values(),
         ]);
     }
 
-    /** 슬롯 추가. */
+    /**
+     * 슬롯 추가. URL/ID 1개 + 키워드 N개(keywords[]) 또는 단건(keyword).
+     * 업체명·카테고리 자동조회 후 키워드별 슬롯 생성.
+     */
     public function store(Request $request, RankSlotService $service)
     {
         $data = $request->validate([
-            'keyword' => ['required', 'string', 'max:100'],
-            'place' => ['required', 'string', 'max:255'],
+            'place' => ['required', 'string', 'max:300'],
+            'keyword' => ['required_without:keywords', 'nullable', 'string', 'max:100'],
+            'keywords' => ['required_without:keyword', 'nullable', 'array', 'min:1'],
+            'keywords.*' => ['string', 'max:100'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
 
+        $keywords = $data['keywords'] ?? [];
+        if (! empty($data['keyword'])) {
+            $keywords[] = $data['keyword'];
+        }
+
         try {
-            $slot = $service->add($request->user(), $data['keyword'], $data['place'], $data['label'] ?? null);
+            $res = $service->addMany($request->user(), $data['place'], $keywords, $data['label'] ?? null);
         } catch (DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(['slot' => $this->slotJson($slot)], 201);
+        return response()->json([
+            'place' => $res['place'],
+            'created' => array_map(fn ($s) => $this->slotJson($s), $res['created']),
+            'skipped' => $res['skipped'],
+        ], 201);
+    }
+
+    /** 플레이스 메타 자동조회(업체명·카테고리·정규 m.place URL). 슬롯 생성 없음. */
+    public function resolve(Request $request, RankSlotService $service)
+    {
+        $data = $request->validate([
+            'place' => ['required', 'string', 'max:300'],
+        ]);
+
+        return response()->json(['place' => $service->resolvePlace($data['place'])]);
     }
 
     /** 즉시 순위 갱신. */
@@ -70,9 +94,9 @@ class RankController extends Controller
     {
         $data = $request->validate([
             'keyword' => ['required', 'string', 'max:100'],
-            'place' => ['required', 'string', 'max:255'],
+            'place' => ['required', 'string', 'max:300'],
         ]);
-        $placeId = PlaceRankChecker::extractPlaceId($data['place']);
+        $placeId = $checker->resolvePlaceId($data['place']);
         $result = $checker->check($data['keyword'], $placeId, $placeId ? null : $data['place']);
 
         return response()->json(['result' => $result]);
@@ -85,6 +109,7 @@ class RankController extends Controller
             'keyword' => $s->keyword,
             'place_id' => $s->place_id,
             'place_name' => $s->place_name,
+            'place_url' => $s->place_url,
             'label' => $s->label,
             'category' => $s->category,
             'last_rank' => $s->last_rank,

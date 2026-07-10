@@ -29,6 +29,7 @@ Route::middleware('auth')->prefix('console')->name('console.')->group(function (
 
     // 순위 추적 슬롯
     Route::get('/rank', [RankTrackController::class, 'index'])->name('rank');
+    Route::get('/rank/resolve', [RankTrackController::class, 'resolve'])->name('rank.resolve');
     Route::post('/rank', [RankTrackController::class, 'store'])->name('rank.store');
     Route::post('/rank/{slot}/run', [RankTrackController::class, 'run'])->name('rank.run');
     Route::delete('/rank/{slot}', [RankTrackController::class, 'destroy'])->name('rank.destroy');

@@ -382,19 +382,140 @@ class PlaceRankChecker
         return 'place';
     }
 
-    /** 입력(URL/숫자)에서 placeId 추출. 못 찾으면 null. */
+    /**
+     * 입력(URL/숫자)에서 placeId 추출. 못 찾으면 null.
+     * crm sp_place_url_convert 3단 폴백: /place|업종/{digits} → 순수숫자 → URL이면 \d{6,} 덩어리.
+     */
     public static function extractPlaceId(string $input): ?string
     {
         $input = trim($input);
-        // m.place / pcmap / map.naver 등의 URL 내 /{cat}/{digits} 또는 place/{digits}
-        if (preg_match('#(?:place|restaurant|hairshop|nailshop|hospital|accommodation)/(\d+)#', $input, $m)) {
+        // 1) m.place / pcmap / map.naver 등의 URL 내 /{cat}/{digits}
+        if (preg_match('#/(?:place|restaurant|hairshop|nailshop|hospital|accommodation)/(\d+)#', $input, $m)) {
             return $m[1];
         }
-        // 순수 숫자(ID 직접 입력)
+        // 2) 순수 숫자(ID 직접 입력)
         if (preg_match('/^\d{5,}$/', $input)) {
             return $input;
         }
+        // 3) 네이버 URL 이면 마지막 폴백: 6자리 이상 숫자 덩어리
+        if (preg_match('#^https?://#i', $input) || str_contains(strtolower($input), 'naver.')) {
+            if (preg_match('#(\d{6,})#', $input, $m)) {
+                return $m[1];
+            }
+        }
 
         return null;
+    }
+
+    /**
+     * 입력(URL·단축URL·ID)에서 placeId 확정. naver.me 단축·map.naver 딥링크는 리다이렉트 최종 URL 에서 재추출.
+     * crm 에는 없는 보강(사용자가 어떤 형태의 플레이스 URL 을 넣어도 자동 변환되도록).
+     */
+    public function resolvePlaceId(string $input): ?string
+    {
+        $input = trim($input);
+        if ($input === '') {
+            return null;
+        }
+        if ($pid = self::extractPlaceId($input)) {
+            return $pid;
+        }
+        // http(s) URL 이면 최종 URL 따라가 재시도 (naver.me 단축, map.naver 리다이렉트)
+        if (preg_match('#^https?://#i', $input)) {
+            $final = $this->followFinalUrl($input);
+            if ($final !== null && $final !== $input && ($pid = self::extractPlaceId($final))) {
+                return $pid;
+            }
+        }
+
+        return null;
+    }
+
+    /** 리다이렉트 최종 URL 반환. 최종 URL 에 pid 가 없으면 본문에서라도 m.place URL 재구성. */
+    private function followFinalUrl(string $url): ?string
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 6);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_ENCODING, '');
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua,
+        ]);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        $body = (string) curl_exec($ch);
+        $final = (string) (curl_getinfo($ch, CURLINFO_EFFECTIVE_URL) ?: '');
+        curl_close($ch);
+
+        if (self::extractPlaceId($final) === null && $body !== '' && preg_match('#place[/:"](\d{5,})#', $body, $m)) {
+            return 'https://m.place.naver.com/place/' . $m[1] . '/home';
+        }
+
+        return $final !== '' ? $final : null;
+    }
+
+    /**
+     * placeId → ['name'=>업체명, 'category'=>경로키]. m.place /home SSR HTML 1회 조회.
+     * crm sp_place_detail_info + sp_category_by_pid 를 1회 요청으로 합침.
+     *  - 업체명: __APOLLO_STATE__ PlaceDetailBase:{pid}.name → og:title → <title> 폴백
+     *  - 카테고리: 최종 리다이렉트 URL 경로 → apollo category(한글) → place
+     */
+    public function placeSummary(string $placeId, string $cookie = ''): array
+    {
+        $placeId = preg_replace('/\D/', '', $placeId);
+        $out = ['name' => '', 'category' => 'place'];
+        if ($placeId === '') {
+            return $out;
+        }
+
+        $ch = curl_init('https://m.place.naver.com/place/' . $placeId . '/home');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+        curl_setopt($ch, CURLOPT_ENCODING, '');
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
+        $h = [
+            'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua,
+            'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none',
+            'upgrade-insecure-requests: 1',
+        ];
+        if (trim($cookie) !== '') {
+            $h[] = 'cookie: ' . $cookie;
+        }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $h);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        $html = (string) curl_exec($ch);
+        $finalUrl = (string) (curl_getinfo($ch, CURLINFO_EFFECTIVE_URL) ?: '');
+        curl_close($ch);
+
+        // 카테고리: 최종 URL 경로 → apollo category(한글)
+        $cat = $this->categoryFromString($finalUrl);
+        if ($cat === 'place') {
+            if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"category"\s*:\s*"([^"]+)"/s', $html, $m)) {
+                $cat = self::categoryKorToPath($m[1]);
+            } elseif (preg_match('/"category"\s*:\s*"([^"]{1,20})"/', $html, $m)) {
+                $cat = self::categoryKorToPath($m[1]);
+            }
+        }
+        $out['category'] = $cat;
+
+        // 업체명: PlaceDetailBase name → og:title → <title>
+        if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"name"\s*:\s*"([^"]*)"/s', $html, $m) && $m[1] !== '') {
+            $out['name'] = $m[1];
+        } elseif (preg_match('#<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)#i', $html, $m)) {
+            $out['name'] = $m[1];
+        } elseif (preg_match('#<title>([^<]+)</title>#i', $html, $m)) {
+            $out['name'] = preg_replace('/\s*[:|]\s*네이버.*$/u', '', $m[1]);
+        }
+        $out['name'] = trim(html_entity_decode((string) $out['name'], ENT_QUOTES, 'UTF-8'));
+
+        return $out;
     }
 }
