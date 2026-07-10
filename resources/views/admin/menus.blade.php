@@ -60,27 +60,34 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
 <script>
-    const CSRF = '{{ csrf_token() }}';
+    const RF_CSRF = '{{ csrf_token() }}';
     function tgl(id) { const e = document.getElementById(id); if (e) e.classList.toggle('hidden'); }
-    function postOrder(items) {
-        fetch('{{ route('admin.menus.reorder') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify({ order: items }) });
+    function rfPostOrder(items) {
+        fetch('{{ route('admin.menus.reorder') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': RF_CSRF }, body: JSON.stringify({ order: items }) });
     }
-    function orderOf(c) {
+    function rfOrderOf(c) {
         const parent = c.dataset.parent || '';
         return [...c.children].filter(x => x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: parent, sort_order: i }));
     }
-    // 최상위 통합 (대분류 .gdrag + 미분류 항목 .tdrag)
-    const top = document.querySelector('[data-sortable-top]');
-    if (top) new Sortable(top, { handle: '.gdrag, .tdrag', draggable: '[data-id]', animation: 150, onEnd: () => {
-        postOrder([...top.children].filter(x => x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: '', sort_order: i })));
-    }});
-    // 대분류 안 항목 (그룹 간 이동)
-    document.querySelectorAll('[data-sortable-items]').forEach(el => {
-        new Sortable(el, { group: 'menu-items', handle: '.drag', animation: 150, onEnd: e => { postOrder(orderOf(e.to)); if (e.from !== e.to) postOrder(orderOf(e.from)); } });
+    (function () {
+        if (typeof window.Sortable !== 'function') { console.error('SortableJS not loaded'); return; }
+        // 최상위 통합 (대분류 .gdrag + 미분류 항목 .tdrag)
+        const topEl = document.querySelector('[data-sortable-top]');
+        if (topEl) {
+            new Sortable(topEl, { handle: '.gdrag, .tdrag', draggable: '[data-id]', animation: 150, onEnd: function () {
+                rfPostOrder([...topEl.children].filter(x => x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: '', sort_order: i })));
+            } });
+        }
+        // 대분류 안 항목 (그룹 간 이동)
+        document.querySelectorAll('[data-sortable-items]').forEach(function (el) {
+            new Sortable(el, { group: 'menu-items', handle: '.drag', animation: 150, onEnd: function (e) { rfPostOrder(rfOrderOf(e.to)); if (e.from !== e.to) rfPostOrder(rfOrderOf(e.from)); } });
+        });
+    })();
+    document.querySelectorAll('.menu-toggle').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            const fd = new URLSearchParams(); fd.append('is_active', cb.checked ? 1 : 0);
+            fetch('/admin/menus/' + cb.dataset.id + '/toggle', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': RF_CSRF }, body: fd });
+        });
     });
-    document.querySelectorAll('.menu-toggle').forEach(cb => cb.addEventListener('change', () => {
-        const fd = new URLSearchParams(); fd.append('is_active', cb.checked ? 1 : 0);
-        fetch('/admin/menus/' + cb.dataset.id + '/toggle', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': CSRF }, body: fd });
-    }));
 </script>
 @endsection
