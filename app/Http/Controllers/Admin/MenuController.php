@@ -11,8 +11,8 @@ use Illuminate\Http\Request;
 
 /**
  * 메뉴 관리 — crm config/menu-list 이식.
- * 대분류(is_group, parent=null) → 중분류(is_group, parent=대) → 항목(페이지, route/url) 트리.
- * 드래그 정렬(reorder)·노출 토글(toggle)·CRUD·등급/역할 권한 매트릭스.
+ * 최상위(parent=null)에 대분류(is_group)와 미분류 항목이 sort_order 로 섞여 배치된다.
+ * 드래그 정렬(reorder)·노출 토글(toggle)·CRUD·소속 변경·등급/역할 권한 매트릭스.
  */
 class MenuController extends Controller
 {
@@ -57,6 +57,7 @@ class MenuController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
+            'parent_id' => ['nullable', 'exists:menus,id'],
             'route' => ['nullable', 'string', 'max:120'],
             'url' => ['nullable', 'string', 'max:200'],
             'icon' => ['nullable', 'string', 'max:60'],
@@ -64,6 +65,10 @@ class MenuController extends Controller
             'meta_title' => ['nullable', 'string', 'max:150'],
             'meta_description' => ['nullable', 'string', 'max:255'],
         ]);
+        // 자기 자신을 부모로 두는 것 방지
+        if ((int) ($data['parent_id'] ?? 0) === $menu->id) {
+            $data['parent_id'] = null;
+        }
         $data['is_active'] = $request->boolean('is_active');
         $menu->update($data);
 

@@ -16,6 +16,14 @@
         <form method="POST" action="{{ route('admin.menus.update', $item) }}" class="flex gap-2 items-end flex-wrap">
             @csrf @method('PUT')
             <div style="flex:1;min-width:120px;"><label class="block text-muted mb-1" style="font-size:11px;">메뉴명</label><input name="name" class="input" value="{{ $item->name }}" required></div>
+            <div style="min-width:130px;"><label class="block text-muted mb-1" style="font-size:11px;">소속(대분류)</label>
+                <select name="parent_id" class="input">
+                    <option value="">— 미분류 —</option>
+                    @foreach ($all->where('is_group', true) as $grp)
+                        <option value="{{ $grp->id }}" @selected($item->parent_id == $grp->id)>{{ $grp->name }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div style="flex:1;min-width:120px;"><label class="block text-muted mb-1" style="font-size:11px;">라우트명</label><input name="route" class="input" value="{{ $item->route }}" placeholder="console.rank"></div>
             <div style="flex:1;min-width:120px;"><label class="block text-muted mb-1" style="font-size:11px;">URL(라우트 없을 때)</label><input name="url" class="input" value="{{ $item->url }}" placeholder="/path"></div>
             <label class="flex items-center gap-1.5 text-muted" style="font-size:12px;height:40px;"><input type="checkbox" name="target" value="_blank" @checked($item->target === '_blank')> 새창</label>

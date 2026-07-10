@@ -9,7 +9,6 @@
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
 <div class="flex min-h-screen">
-    {{-- 관리자 사이드바 --}}
     <aside class="w-60 flex-none bg-canvas border-r border-hairline flex flex-col sticky top-0 h-screen">
         <a href="{{ route('admin.home') }}" class="flex items-center gap-2 px-5" style="height:64px;">
             <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-primary text-on-primary font-display" style="font-size:15px;">R</span>
@@ -17,15 +16,22 @@
             <span class="badge" style="font-size:10px;padding:2px 8px;">관리자</span>
         </a>
 
-        <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5">
-            @foreach (\App\Domain\Access\MenuService::sidebar(auth()->user(), 'admin') as $m)
-                @php $on = $m->route && request()->routeIs($m->route.'*'); @endphp
-                <a href="{{ $m->resolvedUrl() ?? '#' }}"
-                   class="flex items-center gap-3 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
-                   style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
-                    <span class="inline-flex w-4 justify-center text-muted-soft">•</span>
-                    {{ $m->name }}
-                </a>
+        <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto">
+            @foreach (\App\Domain\Access\MenuService::sidebarTree(auth()->user(), 'admin') as $node)
+                @if ($node->is_group)
+                    <div class="px-3 pt-3 pb-1 text-muted-soft" style="font-size:11px;font-weight:700;letter-spacing:.03em;">{{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}</div>
+                    @foreach ($node->menuItems as $item)
+                        @php $on = $item->route && request()->routeIs($item->route.'*'); @endphp
+                        <a href="{{ $item->resolvedUrl() ?? '#' }}" class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}" style="height:38px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
+                            <span class="text-muted-soft" style="width:6px;text-align:center;">·</span>{{ $item->name }}
+                        </a>
+                    @endforeach
+                @else
+                    @php $on = $node->route && request()->routeIs($node->route.'*'); @endphp
+                    <a href="{{ $node->resolvedUrl() ?? '#' }}" class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}" style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
+                        {{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}
+                    </a>
+                @endif
             @endforeach
         </nav>
 
@@ -40,7 +46,6 @@
         </div>
     </aside>
 
-    {{-- 메인 --}}
     <div class="flex-1 flex flex-col min-w-0">
         <header class="bg-canvas border-b border-hairline flex items-center justify-between px-8 sticky top-0 z-10" style="height:64px;">
             <h1 class="font-display text-ink" style="font-size:20px;">@yield('page-title', '관리자')</h1>

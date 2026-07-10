@@ -9,31 +9,34 @@
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
 <div class="flex min-h-screen">
-    {{-- 사이드바 (Cal.com: 흰 캔버스 + hairline, 모노크롬) --}}
+    {{-- 사이드바 (Cal.com: 흰 캔버스 + hairline) --}}
     <aside class="w-60 flex-none bg-canvas border-r border-hairline flex flex-col sticky top-0 h-screen">
         <a href="/console" class="flex items-center gap-2 px-5" style="height:64px;">
             <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-primary text-on-primary font-display" style="font-size:15px;">R</span>
             <span class="font-display text-ink" style="font-size:18px;">rankfree</span>
         </a>
 
-        <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5">
-            @php
-                $nav = [
-                    ['console.dashboard', '대시보드', 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'],
-                    ['console.rank', '순위 추적', 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6'],
-                    ['console.compete', '경쟁 분석', 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'],
-                    ['console.keyword', '키워드 분석', 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'],
-                    ['console.settings', '설정', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'],
-                ];
-            @endphp
-            @foreach ($nav as [$route, $label, $icon])
-                @php $on = request()->routeIs($route); @endphp
-                <a href="{{ Route::has($route) ? route($route) : '#' }}"
-                   class="flex items-center gap-3 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
-                   style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ $icon }}"/></svg>
-                    {{ $label }}
-                </a>
+        {{-- DB 메뉴 트리 (메뉴관리에서 구성) --}}
+        <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto">
+            @foreach (\App\Domain\Access\MenuService::sidebarTree(auth()->user(), 'console') as $node)
+                @if ($node->is_group)
+                    <div class="px-3 pt-3 pb-1 text-muted-soft" style="font-size:11px;font-weight:700;letter-spacing:.03em;">{{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}</div>
+                    @foreach ($node->menuItems as $item)
+                        @php $on = $item->route && request()->routeIs($item->route); @endphp
+                        <a href="{{ $item->resolvedUrl() ?? '#' }}" @if ($item->target === '_blank') target="_blank" @endif
+                           class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
+                           style="height:38px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
+                            <span class="text-muted-soft" style="width:6px;text-align:center;">·</span>{{ $item->name }}
+                        </a>
+                    @endforeach
+                @else
+                    @php $on = $node->route && request()->routeIs($node->route); @endphp
+                    <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
+                       class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
+                       style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
+                        {{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}
+                    </a>
+                @endif
             @endforeach
         </nav>
 

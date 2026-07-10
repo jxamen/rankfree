@@ -30,44 +30,47 @@ class PermissionSeeder extends Seeder
             OperatorRole::updateOrCreate(['slug' => $r['slug']], $r);
         }
 
-        // ── 메뉴 트리 ──
+        // ── 메뉴 (신규 설치 시에만; 기존 DB는 parent/정렬 보존 위해 icon/이름 갱신 안 함) ──
         $console = [
-            ['name' => '대시보드', 'route' => 'console.dashboard', 'icon' => 'home'],
-            ['name' => '순위 추적', 'route' => 'console.rank', 'icon' => 'trending-up'],
-            ['name' => '경쟁 분석', 'route' => 'console.compete', 'icon' => 'bar-chart'],
-            ['name' => '키워드 분석', 'route' => 'console.keyword', 'icon' => 'search'],
-            ['name' => '설정', 'route' => 'console.settings', 'icon' => 'settings'],
+            ['name' => '대시보드', 'route' => 'console.dashboard', 'icon' => '🏠'],
+            ['name' => '순위 추적', 'route' => 'console.rank', 'icon' => '📈'],
+            ['name' => '경쟁 분석', 'route' => 'console.compete', 'icon' => '📊'],
+            ['name' => '키워드 분석', 'route' => 'console.keyword', 'icon' => '🔍'],
+            ['name' => '설정', 'route' => 'console.settings', 'icon' => '⚙️'],
         ];
         $admin = [
-            ['name' => '회원 관리', 'route' => 'admin.members', 'icon' => 'users'],
-            ['name' => '구독 관리', 'route' => 'admin.subscriptions', 'icon' => 'credit-card'],
-            ['name' => '메뉴 관리', 'route' => 'admin.menus', 'icon' => 'list'],
-            ['name' => '권한 설정', 'route' => 'admin.permissions', 'icon' => 'shield'],
+            ['name' => '회원 관리', 'route' => 'admin.members', 'icon' => '👥'],
+            ['name' => '구독 관리', 'route' => 'admin.subscriptions', 'icon' => '💳'],
+            ['name' => '메뉴 관리', 'route' => 'admin.menus', 'icon' => '📋'],
+            ['name' => '권한 설정', 'route' => 'admin.permissions', 'icon' => '🛡️'],
         ];
 
         $consoleIds = [];
         $order = 0;
         foreach ($console as $m) {
-            $consoleIds[] = Menu::updateOrCreate(
-                ['route' => $m['route']],
-                ['area' => 'console', 'name' => $m['name'], 'icon' => $m['icon'], 'sort_order' => $order++, 'is_active' => true, 'parent_id' => null],
-            )->id;
+            $menu = Menu::firstOrNew(['route' => $m['route']]);
+            if (! $menu->exists) {
+                $menu->fill(['area' => 'console', 'name' => $m['name'], 'icon' => $m['icon'], 'sort_order' => $order, 'is_active' => true, 'parent_id' => null])->save();
+            }
+            $consoleIds[] = $menu->id;
+            $order++;
         }
         $adminIds = [];
         $order = 0;
         foreach ($admin as $m) {
-            $adminIds[] = Menu::updateOrCreate(
-                ['route' => $m['route']],
-                ['area' => 'admin', 'name' => $m['name'], 'icon' => $m['icon'], 'sort_order' => $order++, 'is_active' => true, 'parent_id' => null],
-            )->id;
+            $menu = Menu::firstOrNew(['route' => $m['route']]);
+            if (! $menu->exists) {
+                $menu->fill(['area' => 'admin', 'name' => $m['name'], 'icon' => $m['icon'], 'sort_order' => $order, 'is_active' => true, 'parent_id' => null])->save();
+            }
+            $adminIds[] = $menu->id;
+            $order++;
         }
 
         // ── 기본 권한 매트릭스 ──
-        // 콘솔: 모든 등급 접근+CRUD(자기 데이터). 관리: admin 전권, operator 접근만. super는 로직상 전권.
         $gradeIds = MemberGrade::pluck('id');
         foreach ($consoleIds as $mid) {
             foreach ($gradeIds as $gid) {
-                MenuPermission::updateOrCreate(
+                MenuPermission::firstOrCreate(
                     ['menu_id' => $mid, 'subject_type' => 'grade', 'subject_id' => $gid],
                     ['can_access' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true],
                 );
@@ -76,14 +79,8 @@ class PermissionSeeder extends Seeder
         $adminRoleId = OperatorRole::where('slug', 'admin')->value('id');
         $operatorRoleId = OperatorRole::where('slug', 'operator')->value('id');
         foreach ($adminIds as $mid) {
-            MenuPermission::updateOrCreate(
-                ['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $adminRoleId],
-                ['can_access' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true],
-            );
-            MenuPermission::updateOrCreate(
-                ['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $operatorRoleId],
-                ['can_access' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false],
-            );
+            MenuPermission::firstOrCreate(['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $adminRoleId], ['can_access' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true]);
+            MenuPermission::firstOrCreate(['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $operatorRoleId], ['can_access' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false]);
         }
     }
 }
