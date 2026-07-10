@@ -47,10 +47,14 @@ class AuthController extends Controller
         ]);
 
         // NOTE: 추천인(referral)·무료 슬롯(100+20, 최대200) 정책은 순위 추적 슬롯 단계에서 반영.
+        $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
+        $role = in_array(strtolower($data['email']), $superAdmins, true) ? 'super' : 'user';
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
+            'role' => $role,
         ]);
 
         Auth::login($user);
