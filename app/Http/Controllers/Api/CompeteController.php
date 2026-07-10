@@ -85,6 +85,8 @@ class CompeteController extends Controller
                 'seo' => PlaceScorer::seoItems($mineDaily->toArray(), $cat),
                 'dims' => $mineScore ? $mineScore->only(['d1', 'd2', 'd3', 'd4', 'd5', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3']) : null,
                 'review_kw' => $mineDaily->review_kw,
+                'review_weekly' => $mineDaily->review_weekly,
+                'review_quality' => $mineDaily->review_quality,
             ];
         }
 

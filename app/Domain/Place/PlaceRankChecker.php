@@ -785,4 +785,315 @@ class PlaceRankChecker
 
         return $out;
     }
+
+    /**
+     * 리뷰 주별 신규수 + 리뷰어 영향력/품질 — crm spa_review_weekly 이식.
+     * m.place 리뷰탭 3종(방문자 최신·추천, 블로그 최신) 병렬 수집(로그인 불필요).
+     *
+     * @return array{v:int[], b:int[], v8:int, b8:int, quality:?array}
+     *   v/b: 4주 누적(v[3]=최근4주), quality.authority(infl/hi_infl/power/avg_fol/top), quality.ctx(방문맥락), quality.bloggers
+     */
+    public function reviewWeekly(string $placeId, string $cat = 'place', ?string $refYmd = null): array
+    {
+        $refYmd = $refYmd ?: date('Y-m-d');
+        $pid = preg_replace('/\D/', '', $placeId);
+        $path = in_array($cat, ['hairshop', 'nailshop', 'hospital', 'restaurant', 'accommodation'], true) ? $cat : 'place';
+        $out = ['v' => array_fill(0, 4, 0), 'b' => array_fill(0, 4, 0), 'v8' => 0, 'b8' => 0, 'quality' => null];
+        if ($pid === '') {
+            return $out;
+        }
+        $base = "https://m.place.naver.com/{$path}/{$pid}";
+        $htmls = $this->multiGet([
+            'vr' => "{$base}/review/visitor?reviewSort=recent",
+            'vd' => "{$base}/review/visitor",
+            'br' => "{$base}/review/ugc?reviewSort=recent",
+        ]);
+
+        // 방문자: 최신순+추천순 union (reviewId 중복 제거)
+        $visRich = [];
+        $seenR = [];
+        foreach ([$this->parseVisitorState($this->htmlToState($htmls['vr'] ?? ''), $refYmd), $this->parseVisitorState($this->htmlToState($htmls['vd'] ?? ''), $refYmd)] as $set) {
+            foreach ($set as $r) {
+                $rid = $r['rid'];
+                if ($rid !== '' && isset($seenR[$rid])) {
+                    continue;
+                }
+                if ($rid !== '') {
+                    $seenR[$rid] = 1;
+                }
+                $visRich[] = $r;
+            }
+        }
+        $brState = $this->htmlToState($htmls['br'] ?? '');
+        $blogRaw = $this->parseFsasState($brState, ['createdString', 'date']);
+        $bloggers = $this->parseFsasBloggers($brState);
+
+        $visD = [];
+        foreach ($visRich as $r) {
+            if ($r['ymd']) {
+                $visD[] = $r['ymd'];
+            }
+        }
+        $blogD = [];
+        foreach ($blogRaw as $s) {
+            $d = $this->parseKdate($s, $refYmd);
+            if ($d) {
+                $blogD[] = $d;
+            }
+        }
+        $out['v'] = $this->weekBuckets($visD, $refYmd);
+        $out['b'] = $this->weekBuckets($blogD, $refYmd);
+        $out['v8'] = $out['v'][3];
+        $out['b8'] = $out['b'][3];
+
+        // 품질(최근 4주 방문자 리뷰): 사진비율 + 방문맥락 + 리뷰어 영향력
+        $ref = strtotime($refYmd);
+        $pn = 0;
+        $pt = 0;
+        $ctx = [];
+        $infl = 0;
+        $hiInfl = 0;
+        $power = 0;
+        $folSum = 0;
+        $top = [];
+        foreach ($visRich as $r) {
+            if (! $r['ymd']) {
+                continue;
+            }
+            $days = ($ref - strtotime($r['ymd'])) / 86400;
+            if ($days < 0 || $days > 28) {
+                continue;
+            }
+            $pt++;
+            if ($r['photo']) {
+                $pn++;
+            }
+            foreach ($r['cats'] as $c) {
+                $ctx[$c] = ($ctx[$c] ?? 0) + 1;
+            }
+            $folSum += $r['afol'];
+            if ($r['afol'] >= 100) {
+                $infl++;
+                if ($r['rating'] !== null && $r['rating'] >= 4.5) {
+                    $hiInfl++;
+                }
+            }
+            if ($r['arev'] >= 100) {
+                $power++;
+            }
+            $top[] = ['n' => $r['anick'], 'f' => $r['afol'], 'r' => $r['arev'], 'rt' => $r['rating']];
+        }
+        if ($pt > 0) {
+            arsort($ctx);
+            usort($top, fn ($a, $b) => $b['f'] - $a['f']);
+            $out['quality'] = [
+                'photo_n' => $pn, 'photo_total' => $pt, 'photo_ratio' => round($pn / $pt, 3), 'ctx' => $ctx,
+                'authority' => ['infl' => $infl, 'hi_infl' => $hiInfl, 'power' => $power, 'avg_fol' => (int) round($folSum / $pt), 'top' => array_slice($top, 0, 5)],
+            ];
+        }
+        if ($bloggers) {
+            if (! is_array($out['quality'])) {
+                $out['quality'] = [];
+            }
+            $out['quality']['bloggers'] = array_slice($bloggers, 0, 8);
+        }
+
+        return $out;
+    }
+
+    /** 여러 URL 병렬 GET(curl_multi). 입력 키 유지. crm spa_multi_get. */
+    private function multiGet(array $urls, int $conc = 6): array
+    {
+        $out = [];
+        foreach (array_chunk($urls, max(1, $conc), true) as $ci => $chunk) {
+            if ($ci > 0) {
+                usleep(300000);
+            }
+            $mh = curl_multi_init();
+            $chs = [];
+            foreach ($chunk as $k => $u) {
+                $ch = curl_init($u);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => 1, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false,
+                    CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_ENCODING => '',
+                    CURLOPT_TIMEOUT => (int) config('rankfree.place.timeout', 20),
+                    CURLOPT_HTTPHEADER => ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua],
+                ]);
+                $chs[$k] = $ch;
+                curl_multi_add_handle($mh, $ch);
+            }
+            $running = null;
+            do {
+                curl_multi_exec($mh, $running);
+                curl_multi_select($mh, 1.0);
+            } while ($running > 0);
+            foreach ($chs as $k => $ch) {
+                $out[$k] = (string) curl_multi_getcontent($ch);
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+            }
+            curl_multi_close($mh);
+        }
+
+        return $out;
+    }
+
+    /** HTML → __APOLLO_STATE__ 배열. */
+    private function htmlToState(string $html): ?array
+    {
+        if ($html === '' || ! preg_match('/window\.__APOLLO_STATE__\s*=\s*(\{.*?\});/s', $html, $m)) {
+            return null;
+        }
+        $st = json_decode($m[1], true);
+
+        return is_array($st) ? $st : null;
+    }
+
+    /** 방문자(VisitorReview) 노드 → 리뷰별 [작성일·사진·방문맥락·평점·리뷰어영향력]. crm spa_parse_visitor_state. */
+    private function parseVisitorState(?array $st, string $refYmd): array
+    {
+        $out = [];
+        if (! is_array($st)) {
+            return $out;
+        }
+        foreach ($st as $k => $v) {
+            if (strpos($k, 'VisitorReview:') !== 0 || ! is_array($v)) {
+                continue;
+            }
+            $rid = $v['reviewId'] ?? ($v['id'] ?? '');
+            $raw = (isset($v['created']) && $v['created'] !== '') ? $v['created'] : ($v['visited'] ?? '');
+            $ymd = $this->parseKdate((string) $raw, $refYmd);
+            $photo = (isset($v['media']) && is_array($v['media']) && count($v['media']) > 0) ? 1 : 0;
+            $cats = [];
+            if (isset($v['visitCategories']) && is_array($v['visitCategories'])) {
+                foreach ($v['visitCategories'] as $vc) {
+                    if (! empty($vc['keywords']) && is_array($vc['keywords'])) {
+                        foreach ($vc['keywords'] as $kw) {
+                            if (isset($kw['name']) && $kw['name'] !== '') {
+                                $cats[] = $kw['name'];
+                            }
+                        }
+                    }
+                }
+            }
+            $rating = isset($v['rating']) ? (float) $v['rating'] : null;
+            $afol = 0;
+            $arev = 0;
+            $anick = '';
+            $a = null;
+            if (isset($v['author']['__ref']) && isset($st[$v['author']['__ref']])) {
+                $a = $st[$v['author']['__ref']];
+            } elseif (isset($v['author']) && is_array($v['author']) && (isset($v['author']['followerCount']) || isset($v['author']['nickname']))) {
+                $a = $v['author'];
+            }
+            if (is_array($a)) {
+                $afol = isset($a['followerCount']) ? (int) $a['followerCount'] : 0;
+                $anick = $a['nickname'] ?? '';
+                if (isset($a['review']['totalCount'])) {
+                    $arev = (int) $a['review']['totalCount'];
+                }
+            }
+            $out[] = ['rid' => $rid, 'ymd' => $ymd, 'photo' => $photo, 'cats' => $cats, 'rating' => $rating, 'afol' => $afol, 'arev' => $arev, 'anick' => $anick];
+        }
+
+        return $out;
+    }
+
+    /** 블로그(FsasReview) 노드 → 날짜 필드 배열. crm spa_parse_fsas_state. */
+    private function parseFsasState(?array $st, array $fields): array
+    {
+        $out = [];
+        if (! is_array($st)) {
+            return $out;
+        }
+        foreach ($st as $k => $v) {
+            if (strpos($k, 'FsasReview:') !== 0 || ! is_array($v)) {
+                continue;
+            }
+            foreach ($fields as $f) {
+                if (isset($v[$f]) && $v[$f] !== '') {
+                    $out[] = $v[$f];
+                    break;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** 블로그 리뷰어(blog.naver) → [['id'=>blogId,'n'=>authorName]]. crm spa_parse_fsas_bloggers. */
+    private function parseFsasBloggers(?array $st): array
+    {
+        $out = [];
+        $seen = [];
+        if (! is_array($st)) {
+            return $out;
+        }
+        foreach ($st as $k => $v) {
+            if (strpos($k, 'FsasReview:') !== 0 || ! is_array($v)) {
+                continue;
+            }
+            $url = $v['url'] ?? '';
+            if (! preg_match('#m?\.?blog\.naver\.com/([A-Za-z0-9_\-]+)/#', (string) $url, $m)) {
+                continue;
+            }
+            $bid = $m[1];
+            if (isset($seen[$bid])) {
+                continue;
+            }
+            $seen[$bid] = 1;
+            $out[] = ['id' => $bid, 'n' => $v['authorName'] ?? ''];
+        }
+
+        return $out;
+    }
+
+    /** 한글 날짜 문자열 → Y-m-d. crm spa_parse_kdate. */
+    private function parseKdate(string $s, string $refYmd): ?string
+    {
+        $s = preg_replace('/[가-힣]/u', '', $s);
+        $p = array_values(array_filter(array_map('trim', explode('.', $s)), 'strlen'));
+        if (count($p) >= 3) {
+            $y = 2000 + (int) $p[0];
+            $m = (int) $p[1];
+            $d = (int) $p[2];
+        } elseif (count($p) == 2) {
+            $m = (int) $p[0];
+            $d = (int) $p[1];
+            $y = (int) substr($refYmd, 0, 4);
+        } else {
+            return null;
+        }
+        if (! $m || ! $d) {
+            return null;
+        }
+        $ymd = sprintf('%04d-%02d-%02d', $y, $m, $d);
+        if (count($p) == 2 && $ymd > $refYmd) {
+            $ymd = sprintf('%04d-%02d-%02d', $y - 1, $m, $d);
+        }
+
+        return $ymd;
+    }
+
+    /** 날짜 배열 → 4주 누적 버킷([최근1주, 2주누적, 3주누적, 4주누적]). crm spa_week_buckets. */
+    private function weekBuckets(array $dates, string $refYmd): array
+    {
+        $w = array_fill(0, 4, 0);
+        $ref = strtotime($refYmd);
+        foreach ($dates as $dt) {
+            if (! $dt) {
+                continue;
+            }
+            $days = ($ref - strtotime($dt)) / 86400;
+            if ($days < 0) {
+                continue;
+            }
+            $wk = (int) floor($days / 7);
+            for ($i = max($wk, 0); $i < 4; $i++) {
+                $w[$i]++;
+            }
+        }
+
+        return $w;
+    }
 }

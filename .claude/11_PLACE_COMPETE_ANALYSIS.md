@@ -59,4 +59,4 @@
 - [x] **A. 점수 엔진** — `PlaceScorer`(전 산식) + `PlaceRankChecker::serpFetch/placeDetailFull`. 실측 검증(강남 미용실 → 준오헤어 삼성역점 N1=48/N2=98.7/N3=100).
 - [x] B. 저장/일별 스냅샷 + 이력
 - [x] C. 웹 비교표·explain + API
-- [ ] D. 리뷰 주별수집(D9/D10)·품질·블로그
+- [x] D. 리뷰 주별수집(D9/D10)·품질·블로그

@@ -11,15 +11,15 @@ use App\Models\PlaceSeoSerp;
  * 경쟁분석 오케스트레이션 — crm spa_analyze_track 이식.
  *
  * 트랙(순위추적 슬롯) 1개 분석:
- *   T1 경쟁셋 수집(상위30) → T2 상세(내+상위 detailTop) → 점수 → 일별 스냅샷 저장(멱등 upsert).
- * D9/D10(리뷰 주별/영향력)은 task D 에서 review_weekly 추가. 현재는 null(가중 재정규화로 자연 제외).
+ *   T1 경쟁셋 수집(상위30) → T2 상세(내+상위 detailTop) + 리뷰 주별수집(내+상위 reviewTop)
+ *   → 점수(D1~D10 · N1/N2/N3) → 일별 스냅샷 저장(멱등 upsert).
  */
 class PlaceSeoAnalyzer
 {
     public function __construct(private PlaceRankChecker $checker) {}
 
     /** @return array{blocked:bool, my_rank:int, total:int, competitors:int, my_score:?array} */
-    public function analyze(PlaceRankSlot $slot, int $detailTop = 10): array
+    public function analyze(PlaceRankSlot $slot, int $detailTop = 10, int $reviewTop = 10): array
     {
         $keyword = trim($slot->keyword);
         $cat = $slot->category ?: 'place';
@@ -42,16 +42,25 @@ class PlaceSeoAnalyzer
         $scoreArr = array_map(fn ($i) => $i['review_score'], $items);
         $bookingArr = array_map(fn ($i) => $i['booking_cnt'], $items);
 
-        // T2 상세: 내 매장 + 상위 detailTop
+        // T2 상세 + 리뷰 주별수집(D9/D10 raw)
         $details = [];
+        $recArr = [];
+        $authArr = [];
+        $bvArr = [];
         $mineInList = false;
         foreach ($items as $it) {
-            $isMine = ($myPid && $it['place_id'] === $myPid);
+            $pid = $it['place_id'];
+            $isMine = ($myPid && $pid === $myPid);
             if ($isMine) {
                 $mineInList = true;
             }
-            if ($it['rnk'] <= $detailTop || $isMine) {
-                $details[$it['place_id']] = $this->checker->placeDetailFull($it['place_id'], $cat);
+            $needDetail = ($it['rnk'] <= $detailTop || $isMine);
+            $needReview = ($it['rnk'] <= $reviewTop || $isMine);
+            if ($needDetail || $needReview) {
+                $details[$pid] = $this->checker->placeDetailFull($pid, $cat);
+            }
+            if ($needReview) {
+                $this->attachReview($details[$pid], $pid, $cat, $ymd, $recArr, $authArr, $bvArr);
             }
         }
 
@@ -60,7 +69,7 @@ class PlaceSeoAnalyzer
             $pid = $it['place_id'];
             $detail = $details[$pid] ?? null;
             $isMine = ($myPid && $pid === $myPid);
-            $sc = PlaceScorer::computeScores($it, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr);
+            $sc = PlaceScorer::computeScores($it, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr);
             $this->saveSerp($slot->id, $ymd, $it, $isMine, $total);
             $this->saveScore($slot->id, $ymd, $pid, $it['rnk'], $sc, $isMine);
             if ($detail && $detail['ok']) {
@@ -74,6 +83,7 @@ class PlaceSeoAnalyzer
         // 내 매장이 상위30 밖 → 별도 수집·저장
         if ($myPid && ! $mineInList) {
             $detail = $this->checker->placeDetailFull($myPid, $cat);
+            $this->attachReview($detail, $myPid, $cat, $ymd, $recArr, $authArr, $bvArr);
             $item = [
                 'rnk' => $myRank ?: 300, 'place_id' => $myPid,
                 'name' => $slot->place_name ?: ($detail['name'] ?? ''),
@@ -81,7 +91,7 @@ class PlaceSeoAnalyzer
                 'booking_cnt' => null, 'save_cnt' => null, 'review_score' => $detail['review_score'] ?? null,
                 'tags' => $detail['tags'] ?? [], 'address' => '',
             ];
-            $sc = PlaceScorer::computeScores($item, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr);
+            $sc = PlaceScorer::computeScores($item, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr);
             $this->saveSerp($slot->id, $ymd, $item, true, $total);
             $this->saveScore($slot->id, $ymd, $myPid, $item['rnk'], $sc, true);
             if (! empty($detail['ok'])) {
@@ -91,6 +101,30 @@ class PlaceSeoAnalyzer
         }
 
         return ['blocked' => false, 'my_rank' => $myRank, 'total' => $total, 'competitors' => count($items), 'my_score' => $myScore];
+    }
+
+    /** 리뷰 주별수집 → rec_raw(D9)·auth_raw(D10)·bv_raw(D3대체) 를 $detail 에 부착 + 정규화 배열 push. */
+    private function attachReview(array &$detail, string $pid, string $cat, string $ymd, array &$recArr, array &$authArr, array &$bvArr): void
+    {
+        $wk = $this->checker->reviewWeekly($pid, $cat, $ymd);
+        $rec = (int) ($wk['v'][3] ?? 0) + (int) ($wk['b'][3] ?? 0);
+        $bv = (int) ($wk['quality']['ctx']['예약 후 이용'] ?? 0);
+        $auth = null;
+        if (! empty($wk['quality']['authority'])) {
+            $au = $wk['quality']['authority'];
+            $auth = $au['infl'] * 4 + $au['hi_infl'] * 3 + $au['power'] * 1.5 + min(20, $au['avg_fol'] / 10) + min(8, $bv * 0.8);
+        }
+        $detail['rec_raw'] = $rec;
+        $detail['auth_raw'] = $auth;
+        $detail['bv_raw'] = $bv;
+        $detail['review_weekly'] = ['v' => $wk['v'], 'b' => $wk['b']];
+        $detail['review_quality'] = $wk['quality'];
+
+        $recArr[] = $rec;
+        if ($auth !== null) {
+            $authArr[] = $auth;
+        }
+        $bvArr[] = $bv;
     }
 
     private function saveSerp(int $slotId, string $ymd, array $it, bool $isMine, int $total): void
@@ -138,6 +172,7 @@ class PlaceSeoAnalyzer
                 'hide_price' => $d['hide_price'], 'missing_cnt' => $d['missing_cnt'],
                 'missing_labels' => implode(',', (array) ($d['missing_labels'] ?? [])),
                 'place_plus' => $d['place_plus'], 'tags' => $d['tags'] ?? [], 'review_kw' => $d['review_kw'] ?? null,
+                'review_weekly' => $d['review_weekly'] ?? null, 'review_quality' => $d['review_quality'] ?? null,
                 'created_at' => now(),
             ],
         );

@@ -15,12 +15,15 @@ class PlaceSeoDaily extends Model
         'place_id', 'ymd', 'name', 'category', 'visitor_cnt', 'blog_cnt', 'booking_cnt', 'save_cnt', 'review_score',
         'menu_cnt', 'photo_cnt', 'conv_cnt', 'pay_cnt', 'keyword_cnt', 'category_cnt', 'stylist_cnt',
         'has_road', 'has_talktalk', 'has_chatbot', 'has_booking', 'hide_hours', 'hide_price',
-        'missing_cnt', 'missing_labels', 'place_plus', 'tags', 'review_kw', 'created_at',
+        'missing_cnt', 'missing_labels', 'place_plus', 'tags', 'review_kw',
+        'review_weekly', 'review_quality', 'created_at',
     ];
 
     protected $casts = [
         'ymd' => 'date:Y-m-d',
         'tags' => 'array',
         'review_kw' => 'array',
+        'review_weekly' => 'array',
+        'review_quality' => 'array',
     ];
 }
