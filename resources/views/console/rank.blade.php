@@ -11,9 +11,6 @@
         </div>
     </div>
 
-    @if (session('status'))
-        <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-primary) 6%,#fff);color:var(--color-ink);font-size:13px;">{{ session('status') }}</div>
-    @endif
     @if ($errors->any())
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:13px;">{{ $errors->first() }}</div>
     @endif
