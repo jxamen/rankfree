@@ -23,9 +23,8 @@ class ConsoleController extends Controller
             ->get();
 
         return view('console.dashboard', [
-            // NOTE: 추적 슬롯 테이블은 다음 단계 — 현재는 정책 상수만 노출
-            'usedSlots' => 0,
-            'maxSlots' => 100,
+            'usedSlots' => $user->rankSlotsUsed(),
+            'maxSlots' => $user->rankSlotLimit(),
             'monthCount' => $monthCount,
             'recent' => $recent,
         ]);

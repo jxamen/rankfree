@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\RankCheckController;
+use App\Http\Controllers\RankTrackController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -25,6 +26,12 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middl
 // 콘솔 (로그인 필요)
 Route::middleware('auth')->prefix('console')->name('console.')->group(function () {
     Route::get('/', [ConsoleController::class, 'dashboard'])->name('dashboard');
+
+    // 순위 추적 슬롯
+    Route::get('/rank', [RankTrackController::class, 'index'])->name('rank');
+    Route::post('/rank', [RankTrackController::class, 'store'])->name('rank.store');
+    Route::post('/rank/{slot}/run', [RankTrackController::class, 'run'])->name('rank.run');
+    Route::delete('/rank/{slot}', [RankTrackController::class, 'destroy'])->name('rank.destroy');
 });
 
 // 관리자 (운영자 전용)

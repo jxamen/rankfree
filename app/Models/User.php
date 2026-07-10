@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -35,6 +36,11 @@ class User extends Authenticatable
         return $this->belongsTo(OperatorRole::class, 'operator_role_id');
     }
 
+    public function rankSlots(): HasMany
+    {
+        return $this->hasMany(PlaceRankSlot::class);
+    }
+
     /** 최상위 관리자 — role=super / 운영자레벨 is_super / config 이메일 목록. */
     public function isSuperAdmin(): bool
     {
@@ -58,5 +64,25 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->isOperator();
+    }
+
+    /** 순위 추적 슬롯 한도 — 등급 기준(무등급=무료 100). -1 = 무제한. */
+    public function rankSlotLimit(): int
+    {
+        $lim = $this->grade?->rank_slot_limit;
+
+        return $lim === null ? 100 : (int) $lim;
+    }
+
+    public function rankSlotsUsed(): int
+    {
+        return $this->rankSlots()->where('is_active', true)->count();
+    }
+
+    public function canAddRankSlot(): bool
+    {
+        $lim = $this->rankSlotLimit();
+
+        return $lim < 0 || $this->rankSlotsUsed() < $lim;
     }
 }

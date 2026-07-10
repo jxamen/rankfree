@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MemberGrade;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,7 +53,9 @@ class AuthController extends Controller
             'referral' => ['nullable', 'string', 'max:32'],
         ]);
 
-        // NOTE: 추천인(referral)·무료 슬롯(100+20, 최대200) 정책은 순위 추적 슬롯 단계에서 반영.
+        // 최상위 이메일이면 super, 그 외는 일반 회원 + 무료 등급 자동 배정
+        // (등급이 없으면 콘솔 메뉴 권한이 비어 사이드바가 비어 보이므로 free 기본 배정)
+        // NOTE: 추천인(referral) 리워드(+20, 최대200)는 별도 단계에서 반영.
         $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
         $role = in_array(strtolower($data['email']), $superAdmins, true) ? 'super' : 'user';
 
@@ -61,6 +64,7 @@ class AuthController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
             'role' => $role,
+            'grade_id' => MemberGrade::where('slug', 'free')->value('id'),
         ]);
 
         Auth::login($user);
