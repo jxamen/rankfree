@@ -6,6 +6,7 @@
     <meta name="robots" content="noindex, nofollow">
     <title>@yield('page-title', '콘솔') · rankfree</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
 <div class="flex min-h-screen">
@@ -20,7 +21,9 @@
         <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto">
             @foreach (\App\Domain\Access\MenuService::sidebarTree(auth()->user(), 'console') as $node)
                 @if ($node->is_group)
-                    <div class="px-3 pt-3 pb-1 text-muted-soft" style="font-size:11px;font-weight:700;letter-spacing:.03em;">{{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}</div>
+                    <div class="px-3 pt-3 pb-1 text-muted-soft flex items-center gap-2" style="font-size:11px;font-weight:700;letter-spacing:.03em;">
+                        <span style="color:var(--color-muted);"><x-icon :name="$node->icon" /></span>{{ $node->name }}
+                    </div>
                     @foreach ($node->menuItems as $item)
                         @php $on = $item->route && request()->routeIs($item->route); @endphp
                         <a href="{{ $item->resolvedUrl() ?? '#' }}" @if ($item->target === '_blank') target="_blank" @endif
@@ -34,7 +37,7 @@
                     <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                        class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
                        style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
-                        {{ $node->icon ? $node->icon.' ' : '' }}{{ $node->name }}
+                        <span style="width:18px;text-align:center;"><x-icon :name="$node->icon" /></span>{{ $node->name }}
                     </a>
                 @endif
             @endforeach

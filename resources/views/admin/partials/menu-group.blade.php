@@ -8,7 +8,7 @@
     {{-- 헤더 --}}
     <div class="flex items-center gap-2 px-3 py-2.5" style="background:var(--color-surface-card);border-bottom:1px solid var(--color-hairline);">
         <span class="gdrag text-muted-soft" style="cursor:move;" title="드래그하여 순서 변경">⠿</span>
-        @if ($g->icon)<span style="font-size:15px;">{{ $g->icon }}</span>@endif
+        <span style="font-size:15px;line-height:1;color:var(--color-primary);"><x-icon :name="$g->icon" /></span>
         <span class="font-semibold text-ink flex-1" style="font-size:14px;">{{ $g->name }}</span>
         <label title="노출" style="display:inline-flex;align-items:center;"><input type="checkbox" class="menu-toggle" data-id="{{ $g->id }}" @checked($g->is_active)></label>
         <button type="button" class="btn btn-ghost btn-sm" onclick="tgl('add-{{ $g->id }}')">+ 하위</button>
@@ -20,12 +20,17 @@
 
     {{-- 수정 --}}
     <div id="edit-{{ $g->id }}" class="hidden px-3 py-3" style="background:var(--color-surface-soft);border-bottom:1px solid var(--color-hairline-soft);">
-        <form method="POST" action="{{ route('admin.menus.update', $g) }}" class="flex gap-2 items-end flex-wrap">
+        <form method="POST" action="{{ route('admin.menus.update', $g) }}" class="flex gap-3 items-end flex-wrap">
             @csrf @method('PUT')
-            <div style="flex:1;min-width:140px;"><label class="block text-muted mb-1" style="font-size:11px;">이름</label><input name="name" class="input" value="{{ $g->name }}" required></div>
-            <div style="width:140px;"><label class="block text-muted mb-1" style="font-size:11px;">아이콘(이모지)</label><input name="icon" class="input" value="{{ $g->icon }}"></div>
+            <div style="flex:1;min-width:160px;"><label class="block text-muted mb-1" style="font-size:11px;">이름</label><input name="name" class="input" value="{{ $g->name }}" required></div>
             <label class="flex items-center gap-1.5 text-muted" style="font-size:12px;height:40px;"><input type="checkbox" name="is_active" value="1" @checked($g->is_active)> 노출</label>
             <button type="submit" class="btn btn-secondary btn-sm">저장</button>
+            @if (is_null($g->parent_id))
+                <div style="flex-basis:100%;min-width:300px;margin-top:6px;">
+                    <label class="block text-muted mb-1" style="font-size:11px;">아이콘 <span class="text-muted-soft">(대분류 레일)</span></label>
+                    @include('admin.partials.icon-picker', ['name' => 'icon', 'value' => $g->icon, 'uid' => 'grp'.$g->id])
+                </div>
+            @endif
         </form>
     </div>
 
