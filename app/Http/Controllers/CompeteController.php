@@ -152,4 +152,48 @@ class CompeteController extends Controller
 
         return [(int) $cum[0], (int) $cum[1] - (int) $cum[0], (int) $cum[2] - (int) $cum[1], (int) $cum[3] - (int) $cum[2]];
     }
+
+    /** 특정 매장 점수 근거(상세) — 모달 AJAX. */
+    public function explain(Request $request, PlaceRankSlot $slot, string $place)
+    {
+        abort_unless($slot->user_id === $request->user()->id, 403);
+        $place = preg_replace('/\D/', '', $place);
+        $ymd = PlaceSeoScore::where('slot_id', $slot->id)->where('place_id', $place)->max('ymd');
+        $ymd = $ymd instanceof \Illuminate\Support\Carbon ? $ymd->toDateString() : $ymd;
+        if (! $ymd) {
+            return response()->json(['ok' => false]);
+        }
+        $sc = PlaceSeoScore::where('slot_id', $slot->id)->where('place_id', $place)->where('ymd', $ymd)->first();
+        $serp = PlaceSeoSerp::where('slot_id', $slot->id)->where('ymd', $ymd)->where('place_id', $place)->first();
+        $daily = PlaceSeoDaily::where('place_id', $place)->where('ymd', $ymd)->first();
+        $cat = $slot->category ?: 'place';
+
+        return response()->json([
+            'ok' => true,
+            'name' => $serp?->name ?: ($daily?->name ?: ''),
+            'is_mine' => $place === preg_replace('/\D/', '', (string) $slot->place_id),
+            'rnk' => $sc?->rnk,
+            'tier' => $sc?->tier,
+            'components' => $daily ? PlaceScorer::keywordComponents($slot->keyword, $daily->name, (string) $daily->category, (string) ($serp?->address ?? ''), $daily->tags ?? [], $cat) : null,
+            'seo' => $daily ? array_values(array_filter(PlaceScorer::seoItems($daily->toArray(), $cat), fn ($i) => $i['avail'])) : null,
+            'dims' => $sc ? $sc->only(['d1', 'd2', 'd3', 'd4', 'd5', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3']) : null,
+            'review_quality' => $daily?->review_quality,
+        ]);
+    }
+
+    /** 특정 매장 순위·점수 추이 — 모달 AJAX. */
+    public function history(Request $request, PlaceRankSlot $slot, string $place)
+    {
+        abort_unless($slot->user_id === $request->user()->id, 403);
+        $place = preg_replace('/\D/', '', $place);
+        $name = PlaceSeoSerp::where('slot_id', $slot->id)->where('place_id', $place)->orderByDesc('ymd')->value('name');
+        $history = PlaceSeoScore::where('slot_id', $slot->id)->where('place_id', $place)->orderBy('ymd')
+            ->get(['ymd', 'rnk', 'n1', 'n2', 'n3', 'd7'])
+            ->map(fn ($r) => [
+                'ymd' => $r->ymd instanceof \Illuminate\Support\Carbon ? $r->ymd->toDateString() : $r->ymd,
+                'rnk' => $r->rnk, 'n1' => $r->n1, 'n2' => $r->n2, 'n3' => $r->n3, 'd7' => $r->d7,
+            ]);
+
+        return response()->json(['ok' => true, 'name' => $name, 'history' => $history]);
+    }
 }

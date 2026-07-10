@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\MenuController;
+use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CompeteController;
 use App\Http\Controllers\ConsoleController;
@@ -14,6 +15,9 @@ Route::get('/', function () {
 
 // A1 플레이스 순위체크 — 1회성 무료 조회
 Route::get('/rank-check', [RankCheckController::class, 'check'])->name('rank.check');
+
+// 순위 추적 공개 리포트 — 공유 토큰으로 비로그인 열람
+Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');
 
 // 인증
 Route::middleware('guest')->group(function () {
@@ -40,7 +44,15 @@ Route::middleware('auth')->prefix('console')->name('console.')->group(function (
     // 경쟁 분석 (SEO 점수 + 순위추적)
     Route::get('/compete', [CompeteController::class, 'index'])->name('compete');
     Route::get('/compete/{slot}', [CompeteController::class, 'show'])->name('compete.show');
+    Route::get('/compete/{slot}/explain/{place}', [CompeteController::class, 'explain'])->name('compete.explain');
+    Route::get('/compete/{slot}/history/{place}', [CompeteController::class, 'history'])->name('compete.history');
     Route::post('/compete/{slot}/analyze', [CompeteController::class, 'analyze'])->name('compete.analyze');
+
+    // API 키 관리 (발급·허용기간·일일 한도·허용 IP)
+    Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys');
+    Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
+    Route::post('/api-keys/{key}/toggle', [ApiKeyController::class, 'toggle'])->name('api-keys.toggle');
+    Route::delete('/api-keys/{key}', [ApiKeyController::class, 'destroy'])->name('api-keys.destroy');
 });
 
 // 관리자 (운영자 전용)
