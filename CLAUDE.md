@@ -49,6 +49,7 @@ php artisan test # 테스트
 **부트스트랩 진행 중** (2026-07-10)
 - Laravel 13 + Tailwind v4 스캐폴드 완료, Cal.com `@theme` 토큰 주입 완료 (`resources/css/app.css`)
 - 하네스(.claude) 세팅 중
+- 크롬 확장 v0.1 (`extension/`) — 쇼핑 시장 분석(C1) + 확장용 토큰 인증 API(`/api/ext/*`) 완료 ([.claude/10_EXTENSION_SHOPPING_MARKET.md](.claude/10_EXTENSION_SHOPPING_MARKET.md))
 - 다음: 콘솔 셸(Cal.com 스타일) → crm smartplace 모듈 이식 → 홈페이지
 
 ---

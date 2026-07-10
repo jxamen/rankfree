@@ -5,16 +5,17 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Route;
 
-/** 메뉴 트리 (adjacency list). area=console|admin. route 우선, 없으면 url. */
+/** 메뉴 트리 (adjacency list). is_group=컨테이너(대/중분류), 아니면 페이지 항목. */
 class Menu extends Model
 {
     protected $fillable = [
-        'parent_id', 'area', 'name', 'route', 'url', 'icon',
+        'parent_id', 'area', 'is_group', 'name', 'route', 'url', 'target', 'icon',
         'sort_order', 'is_active', 'meta_title', 'meta_description',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_group' => 'boolean',
         'sort_order' => 'integer',
     ];
 

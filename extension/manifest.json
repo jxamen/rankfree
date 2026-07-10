@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "RankFree — 네이버 쇼핑 시장분석",
+  "version": "0.1.0",
+  "description": "네이버 쇼핑 검색 페이지에서 시장 규모·키워드 분석을 제공합니다. rankfree.kr 로그인이 필요합니다.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://rankfree.kr/*",
+    "http://rankfree.test/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://search.shopping.naver.com/search/*"],
+      "js": ["content/injected.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://search.shopping.naver.com/search/*"],
+      "js": ["content/content.js"],
+      "css": ["content/panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "RankFree 시장분석"
+  }
+}

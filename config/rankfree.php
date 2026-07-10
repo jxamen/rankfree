@@ -37,4 +37,20 @@ return [
         // 요청 타임아웃(초)
         'timeout' => (int) env('RANKFREE_RANK_TIMEOUT', 20),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 네이버 검색광고 API — 키워드 도구(keywordstool)
+    |--------------------------------------------------------------------------
+    | 크롬 확장 '키워드 분석'(월간 검색량·경쟁강도)에 사용.
+    | 자격증명이 비어 있으면 기능은 조용히 비활성화된다.
+    | 발급: https://manage.searchad.naver.com → 도구 → API 사용 관리
+    */
+    'searchad' => [
+        'base' => env('NAVER_SEARCHAD_BASE', 'https://api.searchad.naver.com'),
+        'api_key' => env('NAVER_SEARCHAD_API_KEY', ''),
+        'secret_key' => env('NAVER_SEARCHAD_SECRET', ''),
+        'customer_id' => env('NAVER_SEARCHAD_CUSTOMER_ID', ''),
+        'timeout' => (int) env('NAVER_SEARCHAD_TIMEOUT', 10),
+    ],
 ];

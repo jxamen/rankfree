@@ -67,5 +67,6 @@
 | 파일 | 내용 |
 |------|------|
 | [09_DESIGN_SYSTEM.md](./09_DESIGN_SYSTEM.md) | Cal.com 디자인 시스템 → Tailwind 토큰 매핑 |
+| [10_EXTENSION_SHOPPING_MARKET.md](./10_EXTENSION_SHOPPING_MARKET.md) | 크롬 확장 — 쇼핑 시장 분석(C1) 설계·API 계약 |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

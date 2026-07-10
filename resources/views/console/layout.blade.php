@@ -37,6 +37,16 @@
             @endforeach
         </nav>
 
+        {{-- 관리자 진입점 (운영자 전용) --}}
+        @if (auth()->user()?->isOperator())
+        <div class="px-3 pb-1">
+            <a href="{{ route('admin.home') }}" class="flex items-center gap-3 px-3 rounded-md text-muted hover:bg-surface-soft hover:text-ink transition" style="height:40px;font-size:14px;font-weight:600;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                관리자
+            </a>
+        </div>
+        @endif
+
         {{-- 무료 슬롯 게이지 --}}
         <div class="px-4 py-3 mx-3 mb-2 rounded-lg bg-surface-soft">
             <div class="flex items-center justify-between mb-1.5" style="font-size:12px;">
