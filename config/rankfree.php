@@ -1,0 +1,29 @@
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | 네이버 플레이스 순위체크 (A1) — crm ads/smartplace 이식
+    |--------------------------------------------------------------------------
+    | pcmap-api GraphQL 순위 조회 설정. 시크릿/환경값은 .env 로.
+    */
+    'place' => [
+        // 순위 조회 요청 User-Agent
+        'ua' => env('RANKFREE_PLACE_UA', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'),
+
+        // nCaptcha 토큰 최후 폴백(정상 운영은 DB place_rank_tokens 의 발급 토큰 사용)
+        'ncaptcha_fallback' => env('RANKFREE_NCAPTCHA_TOKEN', ''),
+
+        // 외부 순위 릴레이(안막히는 IP 서버). 토큰 없을 때 폴백. GET ?action=get_place_rank&url=&keyword=
+        'relay_url' => env('RANKFREE_RANK_RELAY', ''),
+
+        // 순회 최대 페이지(1페이지=50개) — 6페이지=300위까지
+        'max_pages' => (int) env('RANKFREE_RANK_MAX_PAGES', 6),
+
+        // 페이지 간 대기(초) — 네이버 봇탐지 완화
+        'page_delay' => (int) env('RANKFREE_RANK_PAGE_DELAY', 3),
+
+        // 요청 타임아웃(초)
+        'timeout' => (int) env('RANKFREE_RANK_TIMEOUT', 20),
+    ],
+];
