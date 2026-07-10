@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\MenuController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CompeteController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\RankCheckController;
 use App\Http\Controllers\RankTrackController;
@@ -30,9 +31,16 @@ Route::middleware('auth')->prefix('console')->name('console.')->group(function (
     // 순위 추적 슬롯
     Route::get('/rank', [RankTrackController::class, 'index'])->name('rank');
     Route::get('/rank/resolve', [RankTrackController::class, 'resolve'])->name('rank.resolve');
+    Route::get('/rank/export', [RankTrackController::class, 'export'])->name('rank.export');
     Route::post('/rank', [RankTrackController::class, 'store'])->name('rank.store');
     Route::post('/rank/{slot}/run', [RankTrackController::class, 'run'])->name('rank.run');
+    Route::put('/rank/{slot}', [RankTrackController::class, 'update'])->name('rank.update');
     Route::delete('/rank/{slot}', [RankTrackController::class, 'destroy'])->name('rank.destroy');
+
+    // 경쟁 분석 (SEO 점수 + 순위추적)
+    Route::get('/compete', [CompeteController::class, 'index'])->name('compete');
+    Route::get('/compete/{slot}', [CompeteController::class, 'show'])->name('compete.show');
+    Route::post('/compete/{slot}/analyze', [CompeteController::class, 'analyze'])->name('compete.analyze');
 });
 
 // 관리자 (운영자 전용)

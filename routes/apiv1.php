@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CompeteController;
 use App\Http\Controllers\Api\RankController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,5 +21,12 @@ Route::middleware('auth.ext')->group(function () {
         Route::delete('/slots/{slot}', [RankController::class, 'destroy'])->name('destroy');
         Route::post('/resolve', [RankController::class, 'resolve'])->name('resolve');  // 업체명·카테고리 자동조회
         Route::get('/check', [RankController::class, 'check'])->name('check');         // 1회성 순위조회
+    });
+
+    // 경쟁 분석 (SEO 점수 + 순위추적)
+    Route::prefix('compete')->name('api.compete.')->group(function () {
+        Route::get('/tracks', [CompeteController::class, 'tracks'])->name('tracks');
+        Route::post('/{slot}/analyze', [CompeteController::class, 'analyze'])->name('analyze');
+        Route::get('/{slot}', [CompeteController::class, 'show'])->name('show');
     });
 });
