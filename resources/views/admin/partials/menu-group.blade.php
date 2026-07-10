@@ -8,8 +8,8 @@
     {{-- 헤더 --}}
     <div class="flex items-center gap-2 px-3 py-2.5" style="background:var(--color-surface-card);border-bottom:1px solid var(--color-hairline);">
         <span class="gdrag text-muted-soft" style="cursor:move;" title="드래그하여 순서 변경">⠿</span>
-        <span style="font-size:15px;line-height:1;color:var(--color-primary);"><x-icon :name="$g->icon" /></span>
-        <span class="font-semibold text-ink flex-1" style="font-size:14px;">{{ $g->name }}</span>
+        <span style="font-size:18px;line-height:1;color:var(--color-ink);width:22px;text-align:center;"><x-icon :name="$g->icon" /></span>
+        <span class="font-semibold text-ink flex-1" style="font-size:15px;">{{ $g->name }}</span>
         <label title="노출" style="display:inline-flex;align-items:center;"><input type="checkbox" class="menu-toggle" data-id="{{ $g->id }}" @checked($g->is_active)></label>
         <button type="button" class="btn btn-ghost btn-sm" onclick="tgl('add-{{ $g->id }}')">+ 하위</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="tgl('edit-{{ $g->id }}')">수정</button>

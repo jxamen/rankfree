@@ -21,15 +21,16 @@
         <nav class="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto">
             @foreach (\App\Domain\Access\MenuService::sidebarTree(auth()->user(), 'console') as $node)
                 @if ($node->is_group)
-                    <div class="px-3 pt-3 pb-1 text-muted-soft flex items-center gap-2" style="font-size:11px;font-weight:700;letter-spacing:.03em;">
-                        <span style="color:var(--color-muted);"><x-icon :name="$node->icon" /></span>{{ $node->name }}
+                    <div class="flex items-center gap-2 px-3 pt-4 pb-1 text-ink">
+                        <span style="font-size:17px;width:20px;text-align:center;line-height:1;"><x-icon :name="$node->icon" /></span>
+                        <span style="font-size:14px;font-weight:700;letter-spacing:-.01em;">{{ $node->name }}</span>
                     </div>
                     @foreach ($node->menuItems as $item)
                         @php $on = $item->route && request()->routeIs($item->route); @endphp
                         <a href="{{ $item->resolvedUrl() ?? '#' }}" @if ($item->target === '_blank') target="_blank" @endif
                            class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
                            style="height:38px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
-                            <span class="text-muted-soft" style="width:6px;text-align:center;">·</span>{{ $item->name }}
+                            <span style="width:20px;text-align:center;font-size:13px;color:var(--color-muted-soft);">@if (trim((string) $item->icon) !== '')<x-icon :name="$item->icon" />@else·@endif</span>{{ $item->name }}
                         </a>
                     @endforeach
                 @else
@@ -37,7 +38,7 @@
                     <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                        class="flex items-center gap-2 px-3 rounded-md transition {{ $on ? 'bg-surface-card text-ink' : 'text-muted hover:bg-surface-soft hover:text-ink' }}"
                        style="height:40px;font-size:14px;font-weight:{{ $on ? '600' : '500' }};">
-                        <span style="width:18px;text-align:center;"><x-icon :name="$node->icon" /></span>{{ $node->name }}
+                        <span style="width:20px;text-align:center;font-size:15px;">@if (trim((string) $node->icon) !== '')<x-icon :name="$node->icon" />@endif</span>{{ $node->name }}
                     </a>
                 @endif
             @endforeach
