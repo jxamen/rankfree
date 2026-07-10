@@ -153,7 +153,7 @@ class CompeteController extends Controller
         return [(int) $cum[0], (int) $cum[1] - (int) $cum[0], (int) $cum[2] - (int) $cum[1], (int) $cum[3] - (int) $cum[2]];
     }
 
-    /** 특정 매장 점수 근거(상세) — 모달 AJAX. */
+    /** 특정 매장 점수 근거(상세) — crm _explain_render 형식 HTML 반환. */
     public function explain(Request $request, PlaceRankSlot $slot, string $place)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);
@@ -167,18 +167,39 @@ class CompeteController extends Controller
         $serp = PlaceSeoSerp::where('slot_id', $slot->id)->where('ymd', $ymd)->where('place_id', $place)->first();
         $daily = PlaceSeoDaily::where('place_id', $place)->where('ymd', $ymd)->first();
         $cat = $slot->category ?: 'place';
+        $rnk = (int) ($sc?->rnk ?? 300);
 
-        return response()->json([
-            'ok' => true,
+        $x = [
             'name' => $serp?->name ?: ($daily?->name ?: ''),
+            'category' => (string) ($daily?->category ?? ''),
             'is_mine' => $place === preg_replace('/\D/', '', (string) $slot->place_id),
-            'rnk' => $sc?->rnk,
-            'tier' => $sc?->tier,
-            'components' => $daily ? PlaceScorer::keywordComponents($slot->keyword, $daily->name, (string) $daily->category, (string) ($serp?->address ?? ''), $daily->tags ?? [], $cat) : null,
-            'seo' => $daily ? array_values(array_filter(PlaceScorer::seoItems($daily->toArray(), $cat), fn ($i) => $i['avail'])) : null,
-            'dims' => $sc ? $sc->only(['d1', 'd2', 'd3', 'd4', 'd5', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3']) : null,
+            'place_plus' => $daily?->place_plus,
+            'keyword' => $slot->keyword,
+            'rnk' => $rnk,
+            'ymd' => $ymd,
+            'rep_keywords' => is_array($daily?->tags) ? $daily->tags : [],
+            'n1' => $sc?->n1, 'n2' => $sc?->n2, 'n3' => $sc?->n3,
+            'n3formula' => '100 × (1 − ln('.min($rnk, 300).') ÷ ln 301)',
+            'kc' => $daily
+                ? PlaceScorer::keywordComponents($slot->keyword, $daily->name, (string) $daily->category, (string) ($serp?->address ?? ''), $daily->tags ?? [], $cat)
+                : ['L' => null, 'B' => null, 'T' => null, 'M' => null, 'region' => '', 'core' => '', 'bizterm' => ''],
+            'd7' => $sc?->d7,
+            'n2parts' => [
+                ['label' => '방문자 리뷰', 'code' => 'D1', 'w' => 0.18, 'v' => $sc?->d1],
+                ['label' => '블로그 리뷰', 'code' => 'D2', 'w' => 0.09, 'v' => $sc?->d2],
+                ['label' => '예약자 리뷰', 'code' => 'D3', 'w' => 0.07, 'v' => $sc?->d3],
+                ['label' => '평점', 'code' => 'D4', 'w' => 0.12, 'v' => $sc?->d4],
+                ['label' => '저장수', 'code' => 'D5', 'w' => 0.08, 'v' => $sc?->d5],
+                ['label' => '정보충실성', 'code' => 'D7', 'w' => 0.14, 'v' => $sc?->d7],
+                ['label' => '최근 활동', 'code' => 'D9', 'w' => 0.20, 'v' => $sc?->d9],
+                ['label' => '리뷰 영향력', 'code' => 'D10', 'w' => 0.12, 'v' => $sc?->d10],
+            ],
+            'seo' => $daily ? PlaceScorer::seoItems($daily->toArray(), $cat) : [],
+            'review_kw' => $daily?->review_kw,
             'review_quality' => $daily?->review_quality,
-        ]);
+        ];
+
+        return response()->json(['ok' => true, 'html' => view('compete._explain', ['x' => $x])->render()]);
     }
 
     /** 공개 공유 리포트(로그인 불필요) — share_token 으로 열람. */
@@ -199,19 +220,30 @@ class CompeteController extends Controller
         ]);
     }
 
-    /** 특정 매장 순위·점수 추이 — 모달 AJAX. */
+    /** 특정 매장 순위·점수 추이 — crm _history_render 형식 HTML 반환. */
     public function history(Request $request, PlaceRankSlot $slot, string $place)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);
         $place = preg_replace('/\D/', '', $place);
-        $name = PlaceSeoSerp::where('slot_id', $slot->id)->where('place_id', $place)->orderByDesc('ymd')->value('name');
-        $history = PlaceSeoScore::where('slot_id', $slot->id)->where('place_id', $place)->orderBy('ymd')
-            ->get(['ymd', 'rnk', 'n1', 'n2', 'n3', 'd7'])
-            ->map(fn ($r) => [
-                'ymd' => $r->ymd instanceof \Illuminate\Support\Carbon ? $r->ymd->toDateString() : $r->ymd,
-                'rnk' => $r->rnk, 'n1' => $r->n1, 'n2' => $r->n2, 'n3' => $r->n3, 'd7' => $r->d7,
-            ]);
+        $toYmd = fn ($v) => $v instanceof \Illuminate\Support\Carbon ? $v->toDateString() : (string) $v;
 
-        return response()->json(['ok' => true, 'name' => $name, 'history' => $history]);
+        $serp = PlaceSeoSerp::where('slot_id', $slot->id)->where('place_id', $place)->orderBy('ymd')->get();
+        $scores = PlaceSeoScore::where('slot_id', $slot->id)->where('place_id', $place)->get()->keyBy(fn ($r) => $toYmd($r->ymd));
+        $dailies = PlaceSeoDaily::where('place_id', $place)->get()->keyBy(fn ($r) => $toYmd($r->ymd));
+
+        $rows = $serp->map(function ($s) use ($scores, $dailies, $toYmd) {
+            $ymd = $toYmd($s->ymd);
+            $sc = $scores[$ymd] ?? null;
+            $pd = $dailies[$ymd] ?? null;
+
+            return [
+                'ymd' => $ymd, 'rnk' => $s->rnk, 'visitor_cnt' => $s->visitor_cnt, 'blog_cnt' => $s->blog_cnt,
+                'save_cnt' => $s->save_cnt, 'review_score' => $s->review_score ?? $pd?->review_score,
+                'd7' => $sc?->d7, 'd9' => $sc?->d9, 'd10' => $sc?->d10,
+                'n1' => $sc?->n1, 'n2' => $sc?->n2, 'n3' => $sc?->n3, 'place_plus' => $pd?->place_plus,
+            ];
+        })->all();
+
+        return response()->json(['ok' => true, 'html' => view('compete._history', ['rows' => $rows, 'name' => $serp->last()?->name])->render()]);
     }
 }
