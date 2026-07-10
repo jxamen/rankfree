@@ -9,8 +9,14 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-    public function showLogin()
+    public function showLogin(Request $request)
     {
+        // 로그인 후 직전 페이지로 복귀 (헤더의 from 파라미터 우선)
+        $from = $request->query('from');
+        if (is_string($from) && $from !== '' && ! str_contains($from, '/login') && ! str_contains($from, '/register')) {
+            session()->put('url.intended', $from);
+        }
+
         return view('auth.login');
     }
 

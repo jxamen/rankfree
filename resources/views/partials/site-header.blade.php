@@ -15,10 +15,18 @@
             <a href="/#marketing" class="px-3 py-2 rounded-md text-muted hover:text-ink hover:bg-surface-card transition">마케팅</a>
         </nav>
 
-        {{-- 우측 액션 --}}
+        {{-- 우측 액션 — 로그인 상태 분기 --}}
         <div class="flex items-center gap-2">
-            <a href="/login" class="hidden sm:inline-flex btn btn-ghost btn-sm">로그인</a>
-            <a href="/#hero-form" class="btn btn-primary btn-sm">무료로 시작</a>
+            @auth
+                <a href="{{ route('console.dashboard') }}" class="btn btn-ghost btn-sm">콘솔</a>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="btn btn-primary btn-sm">로그아웃</button>
+                </form>
+            @else
+                <a href="{{ route('login', ['from' => request()->fullUrl()]) }}" class="hidden sm:inline-flex btn btn-ghost btn-sm">로그인</a>
+                <a href="{{ route('register') }}" class="btn btn-primary btn-sm">무료로 시작</a>
+            @endauth
         </div>
     </div>
 </header>
