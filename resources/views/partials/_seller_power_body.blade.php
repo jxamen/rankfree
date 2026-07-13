@@ -99,7 +99,7 @@
 
     {{-- 캡처 전용 상단 브랜딩 — 공유페이지 디자인 --}}
     <div class="sp-cap-only" style="align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px;">
-        <span class="badge border border-hairline">셀러력 진단 리포트 · rankfree</span>
+        <span class="badge border border-hairline">셀러력 진단 리포트 · 랭크프리</span>
         <span class="text-muted-soft" style="font-size:var(--fs-xs);">rankfree.kr</span>
     </div>
 
@@ -482,14 +482,14 @@ window.spSaveImage = function (btn) {
     if (!node || !window.htmlToImage) return;
     var orig = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '저장 중…'; }
-    node.classList.add('sp-capturing'); // 상하단 rankfree 브랜딩 노출
+    node.classList.add('sp-capturing'); // 상하단 랭크프리 브랜딩 노출
     htmlToImage.toPng(node, {
         pixelRatio: 2,
         backgroundColor: getComputedStyle(document.body).backgroundColor || 'white'
     }).then(function (dataUrl) {
         var a = document.createElement('a');
         a.href = dataUrl;
-        a.download = 'rankfree-셀러력-' + @json($r['keyword'] ?? $a->keyword) + '.png';
+        a.download = '랭크프리-셀러력-' + @json($r['keyword'] ?? $a->keyword) + '.png';
         a.click();
     }).catch(function () {
         alert('이미지 생성에 실패했습니다. 잠시 후 다시 시도하세요.');

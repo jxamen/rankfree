@@ -36,9 +36,18 @@ return [
     ],
 
     // Anthropic Claude API — 커뮤니티 페르소나 콘텐츠 생성용. 키 없으면 템플릿 폴백.
+    // 어드민 '환경 설정 > API 설정'에서 등록 시 이 키를 런타임 오버라이드(SettingsServiceProvider).
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'), // 대량 활동 시 'claude-haiku-4-5' 로 비용 절감 가능
+    ],
+
+    // Google Gemini · OpenAI — 환경 설정에서 등록. 현재는 저장·표시용(향후 AI 기능 확장 대비).
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
     ],
 
 ];

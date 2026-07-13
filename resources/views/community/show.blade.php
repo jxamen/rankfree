@@ -1,5 +1,5 @@
 @extends('layouts.site')
-@section('title', $post->title.' · 커뮤니티 · rankfree')
+@section('title', $post->title.' · 커뮤니티 · 랭크프리')
 @section('follow-theme', '1')
 
 @section('content')

@@ -54,6 +54,7 @@ class PermissionSeeder extends Seeder
             ['name' => '회원 관리', 'route' => 'admin.members', 'icon' => '👥'],
             ['name' => '구독 관리', 'route' => 'admin.subscriptions', 'icon' => '💳'],
             ['name' => '페르소나 관리', 'route' => 'admin.personas', 'icon' => '🎭'],
+            ['name' => '환경 설정', 'route' => 'admin.settings', 'icon' => '⚙️'],
             ['name' => '메뉴 관리', 'route' => 'admin.menus', 'icon' => '📋'],
             ['name' => '권한 설정', 'route' => 'admin.permissions', 'icon' => '🛡️'],
         ];

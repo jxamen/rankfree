@@ -42,12 +42,13 @@
     {{-- 하위 추가 --}}
     <div id="add-{{ $g->id }}" class="hidden px-3 py-3" style="background:var(--color-surface-soft);border-bottom:1px solid var(--color-hairline-soft);">
         <div class="flex gap-6 flex-wrap">
-            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap">
+            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="max-width:520px;">
                 @csrf
                 <input type="hidden" name="area" value="{{ $area }}"><input type="hidden" name="kind" value="item"><input type="hidden" name="parent_id" value="{{ $g->id }}">
                 <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">＋ 페이지 항목</label><input name="name" class="input" placeholder="메뉴명" required></div>
                 <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" placeholder="console.rank"></div>
                 <button type="submit" class="btn btn-primary btn-sm">저장</button>
+                @include('admin.partials.menu-seo-fields', ['menu' => null])
             </form>
             <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap">
                 @csrf

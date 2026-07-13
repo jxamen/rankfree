@@ -10,7 +10,7 @@ class Menu extends Model
 {
     protected $fillable = [
         'parent_id', 'area', 'is_group', 'name', 'route', 'url', 'target', 'icon',
-        'sort_order', 'is_active', 'meta_title', 'meta_description',
+        'sort_order', 'is_active', 'meta_title', 'meta_description', 'meta_keywords',
     ];
 
     protected $casts = [
@@ -32,6 +32,36 @@ class Menu extends Model
     public function permissions()
     {
         return $this->hasMany(MenuPermission::class);
+    }
+
+    /**
+     * 현재 라우트명에 매칭되는 메뉴의 SEO 값. 'site' area(공개 페이지) 우선.
+     * 페이지가 @section 으로 직접 지정하면 레이아웃에서 그쪽이 우선한다(여긴 폴백값).
+     *
+     * @return array{title:?string, description:?string, keywords:?string}
+     */
+    public static function seo(?string $routeName): array
+    {
+        $empty = ['title' => null, 'description' => null, 'keywords' => null];
+        if (! $routeName) {
+            return $empty;
+        }
+
+        // 레이아웃(<head>)에서 호출되므로 DB 문제(테이블 부재·연결 오류)로 페이지가 500 나지 않게 방어.
+        try {
+            $m = static::query()
+                ->where('route', $routeName)
+                ->where(fn ($q) => $q->whereNotNull('meta_title')->orWhereNotNull('meta_description')->orWhereNotNull('meta_keywords'))
+                ->orderByRaw("CASE WHEN area = 'site' THEN 0 ELSE 1 END")
+                ->orderBy('id')
+                ->first();
+        } catch (\Throwable $e) {
+            return $empty;
+        }
+
+        return $m
+            ? ['title' => $m->meta_title, 'description' => $m->meta_description, 'keywords' => $m->meta_keywords]
+            : $empty;
     }
 
     /**

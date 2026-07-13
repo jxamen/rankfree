@@ -24,9 +24,8 @@ class NaverKeywordService
      */
     public function analyze(string $keyword): ?array
     {
-        $config = (array) config('rankfree.searchad');
-
-        if (empty($config['api_key']) || empty($config['secret_key']) || empty($config['customer_id'])) {
+        $accounts = $this->accounts();
+        if (! $accounts) {
             return null;
         }
 
@@ -36,11 +35,47 @@ class NaverKeywordService
             return null;
         }
 
-        return Cache::remember(
-            'searchad:kwtool:'.md5($hint),
-            now()->addHours(6),
-            fn () => $this->fetch($hint, $config),
-        );
+        $cacheKey = 'searchad:kwtool:'.md5($hint);
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // 등록된 계정을 순회 — 하나라도 성공하면 사용(한도/오류 시 다음 계정으로 로테이션)
+        foreach ($accounts as $acc) {
+            $r = $this->fetch($hint, $acc);
+            if ($r !== null) {
+                Cache::put($cacheKey, $r, now()->addHours(6));
+
+                return $r;
+            }
+        }
+
+        return null;
+    }
+
+    /** 검색광고 계정 목록 — 다중(accounts) 우선, 없으면 단일 config 폴백. */
+    private function accounts(): array
+    {
+        $base = (string) config('rankfree.searchad.base', 'https://api.searchad.naver.com');
+        $timeout = (int) config('rankfree.searchad.timeout', 10);
+        $accounts = [];
+        foreach ((array) config('rankfree.searchad.accounts', []) as $a) {
+            if (! empty($a['api_key']) && ! empty($a['secret_key']) && ! empty($a['customer_id'])) {
+                $accounts[] = [
+                    'api_key' => $a['api_key'], 'secret_key' => $a['secret_key'], 'customer_id' => $a['customer_id'],
+                    'base' => $base, 'timeout' => $timeout,
+                ];
+            }
+        }
+        if (! $accounts) {
+            $c = (array) config('rankfree.searchad');
+            if (! empty($c['api_key']) && ! empty($c['secret_key']) && ! empty($c['customer_id'])) {
+                $accounts[] = $c;
+            }
+        }
+
+        return $accounts;
     }
 
     private function fetch(string $hint, array $config): ?array

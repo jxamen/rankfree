@@ -1,7 +1,6 @@
 @extends('layouts.site')
 
-@section('title', 'API 문서 · rankfree')
-@section('description', 'rankfree 순위추적·경쟁분석·키워드분석 REST API 문서 — 인증, 엔드포인트, 요청/응답 예시')
+{{-- 타이틀·디스크립션은 메뉴관리 > 사이트 SEO(route: developers)에서 설정 --}}
 
 @section('content')
 <style>
@@ -23,7 +22,7 @@
 
 <section class="container-page" style="padding-top:48px;padding-bottom:96px;max-width:880px;">
     <div class="badge mb-4 border border-hairline">개발자 문서</div>
-    <h1 class="font-display text-ink" style="font-size:clamp(28px,4vw,40px);line-height:1.1;">rankfree API</h1>
+    <h1 class="font-display text-ink" style="font-size:clamp(28px,4vw,40px);line-height:1.1;">랭크프리 API</h1>
     <p class="mt-4 text-body" style="font-size:var(--fs-base);line-height:1.7;">
         네이버 플레이스 <b class="text-ink">순위추적</b>, <b class="text-ink">경쟁분석</b>, <b class="text-ink">키워드분석</b> 데이터를
         REST API로 제공합니다. API 키는 <a href="{{ route('console.api-keys') }}" class="text-accent">콘솔 → API 키</a>에서
@@ -91,7 +90,7 @@ HTTP/1.1 201
     <h2 class="font-display text-ink doc-h2">경쟁분석 <span class="badge border border-hairline" style="font-size:var(--fs-xs);vertical-align:middle;">scope: compete</span></h2>
     <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
         키워드 상위 노출 경쟁 업체와 내 플레이스의 SEO 신호를 비교·점수화합니다.
-        N1/N2/N3·D1~D10 점수는 <b class="text-ink">rankfree 자체 추정치</b>이며 네이버 공식 지표가 아닙니다.
+        N1/N2/N3·D1~D10 점수는 <b class="text-ink">랭크프리 자체 추정치</b>이며 네이버 공식 지표가 아닙니다.
     </p>
     <table class="doc-table mt-4">
         <thead><tr><th style="width:340px;">엔드포인트</th><th>설명</th></tr></thead>

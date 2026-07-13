@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ $slot->keyword }} 경쟁 분석 · rankfree</title>
+    <title>{{ $slot->keyword }} 경쟁 분석 · 랭크프리</title>
     <meta property="og:title" content="{{ $slot->keyword }} — {{ $slot->place_name ?: '플레이스' }} 경쟁 분석">
     <meta property="og:description" content="네이버 플레이스 SEO 경쟁력(N1 유사도·N2 관련성·N3 랭킹) 리포트">
     {{-- 공유 리포트 — 사용자의 콘솔 테마 선택(localStorage)을 따라 다크/라이트 렌더 --}}
@@ -24,7 +24,7 @@
     {{-- 헤더 --}}
     <div class="flex items-center gap-2 mb-6" style="height:48px;">
         <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-primary text-on-primary font-display" style="font-size:var(--fs-sm);">R</span>
-        <span class="font-display text-ink" style="font-size:var(--fs-md);">rankfree</span>
+        <span class="font-display text-ink" style="font-size:var(--fs-md);">랭크프리</span>
         <span class="text-muted-soft" style="font-size:var(--fs-xs);">경쟁 분석 공유 리포트</span>
     </div>
 
@@ -121,7 +121,7 @@
         <p class="text-muted-soft mb-6" style="font-size:var(--fs-xs);">N1 유사도·N2 관련성·N3 랭킹 및 세부지표는 관측 신호 기반 <b>자체 추정치</b>이며 네이버 공식 점수가 아닙니다. 일별 순위 색: <span style="color:var(--color-primary);">상승</span>/<span style="color:var(--color-error);">하락</span>.</p>
 
         <div class="text-center">
-            <a href="/" class="btn btn-primary btn-sm" style="text-decoration:none;">rankfree에서 내 플레이스 무료 분석하기 →</a>
+            <a href="/" class="btn btn-primary btn-sm" style="text-decoration:none;">랭크프리에서 내 플레이스 무료 분석하기 →</a>
         </div>
     @endunless
 </div>

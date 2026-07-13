@@ -1,0 +1,186 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Domain\Keyword\NaverKeywordService;
+use App\Models\AppSetting;
+use App\Models\User;
+use App\Providers\SettingsServiceProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+/** 환경 설정 — 네이버 API 자격증명 다중 관리, 암호화 저장, config 런타임 오버라이드, 계정 로테이션. */
+class SettingsTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function super(): User
+    {
+        return User::create(['name' => 'a', 'email' => 'admin@rf.kr', 'password' => 'x1234567', 'role' => 'super']);
+    }
+
+    private function reboot(): void
+    {
+        (new SettingsServiceProvider($this->app))->boot();
+    }
+
+    public function test_settings_page_loads_for_operator(): void
+    {
+        // 저장된 값(시크릿 포함)이 폼 value 로 렌더되어 보기/복사 가능해야 함
+        AppSetting::write('searchad.accounts', json_encode([['api_key' => 'AKSHOW', 'customer_id' => '9', 'secret_key' => 'SECSHOW']]));
+
+        $this->actingAs($this->super())->get('/admin/settings')
+            ->assertOk()->assertSee('네이버 검색광고 API')->assertSee('광고주 로그인')->assertSee('데이터랩')
+            ->assertSee('AKSHOW')->assertSee('SECSHOW'); // 시크릿도 value 로 노출(가림은 프런트 type=password)
+    }
+
+    public function test_non_operator_forbidden(): void
+    {
+        $user = User::create(['name' => 'u', 'email' => 'u@rf.kr', 'password' => 'x1234567']);
+        $this->actingAs($user)->get('/admin/settings')->assertForbidden();
+    }
+
+    public function test_save_multiple_credentials_and_override_config(): void
+    {
+        $this->actingAs($this->super())->put('/admin/settings', [
+            // 검색광고 2계정
+            'searchad_api_key' => ['AK1', 'AK2'],
+            'searchad_customer_id' => ['11', '22'],
+            'searchad_secret_key' => ['S1', 'S2'],
+            // 광고주 로그인 2개
+            'ads_id' => ['ads1', 'ads2'],
+            'ads_pw' => ['pw1', 'pw2'],
+            // OpenAPI 2개
+            'openapi_id' => ['cidA', 'cidB'],
+            'openapi_secret' => ['secA', 'secB'],
+        ])->assertRedirect(route('admin.settings'));
+
+        $this->assertCount(2, AppSetting::readJson('searchad.accounts'));
+        $this->assertCount(2, AppSetting::readJson('ads.logins'));
+        $this->assertCount(2, AppSetting::readJson('openapi.keys'));
+
+        $this->reboot();
+        // 대표 계정이 단일 config 로 반영 + 전체 리스트
+        $this->assertSame('AK1', config('rankfree.searchad.api_key'));
+        $this->assertSame('11', config('rankfree.searchad.customer_id'));
+        $this->assertCount(2, config('rankfree.searchad.accounts'));
+        $this->assertSame('ads1', config('searchadweb.login.id'));
+        $this->assertCount(2, config('searchadweb.logins'));
+        $this->assertCount(2, config('rankfree.shopping.api_keys'));
+        $this->assertSame('cidA', config('rankfree.shopping.api_keys.0.id'));
+    }
+
+    public function test_secrets_encrypted_at_rest(): void
+    {
+        AppSetting::write('searchad.accounts', json_encode([['api_key' => 'AK', 'customer_id' => '9', 'secret_key' => 'PLAINSECRET']]));
+        $raw = DB::table('app_settings')->where('key', 'searchad.accounts')->value('value');
+        $this->assertStringNotContainsString('PLAINSECRET', (string) $raw);
+        // 복호화 조회는 원문
+        $this->assertSame('PLAINSECRET', AppSetting::readJson('searchad.accounts')[0]['secret_key']);
+    }
+
+    public function test_existing_secret_is_editable(): void
+    {
+        $super = $this->super();
+        $this->actingAs($super)->put('/admin/settings', [
+            'openapi_id' => ['id1'], 'openapi_secret' => ['old'],
+        ]);
+        // 같은 id 로 시크릿만 교체 저장 → 새 값으로 갱신
+        $this->actingAs($super)->put('/admin/settings', [
+            'openapi_id' => ['id1'], 'openapi_secret' => ['NEWSECRET'],
+        ]);
+        $keys = AppSetting::readJson('openapi.keys');
+        $this->assertCount(1, $keys);
+        $this->assertSame('NEWSECRET', $keys[0]['secret']);
+    }
+
+    public function test_delete_by_omission_removes_row(): void
+    {
+        $super = $this->super();
+        // 2줄 저장
+        $this->actingAs($super)->put('/admin/settings', [
+            'openapi_id' => ['id1', 'id2'], 'openapi_secret' => ['s1', 's2'],
+        ]);
+        // 프런트에서 1번 줄을 삭제 → 전송에 아예 없음(=id1 만 전송)
+        $this->actingAs($super)->put('/admin/settings', [
+            'openapi_id' => ['id1'], 'openapi_secret' => ['s1'],
+        ]);
+        $keys = AppSetting::readJson('openapi.keys');
+        $ids = array_column($keys, 'id');
+        $this->assertCount(1, $keys);
+        $this->assertSame(['id1'], $ids);
+    }
+
+    public function test_empty_group_clears_all(): void
+    {
+        $super = $this->super();
+        $this->actingAs($super)->put('/admin/settings', ['openapi_id' => ['id1'], 'openapi_secret' => ['s1']]);
+        $this->assertCount(1, AppSetting::readJson('openapi.keys'));
+        // 전 줄 삭제 → 그룹 필드 미전송 → 비워짐
+        $this->actingAs($super)->put('/admin/settings', []);
+        $this->assertCount(0, AppSetting::readJson('openapi.keys'));
+    }
+
+    public function test_new_entry_requires_all_fields(): void
+    {
+        $super = $this->super();
+        // api_key 만 있고 secret 없음 → 저장 안 됨
+        $this->actingAs($super)->put('/admin/settings', [
+            'searchad_api_key' => ['AK'], 'searchad_customer_id' => ['11'], 'searchad_secret_key' => [''],
+        ]);
+        $this->assertCount(0, AppSetting::readJson('searchad.accounts'));
+    }
+
+    public function test_ai_keys_save_and_override_services_config(): void
+    {
+        $this->actingAs($this->super())->put('/admin/settings', [
+            'ai_provider' => ['anthropic', 'google', 'bogus'],
+            'ai_key' => ['sk-ant-123', 'gm-456', 'ignored'], // bogus 공급자는 무시
+        ])->assertRedirect(route('admin.settings'));
+
+        $saved = AppSetting::readJson('ai.keys');
+        $this->assertCount(2, $saved); // bogus 제외
+        $this->assertSame('anthropic', $saved[0]['provider']);
+
+        $this->reboot();
+        $this->assertSame('sk-ant-123', config('services.anthropic.key'));
+        $this->assertSame('gm-456', config('services.gemini.key'));
+    }
+
+    public function test_ai_first_key_per_provider_is_primary(): void
+    {
+        AppSetting::write('ai.keys', json_encode([
+            ['provider' => 'anthropic', 'api_key' => 'FIRST'],
+            ['provider' => 'anthropic', 'api_key' => 'SECOND'],
+        ]));
+        $this->reboot();
+        $this->assertSame('FIRST', config('services.anthropic.key'));
+    }
+
+    public function test_keyword_service_rotates_accounts(): void
+    {
+        // 첫 계정은 인증 실패, 둘째 계정 성공하도록 Http 페이크
+        AppSetting::write('searchad.accounts', json_encode([
+            ['api_key' => 'BAD', 'customer_id' => '1', 'secret_key' => 'x'],
+            ['api_key' => 'GOOD', 'customer_id' => '2', 'secret_key' => 'y'],
+        ]));
+        $this->reboot();
+
+        \Illuminate\Support\Facades\Http::fake([
+            '*/keywordstool*' => function ($request) {
+                if ($request->header('X-API-KEY')[0] === 'GOOD') {
+                    return \Illuminate\Support\Facades\Http::response(['keywordList' => [
+                        ['relKeyword' => '여름매트', 'monthlyPcQcCnt' => 100, 'monthlyMobileQcCnt' => 200, 'compIdx' => '중간'],
+                    ]], 200);
+                }
+
+                return \Illuminate\Support\Facades\Http::response('', 401);
+            },
+        ]);
+
+        $r = app(NaverKeywordService::class)->analyze('여름매트');
+        $this->assertNotNull($r);
+        $this->assertSame(300, $r['monthly_total']); // 둘째(GOOD) 계정으로 성공
+    }
+}

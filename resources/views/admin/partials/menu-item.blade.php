@@ -37,6 +37,9 @@
                 <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">아이콘 <span class="text-muted-soft">(비우면 하위는 · 점, 최상위는 없음)</span></label>
                 @include('admin.partials.icon-picker', ['name' => 'icon', 'value' => $item->icon, 'uid' => 'item'.$item->id])
             </div>
+
+            {{-- SEO (타이틀·디스크립션·키워드) --}}
+            @include('admin.partials.menu-seo-fields', ['menu' => $item])
         </form>
         <form id="del-{{ $item->id }}" method="POST" action="{{ route('admin.menus.destroy', $item) }}">@csrf @method('DELETE')</form>
     </div>

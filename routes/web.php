@@ -17,6 +17,7 @@ use App\Http\Controllers\BlogIndexController;
 use App\Http\Controllers\BulkKeywordController;
 use App\Http\Controllers\Admin\CommunitySeedController;
 use App\Http\Controllers\Admin\PersonaController;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\CommunityController;
 use App\Http\Controllers\CompeteController;
 use App\Http\Controllers\ConsoleController;
@@ -291,6 +292,10 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::put('/personas/{persona}', [PersonaController::class, 'update'])->name('personas.update');
     Route::post('/personas/{persona}/toggle', [PersonaController::class, 'toggle'])->name('personas.toggle');
     Route::delete('/personas/{persona}', [PersonaController::class, 'destroy'])->name('personas.destroy');
+
+    // 환경 설정 — 네이버 API 자격증명 관리
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
 
     // 글밥(소스) 관리 — 수집한 글감을 페르소나가 소재로 변형해 사용
     Route::get('/community-seeds', [CommunitySeedController::class, 'index'])->name('community-seeds');

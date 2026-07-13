@@ -18,7 +18,7 @@ class MenuController extends Controller
 {
     public function index(Request $request)
     {
-        $area = in_array($request->query('area'), ['console', 'admin'], true) ? $request->query('area') : 'console';
+        $area = in_array($request->query('area'), ['console', 'admin', 'site'], true) ? $request->query('area') : 'console';
 
         $all = Menu::where('area', $area)->with('permissions')->orderBy('sort_order')->get();
         $roots = $all->whereNull('parent_id')->values();
@@ -32,7 +32,7 @@ class MenuController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'area' => ['required', 'in:console,admin'],
+            'area' => ['required', 'in:console,admin,site'],
             'kind' => ['required', 'in:group,item'],
             'parent_id' => ['nullable', 'exists:menus,id'],
             'name' => ['required', 'string', 'max:80'],
@@ -42,6 +42,7 @@ class MenuController extends Controller
             'target' => ['nullable', 'in:,_blank'],
             'meta_title' => ['nullable', 'string', 'max:150'],
             'meta_description' => ['nullable', 'string', 'max:255'],
+            'meta_keywords' => ['nullable', 'string', 'max:255'],
         ]);
         $data['is_group'] = $data['kind'] === 'group';
         unset($data['kind']);
@@ -64,6 +65,7 @@ class MenuController extends Controller
             'target' => ['nullable', 'in:,_blank'],
             'meta_title' => ['nullable', 'string', 'max:150'],
             'meta_description' => ['nullable', 'string', 'max:255'],
+            'meta_keywords' => ['nullable', 'string', 'max:255'],
         ]);
         // 자기 자신을 부모로 두는 것 방지
         if ((int) ($data['parent_id'] ?? 0) === $menu->id) {

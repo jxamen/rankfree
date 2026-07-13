@@ -5,11 +5,18 @@
 <div>
     {{-- area 탭 --}}
     <div class="flex gap-2 mb-5 items-center flex-wrap">
-        @foreach (['console' => '콘솔 메뉴', 'admin' => '관리 메뉴'] as $a => $l)
+        @foreach (['console' => '콘솔 메뉴', 'admin' => '관리 메뉴', 'site' => '사이트 SEO'] as $a => $l)
             <a href="{{ route('admin.menus', ['area' => $a]) }}" class="btn btn-sm {{ $area === $a ? 'btn-primary' : 'btn-secondary' }}">{{ $l }}</a>
         @endforeach
         <span class="text-muted-soft" style="font-size:var(--fs-xs);">⠿ 드래그로 순서·이동. 대분류와 미분류 항목은 최상위에서 자유 배치, 항목은 그룹 간 이동 가능</span>
     </div>
+
+    @if ($area === 'site')
+        <div class="card-soft px-4 py-3 mb-5" style="font-size:var(--fs-xs);">
+            <b class="text-ink">사이트 SEO</b> — 메인페이지·게시판 등 <b>공개 페이지</b>의 검색엔진 노출용 타이틀·디스크립션·키워드를 설정합니다.
+            각 항목의 <b>[수정]</b>에서 SEO를 편집하세요. 라우트명은 페이지 라우트(예: <code>home</code>, <code>community</code>, <code>rank.check</code>, <code>developers</code>)를 사용합니다.
+        </div>
+    @endif
 
     @if ($errors->any())
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
@@ -29,13 +36,14 @@
                 @include('admin.partials.icon-picker', ['name' => 'icon', 'value' => '', 'uid' => 'addgrp'])
                 <button type="submit" class="btn btn-primary mt-3">대분류 추가</button>
             </form>
-            {{-- 미분류 항목 --}}
-            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="align-self:flex-start;">
+            {{-- 미분류 항목 (SEO 포함) --}}
+            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="align-self:flex-start;max-width:520px;">
                 @csrf
                 <input type="hidden" name="area" value="{{ $area }}"><input type="hidden" name="kind" value="item">
-                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">＋ 미분류 항목</label><input name="name" class="input" placeholder="메뉴명" required></div>
-                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" placeholder="console.rank"></div>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">＋ {{ $area === 'site' ? '페이지' : '미분류 항목' }}</label><input name="name" class="input" placeholder="메뉴명" required></div>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" placeholder="{{ $area === 'site' ? 'community' : 'console.rank' }}"></div>
                 <button type="submit" class="btn btn-secondary">저장</button>
+                @include('admin.partials.menu-seo-fields', ['menu' => null])
             </form>
         </div>
     </details>

@@ -322,7 +322,7 @@
     </div>
 @endif
 
-<p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">* 구매건수는 네이버 노출값(최근 6개월), 시장 규모는 rankfree 자체 추정치입니다.</p>
+<p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">* 구매건수는 네이버 노출값(최근 6개월), 시장 규모는 랭크프리 자체 추정치입니다.</p>
 
 {{-- ── 리드(상담 문의) 모달 — 의존성 없음(공개 공유 페이지엔 Swal 미탑재). ────────── --}}
 <div id="rf-lead-modal" class="hidden" style="position:fixed;inset:0;z-index:60;">

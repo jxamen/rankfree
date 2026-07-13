@@ -1527,10 +1527,6 @@
       '<input type="password" class="rf-input" name="password" autocomplete="current-password" placeholder="••••••••">' +
       '<div class="rf-login-err" hidden></div>' +
       '<button type="button" class="rf-btn-primary" data-act="login">로그인</button>' +
-      '<details class="rf-adv"><summary>고급 설정</summary>' +
-      '<label class="rf-label">서버 주소</label>' +
-      '<input type="url" class="rf-input" name="apiBase" placeholder="https://rankfree.kr">' +
-      '</details>' +
       '<a class="rf-link rf-join" href="https://rankfree.kr/register" target="_blank" rel="noopener">아직 계정이 없다면 — 무료 가입</a>' +
       '</div>'
     );
@@ -1542,7 +1538,6 @@
     const doLogin = async () => {
       const email = body.querySelector('[name="email"]').value.trim();
       const password = body.querySelector('[name="password"]').value;
-      const apiBase = body.querySelector('[name="apiBase"]').value.trim();
       if (!email || !password) {
         errEl.hidden = false;
         errEl.textContent = '이메일과 비밀번호를 입력해 주세요.';
@@ -1550,7 +1545,7 @@
       }
       btn.disabled = true;
       btn.textContent = '로그인 중…';
-      const res = await sendBg('login', { email, password, apiBase: apiBase || undefined });
+      const res = await sendBg('login', { email, password }); // 서버는 항상 기본(rankfree.kr)
       btn.disabled = false;
       btn.textContent = '로그인';
       if (res.ok) {
@@ -1847,15 +1842,8 @@
       state.marketToken = res && res.ok ? (res.share_token || '') : '';
       state.saveLimitMsg = res && res.status === 429 ? (res.message || '이번 달 저장 횟수를 모두 사용했습니다.') : null;
       state.history = undefined; // 내역 캐시 무효화
-      // 진단 — 저장이 실제로 어느 서버에 어떤 상태로 갔는지(운영 vs 로컬 서버·422 검증실패 구분)
-      if (res && res.ok) {
-        console.log('[RankFree] 시장분석 저장됨 id=' + res.id + ' server=' + (res.apiBase || '?'));
-      } else {
-        console.warn('[RankFree] 시장분석 저장 실패 status=' + (res && res.status) + ' server=' + (res && res.apiBase) + ' msg=' + (res && res.message) + ' loggedIn=' + (res && res.loggedIn));
-      }
     } catch (e) {
       state.savedId = null;
-      console.warn('[RankFree] 시장분석 저장 예외:', (e && e.message) || e);
     }
   }
 

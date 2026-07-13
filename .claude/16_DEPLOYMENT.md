@@ -19,7 +19,34 @@
 | SELinux | **Disabled** | Apache→fpm 소켓 정책 불필요 |
 
 ### 확정 파라미터 / 진행 상태 (2026-07-13)
-- **0~2단계 완료** (php83 설치·fpm 풀 기동까지). crm·타 서비스 영향 0 확인.
+- **배포 완료(0~6단계) — rankfree.kr 공개 라이브** 🎉. 외부에서 `HTTP 200 OK`, `X-Powered-By: PHP/8.3.32`(php83-fpm), HTTP/2, Laravel 세션 정상. crm·실사용 도메인 전부 무영향. DNS `rankfree.kr`·`www` → 서버 IP `49.247.13.187`. 프로덕션 캐시(config/route/view) 적용.
+- 서버 IP: `49.247.13.187`. **서버에서 `curl https://rankfree.kr`가 빈 응답인 건 NAT 헤어핀(자기 공인IP 루프백 미지원)일 뿐 정상** — 외부/로컬 `--resolve 127.0.0.1` 테스트는 200. `.env` 변경 시 `php83 artisan config:cache` 재실행 필요.
+- 스케줄러/큐: 앱에 예약작업·`ShouldQueue` 잡 없음 → 크론/워커 불필요. 확장 기본 서버 = `https://rankfree.kr`(코드 기본값, 로그인 폼에 프리필).
+
+### 기능 활성화 — 운영 .env·Playwright·세션 (필수)
+> `.env`는 시크릿이라 git으로 안 옮김. 아래를 운영 `.env`에 채워야 각 기능이 동작. **`.env` 변경 시 반드시 `php83 artisan config:cache`**(config 캐시 상태라 안 하면 반영 안 됨).
+
+**API 키만으로 되는 기능** — 로컬 `.env` 값 그대로 복사:
+- 키워드 검색량·경쟁: `NAVER_SEARCHAD_API_KEY` `NAVER_SEARCHAD_SECRET` `NAVER_SEARCHAD_CUSTOMER_ID`
+- 쇼핑 순위·셀러력·시장분석: `NAVER_SHOPPING_API_KEYS`
+
+**Playwright(chromium) 필요한 기능** — 키워드 성별·연령·트렌드(검색광고 웹세션), 스마트플레이스, 경쟁 SERP:
+- `.env`: `NAVER_ADS_LOGIN_ID` `NAVER_ADS_LOGIN_PW` `NAVER_ADS_CUSTOMER_ID` `NAVER_ADS_ACCOUNT_NO`, `RANKFREE_NODE=/home/jcurve/.nvm/versions/node/v22.14.0/bin/node`
+- playwright npm 패키지는 `npm ci`로 이미 설치. **chromium 브라우저는 별도**: `node_modules/.bin/playwright install chromium`(웹 실행 유저 **jcurve**로) + 시스템 라이브러리(`playwright install-deps chromium` 또는 dnf 수동).
+- 구조: `artisan searchadweb:login`(Playwright)이 세션 쿠키를 DB(암호화)에 저장 → 이후 성별/연령/트렌드는 **저장 쿠키로 curl** 호출(요청마다 브라우저 안 띄움).
+- **세션 지속성 크론(jcurve)** — 만료 전 재로그인으로 크롤링 끊김 방지:
+  `0 */4 * * * cd /www/jcurve/rankfree && php83 artisan searchadweb:login >> storage/logs/searchad-login.log 2>&1`
+
+**게차**: DB 계정은 `@localhost`뿐 아니라 **`@127.0.0.1`**도 필요(Laravel TCP 접속). chromium은 **웹 실행 유저(jcurve) 캐시**에 있어야(root `~/.cache`만으론 php-fpm 재로그인 실패).
+
+### 재배포 워크플로
+로컬 개발 → `git push` → 서버(jcurve) `bash deploy.sh`(git reset→composer→npm build→migrate→config/route/view:cache). **FTP 직접 편집 금지**(git과 어긋나고 다음 배포에 덮어써짐).
+- 4단계: `apxs`로 `mod_proxy_fcgi.so` 빌드+`LoadModule proxy_fcgi_module`(httpd.conf, proxy_module 다음). 5단계: `httpd-vhosts.conf`(:80 리다이렉트) + `httpd-ssl.conf`(:443) rankfree vhost를 DocumentRoot→`public` + `<FilesMatch \.php$> SetHandler "proxy:unix:/var/opt/remi/php83/run/php-fpm/rankfree.sock|fcgi://localhost/"`. 기존 GoGetSSL 인증서 유지. 검증: `curl -skI --resolve rankfree.kr:443:127.0.0.1 https://rankfree.kr` → HTTP/2 200.
+- 코드 전송: GitHub `github.com/jxamen/rankfree`(public) → 서버에서 **jcurve 유저로** clone/composer/artisan(root 파일 금지). 검증: `find /www/jcurve/rankfree ! -user jcurve` 빈 출력.
+
+**실전 게차(3단계에서 실제로 걸린 것)**
+- **DB 계정은 `@127.0.0.1`도 필요**: Laravel이 `DB_HOST=127.0.0.1`(TCP)로 붙어서 `'rankfree'@'localhost'`만으론 `[1045] Access denied`. → `CREATE USER 'rankfree'@'127.0.0.1' IDENTIFIED BY '동일암호'; GRANT ALL ON rankfree.* ...` 추가.
+- **Vite 자산 빌드 필수**: `public/build`는 gitignore라 배포에 없음 → `@vite`가 `manifest not found`로 500. → 서버에서 `npm ci && npm run build`. 재배포 시에도 항상 수행.
 - php83 = **8.3.32**(Remi, `/opt/remi/php83`), 시스템 php = **7.2.24 유지**(crm mod_php 무변경)
 - fpm 풀: `/etc/opt/remi/php83/php-fpm.d/rankfree.conf` → 소켓 **`/var/opt/remi/php83/run/php-fpm/rankfree.sock`** (`apache:apache`, `0660`), 워커 유저 **`jcurve`**
 - 배포 경로: **`/www/jcurve/rankfree`** (`jcurve:jcurve`, 현재 `.well-known`만) → 5단계에서 DocumentRoot를 **`/www/jcurve/rankfree/public`** 으로 변경

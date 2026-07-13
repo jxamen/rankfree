@@ -2,7 +2,8 @@
     // 페이지 제목은 현재 라우트에 매칭되는 콘솔 메뉴명으로 통일(메뉴관리에서 이름 변경 시 자동 반영).
     // 메뉴에 없는 하위 라우트(상세·show 등)는 페이지가 지정한 @section('page-title')을 사용.
     $__rn = \Illuminate\Support\Facades\Route::currentRouteName();
-    $__menuName = $__rn ? \App\Models\Menu::where('area', 'console')->where('route', $__rn)->value('name') : null;
+    $__menu = $__rn ? \App\Models\Menu::where('area', 'console')->where('route', $__rn)->first() : null;
+    $__menuName = $__menu?->name;
     $__pageTitle = $__menuName ?: (trim($__env->yieldContent('page-title')) ?: '대시보드');
 @endphp
 <!DOCTYPE html>
@@ -11,7 +12,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ $__pageTitle }} · rankfree</title>
+    <title>{{ $__pageTitle }} · 랭크프리</title>
+    @if ($__menu?->meta_description)<meta name="description" content="{{ $__menu->meta_description }}">@endif
+    @if ($__menu?->meta_keywords)<meta name="keywords" content="{{ $__menu->meta_keywords }}">@endif
     {{-- 다크모드 선적용(FOUC 방지) — 토글은 헤더 버튼, 저장은 localStorage --}}
     <script>if (localStorage.getItem('rf-theme') === 'dark') document.documentElement.classList.add('theme-dark');</script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -27,7 +30,7 @@
     <aside id="rf-sidebar" class="console-sidebar w-72 flex-none bg-canvas border-r border-hairline flex flex-col lg:sticky top-0 h-screen">
         <a href="{{ route('home') }}" class="flex items-center gap-2 px-5" style="height:64px;" title="홈으로">
             <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-primary text-on-primary font-display" style="font-size:var(--fs-sm);">R</span>
-            <span class="font-display text-ink" style="font-size:var(--fs-md);">rankfree</span>
+            <span class="font-display text-ink" style="font-size:var(--fs-md);">랭크프리</span>
         </a>
 
         {{-- 즐겨찾기(호버 팝오버) · 전체 메뉴(클릭 오버레이) — 메뉴 검색은 전체 메뉴 오버레이에 있음 --}}

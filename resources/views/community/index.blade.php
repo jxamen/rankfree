@@ -1,5 +1,5 @@
 @extends('layouts.site')
-@section('title', '커뮤니티 · rankfree')
+{{-- 타이틀·디스크립션은 메뉴관리 > 사이트 SEO(route: community)에서 설정 --}}
 @section('follow-theme', '1')
 
 @section('content')

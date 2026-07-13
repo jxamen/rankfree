@@ -1,6 +1,6 @@
 @extends('layouts.site')
 
-@section('title', $keyword.' 순위 결과 — rankfree')
+@section('title', $keyword.' 순위 결과 — 랭크프리')
 
 @section('content')
 <section class="container-page py-16 lg:py-20" style="max-width:760px;">
