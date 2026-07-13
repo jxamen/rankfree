@@ -72,6 +72,8 @@
                             document.querySelectorAll('.rc-form').forEach(function (f) { f.classList.toggle('hidden', f.dataset.rc !== t); });
                         });
                     });
+                    // 제출 실패(입력 유지) 시 방금 사용한 탭으로 복귀
+                    @if (old('target')) document.querySelector('.rc-tab[data-rc="shop"]').click(); @endif
                 })();
                 </script>
                 @endpush
