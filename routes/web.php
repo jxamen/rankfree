@@ -39,7 +39,10 @@ Route::get('/', function () {
 })->name('home');
 
 // A1 플레이스 순위체크 — 1회성 무료 조회
-Route::get('/rank-check', [RankCheckController::class, 'check'])->name('rank.check');
+// 1회성 무료 순위 조회 (비회원 허용 — Turnstile 봇 차단). 폼은 POST 제출.
+Route::post('/rank-check', [RankCheckController::class, 'check'])->name('rank.check');
+Route::post('/shop-check', [RankCheckController::class, 'shopCheck'])->name('shop.check');
+Route::get('/rank-check', fn () => redirect('/#hero-form')); // 구 GET 링크 안전 처리
 
 // 순위 추적 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');

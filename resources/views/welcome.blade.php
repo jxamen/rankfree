@@ -24,11 +24,57 @@
                     키워드만 넣으면 내 순위와 경쟁사, 시장 규모까지 — 회원가입 없이 지금 바로 확인하세요.
                 </p>
 
-                <form id="hero-form" action="/rank-check" method="GET" class="mt-8 card p-3 flex flex-col sm:flex-row gap-2" style="max-width:560px;box-shadow:var(--shadow-card);">
-                    <input name="keyword" class="input" style="flex:1;background:var(--color-surface-soft);" placeholder="검색 키워드 (예: 강남 미용실)" required>
-                    <input name="place" class="input" style="flex:1;background:var(--color-surface-soft);" placeholder="내 업체명 또는 플레이스 URL" required>
-                    <button type="submit" class="btn btn-primary">무료 순위 조회</button>
-                </form>
+                {{-- 무료 순위 조회 — 플레이스 / 쇼핑 2탭. 비회원도 조회 가능(비회원은 Cloudflare Turnstile 봇 검증) --}}
+                @php $__tsKey = \App\Support\Turnstile::siteKey(); @endphp
+                <div id="hero-form" class="mt-8" style="max-width:560px;">
+                    <div class="inline-flex rounded-lg border border-hairline overflow-hidden mb-2">
+                        <button type="button" class="rc-tab on" data-rc="place" style="padding:7px 18px;font-size:var(--fs-xs);font-weight:600;border:0;cursor:pointer;background:var(--color-primary);color:var(--color-on-primary);">플레이스</button>
+                        <button type="button" class="rc-tab" data-rc="shop" style="padding:7px 18px;font-size:var(--fs-xs);font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--color-muted);">쇼핑</button>
+                    </div>
+
+                    @error('captcha')
+                        <div class="mb-2 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
+                    @enderror
+
+                    {{-- 플레이스 --}}
+                    <form class="rc-form card p-3 flex flex-col sm:flex-row gap-2 flex-wrap" data-rc="place" action="{{ route('rank.check') }}" method="POST" style="box-shadow:var(--shadow-card);">
+                        @csrf
+                        <input name="keyword" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
+                        <input name="place" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="내 업체명 또는 플레이스 URL" value="{{ old('place') }}" required>
+                        <button type="submit" class="btn btn-primary">무료 순위 조회</button>
+                        @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" style="flex-basis:100%;"></div>@endif @endguest
+                    </form>
+
+                    {{-- 쇼핑 --}}
+                    <form class="rc-form card p-3 flex flex-col sm:flex-row gap-2 flex-wrap hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST" style="box-shadow:var(--shadow-card);">
+                        @csrf
+                        <input name="keyword" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
+                        <input name="target" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="상품 URL·상품ID 또는 스토어명" value="{{ old('target') }}" required>
+                        <button type="submit" class="btn btn-primary">무료 순위 조회</button>
+                        @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" style="flex-basis:100%;"></div>@endif @endguest
+                    </form>
+                </div>
+
+                @guest @if ($__tsKey)
+                    @push('scripts')<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>@endpush
+                @endif @endguest
+                @push('scripts')
+                <script>
+                (function () {
+                    document.querySelectorAll('.rc-tab').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var t = btn.dataset.rc;
+                            document.querySelectorAll('.rc-tab').forEach(function (b) {
+                                var on = b.dataset.rc === t;
+                                b.style.background = on ? 'var(--color-primary)' : 'transparent';
+                                b.style.color = on ? 'var(--color-on-primary)' : 'var(--color-muted)';
+                            });
+                            document.querySelectorAll('.rc-form').forEach(function (f) { f.classList.toggle('hidden', f.dataset.rc !== t); });
+                        });
+                    });
+                })();
+                </script>
+                @endpush
 
                 <p class="mt-5 text-muted-soft" style="font-size:var(--fs-xs);">
                     이미 <b class="text-muted">1,200+</b> 사장님이 순위를 확인했어요.

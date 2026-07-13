@@ -20,12 +20,13 @@ class NaverContentVolumeService
         if ($kw === '') {
             return null;
         }
+        // 키 없으면 결과를 캐시하지 않는다 — 환경 설정에서 키를 넣으면 다음 요청에 즉시 반영.
+        $keys = (array) config('rankfree.shopping.api_keys');
+        if (! $keys) {
+            return null;
+        }
 
-        return Cache::remember('kw:content:'.md5(mb_strtoupper(str_replace(' ', '', $kw))), now()->addHours(6), function () use ($kw) {
-            $keys = (array) config('rankfree.shopping.api_keys');
-            if (! $keys) {
-                return null;
-            }
+        return Cache::remember('kw:content:'.md5(mb_strtoupper(str_replace(' ', '', $kw))), now()->addHours(6), function () use ($kw, $keys) {
             $blog = $this->total('blog.json', $kw, $keys);
             $cafe = $this->total('cafearticle.json', $kw, $keys);
             if ($blog === null && $cafe === null) {
@@ -43,11 +44,13 @@ class NaverContentVolumeService
         if ($kw === '') {
             return null;
         }
+        $keys = (array) config('rankfree.shopping.api_keys');
+        if (! $keys) {
+            return null; // 키 없으면 캐시하지 않음(설정 즉시 반영)
+        }
 
-        return Cache::remember('kw:shoptotal:'.md5(mb_strtoupper(str_replace(' ', '', $kw), 'UTF-8')), now()->addHours(6), function () use ($kw) {
-            $keys = (array) config('rankfree.shopping.api_keys');
-
-            return $keys ? $this->total('shop.json', $kw, $keys) : null;
+        return Cache::remember('kw:shoptotal:'.md5(mb_strtoupper(str_replace(' ', '', $kw), 'UTF-8')), now()->addHours(6), function () use ($kw, $keys) {
+            return $this->total('shop.json', $kw, $keys);
         });
     }
 
@@ -62,12 +65,12 @@ class NaverContentVolumeService
         if ($kw === '') {
             return [];
         }
+        $keys = (array) config('rankfree.shopping.api_keys');
+        if (! $keys) {
+            return []; // 키 없으면 캐시하지 않음(설정 즉시 반영)
+        }
 
-        return Cache::remember('kw:popular:'.md5(mb_strtoupper(str_replace(' ', '', $kw))).':'.$limit, now()->addHours(6), function () use ($kw, $limit) {
-            $keys = (array) config('rankfree.shopping.api_keys');
-            if (! $keys) {
-                return [];
-            }
+        return Cache::remember('kw:popular:'.md5(mb_strtoupper(str_replace(' ', '', $kw))).':'.$limit, now()->addHours(6), function () use ($kw, $limit, $keys) {
             $each = (int) max(3, ceil($limit / 2) + 1);
             $blog = $this->items('blog.json', $kw, $keys, $each, '블로그');
             $cafe = $this->items('cafearticle.json', $kw, $keys, $each, '카페');

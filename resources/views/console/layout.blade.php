@@ -5,6 +5,20 @@
     $__menu = $__rn ? \App\Models\Menu::where('area', 'console')->where('route', $__rn)->first() : null;
     $__menuName = $__menu?->name;
     $__pageTitle = $__menuName ?: (trim($__env->yieldContent('page-title')) ?: '대시보드');
+
+    // 사이드바 활성 메뉴 — 페이지가 @section('active-menu','console.xxx')로 지정하면 그 메뉴만 활성.
+    // 공용 상세 라우트(예: console.blog.show)가 엉뚱한 부모(console.blog.* 와일드카드)를 물지 않게 오버라이드.
+    $__active = trim($__env->yieldContent('active-menu'));
+    $__isOn = function (?string $route) use ($__active) {
+        if (! $route) {
+            return false;
+        }
+        if ($__active !== '') {
+            return $route === $__active;
+        }
+
+        return request()->routeIs($route) || request()->routeIs($route.'.*');
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="ko">
@@ -84,7 +98,7 @@
         @if ($__leading->count())
         <div id="rf-nav-top" class="px-3 pt-1 flex flex-col gap-0.5 flex-none">
             @foreach ($__leading as $node)
-                @php $on = $node->route && (request()->routeIs($node->route) || request()->routeIs($node->route.'.*')); @endphp
+                @php $on = $__isOn($node->route); @endphp
                 <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                    class="sb-link px-3 {{ $on ? 'on' : '' }}" data-item data-label="{{ $node->name }}">
                     <span class="ic">@if (trim((string) $node->icon) !== '')<x-icon :name="$node->icon" />@endif</span>{{ $node->name }}
@@ -107,14 +121,14 @@
                         <div class="sb-group-items">
                             @foreach ($node->menuItems as $item)
                                 {{-- 상세(show 등) 하위 라우트도 부모 메뉴를 활성으로 유지. 활성=블루 틴트(.on) --}}
-                                @php $on = $item->route && (request()->routeIs($item->route) || request()->routeIs($item->route.'.*')); @endphp
+                                @php $on = $__isOn($item->route); @endphp
                                 <a href="{{ $item->resolvedUrl() ?? '#' }}" @if ($item->target === '_blank') target="_blank" @endif
                                    class="sb-sublink {{ $on ? 'on' : '' }}" data-item data-label="{{ $item->name }}">{{ $item->name }}</a>
                             @endforeach
                         </div>
                     </div>
                 @else
-                    @php $on = $node->route && (request()->routeIs($node->route) || request()->routeIs($node->route.'.*')); @endphp
+                    @php $on = $__isOn($node->route); @endphp
                     <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                        class="sb-link px-3 {{ $on ? 'on' : '' }}" data-item data-label="{{ $node->name }}">
                         <span class="ic">@if (trim((string) $node->icon) !== '')<x-icon :name="$node->icon" />@endif</span>{{ $node->name }}

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Keyword\NaverContentVolumeService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Models\AppSetting;
 use App\Models\User;
 use App\Providers\SettingsServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -156,6 +158,17 @@ class SettingsTest extends TestCase
         ]));
         $this->reboot();
         $this->assertSame('FIRST', config('services.anthropic.key'));
+    }
+
+    /** 키가 없으면 수집 결과(null)를 캐시하지 않아야 함 — 환경 설정에서 키를 넣으면 다음 요청에 즉시 반영. */
+    public function test_collector_does_not_cache_when_no_keys(): void
+    {
+        config(['rankfree.shopping.api_keys' => []]);
+        $svc = app(NaverContentVolumeService::class);
+
+        $this->assertNull($svc->counts('여름매트'));
+        $cacheKey = 'kw:content:'.md5(mb_strtoupper(str_replace(' ', '', '여름매트')));
+        $this->assertFalse(Cache::has($cacheKey), '키 없을 때 결과가 캐시되면 안 됨');
     }
 
     public function test_keyword_service_rotates_accounts(): void

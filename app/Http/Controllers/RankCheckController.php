@@ -3,13 +3,32 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Place\PlaceRankChecker;
+use App\Domain\Shopping\NaverShoppingRankService;
 use App\Models\PlaceRankLookup;
+use App\Support\Turnstile;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class RankCheckController extends Controller
 {
     /**
-     * 홈 폼 → 1회성 무료 순위 조회 → 결과 페이지.
+     * 비회원 봇 차단(Cloudflare Turnstile). 회원은 검증 생략, 비회원만 검사.
+     * 실패 시 입력값을 유지한 채 에러와 함께 홈으로 되돌린다.
+     */
+    private function botGuard(Request $request): ?RedirectResponse
+    {
+        if ($request->user()) {
+            return null; // 회원 → 봇 검증 생략
+        }
+        if (! Turnstile::verify($request->input('cf-turnstile-response'), $request->ip())) {
+            return back()->withErrors(['captcha' => '봇 검증에 실패했습니다. 잠시 후 다시 시도하세요.'])->withInput();
+        }
+
+        return null;
+    }
+
+    /**
+     * 홈 폼(플레이스 탭) → 1회성 무료 플레이스 순위 조회 → 결과 페이지.
      * place 입력은 URL/placeId(정확) 또는 업체명(부분일치) 모두 허용.
      */
     public function check(Request $request, PlaceRankChecker $checker)
@@ -18,6 +37,9 @@ class RankCheckController extends Controller
             'keyword' => 'required|string|max:100',
             'place' => 'required|string|max:255',
         ]);
+        if ($blocked = $this->botGuard($request)) {
+            return $blocked;
+        }
 
         $keyword = trim($data['keyword']);
         $place = trim($data['place']);
@@ -45,6 +67,31 @@ class RankCheckController extends Controller
         return view('rank.result', [
             'keyword' => $keyword,
             'place' => $place,
+            'result' => $result,
+        ]);
+    }
+
+    /**
+     * 홈 폼(쇼핑 탭) → 1회성 무료 쇼핑 순위 조회 → 결과 페이지.
+     * target 입력은 상품 URL/ID 또는 스토어(업체)명 허용.
+     */
+    public function shopCheck(Request $request, NaverShoppingRankService $shop)
+    {
+        $data = $request->validate([
+            'keyword' => 'required|string|max:100',
+            'target' => 'required|string|max:500',
+        ]);
+        if ($blocked = $this->botGuard($request)) {
+            return $blocked;
+        }
+
+        $keyword = trim($data['keyword']);
+        $target = $shop->resolveTarget(trim($data['target']));
+        $result = $shop->checkRank($keyword, $target);
+
+        return view('rank.shop-result', [
+            'keyword' => $keyword,
+            'target' => trim($data['target']),
             'result' => $result,
         ]);
     }

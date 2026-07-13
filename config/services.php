@@ -50,4 +50,10 @@ return [
         'key' => env('OPENAI_API_KEY'),
     ],
 
+    // Cloudflare Turnstile — 비회원 무료 순위조회 봇 차단. 키 미설정 시 검증 생략(로컬/미배포).
+    'turnstile' => [
+        'key' => env('TURNSTILE_SITE_KEY'),      // 위젯 렌더용 사이트 키(공개)
+        'secret' => env('TURNSTILE_SECRET'),     // 서버 검증용 시크릿
+    ],
+
 ];

@@ -1,5 +1,7 @@
 @extends('console.layout')
-@section('page-title', '블로그 수집')
+{{-- 공용 상세(console.blog.show)에서 분석 타입에 맞게 제목·사이드바 활성 — blog=지수분석, keyword=수집 --}}
+@section('page-title', ($type ?? '') === 'blog' ? '블로그 지수 분석' : '블로그 수집')
+@section('active-menu', ($type ?? '') === 'blog' ? 'console.blog-single' : 'console.blog')
 
 @section('console-content')
 @php

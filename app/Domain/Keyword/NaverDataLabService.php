@@ -28,12 +28,13 @@ class NaverDataLabService
         if ($kw === '') {
             return null;
         }
+        // 키 없으면 캐시하지 않음 — 환경 설정에서 키를 넣으면 다음 요청에 즉시 반영.
+        $keys = (array) config('rankfree.shopping.api_keys');
+        if (! $keys) {
+            return null;
+        }
 
-        return Cache::remember('kw:weekday:'.md5(mb_strtoupper(str_replace(' ', '', $kw))), now()->addHours(24), function () use ($kw) {
-            $keys = (array) config('rankfree.shopping.api_keys');
-            if (! $keys) {
-                return null;
-            }
+        return Cache::remember('kw:weekday:'.md5(mb_strtoupper(str_replace(' ', '', $kw))), now()->addHours(24), function () use ($kw, $keys) {
             $end = CarbonImmutable::yesterday();
             $start = $end->subDays(90);
             $body = json_encode([
