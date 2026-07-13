@@ -69,6 +69,9 @@ Route::middleware('auth')->group(function () {
 // API 문서 (공개)
 Route::view('/developers', 'site.developers')->name('developers');
 
+// 개인정보처리방침 (공개 — 크롬 웹스토어 심사 필수)
+Route::view('/privacy', 'site.privacy')->name('privacy');
+
 // 커뮤니티 (공개 열람, 작성은 로그인 필요)
 Route::get('/community', [CommunityController::class, 'index'])->name('community');
 Route::get('/community/post/{post}', [CommunityController::class, 'show'])->name('community.show');
