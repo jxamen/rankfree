@@ -36,16 +36,23 @@
             <a href="/#hero-form" class="btn btn-secondary mt-6">다시 조회</a>
         </div>
     @elseif ($result['found'])
+        @php $pct = $result['total'] > 0 ? max(0.1, round($result['rank'] / $result['total'] * 100, 1)) : null; @endphp
         <div class="card overflow-hidden" style="box-shadow:var(--shadow-card);">
-            <div class="card-soft flex items-center justify-between p-6" style="border-radius:0;">
-                <div style="min-width:0;">
-                    <div class="text-muted" style="font-size:var(--fs-xs);">현재 쇼핑 순위</div>
-                    <div class="text-ink font-semibold mt-1 truncate" style="font-size:var(--fs-base);max-width:420px;">{{ $result['title'] ?: ($result['mall_name'] ?: $target) }}</div>
-                    <div class="text-muted-soft mt-0.5" style="font-size:var(--fs-xs);">
-                        @if ($result['mall_name']){{ $result['mall_name'] }} · @endif총 {{ number_format($result['total']) }}개 노출
+            {{-- 순위 히어로 (다크 featured 밴드) --}}
+            <div style="background:var(--color-surface-dark);padding:34px 32px;">
+                <div class="flex items-end justify-between flex-wrap gap-5">
+                    <div style="min-width:0;">
+                        <div style="color:rgba(255,255,255,.5);font-size:var(--fs-xs);">@if ($result['mall_name']){{ $result['mall_name'] }} · @endif총 {{ number_format($result['total']) }}개 노출</div>
+                        <div class="font-semibold mt-1 truncate" style="color:#fff;font-size:var(--fs-md);max-width:360px;">{{ $result['title'] ?: ($result['mall_name'] ?: $target) }}</div>
+                        @if ($pct !== null)
+                        <span class="inline-flex items-center mt-3" style="background:color-mix(in srgb, var(--color-success) 20%, transparent);color:color-mix(in srgb, var(--color-success) 40%, #fff);padding:5px 13px;border-radius:var(--radius-pill);font-size:var(--fs-xs);font-weight:600;">상위 {{ $pct < 1 ? $pct : round($pct) }}%</span>
+                        @endif
+                    </div>
+                    <div class="text-right flex-none">
+                        <div style="color:rgba(255,255,255,.5);font-size:var(--fs-xs);">현재 쇼핑 순위</div>
+                        <div class="font-display" style="color:#fff;font-size:clamp(52px,9vw,80px);line-height:.85;letter-spacing:-0.02em;">{{ $result['rank'] }}<span style="font-size:var(--fs-xl);color:rgba(255,255,255,.55);"> 위</span></div>
                     </div>
                 </div>
-                <div class="font-display text-ink flex-none" style="font-size:var(--fs-3xl);line-height:1;">{{ $result['rank'] }}<span class="text-muted" style="font-size:var(--fs-lg);">위</span></div>
             </div>
 
             <div class="grid grid-cols-2 divide-x" style="border-top:1px solid var(--color-hairline);">

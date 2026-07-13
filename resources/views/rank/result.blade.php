@@ -26,14 +26,26 @@
         </div>
     @elseif ($result['found'])
         {{-- 순위 발견 --}}
+        @php
+            $catLabel = ['place'=>'플레이스','restaurant'=>'음식점','hospital'=>'병원','hairshop'=>'미용','nailshop'=>'네일','accommodation'=>'숙박'][$result['category']] ?? '플레이스';
+            $pct = $result['list_total'] > 0 ? max(0.1, round($result['rank'] / $result['list_total'] * 100, 1)) : null;
+        @endphp
         <div class="card overflow-hidden" style="box-shadow:var(--shadow-card);">
-            <div class="card-soft flex items-center justify-between p-6" style="border-radius:0;">
-                <div>
-                    <div class="text-muted" style="font-size:var(--fs-xs);">현재 순위</div>
-                    <div class="text-ink font-semibold mt-1" style="font-size:var(--fs-base);">{{ $result['place_name'] ?: $place }}</div>
-                    <div class="text-muted-soft mt-0.5" style="font-size:var(--fs-xs);">{{ ['place'=>'플레이스','restaurant'=>'음식점','hospital'=>'병원','hairshop'=>'미용','nailshop'=>'네일','accommodation'=>'숙박'][$result['category']] ?? '플레이스' }} · 총 {{ number_format($result['list_total']) }}개 노출</div>
+            {{-- 순위 히어로 (다크 featured 밴드) --}}
+            <div style="background:var(--color-surface-dark);padding:34px 32px;">
+                <div class="flex items-end justify-between flex-wrap gap-5">
+                    <div style="min-width:0;">
+                        <div style="color:rgba(255,255,255,.5);font-size:var(--fs-xs);">{{ $catLabel }} · 총 {{ number_format($result['list_total']) }}개 노출</div>
+                        <div class="font-semibold mt-1 truncate" style="color:#fff;font-size:var(--fs-md);max-width:360px;">{{ $result['place_name'] ?: $place }}</div>
+                        @if ($pct !== null)
+                        <span class="inline-flex items-center mt-3" style="background:color-mix(in srgb, var(--color-success) 20%, transparent);color:color-mix(in srgb, var(--color-success) 40%, #fff);padding:5px 13px;border-radius:var(--radius-pill);font-size:var(--fs-xs);font-weight:600;">상위 {{ $pct < 1 ? $pct : round($pct) }}%</span>
+                        @endif
+                    </div>
+                    <div class="text-right flex-none">
+                        <div style="color:rgba(255,255,255,.5);font-size:var(--fs-xs);">현재 순위</div>
+                        <div class="font-display" style="color:#fff;font-size:clamp(52px,9vw,80px);line-height:.85;letter-spacing:-0.02em;">{{ $result['rank'] }}<span style="font-size:var(--fs-xl);color:rgba(255,255,255,.55);"> 위</span></div>
+                    </div>
                 </div>
-                <div class="font-display text-ink" style="font-size:var(--fs-3xl);line-height:1;">{{ $result['rank'] }}<span class="text-muted" style="font-size:var(--fs-lg);">위</span></div>
             </div>
 
             {{-- 지표 --}}

@@ -27,32 +27,46 @@
                 {{-- 무료 순위 조회 — 플레이스 / 쇼핑 2탭. 비회원도 조회 가능(비회원은 Cloudflare Turnstile 봇 검증) --}}
                 @php $__tsKey = \App\Support\Turnstile::siteKey(); @endphp
                 <div id="hero-form" class="mt-8" style="max-width:560px;">
-                    <div class="inline-flex rounded-lg border border-hairline overflow-hidden mb-2">
-                        <button type="button" class="rc-tab on" data-rc="place" style="padding:7px 18px;font-size:var(--fs-xs);font-weight:600;border:0;cursor:pointer;background:var(--color-primary);color:var(--color-on-primary);">플레이스</button>
-                        <button type="button" class="rc-tab" data-rc="shop" style="padding:7px 18px;font-size:var(--fs-xs);font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--color-muted);">쇼핑</button>
+                    <div class="card overflow-hidden" style="box-shadow:var(--shadow-card);">
+                        {{-- 탭: 카드 폭 전체 세그먼트 --}}
+                        <div class="rc-tabs">
+                            <button type="button" class="rc-tab on" data-rc="place">플레이스 순위</button>
+                            <button type="button" class="rc-tab" data-rc="shop">쇼핑 순위</button>
+                        </div>
+
+                        @error('captcha')
+                            <div class="mx-4 mt-4 -mb-1 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
+                        @enderror
+
+                        {{-- 플레이스 --}}
+                        <form class="rc-form" data-rc="place" action="{{ route('rank.check') }}" method="POST">
+                            @csrf
+                            <div class="p-4 flex flex-col gap-2.5">
+                                <input name="keyword" class="input" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
+                                <input name="place" class="input" placeholder="내 업체명 또는 플레이스 URL" value="{{ old('place') }}" required>
+                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}"></div>@endif @endguest
+                                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
+                            </div>
+                        </form>
+
+                        {{-- 쇼핑 --}}
+                        <form class="rc-form hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST">
+                            @csrf
+                            <div class="p-4 flex flex-col gap-2.5">
+                                <input name="keyword" class="input" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
+                                <input name="target" class="input" placeholder="상품 URL·상품ID 또는 스토어명" value="{{ old('target') }}" required>
+                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}"></div>@endif @endguest
+                                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
+                            </div>
+                        </form>
                     </div>
 
-                    @error('captcha')
-                        <div class="mb-2 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
-                    @enderror
-
-                    {{-- 플레이스 --}}
-                    <form class="rc-form card p-3 flex flex-col sm:flex-row gap-2 flex-wrap" data-rc="place" action="{{ route('rank.check') }}" method="POST" style="box-shadow:var(--shadow-card);">
-                        @csrf
-                        <input name="keyword" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
-                        <input name="place" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="내 업체명 또는 플레이스 URL" value="{{ old('place') }}" required>
-                        <button type="submit" class="btn btn-primary">무료 순위 조회</button>
-                        @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" style="flex-basis:100%;"></div>@endif @endguest
-                    </form>
-
-                    {{-- 쇼핑 --}}
-                    <form class="rc-form card p-3 flex flex-col sm:flex-row gap-2 flex-wrap hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST" style="box-shadow:var(--shadow-card);">
-                        @csrf
-                        <input name="keyword" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
-                        <input name="target" class="input" style="flex:1;min-width:150px;background:var(--color-surface-soft);" placeholder="상품 URL·상품ID 또는 스토어명" value="{{ old('target') }}" required>
-                        <button type="submit" class="btn btn-primary">무료 순위 조회</button>
-                        @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" style="flex-basis:100%;"></div>@endif @endguest
-                    </form>
+                    @guest @if ($__tsKey)
+                        <p class="mt-2 text-muted-soft flex items-center gap-1" style="font-size:var(--fs-xs);">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            Cloudflare가 자동 조회(봇)를 차단합니다
+                        </p>
+                    @endif @endguest
                 </div>
 
                 @guest @if ($__tsKey)
@@ -64,11 +78,7 @@
                     document.querySelectorAll('.rc-tab').forEach(function (btn) {
                         btn.addEventListener('click', function () {
                             var t = btn.dataset.rc;
-                            document.querySelectorAll('.rc-tab').forEach(function (b) {
-                                var on = b.dataset.rc === t;
-                                b.style.background = on ? 'var(--color-primary)' : 'transparent';
-                                b.style.color = on ? 'var(--color-on-primary)' : 'var(--color-muted)';
-                            });
+                            document.querySelectorAll('.rc-tab').forEach(function (b) { b.classList.toggle('on', b.dataset.rc === t); });
                             document.querySelectorAll('.rc-form').forEach(function (f) { f.classList.toggle('hidden', f.dataset.rc !== t); });
                         });
                     });
