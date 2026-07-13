@@ -56,4 +56,30 @@ return [
         'secret' => env('TURNSTILE_SECRET'),     // 서버 검증용 시크릿
     ],
 
+    // 소셜 로그인 — 각 플랫폼 개발자센터에서 앱 등록 후 Client ID/Secret 발급.
+    // Redirect(콜백) URL 등록: {APP_URL}/auth/{provider}/callback
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+    ],
+    'naver' => [
+        'client_id' => env('NAVER_CLIENT_ID'),
+        'client_secret' => env('NAVER_CLIENT_SECRET'),
+        'redirect' => env('NAVER_REDIRECT_URI', '/auth/naver/callback'),
+    ],
+    'kakao' => [
+        'client_id' => env('KAKAO_CLIENT_ID'),
+        'client_secret' => env('KAKAO_CLIENT_SECRET'), // 카카오는 선택(REST API 키만으로도 가능)
+        'redirect' => env('KAKAO_REDIRECT_URI', '/auth/kakao/callback'),
+    ],
+
+    // 알리고 SMS — 전화번호 인증 문자 발송. 발신번호(sender)는 알리고에 사전 등록 필요.
+    'aligo' => [
+        'user_id' => env('ALIGO_USER_ID'),
+        'key' => env('ALIGO_API_KEY'),
+        'sender' => env('ALIGO_SENDER'),
+        'test' => env('ALIGO_TEST_MODE', false), // true면 실제 발송 없이 성공 응답(개발용)
+    ],
+
 ];

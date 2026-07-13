@@ -14,6 +14,8 @@ use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BlogIndexController;
+use App\Http\Controllers\PhoneVerificationController;
+use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\BulkKeywordController;
 use App\Http\Controllers\Admin\CommunitySeedController;
 use App\Http\Controllers\Admin\PersonaController;
@@ -92,6 +94,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/register', [AuthController::class, 'register']);
+
+    // 소셜 로그인/가입 (google 내장 · naver/kakao SocialiteProviders)
+    Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect')->where('provider', 'google|naver|kakao');
+    Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback')->where('provider', 'google|naver|kakao');
+    Route::get('/auth/complete', [SocialAuthController::class, 'complete'])->name('social.complete');
+    Route::post('/auth/complete', [SocialAuthController::class, 'completeStore']);
+
+    // 전화번호 SMS 인증(가입 폼 AJAX) — 발송 남용 방지 throttle
+    Route::post('/phone/send-code', [PhoneVerificationController::class, 'send'])->middleware('throttle:10,1')->name('phone.send');
+    Route::post('/phone/verify-code', [PhoneVerificationController::class, 'verify'])->middleware('throttle:30,1')->name('phone.verify');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
 

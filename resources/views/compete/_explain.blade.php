@@ -12,41 +12,43 @@
     };
 @endphp
 <style>
-.xw{font-size:.875rem;color:#333}
-.xw .mut{color:#8a94a6}
-.xw .xh{margin-bottom:12px}.xw .xh b{font-size:var(--fs-md)}
-.xw .minetag{background:#fffbe6;border:1px solid #f0d98a;color:#a37b00;border-radius:4px;font-size:.74rem;padding:1px 6px}
+/* 색은 전부 테마 토큰 — 라이트/다크(.theme-dark) 자동 적응. 하드코딩 hex 금지 */
+.xw{font-size:.875rem;color:var(--color-body)}
+.xw .mut{color:var(--color-muted)}
+.xw a{color:var(--color-accent)}
+.xw .xh{margin-bottom:12px}.xw .xh b{font-size:var(--fs-md);color:var(--color-ink)}
+.xw .minetag{background:color-mix(in srgb,var(--color-warning) 16%,var(--color-canvas));border:1px solid color-mix(in srgb,var(--color-warning) 40%,var(--color-canvas));color:var(--color-warning);border-radius:4px;font-size:.74rem;padding:1px 6px}
 .xw .xsum{display:flex;gap:12px;margin-bottom:16px}
-.xw .xsc{flex:1;background:#fafbfc;border:1px solid #eef0f2;border-radius:8px;padding:12px 14px;text-align:center}
-.xw .xsc .l{display:block;color:#8a94a6;font-size:.78rem}.xw .xsc .v{font-size:var(--fs-xl);font-weight:800;color:#111}
-.xw .xsc.n3{background:#eefcf3;border-color:#b7e9cd}.xw .xsc.n3 .v{color:#03a54a}
-.xw .xsec{border:1px solid #eef0f2;border-radius:8px;padding:12px 16px;margin-bottom:12px}
-.xw .xt{font-weight:700;color:#1f2937;margin-bottom:9px;font-size:.95rem}
-.xw .xrow{font-size:.82rem;background:#fafbfc;border-radius:6px;padding:7px 11px}
-.xw .xnote{color:#8a94a6;font-size:.78rem;margin-top:7px}
-.xw .xnote2{color:#adb5bd;font-size:.77rem;margin-top:6px}
+.xw .xsc{flex:1;background:var(--color-surface-soft);border:1px solid var(--color-hairline);border-radius:8px;padding:12px 14px;text-align:center}
+.xw .xsc .l{display:block;color:var(--color-muted);font-size:.78rem}.xw .xsc .v{font-size:var(--fs-xl);font-weight:800;color:var(--color-ink)}
+.xw .xsc.n3{background:color-mix(in srgb,var(--color-success) 12%,var(--color-canvas));border-color:color-mix(in srgb,var(--color-success) 35%,var(--color-canvas))}.xw .xsc.n3 .v{color:var(--color-success)}
+.xw .xsec{border:1px solid var(--color-hairline);border-radius:8px;padding:12px 16px;margin-bottom:12px}
+.xw .xt{font-weight:700;color:var(--color-ink);margin-bottom:9px;font-size:.95rem}
+.xw .xrow{font-size:.82rem;background:var(--color-surface-soft);border-radius:6px;padding:7px 11px}
+.xw .xnote{color:var(--color-muted);font-size:.78rem;margin-top:7px}
+.xw .xnote2{color:var(--color-muted-soft);font-size:.77rem;margin-top:6px}
 .xw table.xtb{width:100%;border-collapse:collapse}
-.xw table.xtb th{background:#fafbfc;color:#8a94a6;font-weight:600;font-size:.8rem;padding:7px 10px;border-bottom:1px solid #eef0f2;text-align:left}
-.xw table.xtb td{padding:9px 10px;border-bottom:1px solid #f4f6f8;vertical-align:middle;font-size:.86rem}
+.xw table.xtb th{background:var(--color-surface-soft);color:var(--color-muted);font-weight:600;font-size:.8rem;padding:7px 10px;border-bottom:1px solid var(--color-hairline);text-align:left}
+.xw table.xtb td{padding:9px 10px;border-bottom:1px solid var(--color-hairline-soft);vertical-align:middle;font-size:.86rem;color:var(--color-body)}
 .xw table.xtb td.c,.xw table.xtb th.c{text-align:center}
-.xw table.xtb .sub{color:#adb5bd;font-size:.75rem;margin-top:2px}
-.xw .ok{color:#03a54a}.xw .no{color:#e5484d}.xw .mid{color:#c17a00}
-.xw .xb{display:inline-block;width:60%;height:8px;background:#eef0f2;border-radius:4px;vertical-align:middle;overflow:hidden}
+.xw table.xtb .sub{color:var(--color-muted-soft);font-size:.75rem;margin-top:2px}
+.xw .ok{color:var(--color-success)}.xw .no{color:var(--color-error)}.xw .mid{color:var(--color-warning)}
+.xw .xb{display:inline-block;width:60%;height:8px;background:var(--color-surface-strong);border-radius:4px;vertical-align:middle;overflow:hidden}
 .xw .xf{display:block;height:100%;border-radius:4px}
 .xw .xchk{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
-.xw .ck{display:flex;justify-content:space-between;border-bottom:1px dashed #f0f2f4;padding:5px 0;font-size:.86rem}
-.xw .ck .ckl{color:#555}.xw .ck .ckr{color:#8a94a6}
+.xw .ck{display:flex;justify-content:space-between;border-bottom:1px dashed var(--color-hairline-soft);padding:5px 0;font-size:.86rem}
+.xw .ck .ckl{color:var(--color-body)}.xw .ck .ckr{color:var(--color-muted)}
 .xw .pplus2{display:inline-block;font-size:.74rem;font-weight:700;color:#fff;background:#03c75a;border-radius:4px;padding:1px 6px;letter-spacing:-.3px}
 .xw .repkw{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .xw .repkw>.mut{font-weight:700;margin-right:2px}
-.xw .repkw .rkc{background:#eefcf3;border-color:#a5e3c1;color:#03a54a;font-weight:700}
+.xw .repkw .rkc{background:color-mix(in srgb,var(--color-success) 12%,var(--color-canvas));border-color:color-mix(in srgb,var(--color-success) 35%,var(--color-canvas));color:var(--color-success);font-weight:700}
 .xw .rkg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}
-.xw .rkg .rkl{font-size:.78rem;color:#8a94a6;font-weight:700;min-width:84px}
-.xw .rkc{display:inline-block;font-size:.8rem;padding:3px 9px;border-radius:12px;border:1px solid #eef0f2;background:#fafbfc;color:#444}
-.xw .rkc b{color:#12b886;font-weight:700}
-.xw .rkc.voted{background:#eefcf3;border-color:#c3ecd4}.xw .rkc.voted b{color:#03a54a}
-.xw .rkc.menu{background:#eff4ff;border-color:#d3e0fb}.xw .rkc.menu b{color:#3d6fe0}
-.xw .rkc.theme{background:#fff6ec;border-color:#f3ddba}.xw .rkc.theme b{color:#c17a00}
+.xw .rkg .rkl{font-size:.78rem;color:var(--color-muted);font-weight:700;min-width:84px}
+.xw .rkc{display:inline-block;font-size:.8rem;padding:3px 9px;border-radius:12px;border:1px solid var(--color-hairline);background:var(--color-surface-soft);color:var(--color-body)}
+.xw .rkc b{color:var(--color-success);font-weight:700}
+.xw .rkc.voted{background:color-mix(in srgb,var(--color-success) 12%,var(--color-canvas));border-color:color-mix(in srgb,var(--color-success) 35%,var(--color-canvas))}.xw .rkc.voted b{color:var(--color-success)}
+.xw .rkc.menu{background:color-mix(in srgb,var(--color-accent) 12%,var(--color-canvas));border-color:color-mix(in srgb,var(--color-accent) 35%,var(--color-canvas))}.xw .rkc.menu b{color:var(--color-accent)}
+.xw .rkc.theme{background:color-mix(in srgb,var(--color-warning) 12%,var(--color-canvas));border-color:color-mix(in srgb,var(--color-warning) 35%,var(--color-canvas))}.xw .rkc.theme b{color:var(--color-warning)}
 @media(max-width:640px){.xw .xchk{grid-template-columns:1fr}.xw .xsum{flex-wrap:wrap}.xw .rkg .rkl{min-width:auto;width:100%}}
 </style>
 <div class="xw">
@@ -78,7 +80,7 @@
       <tr><td>{{ $r[0] }}<div class="sub">{{ $r[3] }}</div></td>
           <td class="c">@if ($g === null)<span class="mut">해당없음</span>@else{!! $grade($g) !!}@endif</td>
           <td class="c mut">{{ (int) ($r[2] * 100) }}%</td>
-          <td>{!! $bar($s, '#03c75a') !!} <span class="mut">{{ $s === null ? '–' : $s }}</span></td></tr>
+          <td>{!! $bar($s, 'var(--color-success)') !!} <span class="mut">{{ $s === null ? '–' : $s }}</span></td></tr>
     @endforeach
     </tbody></table>
   </div>
@@ -88,7 +90,7 @@
       @php $v = $p['v']; $alt = $p['alt'] ?? null; @endphp
       <tr><td>{{ $p['label'] }} <span class="mut">{{ $p['code'] }}</span></td>
           <td class="c mut">{{ (int) ($p['w'] * 100) }}%</td>
-          <td>{!! $bar($v, '#4C7EF3') !!} <span class="mut">{{ ($v === null || $v === '') ? ($alt !== null ? $alt : '결측(제외)') : $num($v) }}</span></td></tr>
+          <td>{!! $bar($v, 'var(--color-accent)') !!} <span class="mut">{{ ($v === null || $v === '') ? ($alt !== null ? $alt : '결측(제외)') : $num($v) }}</span></td></tr>
     @endforeach
     </tbody></table>
     <div class="xnote">예약자 리뷰 미제공 업종(음식점 등)은 영수증 리뷰의 「예약 후 이용」 언급 수를 경쟁셋 대비 정규화해 D3에 반영합니다. D9·D10은 리뷰를 수집한 매장(내 매장+상위 10)만 산출됩니다.</div>

@@ -11,7 +11,17 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('register') }}" class="mt-6 flex flex-col gap-4">
+    <div class="mt-6">
+        @include('auth._social-buttons')
+    </div>
+
+    <div class="flex items-center gap-3 my-5">
+        <span style="flex:1;height:1px;background:var(--color-hairline);"></span>
+        <span class="text-muted-soft" style="font-size:var(--fs-xs);">또는 이메일로 가입</span>
+        <span style="flex:1;height:1px;background:var(--color-hairline);"></span>
+    </div>
+
+    <form method="POST" action="{{ route('register') }}" class="flex flex-col gap-4">
         @csrf
         <div>
             <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">이름</label>
@@ -21,6 +31,7 @@
             <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">이메일</label>
             <input name="email" type="email" class="input" value="{{ old('email') }}" required>
         </div>
+        @include('auth._phone-verify')
         <div>
             <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">비밀번호</label>
             <input name="password" type="password" class="input" required minlength="8">

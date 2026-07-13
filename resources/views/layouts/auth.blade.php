@@ -9,6 +9,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $__title }}</title>
     @if ($__seo['description'])<meta name="description" content="{{ $__seo['description'] }}">@endif
     @if ($__seo['keywords'])<meta name="keywords" content="{{ $__seo['keywords'] }}">@endif
@@ -25,5 +26,6 @@
         </div>
         <p class="text-center text-muted mt-6" style="font-size:var(--fs-xs);">@yield('auth-footer')</p>
     </div>
+    @stack('scripts')
 </body>
 </html>

@@ -26,3 +26,15 @@ if (config('rankfree.community.schedule_enabled', true)) {
         ->everyThirtyMinutes()
         ->withoutOverlapping();
 }
+
+// 앱 타임존이 UTC 라 시각 지정 스케줄은 반드시 timezone('Asia/Seoul') 로 KST 고정.
+
+// 플레이스 순위추적 — 매일 오전 11:30·오후 4:30(KST). 활성 슬롯 순위 조회·기록(nCaptcha 토큰 필요).
+Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->withoutOverlapping()->runInBackground();
+Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->withoutOverlapping()->runInBackground();
+
+// 쇼핑 순위추적 — 매시간. 활성 슬롯 순위 조회·기록(openapi shop.json).
+Schedule::command('shop:track-run')->hourly()->withoutOverlapping()->runInBackground();
+
+// 스마트플레이스 리포트 수집 + 세션 유지 — 매일 새벽 3시(KST). (crm cron/smartplace_collect.php 이식)
+Schedule::command('smartplace:collect')->timezone('Asia/Seoul')->dailyAt('03:00')->withoutOverlapping()->runInBackground();
