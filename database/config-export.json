@@ -86,7 +86,8 @@
             "created_at": "2026-07-10 05:42:20",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 2,
@@ -98,12 +99,13 @@
             "icon": "fas fa-chart-line",
             "sort_order": 0,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "플레이스 순위 추적",
+            "meta_description": "키워드별 네이버 플레이스 순위를 매일 자동 기록하고 추이·리뷰 변화를 추적합니다.",
             "created_at": "2026-07-10 05:42:20",
             "updated_at": "2026-07-11 14:45:11",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 3,
@@ -115,16 +117,17 @@
             "icon": "fas fa-satellite-dish",
             "sort_order": 1,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "플레이스 경쟁 분석",
+            "meta_description": "상위 경쟁 업체와 내 플레이스의 리뷰·저장·SEO 신호를 비교 분석합니다.",
             "created_at": "2026-07-10 05:42:20",
             "updated_at": "2026-07-11 14:45:11",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 6,
-            "parent_id": null,
+            "parent_id": 53,
             "area": "admin",
             "name": "회원 관리",
             "route": "admin.members",
@@ -135,13 +138,14 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-10 05:42:20",
-            "updated_at": "2026-07-10 06:30:26",
+            "updated_at": "2026-07-13 08:20:32",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 7,
-            "parent_id": null,
+            "parent_id": 53,
             "area": "admin",
             "name": "구독 관리",
             "route": "admin.subscriptions",
@@ -152,43 +156,46 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-10 05:42:20",
-            "updated_at": "2026-07-10 06:30:26",
+            "updated_at": "2026-07-13 08:20:32",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 8,
-            "parent_id": null,
+            "parent_id": 56,
             "area": "admin",
             "name": "메뉴 관리",
             "route": "admin.menus",
             "url": null,
             "icon": "📋",
-            "sort_order": 2,
+            "sort_order": 1,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-10 05:42:20",
-            "updated_at": "2026-07-10 06:30:26",
+            "updated_at": "2026-07-13 08:22:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 9,
-            "parent_id": null,
+            "parent_id": 56,
             "area": "admin",
             "name": "권한 설정",
             "route": "admin.permissions",
             "url": null,
             "icon": "🛡️",
-            "sort_order": 3,
+            "sort_order": 2,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-10 05:42:20",
-            "updated_at": "2026-07-10 06:30:26",
+            "updated_at": "2026-07-13 08:22:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 10,
@@ -205,7 +212,8 @@
             "created_at": "2026-07-10 06:18:17",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 11,
@@ -222,7 +230,8 @@
             "created_at": "2026-07-10 06:18:24",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 14,
@@ -239,7 +248,8 @@
             "created_at": "2026-07-10 07:25:25",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 15,
@@ -251,12 +261,13 @@
             "icon": "fas fa-chart-pie",
             "sort_order": 1,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "키워드 분석",
+            "meta_description": "월간 검색량·성별\/연령·계절성 트렌드·연관 키워드를 한 번에 분석합니다.",
             "created_at": "2026-07-10 07:26:45",
             "updated_at": "2026-07-10 07:27:11",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 16,
@@ -273,7 +284,8 @@
             "created_at": "2026-07-10 09:06:15",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 17,
@@ -290,7 +302,8 @@
             "created_at": "2026-07-10 09:06:54",
             "updated_at": "2026-07-10 14:49:55",
             "is_group": 0,
-            "target": "_blank"
+            "target": "_blank",
+            "meta_keywords": null
         },
         {
             "id": 18,
@@ -302,12 +315,13 @@
             "icon": "fas fa-key",
             "sort_order": 0,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "API 키",
+            "meta_description": "순위·경쟁·키워드 분석 REST API 키를 발급·관리합니다.",
             "created_at": "2026-07-10 09:08:49",
             "updated_at": "2026-07-10 14:49:55",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 20,
@@ -319,12 +333,13 @@
             "icon": "fas fa-chart-column",
             "sort_order": 1,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "쇼핑 시장 분석",
+            "meta_description": "키워드 시장 규모·매출·경쟁 구도와 진입 전략을 분석합니다.",
             "created_at": "2026-07-10 11:11:57",
             "updated_at": "2026-07-12 06:48:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 21,
@@ -336,12 +351,13 @@
             "icon": "fas fa-box",
             "sort_order": 3,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "상품 리뷰 분석",
+            "meta_description": "스마트스토어 상품 리뷰의 감정·옵션·약점을 분석합니다.",
             "created_at": "2026-07-10 11:32:13",
             "updated_at": "2026-07-12 06:48:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 22,
@@ -353,12 +369,13 @@
             "icon": "fas fa-house-user",
             "sort_order": 2,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "스마트플레이스 리포트",
+            "meta_description": "방문·유입·리뷰·예약 통계를 스마트플레이스에서 수집해 리포트로 제공합니다.",
             "created_at": "2026-07-10 11:39:52",
             "updated_at": "2026-07-11 14:45:11",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 23,
@@ -370,12 +387,13 @@
             "icon": "🛒",
             "sort_order": 0,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "쇼핑 순위 추적",
+            "meta_description": "네이버 쇼핑 검색에서 상품·업체의 키워드별 순위를 매일 추적합니다.",
             "created_at": "2026-07-10 14:36:05",
             "updated_at": "2026-07-12 06:48:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 24,
@@ -387,12 +405,13 @@
             "icon": "fas fa-spider",
             "sort_order": 0,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "블로그 분석",
+            "meta_description": "검색 노출 블로그를 수집하고 방문·이웃·전문성 지수를 분석합니다.",
             "created_at": "2026-07-10 15:46:49",
             "updated_at": "2026-07-11 09:54:26",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 25,
@@ -409,7 +428,8 @@
             "created_at": "2026-07-10 15:51:32",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 26,
@@ -426,7 +446,8 @@
             "created_at": "2026-07-11 04:00:34",
             "updated_at": "2026-07-11 09:54:46",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 27,
@@ -438,12 +459,13 @@
             "icon": "far fa-file-powerpoint",
             "sort_order": 2,
             "is_active": 1,
-            "meta_title": null,
-            "meta_description": null,
+            "meta_title": "셀러력 진단",
+            "meta_description": "쇼핑 상품의 5축 SEO·지수를 경쟁 상품과 비교 진단합니다.",
             "created_at": "2026-07-11 08:25:06",
             "updated_at": "2026-07-12 06:48:34",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 28,
@@ -453,18 +475,19 @@
             "route": null,
             "url": null,
             "icon": "📝",
-            "sort_order": 50,
+            "sort_order": 0,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:22:34",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 29,
-            "parent_id": 28,
+            "parent_id": 55,
             "area": "admin",
             "name": "공지사항",
             "route": "admin.notices",
@@ -475,13 +498,14 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:22:02",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 30,
-            "parent_id": 28,
+            "parent_id": 55,
             "area": "admin",
             "name": "FAQ",
             "route": "admin.faqs",
@@ -492,13 +516,14 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:22:02",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 31,
-            "parent_id": 28,
+            "parent_id": 55,
             "area": "admin",
             "name": "1:1 문의",
             "route": "admin.qnas",
@@ -509,43 +534,46 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:22:02",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 32,
-            "parent_id": 28,
+            "parent_id": 54,
             "area": "admin",
             "name": "배너 관리",
             "route": "admin.banners",
             "url": null,
             "icon": "🖼️",
-            "sort_order": 3,
+            "sort_order": 1,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:21:54",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 33,
-            "parent_id": 28,
+            "parent_id": 54,
             "area": "admin",
             "name": "팝업 관리",
             "route": "admin.popups",
             "url": null,
             "icon": "🪧",
-            "sort_order": 4,
+            "sort_order": 2,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-11 09:40:16",
-            "updated_at": "2026-07-11 09:40:16",
+            "updated_at": "2026-07-13 08:21:54",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 34,
@@ -562,7 +590,8 @@
             "created_at": "2026-07-11 09:40:16",
             "updated_at": "2026-07-11 14:45:16",
             "is_group": 1,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 35,
@@ -579,7 +608,8 @@
             "created_at": "2026-07-11 09:40:16",
             "updated_at": "2026-07-11 09:55:20",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 36,
@@ -596,7 +626,8 @@
             "created_at": "2026-07-11 09:40:16",
             "updated_at": "2026-07-11 09:55:36",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 37,
@@ -613,7 +644,8 @@
             "created_at": "2026-07-11 09:40:16",
             "updated_at": "2026-07-11 09:40:16",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 38,
@@ -630,7 +662,8 @@
             "created_at": "2026-07-11 09:42:10",
             "updated_at": "2026-07-11 09:56:07",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 39,
@@ -647,7 +680,8 @@
             "created_at": "2026-07-11 09:51:55",
             "updated_at": "2026-07-11 09:53:32",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 40,
@@ -664,11 +698,12 @@
             "created_at": "2026-07-11 14:44:53",
             "updated_at": "2026-07-11 15:02:53",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 41,
-            "parent_id": null,
+            "parent_id": 54,
             "area": "admin",
             "name": "마케팅 상품",
             "route": "admin.products",
@@ -679,26 +714,28 @@
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-12 05:20:30",
-            "updated_at": "2026-07-12 05:20:30",
+            "updated_at": "2026-07-13 08:21:54",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 42,
-            "parent_id": null,
+            "parent_id": 53,
             "area": "admin",
             "name": "주문 관리",
             "route": "admin.orders",
             "url": null,
             "icon": "🧾",
-            "sort_order": 1,
+            "sort_order": 2,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-12 05:46:33",
-            "updated_at": "2026-07-12 05:46:33",
+            "updated_at": "2026-07-13 08:20:32",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 44,
@@ -715,24 +752,224 @@
             "created_at": "2026-07-12 08:14:03",
             "updated_at": "2026-07-12 08:15:36",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
         },
         {
             "id": 45,
-            "parent_id": null,
+            "parent_id": 54,
             "area": "admin",
             "name": "페르소나 관리",
             "route": "admin.personas",
             "url": null,
             "icon": "🎭",
-            "sort_order": 4,
+            "sort_order": 3,
             "is_active": 1,
             "meta_title": null,
             "meta_description": null,
             "created_at": "2026-07-13 07:12:21",
-            "updated_at": "2026-07-13 07:12:21",
+            "updated_at": "2026-07-13 08:21:54",
             "is_group": 0,
-            "target": ""
+            "target": "",
+            "meta_keywords": null
+        },
+        {
+            "id": 46,
+            "parent_id": 56,
+            "area": "admin",
+            "name": "환경 설정",
+            "route": "admin.settings",
+            "url": null,
+            "icon": "⚙️",
+            "sort_order": 0,
+            "is_active": 1,
+            "meta_title": null,
+            "meta_description": null,
+            "created_at": "2026-07-13 07:47:05",
+            "updated_at": "2026-07-13 08:22:34",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": null
+        },
+        {
+            "id": 47,
+            "parent_id": null,
+            "area": "site",
+            "name": "메인페이지",
+            "route": "home",
+            "url": null,
+            "icon": null,
+            "sort_order": 0,
+            "is_active": 1,
+            "meta_title": "랭크프리 — 네이버 플레이스·쇼핑·블로그 순위 무료 분석",
+            "meta_description": "키워드만 입력하면 네이버 플레이스·쇼핑 순위, 경쟁사 비교, 블로그 지수, 시장 규모까지 무료로 분석합니다. 가입 없이 30초 만에 시작하세요.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "네이버 순위, 플레이스 순위, 스마트스토어 순위, 쇼핑 순위, 블로그 지수, 키워드 분석, 순위 추적, 경쟁사 분석, 랭크프리"
+        },
+        {
+            "id": 48,
+            "parent_id": null,
+            "area": "site",
+            "name": "커뮤니티(게시판)",
+            "route": "community",
+            "url": null,
+            "icon": null,
+            "sort_order": 1,
+            "is_active": 1,
+            "meta_title": "커뮤니티 — 네이버 마케팅 노하우·순위 정보 게시판 · 랭크프리",
+            "meta_description": "플레이스·스마트스토어·블로그 상위노출 노하우와 순위 변화 정보를 나누는 랭크프리 마케팅 커뮤니티 게시판입니다.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "네이버 마케팅 커뮤니티, 플레이스 상위노출, 스마트스토어 상위노출, 블로그 상위노출, 순위 정보 게시판"
+        },
+        {
+            "id": 49,
+            "parent_id": null,
+            "area": "site",
+            "name": "무료 순위 조회",
+            "route": "rank.check",
+            "url": null,
+            "icon": null,
+            "sort_order": 2,
+            "is_active": 1,
+            "meta_title": "무료 플레이스 순위 조회 — 네이버 지도 순위 확인 · 랭크프리",
+            "meta_description": "내 가게가 네이버 플레이스에서 몇 위인지 키워드로 무료 조회하세요. 가입 없이 즉시 순위와 상위 경쟁 업체를 확인합니다.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "플레이스 순위 조회, 네이버 지도 순위, 플레이스 순위 확인, 무료 순위 조회, 매장 순위"
+        },
+        {
+            "id": 50,
+            "parent_id": null,
+            "area": "site",
+            "name": "API 문서",
+            "route": "developers",
+            "url": null,
+            "icon": null,
+            "sort_order": 3,
+            "is_active": 1,
+            "meta_title": "API 문서 — 순위·경쟁·키워드 분석 REST API · 랭크프리",
+            "meta_description": "랭크프리 순위추적·경쟁분석·키워드분석 데이터를 REST API로 제공합니다. 인증·엔드포인트·요청 예시를 확인하세요.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "순위 API, 네이버 순위 API, 키워드 분석 API, 랭크프리 API, 순위추적 API"
+        },
+        {
+            "id": 51,
+            "parent_id": null,
+            "area": "site",
+            "name": "로그인",
+            "route": "login",
+            "url": null,
+            "icon": null,
+            "sort_order": 4,
+            "is_active": 1,
+            "meta_title": "로그인 · 랭크프리",
+            "meta_description": "랭크프리 콘솔에 로그인해 순위 추적·경쟁 분석·키워드 데이터를 확인하세요.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "랭크프리 로그인, 순위 분석 로그인"
+        },
+        {
+            "id": 52,
+            "parent_id": null,
+            "area": "site",
+            "name": "회원가입",
+            "route": "register",
+            "url": null,
+            "icon": null,
+            "sort_order": 5,
+            "is_active": 1,
+            "meta_title": "무료 회원가입 · 랭크프리",
+            "meta_description": "무료로 가입하고 네이버 플레이스·쇼핑·블로그 순위를 추적·분석하세요. 순위체크 100개 무료 제공.",
+            "created_at": "2026-07-13 08:11:15",
+            "updated_at": "2026-07-13 08:11:15",
+            "is_group": 0,
+            "target": "",
+            "meta_keywords": "랭크프리 가입, 무료 순위 추적, 네이버 순위 분석 가입"
+        },
+        {
+            "id": 53,
+            "parent_id": null,
+            "area": "admin",
+            "name": "운영·매출",
+            "route": null,
+            "url": null,
+            "icon": null,
+            "sort_order": 1,
+            "is_active": 1,
+            "meta_title": null,
+            "meta_description": null,
+            "created_at": "2026-07-13 08:20:03",
+            "updated_at": "2026-07-13 08:22:34",
+            "is_group": 1,
+            "target": "",
+            "meta_keywords": null
+        },
+        {
+            "id": 54,
+            "parent_id": null,
+            "area": "admin",
+            "name": "마케팅",
+            "route": null,
+            "url": null,
+            "icon": null,
+            "sort_order": 2,
+            "is_active": 1,
+            "meta_title": null,
+            "meta_description": null,
+            "created_at": "2026-07-13 08:20:09",
+            "updated_at": "2026-07-13 08:22:34",
+            "is_group": 1,
+            "target": "",
+            "meta_keywords": null
+        },
+        {
+            "id": 55,
+            "parent_id": null,
+            "area": "admin",
+            "name": "고객지원",
+            "route": null,
+            "url": null,
+            "icon": null,
+            "sort_order": 3,
+            "is_active": 1,
+            "meta_title": null,
+            "meta_description": null,
+            "created_at": "2026-07-13 08:20:15",
+            "updated_at": "2026-07-13 08:22:34",
+            "is_group": 1,
+            "target": "",
+            "meta_keywords": null
+        },
+        {
+            "id": 56,
+            "parent_id": null,
+            "area": "admin",
+            "name": "시스템 설정",
+            "route": null,
+            "url": null,
+            "icon": null,
+            "sort_order": 4,
+            "is_active": 1,
+            "meta_title": null,
+            "meta_description": null,
+            "created_at": "2026-07-13 08:22:23",
+            "updated_at": "2026-07-13 08:22:34",
+            "is_group": 1,
+            "target": "",
+            "meta_keywords": null
         }
     ],
     "menu_permissions": [
@@ -1969,6 +2206,19 @@
             "can_delete": 0,
             "created_at": "2026-07-13 07:12:21",
             "updated_at": "2026-07-13 07:12:21",
+            "monthly_limit": -1
+        },
+        {
+            "id": 112,
+            "menu_id": 46,
+            "subject_type": "role",
+            "subject_id": 3,
+            "can_access": 1,
+            "can_create": 0,
+            "can_update": 0,
+            "can_delete": 0,
+            "created_at": "2026-07-13 07:47:05",
+            "updated_at": "2026-07-13 07:47:05",
             "monthly_limit": -1
         }
     ]
