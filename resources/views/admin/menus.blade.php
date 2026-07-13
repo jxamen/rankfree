@@ -2,30 +2,30 @@
 @section('page-title', '메뉴 관리')
 
 @section('admin-content')
-<div style="max-width:1040px;">
+<div>
     {{-- area 탭 --}}
     <div class="flex gap-2 mb-5 items-center flex-wrap">
         @foreach (['console' => '콘솔 메뉴', 'admin' => '관리 메뉴'] as $a => $l)
             <a href="{{ route('admin.menus', ['area' => $a]) }}" class="btn btn-sm {{ $area === $a ? 'btn-primary' : 'btn-secondary' }}">{{ $l }}</a>
         @endforeach
-        <span class="text-muted-soft" style="font-size:12px;">⠿ 드래그로 순서·이동. 대분류와 미분류 항목은 최상위에서 자유 배치, 항목은 그룹 간 이동 가능</span>
+        <span class="text-muted-soft" style="font-size:var(--fs-xs);">⠿ 드래그로 순서·이동. 대분류와 미분류 항목은 최상위에서 자유 배치, 항목은 그룹 간 이동 가능</span>
     </div>
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:13px;">{{ $errors->first() }}</div>
+        <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
 
     {{-- 메뉴 추가 --}}
     <details class="card mb-6" style="padding:16px 20px;">
-        <summary class="cursor-pointer text-ink font-semibold" style="font-size:14px;">＋ 메뉴 추가</summary>
+        <summary class="cursor-pointer text-ink font-semibold" style="font-size:var(--fs-xs);">＋ 메뉴 추가</summary>
         <div class="flex gap-10 flex-wrap mt-4">
             {{-- 대분류 (아이콘 피커 포함) --}}
             <form method="POST" action="{{ route('admin.menus.store') }}" style="min-width:300px;">
                 @csrf
                 <input type="hidden" name="area" value="{{ $area }}"><input type="hidden" name="kind" value="group">
-                <label class="block text-muted mb-1" style="font-size:12px;font-weight:600;">＋ 대분류</label>
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">＋ 대분류</label>
                 <input name="name" class="input mb-3" placeholder="그룹명" required>
-                <label class="block text-muted mb-1" style="font-size:12px;">아이콘 <span class="text-muted-soft">(대분류 레일)</span></label>
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">아이콘 <span class="text-muted-soft">(대분류 레일)</span></label>
                 @include('admin.partials.icon-picker', ['name' => 'icon', 'value' => '', 'uid' => 'addgrp'])
                 <button type="submit" class="btn btn-primary mt-3">대분류 추가</button>
             </form>
@@ -33,43 +33,56 @@
             <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="align-self:flex-start;">
                 @csrf
                 <input type="hidden" name="area" value="{{ $area }}"><input type="hidden" name="kind" value="item">
-                <div><label class="block text-muted mb-1" style="font-size:12px;">＋ 미분류 항목</label><input name="name" class="input" placeholder="메뉴명" required></div>
-                <div><label class="block text-muted mb-1" style="font-size:12px;">라우트명</label><input name="route" class="input" placeholder="console.rank"></div>
-                <button type="submit" class="btn btn-secondary">항목</button>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">＋ 미분류 항목</label><input name="name" class="input" placeholder="메뉴명" required></div>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" placeholder="console.rank"></div>
+                <button type="submit" class="btn btn-secondary">저장</button>
             </form>
         </div>
     </details>
 
     {{-- 최상위 통합 트리 (대분류 + 미분류 항목, sort 순서대로) --}}
+    <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">⠿ 손잡이를 드래그해 순서를 바꾸거나, 미분류 항목을 대분류 안으로 끌어다 넣을 수 있습니다.</p>
     <div data-sortable-top>
         @foreach ($roots as $node)
             @if ($node->is_group)
                 @include('admin.partials.menu-group', ['g' => $node])
             @else
-                <div class="card mb-3" data-id="{{ $node->id }}">
-                    <div class="flex items-stretch">
-                        <span class="tdrag text-muted-soft" style="cursor:move;display:flex;align-items:center;padding:0 10px;" title="드래그하여 위치 변경">⠿</span>
-                        <div class="flex-1" style="border-left:1px solid var(--color-hairline-soft);">
-                            @include('admin.partials.menu-item', ['item' => $node])
-                        </div>
-                    </div>
-                </div>
+                @include('admin.partials.menu-item', ['item' => $node])
             @endif
         @endforeach
     </div>
     @if (! $roots->count())
-        <div class="card text-center" style="padding:40px;color:var(--color-muted);font-size:13px;">메뉴가 없습니다. 위에서 추가하세요.</div>
+        <div class="card text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">메뉴가 없습니다. 위에서 추가하세요.</div>
     @endif
 </div>
 
 {{-- 아이콘 피커 스타일 (crm 이식, Cal.com 토큰) --}}
 <style>
-    .icon-picker .ip-preview { width:44px; height:44px; border-radius:9px; background:var(--color-surface-card); color:var(--color-primary); display:inline-flex; align-items:center; justify-content:center; font-size:20px; flex:0 0 auto; }
+    .icon-picker .ip-preview { width:44px; height:44px; border-radius:9px; background:var(--color-surface-card); color:var(--color-primary); display:inline-flex; align-items:center; justify-content:center; font-size:var(--fs-lg); flex:0 0 auto; }
     .icon-picker .ip-grid { display:grid; grid-template-columns:repeat(auto-fill, 40px); gap:6px; margin-top:10px; padding:6px; border:1px solid var(--color-hairline); border-radius:8px; max-height:240px; overflow-y:auto; }
-    .icon-picker .ip-grid button { width:40px; height:40px; border:1px solid var(--color-hairline); border-radius:8px; background:var(--color-canvas); color:var(--color-muted); font-size:16px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+    .icon-picker .ip-grid button { width:40px; height:40px; border:1px solid var(--color-hairline); border-radius:8px; background:var(--color-canvas); color:var(--color-muted); font-size:var(--fs-base); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
     .icon-picker .ip-grid button:hover { border-color:var(--color-primary); color:var(--color-primary); }
     .icon-picker .ip-grid button.sel { background:var(--color-primary); color:#fff; border-color:var(--color-primary); }
-    .icon-picker .ip-grid .ig-empty { grid-column:1 / -1; text-align:center; color:var(--color-muted-soft); font-size:12px; padding:12px 4px; }
+    .icon-picker .ip-grid .ig-empty { grid-column:1 / -1; text-align:center; color:var(--color-muted-soft); font-size:var(--fs-xs); padding:12px 4px; }
+
+    /* 최상위 미분류 항목 — 대분류와 같은 카드 형태 */
+    [data-sortable-top] > .menu-item { border:1px solid var(--color-hairline); border-radius:12px; margin-bottom:12px; background:var(--color-canvas); overflow:hidden; }
+    [data-sortable-top] > .menu-item > div:first-child { border-top:0; }
+    /* 그룹 내부 드롭존 — 비어 있어도 끌어다 놓을 수 있게 */
+    [data-sortable-items] { min-height:6px; }
+    [data-sortable-items]:empty { min-height:38px; margin:8px 10px 12px; border:1px dashed var(--color-hairline); border-radius:8px; display:flex; align-items:center; justify-content:center; }
+    [data-sortable-items]:empty::before { content:'여기로 항목을 끌어다 놓으세요'; color:var(--color-muted-soft); font-size:var(--fs-xs); }
+    .sortable-ghost { opacity:.4; }
+    .sortable-chosen { background:var(--color-surface-soft); }
+
+    /* 노출 토글 스위치 (Cal.com 모노크롬) */
+    .rf-switch { position:relative; display:inline-flex; width:36px; height:20px; flex:0 0 auto; vertical-align:middle; cursor:pointer; }
+    .rf-switch input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; z-index:1; }
+    .rf-switch .rf-track { position:absolute; inset:0; background:var(--color-surface-strong); border-radius:9999px; transition:background .15s ease; }
+    .rf-switch .rf-track::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; box-shadow:0 1px 2px rgba(17,17,17,.25); transition:transform .15s ease; }
+    .rf-switch input:checked + .rf-track { background:var(--color-primary); }
+    .rf-switch input:checked + .rf-track::after { transform:translateX(16px); }
+    .rf-switch input:focus-visible + .rf-track { box-shadow:0 0 0 3px rgba(17,17,17,.12); }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
@@ -79,20 +92,40 @@
     function rfPostOrder(items) {
         fetch('{{ route('admin.menus.reorder') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': RF_CSRF }, body: JSON.stringify({ order: items }) });
     }
-    function rfOrderOf(c) {
-        const parent = c.dataset.parent || '';
-        return [...c.children].filter(x => x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: parent, sort_order: i }));
+    // 리스트의 부모(대분류) id — 최상위는 '', 그룹 내부 리스트는 data-parent
+    function rfParentOf(listEl) {
+        if (listEl.hasAttribute('data-sortable-top')) return '';
+        return listEl.dataset.parent || '';
+    }
+    function rfPostList(listEl) {
+        const parent = rfParentOf(listEl);
+        rfPostOrder([...listEl.children].filter(x => x.dataset && x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: parent, sort_order: i })));
     }
     (function () {
         if (typeof window.Sortable !== 'function') { console.error('SortableJS not loaded'); return; }
+        const isGroup = function (el) { return el.classList && el.classList.contains('menu-group'); };
+        const onEnd = function (e) { rfPostList(e.to); if (e.from !== e.to) rfPostList(e.from); };
+
+        // 최상위 — 대분류·미분류 항목 모두. 항목은 그룹 안으로 이동 가능
         const topEl = document.querySelector('[data-sortable-top]');
         if (topEl) {
-            new Sortable(topEl, { handle: '.gdrag, .tdrag', draggable: '[data-id]', animation: 150, onEnd: function () {
-                rfPostOrder([...topEl.children].filter(x => x.dataset.id).map((x, i) => ({ id: x.dataset.id, parent_id: '', sort_order: i })));
-            } });
+            new Sortable(topEl, {
+                group: { name: 'menu', pull: true, put: true },
+                handle: '.gdrag, .drag',
+                draggable: '[data-id]',
+                animation: 150,
+                onEnd: onEnd,
+            });
         }
+        // 그룹 내부 — 항목만 받음(대분류 카드는 거부)
         document.querySelectorAll('[data-sortable-items]').forEach(function (el) {
-            new Sortable(el, { group: 'menu-items', handle: '.drag', animation: 150, onEnd: function (e) { rfPostOrder(rfOrderOf(e.to)); if (e.from !== e.to) rfPostOrder(rfOrderOf(e.from)); } });
+            new Sortable(el, {
+                group: { name: 'menu', pull: true, put: function (to, from, dragEl) { return !isGroup(dragEl); } },
+                handle: '.drag',
+                draggable: '[data-id]',
+                animation: 150,
+                onEnd: onEnd,
+            });
         });
     })();
     document.querySelectorAll('.menu-toggle').forEach(function (cb) {

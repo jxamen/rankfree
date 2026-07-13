@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Place\PlaceCalibration;
 use App\Domain\Place\PlaceScorer;
 use App\Domain\Place\PlaceSeoAnalyzer;
 use App\Models\PlaceRankSlot;
 use App\Models\PlaceSeoDaily;
 use App\Models\PlaceSeoScore;
 use App\Models\PlaceSeoSerp;
+use App\Models\SmartplaceAccount;
 use Illuminate\Http\Request;
 
 /** 플레이스 경쟁 분석(SEO 점수 + 순위추적) — 웹 콘솔. 로직은 PlaceSeoAnalyzer 공유. */
@@ -29,7 +31,7 @@ class CompeteController extends Controller
         return view('console.compete.index', [
             'slots' => $slots,
             'mineScores' => $mineScores,
-            'usedSlots' => $user->rankSlotsUsed(),
+            'usedSlots' => $user->rankSlotsUsedTotal(),
             'maxSlots' => $user->rankSlotLimit(),
         ]);
     }
@@ -38,6 +40,16 @@ class CompeteController extends Controller
     public function analyze(Request $request, PlaceRankSlot $slot, PlaceSeoAnalyzer $analyzer)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);
+
+        if (! $request->user()->tryConsumeFeature('compete_analysis')) {
+            $msg = '이번 달 경쟁 분석 횟수('.$request->user()->featureLimit('compete_analysis').'회)를 모두 사용했습니다. 요금제를 업그레이드하세요.';
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['ok' => false, 'limit_exceeded' => true, 'message' => $msg], 429);
+            }
+
+            return back()->with('status', $msg);
+        }
+
         @set_time_limit(300); // 경쟁셋 상세 + 리뷰 수집은 수십 초 소요(동기)
 
         $res = $analyzer->analyze($slot, 10);
@@ -78,7 +90,34 @@ class CompeteController extends Controller
             'mine' => $data['mine'],
             'explain' => $data['explain'],
             'series' => $series,
+            'calibration' => $this->buildCalibration($request->user()->id, $slot, $series),
         ]);
+    }
+
+    /**
+     * 실측 캘리브레이션 — 내 매장 스마트플레이스 조회수(일자별 PV) ↔ N2/순위 추정치 비교.
+     * 연결 키: smartplace_accounts.place_id == slot.place_id (동일 m.place placeId).
+     * 사적 데이터(조회수)이므로 인증 소유자의 show() 에서만 조립하고 공개 공유엔 넘기지 않는다.
+     */
+    private function buildCalibration(int $userId, PlaceRankSlot $slot, \Illuminate\Support\Collection $series): array
+    {
+        $pid = preg_replace('/\D/', '', (string) $slot->place_id);
+        $acct = $pid !== ''
+            ? SmartplaceAccount::where('user_id', $userId)->where('place_id', $pid)->first()
+            : null;
+        if (! $acct) {
+            return ['state' => 'unlinked'];
+        }
+        $pv = PlaceCalibration::dailyPv(is_array($acct->last_result) ? $acct->last_result : null);
+        $label = $acct->label ?: ($acct->sp_name ?: $slot->place_name);
+        if (! $pv) {
+            return ['state' => 'no_pv', 'label' => $label];
+        }
+        $period = $acct->last_result['period'] ?? null;
+
+        return ['state' => 'linked', 'label' => $label, 'period' => $period,
+            'collected_at' => optional($acct->last_collected_at)->toDateString()]
+            + PlaceCalibration::summarize($pv, $series);
     }
 
     /** slot+ymd → 일별순위 매트릭스 + 비교 행 + 내 매장 explain. */

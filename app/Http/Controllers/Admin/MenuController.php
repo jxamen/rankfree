@@ -124,13 +124,12 @@ class MenuController extends Controller
         }
         foreach ($subjects as [$type, $id]) {
             $a = (array) ($perm["{$type}:{$id}"] ?? []);
+            $limit = isset($a['limit']) && $a['limit'] !== '' ? (int) $a['limit'] : -1;
             MenuPermission::updateOrCreate(
                 ['menu_id' => $menu->id, 'subject_type' => $type, 'subject_id' => $id],
                 [
-                    'can_access' => isset($a['access']),
-                    'can_create' => isset($a['create']),
-                    'can_update' => isset($a['update']),
-                    'can_delete' => isset($a['delete']),
+                    'can_access' => isset($a['access']), // 접근 허용 여부(끄면 차단)
+                    'monthly_limit' => max(-1, $limit),
                 ],
             );
         }

@@ -7,20 +7,20 @@
 
 @section('console-content')
 <div>
-    <p class="text-muted mb-4" style="font-size:14px;">
+    <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
         순위추적 중인 <b class="text-ink">키워드 × 플레이스</b>의 SEO 경쟁력을 분석합니다. 같은 키워드 상위 경쟁사와 비교해
         <b class="text-ink">N1 유사도·N2 관련성·N3 랭킹</b> 점수를 산출합니다.
         <span class="text-muted-soft">점수는 관측 신호 기반 자체 추정치입니다.</span>
     </p>
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:13px;">{{ $errors->first() }}</div>
+        <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
 
     <div class="card overflow-x-auto">
         <table class="w-full" style="min-width:840px;">
             <thead>
-                <tr class="text-muted" style="font-size:12px;">
+                <tr class="text-muted" style="font-size:var(--fs-xs);">
                     <th class="text-right px-4 py-3 font-semibold" style="width:48px;">No</th>
                     <th class="text-left px-3 py-3 font-semibold">키워드</th>
                     <th class="text-left px-3 py-3 font-semibold">내 플레이스</th>
@@ -50,44 +50,44 @@
                         }
                     @endphp
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
-                        <td class="px-4 py-3 text-right text-muted-soft" style="font-size:12px;">{{ $slot->id }}</td>
+                        <td class="px-4 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $slot->id }}</td>
                         <td class="px-3 py-3">
-                            <div class="text-ink font-medium" style="font-size:14px;">{{ $slot->keyword }}</div>
-                            @if ($slot->label)<div class="text-muted-soft" style="font-size:11px;">{{ $slot->label }}</div>@endif
+                            <div class="text-ink font-medium" style="font-size:var(--fs-xs);">{{ $slot->keyword }}</div>
+                            @if ($slot->label)<div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $slot->label }}</div>@endif
                         </td>
                         <td class="px-3 py-3">
-                            <span class="text-ink" style="font-size:13px;">{{ $slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : '—') }}</span>
-                            <span class="text-muted-soft" style="font-size:11px;"> · {{ $slot->category ?: 'place' }}</span>
+                            <span class="text-ink" style="font-size:var(--fs-xs);">{{ $slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : '—') }}</span>
+                            <span class="text-muted-soft" style="font-size:var(--fs-xs);"> · {{ $slot->category ?: 'place' }}</span>
                         </td>
                         <td class="px-3 py-3 text-right">
                             @if ($sc && $sc->rnk > 0 && $sc->rnk < 300)
-                                <span class="font-display text-ink" style="font-size:15px;">{{ $sc->rnk }}위</span>
+                                <span class="font-display text-ink" style="font-size:var(--fs-sm);">{{ $sc->rnk }}위</span>
                             @elseif ($sc)
-                                <span class="text-muted-soft" style="font-size:13px;">300+</span>
+                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">300+</span>
                             @else
-                                <span class="text-muted-soft" style="font-size:12px;">미분석</span>
+                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">미분석</span>
                             @endif
                         </td>
-                        <td class="px-3 py-3 text-right text-ink" style="font-size:14px;">{{ $sc && $sc->n1 !== null ? round($sc->n1) : '—' }}</td>
-                        <td class="px-3 py-3 text-right text-ink" style="font-size:14px;">{{ $sc && $sc->n2 !== null ? round($sc->n2) : '—' }}</td>
+                        <td class="px-3 py-3 text-right text-ink" style="font-size:var(--fs-xs);">{{ $sc && $sc->n1 !== null ? round($sc->n1) : '—' }}</td>
+                        <td class="px-3 py-3 text-right text-ink" style="font-size:var(--fs-xs);">{{ $sc && $sc->n2 !== null ? round($sc->n2) : '—' }}</td>
                         <td class="px-3 py-3 text-right">
                             @if ($sc && $sc->n3 !== null)
-                                <span class="font-display text-ink" style="font-size:15px;">{{ round($sc->n3) }}</span>
+                                <span class="font-display text-ink" style="font-size:var(--fs-sm);">{{ round($sc->n3) }}</span>
                                 @if ($delta !== null && $delta != 0)
-                                    <span style="font-size:11px;color:{{ $delta > 0 ? 'var(--color-primary)' : 'var(--color-error)' }};">{{ $delta > 0 ? '▲' : '▼' }}{{ abs($delta) }}</span>
+                                    <span style="font-size:var(--fs-xs);color:{{ $delta > 0 ? 'var(--color-primary)' : 'var(--color-error)' }};">{{ $delta > 0 ? '▲' : '▼' }}{{ abs($delta) }}</span>
                                 @endif
                             @else
-                                <span class="text-muted-soft" style="font-size:13px;">—</span>
+                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">—</span>
                             @endif
                         </td>
                         <td class="px-3 py-3 text-center">
                             @if ($spark)
                                 <svg width="90" height="24" style="vertical-align:middle;"><polyline fill="none" stroke="var(--color-primary)" stroke-width="1.6" points="{{ $spark }}"/></svg>
                             @else
-                                <span class="text-muted-soft" style="font-size:12px;">—</span>
+                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">—</span>
                             @endif
                         </td>
-                        <td class="px-3 py-3 text-center text-muted-soft" style="font-size:12px;">{{ $sc ? \Illuminate\Support\Carbon::parse($sc->ymd)->format('m-d') : '—' }}</td>
+                        <td class="px-3 py-3 text-center text-muted-soft" style="font-size:var(--fs-xs);">{{ $sc ? \Illuminate\Support\Carbon::parse($sc->ymd)->format('m-d') : '—' }}</td>
                         <td class="px-4 py-3 text-right text-nowrap">
                             <form method="POST" action="{{ route('console.compete.analyze', $slot) }}" class="rf-analyze-form" style="display:inline;" data-keyword="{{ $slot->keyword }}">
                                 @csrf
@@ -98,14 +98,14 @@
                     </tr>
                 @empty
                     <tr><td colspan="10" class="text-center" style="padding:56px 20px;color:var(--color-muted);">
-                        <div style="font-size:28px;opacity:.4;">📊</div>
-                        <p class="mt-2" style="font-size:14px;">등록된 트랙이 없습니다. 우측 상단 <b class="text-ink">＋ 트랙 등록</b>으로 플레이스와 키워드를 추가하세요.</p>
+                        <div style="font-size:var(--fs-2xl);opacity:.4;">📊</div>
+                        <p class="mt-2" style="font-size:var(--fs-xs);">등록된 트랙이 없습니다. 우측 상단 <b class="text-ink">＋ 트랙 등록</b>으로 플레이스와 키워드를 추가하세요.</p>
                     </td></tr>
                 @endforelse
             </tbody>
         </table>
     </div>
-    <p class="text-muted-soft mt-3" style="font-size:12px;">"분석"은 상위 경쟁사 상세·리뷰를 수집해 점수를 산출하므로 20~40초 걸릴 수 있습니다. 결과는 매일 스냅샷으로 누적되어 추이가 쌓입니다.</p>
+    <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">"분석"은 상위 경쟁사 상세·리뷰를 수집해 점수를 산출하므로 20~40초 걸릴 수 있습니다. 결과는 매일 스냅샷으로 누적되어 추이가 쌓입니다.</p>
 </div>
 
 {{-- 트랙 등록 모달 (순위추적과 동일 UI) --}}
@@ -113,24 +113,24 @@
     <div id="rf-modal-bg" style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-ink) 40%, transparent);"></div>
     <div class="card" style="position:relative;max-width:640px;margin:7vh auto 0;max-height:84vh;overflow-y:auto;box-shadow:var(--shadow-card);">
         <div class="flex items-center justify-between px-5 border-b border-hairline-soft" style="height:52px;">
-            <span class="text-ink font-semibold" style="font-size:15px;">트랙 등록</span>
+            <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">트랙 등록</span>
             <button type="button" id="rf-modal-close" class="btn btn-ghost btn-sm" title="닫기">✕</button>
         </div>
         <form method="POST" action="{{ route('console.rank.store') }}" class="p-5" id="rf-rank-form">
             @csrf
             <div class="flex gap-3 flex-wrap items-start mb-4">
                 <div style="flex:2;min-width:260px;">
-                    <label class="block text-muted mb-1" style="font-size:12px;">내 플레이스 URL 또는 ID</label>
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">내 플레이스 URL 또는 ID</label>
                     <input name="place" id="rf-place" class="input" value="{{ old('place') }}" placeholder="https://map.naver.com/... · m.place URL · 플레이스 ID" required autocomplete="off">
-                    <div id="rf-place-info" class="mt-1" style="font-size:12px;min-height:16px;"></div>
+                    <div id="rf-place-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
                 </div>
                 <div style="width:150px;">
-                    <label class="block text-muted mb-1" style="font-size:12px;">라벨 <span class="text-muted-soft">(선택)</span></label>
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라벨 <span class="text-muted-soft">(선택)</span></label>
                     <input name="label" class="input" value="{{ old('label') }}" placeholder="예: 본점">
                 </div>
             </div>
 
-            <label class="block text-muted mb-1" style="font-size:12px;">추적 키워드 <span class="text-muted-soft">(여러 개 추가 가능)</span></label>
+            <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">추적 키워드 <span class="text-muted-soft">(여러 개 추가 가능)</span></label>
             <div id="rf-keywords">
                 @php $olds = array_values(array_filter((array) old('keywords', ['']), fn ($v) => $v !== null)); @endphp
                 @forelse ($olds as $kw)
@@ -206,7 +206,7 @@
     document.querySelectorAll('.rf-analyze-form').forEach(function (f) {
         f.addEventListener('submit', function (e) {
             e.preventDefault();
-            Swal.fire({ title: '경쟁 분석 중…', html: '<span style="font-size:13px;color:var(--color-muted);">‘' + (f.dataset.keyword || '') + '’ 상위 경쟁사 상세·리뷰를 수집해 점수를 산출합니다. 20~40초 걸릴 수 있습니다.</span>', allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); } });
+            Swal.fire({ title: '경쟁 분석 중…', html: '<span style="font-size:var(--fs-xs);color:var(--color-muted);">‘' + (f.dataset.keyword || '') + '’ 상위 경쟁사 상세·리뷰를 수집해 점수를 산출합니다. 20~40초 걸릴 수 있습니다.</span>', allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); } });
             fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(d => { Swal.fire({ toast: true, position: 'top-end', icon: d.ok ? 'success' : 'warning', title: d.message, showConfirmButton: false, timer: 1800, timerProgressBar: true }).then(() => { if (d.redirect) location.href = d.redirect; else location.reload(); }); })

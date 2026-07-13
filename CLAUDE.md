@@ -14,17 +14,18 @@
 ## 기술 스택
 
 - **백엔드**: PHP 8.3 + **Laravel 13** (Blade 자체완결형, 별도 프론트 SPA 없음)
-- **프론트**: **Tailwind CSS v4** (`@tailwindcss/vite`) + Vite 8 — **디자인 시스템은 Cal.com 스타일**(getdesign.md/cal)
+- **프론트**: **Tailwind CSS v4** (`@tailwindcss/vite`) + Vite 8 — **디자인 시스템은 Coinbase 스타일**(getdesign.md/coinbase)
 - **DB**: MySQL/MariaDB (utf8mb4). 로컬은 sqlite 가능
 - **수집**: PHP curl(네이버 pcmap GraphQL 등) + Node/Playwright 헬퍼(nCaptcha 토큰 발급)
 - **타임존**: Asia/Seoul
 
 ## 디자인 시스템 (중요)
 
-- **Cal.com 디자인 시스템**을 Tailwind `@theme` 토큰으로 고정 — [DESIGN.md](DESIGN.md) 원본, 매핑은 [.claude/09_DESIGN_SYSTEM.md](.claude/09_DESIGN_SYSTEM.md)
-- **모든 색/타이포/radius는 토큰으로만** 사용, 하드코딩 hex 금지 (`resources/css/app.css`의 `@theme`)
-- 흰 캔버스 + 검정(#111) 프라이머리 CTA(모노크롬), 라이트그레이 카드, 다크 푸터
-- 본문=Pretendard(한글), 디스플레이 헤드라인=Manrope+Pretendard(음수 자간 `.font-display`)
+- **Coinbase 디자인 시스템**을 Tailwind `@theme` 토큰으로 고정 — [DESIGN.md](DESIGN.md) 원본, 매핑은 [.claude/09_DESIGN_SYSTEM.md](.claude/09_DESIGN_SYSTEM.md) (2026-07-12 Cal.com에서 전환, 백업 `.claude/backup/`)
+- **모든 색/타이포/radius는 토큰으로만** 사용, 하드코딩 hex 금지 (`resources/css/app.css`의 `@theme`) — 토큰 이름은 기존 그대로, 값만 Coinbase로 리매핑
+- 흰 캔버스 + **Coinbase Blue(#0052ff) 단일 브랜드 컬러 CTA(pill)**, 쿨그레이 서피스, 다크 히어로 밴드(#0a0b0d)
+- **모든 CTA는 pill(100px)**, 카드 radius 16~24px, 디스플레이 헤드라인 weight 400(+음수 자간), 숫자는 `font-mono`
+- 본문=Pretendard(한글), 디스플레이 헤드라인=Inter+Pretendard(`.font-display`, weight 400)
 - 반복 컴포넌트(btn/card/input/badge)는 `@layer components`로 정의 → 홈페이지·콘솔 공통. **sign 프로젝트 스타일 복사 금지**
 
 ## 로컬 실행 (Laragon)

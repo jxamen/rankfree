@@ -13,6 +13,6 @@
         <input type="text" class="input ip-search" placeholder="아이콘 검색 (영문: user, chart, truck …)" autocomplete="off" style="flex:1;">
         <button type="button" class="btn btn-secondary btn-sm ip-clear" title="검색 비우기">×</button>
     </div>
-    <div class="ip-hint text-muted-soft" style="font-size:11px;margin-top:5px;">자주 쓰는 아이콘입니다. 검색하면 무료 아이콘 전체에서 찾습니다. (영문 키워드)</div>
+    <div class="ip-hint text-muted-soft" style="font-size:var(--fs-xs);margin-top:5px;">자주 쓰는 아이콘입니다. 검색하면 무료 아이콘 전체에서 찾습니다. (영문 키워드)</div>
     <div class="ip-grid"></div>
 </div>

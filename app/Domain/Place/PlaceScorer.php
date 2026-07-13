@@ -9,12 +9,27 @@ namespace App\Domain\Place;
  * ⚠️ 점수는 관측 신호 기반 자체 추정치이며 "네이버 공식 점수"가 아니다.
  *
  * 가중치(고정):
- *   N2 = D1 .18 / D2 .09 / D3 .07 / D4 .12 / D5 .08 / D7 .14 / D9 .20 / D10 .12  (결측 재정규화)
+ *   N2 = D1 .18 / D2 .09 / D3 .07 / D4 .12 / D5 .08 / D6 .08 / D7 .14 / D9 .20 / D10 .12  (결측 재정규화)
+ *   D5 저장수는 restaurant 전용(네이버 리스트 제약), D6 사진수(imageCount)는 전 업종 가용.
  *   N1 = L .30 / B .30 / T .30 / M .10
  *   N3 = 100·(1 − ln(min(rnk,300)) / ln 301)
  */
 class PlaceScorer
 {
+    /** N2 세부지표 가중치(프라이어). config 로 외부화 — 실측 학습(PlaceWeightLearner)이 개선. */
+    public const N2_PRIOR = [
+        'd1' => 0.18, 'd2' => 0.09, 'd3' => 0.07, 'd4' => 0.12,
+        'd5' => 0.08, 'd6' => 0.08, 'd7' => 0.14, 'd9' => 0.20, 'd10' => 0.12,
+    ];
+
+    /** 현재 적용 중인 N2 가중치 — config 우선, 누락 키는 프라이어로 보정. */
+    public static function n2Weights(): array
+    {
+        $cfg = function_exists('config') ? (array) config('rankfree.scoring.n2_weights', []) : [];
+
+        return array_merge(self::N2_PRIOR, array_intersect_key($cfg, self::N2_PRIOR));
+    }
+
     /** 90분위값. */
     public static function p90(array $arr): float
     {
@@ -261,11 +276,12 @@ class PlaceScorer
     /**
      * 한 플레이스의 D1~D10 · N1/N2/N3 산출.
      *
-     * @param  array       $item     serp item(visitor_cnt,blog_cnt,booking_cnt,save_cnt,review_score,tags,name,address,rnk,id)
+     * @param  array       $item     serp item(visitor_cnt,blog_cnt,booking_cnt,save_cnt,img_cnt,review_score,tags,name,address,rnk,id)
      * @param  array|null  $detail   상세(없으면 T1만; visitor_cnt,blog_cnt,review_score,category,tags,seo필드,bv_raw,rec_raw,auth_raw)
      * @param  float[]     $visArr   경쟁셋 방문자리뷰 배열(P90 기준)
+     * @param  float[]     $imgArr   경쟁셋 사진수 배열(D6 P90 기준)
      */
-    public static function computeScores(array $item, ?array $detail, string $keyword, string $cat, array $visArr, array $blogArr, array $saveArr, array $scoreArr, array $bookingArr = [], array $recArr = [], array $authArr = [], array $bvArr = []): array
+    public static function computeScores(array $item, ?array $detail, string $keyword, string $cat, array $visArr, array $blogArr, array $saveArr, array $scoreArr, array $bookingArr = [], array $recArr = [], array $authArr = [], array $bvArr = [], array $imgArr = []): array
     {
         $dv = fn ($k) => ($detail && array_key_exists($k, $detail)) ? $detail[$k] : null;
 
@@ -301,6 +317,9 @@ class PlaceScorer
             $D4 = round(100 * max(0, min(1, ($st - 3.5) / 1.5)), 3);
         }
         $D5 = ($cat === 'restaurant') ? self::absP90(self::num($save), $saveArr) : null;
+        // D6 사진 충실도 — imageCount 로그-P90 정규화. saveCount 미제공 업종의 "매장 투자/성실도" 프록시(전 업종 list 가용).
+        $img = $item['img_cnt'] ?? null;
+        $D6 = self::absP90(self::num($img), $imgArr);
         $D7 = $detail ? self::seoChecklist($detail, $cat) : null;
         $tags = ($detail && ! empty($detail['tags'])) ? $detail['tags'] : ($item['tags'] ?? []);
         $D8 = self::keywordMatch($keyword, (string) ($item['name'] ?? ''), (string) ($detail ? ($detail['category'] ?? '') : ''), (string) ($item['address'] ?? ''), $tags, $cat);
@@ -311,22 +330,24 @@ class PlaceScorer
         $D10 = ($authRaw !== null && count($authArr)) ? self::pct(self::num($authRaw), $authArr) : null;
 
         $N1 = $D8;
+        $w = self::n2Weights();
         $N2 = self::weighted([
-            [$D1, 0.18], [$D2, 0.09], [$D3, 0.07], [$D4, 0.12],
-            [$D5, 0.08], [$D7, 0.14], [$D9, 0.20], [$D10, 0.12],
+            [$D1, $w['d1']], [$D2, $w['d2']], [$D3, $w['d3']], [$D4, $w['d4']],
+            [$D5, $w['d5']], [$D6, $w['d6']], [$D7, $w['d7']], [$D9, $w['d9']], [$D10, $w['d10']],
         ]);
         $rnk = isset($item['rnk']) ? (int) $item['rnk'] : 0;
         $N3 = ($rnk > 0) ? round(100 * (1 - log(min($rnk, 300)) / log(301)), 3) : null;
 
         $mask = 0;
-        foreach ([$D1, $D2, $D3, $D4, $D5, $D7, $D8, $D9, $D10] as $i => $b) {
+        // D6 은 뒤에 덧붙여 기존 비트 위치(D1~D10) 유지 → D6 = bit 9.
+        foreach ([$D1, $D2, $D3, $D4, $D5, $D7, $D8, $D9, $D10, $D6] as $i => $b) {
             if ($b !== null) {
                 $mask |= (1 << $i);
             }
         }
 
         return [
-            'd1' => $D1, 'd2' => $D2, 'd3' => $D3, 'd4' => $D4, 'd5' => $D5,
+            'd1' => $D1, 'd2' => $D2, 'd3' => $D3, 'd4' => $D4, 'd5' => $D5, 'd6' => $D6,
             'd7' => $D7, 'd8' => $D8, 'd9' => $D9, 'd10' => $D10,
             'n1' => $N1, 'n2' => $N2, 'n3' => $N3, 'act' => null,
             'mask' => $mask, 'tier' => $detail ? 2 : 1,

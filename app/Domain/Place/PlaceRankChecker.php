@@ -407,6 +407,66 @@ class PlaceRankChecker
         return null;
     }
 
+    /** m.place 경로로 쓰이는 업종 키. */
+    public const PLACE_CATEGORIES = ['place', 'restaurant', 'hairshop', 'nailshop', 'hospital', 'accommodation'];
+
+    /**
+     * 네이버 플레이스 URL 경로에서 업종·placeId 추출(네트워크 없음).
+     * 스마트스토어·가격비교 등 그 외 URL 은 null(오변환 방지).
+     *
+     * @return array{id:string, category:string}|null  category 는 URL 이 명시한 업종 또는 'place'(제네릭)
+     */
+    public static function parsePlaceRef(string $input): ?array
+    {
+        $input = trim($input);
+        if ($input === '') {
+            return null;
+        }
+        if (preg_match('#/(place|restaurant|hairshop|nailshop|hospital|accommodation)/(\d+)#', $input, $m)) {
+            return ['id' => $m[2], 'category' => $m[1]];
+        }
+
+        return null;
+    }
+
+    /** id·업종 → 깔끔한 m.place URL. */
+    public static function buildMPlaceUrl(string $id, string $category = 'place'): string
+    {
+        $category = in_array($category, self::PLACE_CATEGORIES, true) ? $category : 'place';
+
+        return 'https://m.place.naver.com/' . $category . '/' . preg_replace('/\D/', '', $id);
+    }
+
+    /**
+     * 네이버 플레이스 URL → 깔끔한 업종별 m.place URL 로 정규화(네트워크 없음).
+     * URL 이 이미 업종을 명시하면 그 업종 보존. 제네릭(/place/{id}: 지도 검색 딥링크 등)이면
+     * 업종을 알 수 없으므로 그대로 place 로 두거나 cleanPlaceUrl()로 실제 업종을 조회한다.
+     */
+    public static function normalizePlaceUrl(string $input): ?string
+    {
+        $ref = self::parsePlaceRef($input);
+
+        return $ref ? self::buildMPlaceUrl($ref['id'], $ref['category']) : null;
+    }
+
+    /**
+     * 네이버 플레이스 URL → 실제 업종을 반영한 m.place URL. URL 에 업종이 없으면(/place/{id})
+     * m.place SSR 을 1회 조회해 업종(restaurant/hairshop/…)을 판별한다(스마트플레이스 등록과 동일).
+     */
+    public function cleanPlaceUrl(string $input): ?string
+    {
+        $ref = self::parsePlaceRef($input);
+        if (! $ref) {
+            return null;
+        }
+        $cat = $ref['category'];
+        if ($cat === 'place') {
+            $cat = $this->placeSummary($ref['id'])['category'] ?: 'place';
+        }
+
+        return self::buildMPlaceUrl($ref['id'], $cat);
+    }
+
     /**
      * 입력(URL·단축URL·ID)에서 placeId 확정. naver.me 단축·map.naver 딥링크는 리다이렉트 최종 URL 에서 재추출.
      * crm 에는 없는 보강(사용자가 어떤 형태의 플레이스 URL 을 넣어도 자동 변환되도록).
@@ -608,6 +668,7 @@ class PlaceRankChecker
             'rnk' => $rnk, 'place_id' => (string) $g('id'), 'name' => (string) $g('name'),
             'visitor_cnt' => $num($g('visitorReviewCount')), 'blog_cnt' => $num($g('blogCafeReviewCount')),
             'booking_cnt' => $num($g('bookingReviewCount')), 'save_cnt' => $num($g('saveCount')),
+            'img_cnt' => $num($g('imageCount')),
             'review_score' => ($g('visitorReviewScore') !== null && $g('visitorReviewScore') !== '') ? (float) $g('visitorReviewScore') : null,
             'tags' => $tags, 'address' => (string) ($g('address') ?: $g('roadAddress')),
         ];

@@ -114,7 +114,8 @@ class NaverKeywordService
         }
 
         usort($related, fn ($a, $b) => $b['monthly_total'] <=> $a['monthly_total']);
-        $main['related'] = array_slice($related, 0, 10);
+        // 제한 없이 전체 전달 — 입력어 토큰 포함 필터는 presenter(related)에서 수행
+        $main['related'] = $related;
 
         return $main;
     }

@@ -3,12 +3,17 @@
   "name": "RankFree — 네이버 쇼핑 시장분석",
   "version": "0.1.0",
   "description": "네이버 쇼핑 검색 페이지에서 시장 규모·키워드 분석을 제공합니다. rankfree.kr 로그인이 필요합니다.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://rankfree.kr/*",
     "http://rankfree.test/*",
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "https://search.shopping.naver.com/*",
+    "https://search.naver.com/*",
+    "https://smartstore.naver.com/*",
+    "https://brand.naver.com/*",
+    "https://shopping.naver.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -23,7 +28,31 @@
     {
       "matches": ["https://search.shopping.naver.com/search/*"],
       "js": ["content/content.js"],
-      "css": ["content/panel.css"],
+      "css": ["content/panel.css", "content/seller-power.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://search.naver.com/search.naver*"],
+      "js": ["content/content.js"],
+      "css": ["content/panel.css", "content/seller-power.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://smartstore.naver.com/*/products/*",
+        "https://brand.naver.com/*/products/*"
+      ],
+      "js": ["content/injected-store.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://smartstore.naver.com/*/products/*",
+        "https://brand.naver.com/*/products/*"
+      ],
+      "js": ["content/product.js"],
+      "css": ["content/panel.css", "content/seller-power.css"],
       "run_at": "document_idle"
     }
   ],

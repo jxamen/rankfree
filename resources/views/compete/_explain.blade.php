@@ -14,11 +14,11 @@
 <style>
 .xw{font-size:.875rem;color:#333}
 .xw .mut{color:#8a94a6}
-.xw .xh{margin-bottom:12px}.xw .xh b{font-size:17px}
+.xw .xh{margin-bottom:12px}.xw .xh b{font-size:var(--fs-md)}
 .xw .minetag{background:#fffbe6;border:1px solid #f0d98a;color:#a37b00;border-radius:4px;font-size:.74rem;padding:1px 6px}
 .xw .xsum{display:flex;gap:12px;margin-bottom:16px}
 .xw .xsc{flex:1;background:#fafbfc;border:1px solid #eef0f2;border-radius:8px;padding:12px 14px;text-align:center}
-.xw .xsc .l{display:block;color:#8a94a6;font-size:.78rem}.xw .xsc .v{font-size:24px;font-weight:800;color:#111}
+.xw .xsc .l{display:block;color:#8a94a6;font-size:.78rem}.xw .xsc .v{font-size:var(--fs-xl);font-weight:800;color:#111}
 .xw .xsc.n3{background:#eefcf3;border-color:#b7e9cd}.xw .xsc.n3 .v{color:#03a54a}
 .xw .xsec{border:1px solid #eef0f2;border-radius:8px;padding:12px 16px;margin-bottom:12px}
 .xw .xt{font-weight:700;color:#1f2937;margin-bottom:9px;font-size:.95rem}

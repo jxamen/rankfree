@@ -11,7 +11,7 @@ class PlaceRankSlot extends Model
 {
     protected $fillable = [
         'user_id', 'keyword', 'place_id', 'place_name', 'place_url',
-        'category', 'label', 'is_active', 'last_rank', 'last_review_count', 'last_checked_at',
+        'category', 'label', 'share_token', 'is_active', 'last_rank', 'last_review_count', 'last_checked_at',
     ];
 
     protected $casts = [

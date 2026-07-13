@@ -75,11 +75,13 @@ class SearchAdWebClient
         if ($kw === '') {
             return ['error' => 'empty_keyword'];
         }
+        // keywordstool 은 공백 포함 키워드에 성별/연령/월별을 비워 반환 → 공백 제거 + 대문자 정규화(공식 API 와 동일)
+        $query = mb_strtoupper(str_replace(' ', '', $kw), 'UTF-8');
 
         $r = Http::withHeaders($this->headers($cookie))
             ->timeout((int) config('searchadweb.timeout', 15))
             ->get($this->base().'/apis/sa/keywordstool', [
-                'format' => 'json', 'includeHintKeywords' => 0, 'showDetail' => 1, 'keyword' => $kw,
+                'format' => 'json', 'includeHintKeywords' => 0, 'showDetail' => 1, 'keyword' => $query,
             ]);
 
         if ($r->status() === 401) {

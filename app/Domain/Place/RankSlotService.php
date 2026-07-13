@@ -66,10 +66,10 @@ class RankSlotService
         }
 
         $lim = $user->rankSlotLimit();
-        $used = $user->rankSlotsUsed();
+        $used = $user->rankSlotsUsedTotal(); // 플레이스+쇼핑 합산(공유 풀)
         if ($lim >= 0 && $used + count($keywords) > $lim) {
             $room = max(0, $lim - $used);
-            throw new DomainException("추적 한도({$lim}개)를 초과합니다. 현재 {$used}개 사용 중 · 추가 가능 {$room}개(요청 ".count($keywords).'개).');
+            throw new DomainException("추적 한도({$lim}개, 플레이스+쇼핑 합산)를 초과합니다. 현재 {$used}개 사용 중 · 추가 가능 {$room}개(요청 ".count($keywords).'개).');
         }
 
         $place = $this->resolvePlace($placeInput);
@@ -98,6 +98,7 @@ class RankSlotService
                 'place_url' => $place['place_url'],
                 'category' => $place['category'] ?: 'place',
                 'label' => $label,
+                'share_token' => \Illuminate\Support\Str::random(32),
                 'is_active' => true,
             ]);
         }
@@ -131,6 +132,7 @@ class RankSlotService
             [
                 'rank' => $r['rank'],
                 'review_count' => $r['review_count'],
+                'blog_review_count' => $r['blog_review_count'],
                 'save_count' => $r['save_count'],
                 'review_score' => $r['review_score'],
                 'list_total' => $r['list_total'],

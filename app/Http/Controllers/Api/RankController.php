@@ -21,7 +21,7 @@ class RankController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'used' => $user->rankSlotsUsed(),
+            'used' => $user->rankSlotsUsedTotal(),
             'limit' => $user->rankSlotLimit(),
             'slots' => $user->rankSlots()->with('records')->latest()->get()->map(fn ($s) => $this->slotJson($s))->values(),
         ]);

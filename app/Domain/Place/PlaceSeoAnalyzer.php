@@ -41,6 +41,7 @@ class PlaceSeoAnalyzer
         $saveArr = array_map(fn ($i) => $i['save_cnt'], $items);
         $scoreArr = array_map(fn ($i) => $i['review_score'], $items);
         $bookingArr = array_map(fn ($i) => $i['booking_cnt'], $items);
+        $imgArr = array_map(fn ($i) => $i['img_cnt'] ?? null, $items);
 
         // T2 상세 + 리뷰 주별수집(D9/D10 raw)
         $details = [];
@@ -69,7 +70,7 @@ class PlaceSeoAnalyzer
             $pid = $it['place_id'];
             $detail = $details[$pid] ?? null;
             $isMine = ($myPid && $pid === $myPid);
-            $sc = PlaceScorer::computeScores($it, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr);
+            $sc = PlaceScorer::computeScores($it, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr, $imgArr);
             $this->saveSerp($slot->id, $ymd, $it, $isMine, $total);
             $this->saveScore($slot->id, $ymd, $pid, $it['rnk'], $sc, $isMine);
             if ($detail && $detail['ok']) {
@@ -88,10 +89,10 @@ class PlaceSeoAnalyzer
                 'rnk' => $myRank ?: 300, 'place_id' => $myPid,
                 'name' => $slot->place_name ?: ($detail['name'] ?? ''),
                 'visitor_cnt' => $detail['visitor_cnt'] ?? null, 'blog_cnt' => $detail['blog_cnt'] ?? null,
-                'booking_cnt' => null, 'save_cnt' => null, 'review_score' => $detail['review_score'] ?? null,
+                'booking_cnt' => null, 'save_cnt' => null, 'img_cnt' => null, 'review_score' => $detail['review_score'] ?? null,
                 'tags' => $detail['tags'] ?? [], 'address' => '',
             ];
-            $sc = PlaceScorer::computeScores($item, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr);
+            $sc = PlaceScorer::computeScores($item, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr, $imgArr);
             $this->saveSerp($slot->id, $ymd, $item, true, $total);
             $this->saveScore($slot->id, $ymd, $myPid, $item['rnk'], $sc, true);
             if (! empty($detail['ok'])) {
@@ -135,6 +136,7 @@ class PlaceSeoAnalyzer
                 'place_id' => (string) $it['place_id'], 'name' => (string) ($it['name'] ?? ''),
                 'visitor_cnt' => $it['visitor_cnt'] ?? null, 'blog_cnt' => $it['blog_cnt'] ?? null,
                 'booking_cnt' => $it['booking_cnt'] ?? null, 'save_cnt' => $it['save_cnt'] ?? null,
+                'image_cnt' => $it['img_cnt'] ?? null,
                 'review_score' => $it['review_score'] ?? null, 'tags' => $it['tags'] ?? [],
                 'address' => (string) ($it['address'] ?? ''), 'list_total' => $total, 'created_at' => now(),
             ],
@@ -147,7 +149,7 @@ class PlaceSeoAnalyzer
             ['slot_id' => $slotId, 'place_id' => $pid, 'ymd' => $ymd],
             [
                 'rnk' => $rnk,
-                'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'],
+                'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'], 'd6' => $sc['d6'],
                 'd7' => $sc['d7'], 'd8' => $sc['d8'], 'd9' => $sc['d9'], 'd10' => $sc['d10'],
                 'n1' => $sc['n1'], 'n2' => $sc['n2'], 'n3' => $sc['n3'],
                 'avail_mask' => $sc['mask'], 'tier' => $sc['tier'], 'is_mine' => $isMine, 'created_at' => now(),

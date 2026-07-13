@@ -18,7 +18,9 @@
         ['k' => 'visitor_cnt', 'label' => '영수증 리뷰', 'invert' => false, 'dec' => null],
         ['k' => 'blog_cnt', 'label' => '블로그 리뷰', 'invert' => false, 'dec' => null],
         ['k' => 'save_cnt', 'label' => '저장수', 'invert' => false, 'dec' => null],
+        ['k' => 'image_cnt', 'label' => '사진수', 'invert' => false, 'dec' => null],
         ['k' => 'review_score', 'label' => '평점', 'invert' => false, 'dec' => 2],
+        ['k' => 'd6', 'label' => '사진충실 D6', 'invert' => false, 'dec' => 2],
         ['k' => 'd7', 'label' => '정보충실성', 'invert' => false, 'dec' => 2],
         ['k' => 'd9', 'label' => '최근활동 D9', 'invert' => false, 'dec' => 2],
         ['k' => 'd10', 'label' => '영향력 D10', 'invert' => false, 'dec' => 2],
@@ -58,7 +60,7 @@
     @if (count($rows) >= 2)
       @php
           $W = 900; $H = 110; $pL = 36; $pR = 12; $pT = 12; $pB = 20; $n = count($rows);
-          $rks = array_map(fn ($rr) => min(300, max(1, (int) $rr['rnk'])), $rows);
+          $rks = array_map(fn ($rr) => min(300, max(1, (int) ($rr['rnk'] ?? 300))), $rows);
           $mn = min($rks); $mxv = max($rks); if ($mxv == $mn) $mxv = $mn + 1;
           $xO = fn ($i) => round($pL + ($n <= 1 ? 0 : ($W - $pL - $pR) * $i / ($n - 1)), 1);
           $yO = fn ($v) => round($pT + ($v - $mn) / ($mxv - $mn) * ($H - $pT - $pB), 1);
@@ -66,7 +68,7 @@
           foreach ($rks as $i => $v) { $pts[] = $xO($i).','.$yO($v); }
       @endphp
       <div class="sec"><div class="tt">순위 추이 <span class="mut">— 위쪽일수록 상위</span></div>
-        <svg viewBox="0 0 {{ $W }} {{ $H }}" style="width:100%;height:auto;max-height:150px;font-size:11px">
+        <svg viewBox="0 0 {{ $W }} {{ $H }}" style="width:100%;height:auto;max-height:150px;font-size:var(--fs-xs)">
           <text x="{{ $pL - 5 }}" y="{{ $yO($mn) + 3 }}" text-anchor="end" fill="#94a0ac">{{ $mn }}위</text>
           <text x="{{ $pL - 5 }}" y="{{ $yO($mxv) + 3 }}" text-anchor="end" fill="#c0c6cd">{{ $mxv }}위</text>
           <polyline points="{{ implode(' ', $pts) }}" fill="none" stroke="#03c75a" stroke-width="2"/>
@@ -84,14 +86,14 @@
       <div class="tt">일자별 <span class="mut">— 최신부터 · 증감은 직전 기록 대비</span></div>
       <div class="hgrid">
         @foreach ($desc as $di => $rr)
-        @php $old = $desc[$di + 1] ?? null; $rk = (int) $rr['rnk']; @endphp
+        @php $old = $desc[$di + 1] ?? null; $rk = (int) ($rr['rnk'] ?? 0); @endphp
         <div class="hcard">
-          <div class="hd">{{ substr($rr['ymd'], 5) }}@if (! empty($rr['place_plus'])) <span class="pplus2">p+</span>@endif</div>
-          <div class="hr">{{ $rk >= 300 ? '300+' : $rk.'위' }}{!! $old ? $hd($rk, (int) $old['rnk'], true, 0) : '' !!}</div>
+          <div class="hd">{{ substr($rr['ymd'] ?? '', 5) }}@if (! empty($rr['place_plus'])) <span class="pplus2">p+</span>@endif</div>
+          <div class="hr">{{ $rk >= 300 ? '300+' : $rk.'위' }}{!! $old ? $hd($rk, (int) ($old['rnk'] ?? 0), true, 0) : '' !!}</div>
           <div class="hm">
-            <span class="lb">영</span> <b>{!! $hv($rr['visitor_cnt']) !!}</b>{!! $old ? $hd($rr['visitor_cnt'], $old['visitor_cnt']) : '' !!}<br>
-            <span class="lb">블</span> <b>{!! $hv($rr['blog_cnt']) !!}</b>{!! $old ? $hd($rr['blog_cnt'], $old['blog_cnt']) : '' !!}<br>
-            <span class="lb">저장</span> <b>{!! $hv($rr['save_cnt']) !!}</b>{!! $old ? $hd($rr['save_cnt'], $old['save_cnt']) : '' !!}
+            <span class="lb">영</span> <b>{!! $hv($rr['visitor_cnt'] ?? null) !!}</b>{!! $old ? $hd($rr['visitor_cnt'] ?? null, $old['visitor_cnt'] ?? null) : '' !!}<br>
+            <span class="lb">블</span> <b>{!! $hv($rr['blog_cnt'] ?? null) !!}</b>{!! $old ? $hd($rr['blog_cnt'] ?? null, $old['blog_cnt'] ?? null) : '' !!}<br>
+            <span class="lb">저장</span> <b>{!! $hv($rr['save_cnt'] ?? null) !!}</b>{!! $old ? $hd($rr['save_cnt'] ?? null, $old['save_cnt'] ?? null) : '' !!}
           </div>
         </div>
         @endforeach
@@ -108,15 +110,15 @@
           <tr>
             <td>{{ $m['label'] }}</td>
             @foreach ($desc as $di => $rr)
-              @php $old = $desc[$di + 1] ?? null; $v = $rr[$m['k']]; @endphp
-              <td>@if (! empty($m['rank']))<b>{{ (int) $v >= 300 ? '300+' : (int) $v.'위' }}</b>@else{!! $hv($v, $m['dec']) !!}@endif{!! $old ? $hd($v, $old[$m['k']], $m['invert'], $m['dec'] ?: 0) : '' !!}</td>
+              @php $old = $desc[$di + 1] ?? null; $v = $rr[$m['k']] ?? null; $ov = $old[$m['k']] ?? null; @endphp
+              <td>@if (! empty($m['rank']))<b>{{ (int) $v >= 300 ? '300+' : (int) $v.'위' }}</b>@else{!! $hv($v, $m['dec']) !!}@endif{!! $old ? $hd($v, $ov, $m['invert'], $m['dec'] ?: 0) : '' !!}</td>
             @endforeach
           </tr>
         @endforeach
         </tbody></table>
       </div>
       </div>
-      <div class="note">지표 상승(<span class="hup">+</span>)·순위 개선(<span class="hup">-N</span>)은 녹색, 반대는 빨강. D9·D10은 리뷰 수집 대상(내 매장+상위10), 저장수는 맛집 순위체크 응답 기준.</div>
+      <div class="note">지표 상승(<span class="hup">+</span>)·순위 개선(<span class="hup">-N</span>)은 녹색, 반대는 빨강. D9·D10은 리뷰 수집 대상(내 매장+상위10), 저장수는 맛집 전용, 사진수·D6은 전 업종 공통.</div>
     </div>
   @endif
 </div>

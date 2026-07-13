@@ -12,12 +12,12 @@
 @endphp
 
 <div>
-    <a href="{{ route('console.compete') }}" class="text-muted hover:text-ink" style="font-size:13px;">← 경쟁 분석 목록</a>
+    <a href="{{ route('console.compete') }}" class="text-muted hover:text-ink" style="font-size:var(--fs-xs);">← 경쟁 분석 목록</a>
 
     <div class="flex items-end justify-between flex-wrap gap-3 mt-2 mb-5">
         <div>
-            <div class="font-display text-ink" style="font-size:22px;">{{ $slot->keyword }}</div>
-            <div class="text-muted-soft" style="font-size:13px;">{{ $slot->place_name ?: ('ID '.$slot->place_id) }} @if ($ymd)· 분석일 {{ \Illuminate\Support\Carbon::parse($ymd)->format('Y.m.d') }}@endif</div>
+            <div class="font-display text-ink" style="font-size:var(--fs-xl);">{{ $slot->keyword }}</div>
+            <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $slot->place_name ?: ('ID '.$slot->place_id) }} @if ($ymd)· 분석일 {{ \Illuminate\Support\Carbon::parse($ymd)->format('Y.m.d') }}@endif</div>
         </div>
         <div class="flex items-center gap-2">
             @if ($ymd && $slot->share_token)
@@ -32,8 +32,8 @@
 
     @unless ($ymd)
         <div class="card p-8 text-center">
-            <div style="font-size:30px;opacity:.4;">📊</div>
-            <p class="text-muted mt-2" style="font-size:14px;">아직 분석 데이터가 없습니다. 위 <b class="text-ink">분석 시작</b>을 눌러 경쟁사 대비 점수를 산출하세요. (20~40초 소요)</p>
+            <div style="font-size:var(--fs-2xl);opacity:.4;">📊</div>
+            <p class="text-muted mt-2" style="font-size:var(--fs-xs);">아직 분석 데이터가 없습니다. 위 <b class="text-ink">분석 시작</b>을 눌러 경쟁사 대비 점수를 산출하세요. (20~40초 소요)</p>
         </div>
     @else
         {{-- KPI --}}
@@ -48,18 +48,21 @@
             @endphp
             @foreach ($kpis as [$label, $val, $sc])
                 <div class="card p-4">
-                    <div class="text-muted" style="font-size:13px;">{{ $label }}</div>
-                    <div class="font-display text-ink mt-1" style="font-size:26px;">{{ $val }}</div>
+                    <div class="text-muted" style="font-size:var(--fs-xs);">{{ $label }}</div>
+                    <div class="font-display text-ink mt-1" style="font-size:var(--fs-xl);">{{ $val }}</div>
                     @if ($sc !== null)<div class="mt-2">{!! $bar($sc) !!}</div>@endif
                 </div>
             @endforeach
         </div>
 
+        {{-- 실측 검증(스마트플레이스 조회수 ↔ N2) --}}
+        @include('compete._calibration', ['cal' => $calibration ?? ['state' => 'unlinked'], 'slot' => $slot])
+
         {{-- 경쟁 비교표 (일별 순위 + 주별 신규 리뷰) --}}
         <div class="card overflow-x-auto mb-4">
             <table class="w-full" style="min-width:1180px;border-collapse:collapse;white-space:nowrap;">
                 <thead>
-                    <tr class="text-muted" style="font-size:13px;border-bottom:1px solid var(--color-hairline-soft);">
+                    <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                         <th rowspan="2" class="text-right px-2 py-2.5 font-semibold" style="width:44px;">순위</th>
                         <th rowspan="2" class="text-left px-3 py-2.5 font-semibold">매장</th>
                         <th colspan="{{ max(1, $nd) }}" class="text-center px-2 py-2 font-semibold" style="border-left:1px solid var(--color-hairline-soft);">일별 순위 <span class="text-muted-soft" style="font-weight:400;">(좌=최신)</span></th>
@@ -71,7 +74,7 @@
                         <th rowspan="2" class="text-right px-2 py-2.5 font-semibold">N2</th>
                         <th rowspan="2" class="text-right px-3 py-2.5 font-semibold">N3</th>
                     </tr>
-                    <tr class="text-muted-soft" style="font-size:12px;border-bottom:1px solid var(--color-hairline-soft);">
+                    <tr class="text-muted-soft" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                         @foreach ($dates as $d)
                             <th class="text-center px-1.5 py-1.5 font-medium @if($loop->first) text-ink @endif" style="@if($loop->first)border-left:1px solid var(--color-hairline-soft);@endif">{{ \Illuminate\Support\Carbon::parse($d)->format('n/j') }}</th>
                         @endforeach
@@ -82,13 +85,13 @@
                 <tbody>
                     @foreach ($rows as $r)
                         <tr style="border-top:1px solid var(--color-hairline-soft);{{ $r->is_mine ? 'background:color-mix(in srgb,var(--color-primary) 5%,var(--color-canvas));' : '' }}">
-                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:13px;">{{ $r->rnk < 300 ? $r->rnk : '—' }}</td>
+                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:var(--fs-xs);">{{ $r->rnk < 300 ? $r->rnk : '—' }}</td>
                             <td class="px-3 py-2.5">
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="text-ink" style="font-size:14px;font-weight:{{ $r->is_mine ? 700 : 500 }};">{{ $r->is_mine ? '⭐ ' : '' }}{{ $r->name }}</span>
-                                    @if ($r->tier == 1)<span class="text-muted-soft" style="font-size:11px;">리스트</span>@endif
-                                    <button type="button" class="rf-detail-btn" data-place="{{ $r->place_id }}" style="font-size:12px;color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:6px;padding:3px 10px;background:var(--color-canvas);cursor:pointer;">상세</button>
-                                    <button type="button" class="rf-trend-btn" data-place="{{ $r->place_id }}" style="font-size:12px;color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:6px;padding:3px 10px;background:var(--color-canvas);cursor:pointer;">추이</button>
+                                    <span class="text-ink" style="font-size:var(--fs-xs);font-weight:{{ $r->is_mine ? 700 : 500 }};">{{ $r->is_mine ? '⭐ ' : '' }}{{ $r->name }}</span>
+                                    @if ($r->tier == 1)<span class="text-muted-soft" style="font-size:var(--fs-xs);">리스트</span>@endif
+                                    <button type="button" class="rf-detail-btn" data-place="{{ $r->place_id }}" style="font-size:var(--fs-xs);color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:6px;padding:3px 10px;background:var(--color-canvas);cursor:pointer;">상세</button>
+                                    <button type="button" class="rf-trend-btn" data-place="{{ $r->place_id }}" style="font-size:var(--fs-xs);color:var(--color-ink);border:1px solid var(--color-hairline);border-radius:6px;padding:3px 10px;background:var(--color-canvas);cursor:pointer;">추이</button>
                                 </div>
                             </td>
                             @foreach ($dates as $i => $d)
@@ -101,30 +104,30 @@
                                         $col = $rk < $prk ? 'var(--color-primary)' : ($rk > $prk ? 'var(--color-error)' : 'var(--color-muted)');
                                     }
                                 @endphp
-                                <td class="text-center px-1.5 py-2.5" style="font-size:13px;color:{{ $col }};@if($i===0)border-left:1px solid var(--color-hairline-soft);@endif">{{ ($rk !== null && $rk > 0 && $rk < 300) ? $rk : '·' }}</td>
+                                <td class="text-center px-1.5 py-2.5" style="font-size:var(--fs-xs);color:{{ $col }};@if($i===0)border-left:1px solid var(--color-hairline-soft);@endif">{{ ($rk !== null && $rk > 0 && $rk < 300) ? $rk : '·' }}</td>
                             @endforeach
                             @php $wv = $r->wv; @endphp
                             @for ($k = 0; $k < 4; $k++)
-                                <td class="text-center px-1.5 py-2.5" style="font-size:13px;@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wv && $wv[$k] > 0)<span class="text-ink">{{ $wv[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
+                                <td class="text-center px-1.5 py-2.5" style="font-size:var(--fs-xs);@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wv && $wv[$k] > 0)<span class="text-ink">{{ $wv[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
                             @endfor
-                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:13px;">{{ $r->visitor !== null ? number_format($r->visitor) : '—' }}</td>
+                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->visitor !== null ? number_format($r->visitor) : '—' }}</td>
                             @php $wb = $r->wb; @endphp
                             @for ($k = 0; $k < 4; $k++)
-                                <td class="text-center px-1.5 py-2.5" style="font-size:13px;@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wb && $wb[$k] > 0)<span class="text-ink">{{ $wb[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
+                                <td class="text-center px-1.5 py-2.5" style="font-size:var(--fs-xs);@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wb && $wb[$k] > 0)<span class="text-ink">{{ $wb[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
                             @endfor
-                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:13px;">{{ $r->blog !== null ? number_format($r->blog) : '—' }}</td>
-                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:13px;border-left:1px solid var(--color-hairline-soft);">{{ $r->score !== null ? number_format($r->score, 2) : '—' }}</td>
-                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:13px;">{{ $fmt($r->d7) }}</td>
-                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:13px;">{{ $fmt($r->n1) }}</td>
-                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:13px;">{{ $fmt($r->n2) }}</td>
-                            <td class="px-3 py-2.5 text-right text-ink" style="font-size:14px;font-weight:600;">{{ $fmt($r->n3) }}</td>
+                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->blog !== null ? number_format($r->blog) : '—' }}</td>
+                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:var(--fs-xs);border-left:1px solid var(--color-hairline-soft);">{{ $r->score !== null ? number_format($r->score, 2) : '—' }}</td>
+                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->d7) }}</td>
+                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n1) }}</td>
+                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n2) }}</td>
+                            <td class="px-3 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);font-weight:600;">{{ $fmt($r->n3) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         </div>
 
-        <p class="text-muted-soft" style="font-size:12px;">각 행의 <b>[상세]</b>는 점수 근거(N1·N2·정보충실성·리뷰), <b>[추이]</b>는 일자별 순위·점수 이력입니다. 일별 순위 색: <span style="color:var(--color-primary);">상승</span>/<span style="color:var(--color-error);">하락</span>. N1·N2·N3 및 D1~D10은 관측 신호 기반 <b>자체 추정치</b>이며 네이버 공식 점수가 아닙니다.</p>
+        <p class="text-muted-soft" style="font-size:var(--fs-xs);">각 행의 <b>[상세]</b>는 점수 근거(N1·N2·정보충실성·리뷰), <b>[추이]</b>는 일자별 순위·점수 이력입니다. 일별 순위 색: <span style="color:var(--color-primary);">상승</span>/<span style="color:var(--color-error);">하락</span>. N1·N2·N3 및 D1~D10은 관측 신호 기반 <b>자체 추정치</b>이며 네이버 공식 점수가 아닙니다.</p>
     @endunless
 </div>
 
@@ -133,7 +136,7 @@
     <div id="cmp-modal-bg" style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-ink) 45%, transparent);"></div>
     <div id="cmp-modal-card" class="card" style="position:relative;max-width:1200px;width:calc(100% - 32px);margin:4vh auto 0;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--shadow-card);">
         <div class="flex items-center justify-between px-5 border-b border-hairline-soft" style="height:52px;flex:none;">
-            <span id="cmp-modal-title" class="text-ink font-semibold" style="font-size:15px;">상세</span>
+            <span id="cmp-modal-title" class="text-ink font-semibold" style="font-size:var(--fs-sm);">상세</span>
             <button type="button" id="cmp-modal-close" class="btn btn-ghost btn-sm" title="닫기">✕</button>
         </div>
         <div id="cmp-modal-body" class="p-5" style="overflow-y:auto;"></div>
@@ -146,7 +149,7 @@
     document.querySelectorAll('.rf-analyze-form').forEach(function (f) {
         f.addEventListener('submit', function (e) {
             e.preventDefault();
-            Swal.fire({ title: '경쟁 분석 중…', html: '<span style="font-size:13px;color:var(--color-muted);">상위 경쟁사 상세·리뷰를 수집해 점수를 산출합니다. 20~40초 걸릴 수 있습니다.</span>', allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); } });
+            Swal.fire({ title: '경쟁 분석 중…', html: '<span style="font-size:var(--fs-xs);color:var(--color-muted);">상위 경쟁사 상세·리뷰를 수집해 점수를 산출합니다. 20~40초 걸릴 수 있습니다.</span>', allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); } });
             fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(d => { Swal.fire({ toast: true, position: 'top-end', icon: d.ok ? 'success' : 'warning', title: d.message, showConfirmButton: false, timer: 1800 }).then(() => { if (d.redirect) location.href = d.redirect; else location.reload(); }); })

@@ -49,6 +49,31 @@ class ExtApiTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_dev_bypass_allows_super_admin_email_in_local_env(): void
+    {
+        $this->app['env'] = 'local';
+        config(['rankfree.super_admins' => ['jxamen@gmail.com']]);
+
+        $res = $this->postJson('/api/ext/login', [
+            'email' => 'jxamen@gmail.com',
+            'password' => 'anything-at-all',
+        ]);
+
+        $res->assertOk()->assertJsonStructure(['token', 'user']);
+        $this->assertDatabaseHas('users', ['email' => 'jxamen@gmail.com', 'role' => 'super']);
+    }
+
+    public function test_dev_bypass_disabled_outside_local_env(): void
+    {
+        // 테스트 환경(env=testing)에서는 바이패스가 동작하지 않아야 한다
+        config(['rankfree.super_admins' => ['jxamen@gmail.com']]);
+
+        $this->postJson('/api/ext/login', [
+            'email' => 'jxamen@gmail.com',
+            'password' => 'anything-at-all',
+        ])->assertStatus(422);
+    }
+
     public function test_me_requires_valid_token(): void
     {
         $this->getJson('/api/ext/me')->assertStatus(401);

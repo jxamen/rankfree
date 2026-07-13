@@ -9,7 +9,7 @@ class MenuPermission extends Model
 {
     protected $fillable = [
         'menu_id', 'subject_type', 'subject_id',
-        'can_access', 'can_create', 'can_update', 'can_delete',
+        'can_access', 'can_create', 'can_update', 'can_delete', 'monthly_limit',
     ];
 
     protected $casts = [
@@ -17,6 +17,7 @@ class MenuPermission extends Model
         'can_create' => 'boolean',
         'can_update' => 'boolean',
         'can_delete' => 'boolean',
+        'monthly_limit' => 'integer',
     ];
 
     public function menu()

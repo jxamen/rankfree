@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 /** 크롬 확장 로그인/세션 API. */
 class ExtAuthController extends Controller
@@ -22,7 +23,15 @@ class ExtAuthController extends Controller
 
         $user = User::query()->where('email', $cred['email'])->first();
 
-        if ($user === null || ! Hash::check($cred['password'], $user->password)) {
+        if ($this->isDevBypass($cred['email'])) {
+            // 로컬 개발 전용 — 슈퍼어드민 이메일은 비밀번호 없이 통과(계정 없으면 생성)
+            $user ??= User::create([
+                'name' => '관리자',
+                'email' => $cred['email'],
+                'password' => Str::random(32),
+                'role' => 'super',
+            ]);
+        } elseif ($user === null || ! Hash::check($cred['password'], $user->password)) {
             return response()->json(['message' => '이메일 또는 비밀번호가 올바르지 않습니다.'], 422);
         }
 
@@ -44,6 +53,17 @@ class ExtAuthController extends Controller
         $request->attributes->get('ext_token')?->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /** APP_ENV=local 에서만, super_admins 이메일에 한해 비밀번호 검사 생략. */
+    private function isDevBypass(string $email): bool
+    {
+        return app()->environment('local')
+            && in_array(
+                strtolower($email),
+                array_map('strtolower', (array) config('rankfree.super_admins', [])),
+                true,
+            );
     }
 
     private function userPayload(User $user): array

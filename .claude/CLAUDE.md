@@ -26,6 +26,7 @@
 - 요청받은 작업은 그 자리에서 직접 바로 진행한다.
 - 여러 단계 작업은 시작 전 계획을 세우고, 단계마다 검증 후 진행한다.
 - 시작한 작업은 끝까지 완료한다. 실제로 반영·검증된 결과가 완료의 기준이다.
+- **작업 완료 전 반드시 Playwright로 실제 동작을 검증한다**(문법 통과·코드 리뷰만으로 완료라 하지 않는다). 확장·수집·UI처럼 네이버 페이지 실동작에 의존하는 기능은 실제로 돌려 확인하고, 오류가 나면 **원인 수정 → 재검증 루프를 요청이 실동작으로 마무리될 때까지 반복**한다. 완료 보고엔 Playwright 검증 방법·결과를 포함한다. (chromium 설치됨, 임시 스크립트는 `$CLAUDE_JOB_DIR/tmp`)
 - 막히면 조용히 넘어가지 말고 보고한다: 지금까지의 결과 + 막힌 지점 + 시도한 방법 + 대안.
 - 모호한 요청은 가장 그럴듯한 해석을 명시하고 진행한다. 해석이 크게 갈릴 때만 질문한다.
 - 설계 결정사항은 해당 `.claude` 설계 문서에 즉시 반영해 문서가 항상 최신 기준이 되게 한다.
@@ -40,15 +41,19 @@
 - 네이버 계정 쿠키/비밀번호 등 민감정보는 **암호화 저장**(원본 crm은 평문 — 이식 시 반드시 개선).
 - 큰 변경 전 `.claude/backup/`에 백업본(파일명에 날짜)을 남긴다.
 
-## UI / 디자인 규칙 (Cal.com 디자인 시스템)
+## UI / 디자인 규칙 (Coinbase 디자인 시스템)
 
-- **디자인 시스템은 Cal.com** — [DESIGN.md](../DESIGN.md) 원본, Tailwind 매핑은 [09_DESIGN_SYSTEM.md](./09_DESIGN_SYSTEM.md)
-- **모든 색/타이포/radius는 `resources/css/app.css`의 `@theme` 토큰으로만** 사용. 하드코딩 hex 금지
+- **디자인 시스템은 Coinbase** — [DESIGN.md](../DESIGN.md) 원본, Tailwind 매핑은 [09_DESIGN_SYSTEM.md](./09_DESIGN_SYSTEM.md). 2026-07-12 Cal.com에서 전환(백업 [backup/](./backup/))
+- **모든 색/타이포/radius는 `resources/css/app.css`의 `@theme` 토큰으로만** 사용. 하드코딩 hex 금지. 토큰 이름은 기존 그대로(값만 Coinbase 리매핑)
 - 반복 UI(버튼/카드/입력/배지)는 `@layer components`(btn/card/input/badge)로 정의된 클래스를 **재사용**. 새 인라인 스타일 남발 금지
-- **sign 프로젝트의 콘솔/홈페이지 스타일을 복사하지 않는다.** 정보 구조만 참고, 스타일은 Cal.com 토큰으로 신규
-- 흰 캔버스 + 검정(#111) 프라이머리 CTA(모노크롬). 파랑(accent)은 인라인 링크 등에 희소하게
-- 다크 서피스는 **푸터와 featured 카드**에만. 남용 금지
-- 디스플레이 헤드라인은 `.font-display`(Manrope+Pretendard, weight 700, 음수 자간). 본문은 Pretendard 400/500
+- **sign 프로젝트의 콘솔/홈페이지 스타일을 복사하지 않는다.** 정보 구조만 참고, 스타일은 Coinbase 토큰으로 신규
+- 흰 캔버스 + **Coinbase Blue(#0052ff=`primary`) 단일 브랜드 컬러** — CTA·인라인 링크·포커스 링에만 희소하게(밴드당 1~2곳). 두 번째 브랜드 컬러 도입 금지
+- **모든 CTA는 pill(`--radius-pill`)**, 카드 16~24px, sharp corner 금지
+- 상승/성공=`success`(#05b169)·하락/오류=`error`(#cf202f)는 **텍스트 색으로만**(버튼 배경 금지). badge 파스텔은 등급·차트 등 데이터 시각화 전용
+- 다크 서피스(#0a0b0d)는 **히어로 밴드·featured 카드**에만. 남용 금지
+- 디스플레이 헤드라인은 `.font-display`(Inter+Pretendard, **weight 400**, 음수 자간 — bold 금지가 시그니처). 본문은 Pretendard 400/600. 숫자·지표는 `font-mono`(JetBrains Mono)
+- **콘솔 최소 폰트: 본문/데이터 13px, 보조(라벨·캡션·배지·테이블 헤더 셀) 12px. 12px 미만 금지**(10~11.5px 사용하지 않는다). 카드 제목은 14px
+- **콘솔 콘텐츠 가로 최대 1880px** — `console.layout`의 `<main>` 내부 래퍼(`max-width:1880px;margin:0 auto`)로 고정
 
 ## 데이터 수집 규칙 (네이버)
 
@@ -68,5 +73,10 @@
 |------|------|
 | [09_DESIGN_SYSTEM.md](./09_DESIGN_SYSTEM.md) | Cal.com 디자인 시스템 → Tailwind 토큰 매핑 |
 | [10_EXTENSION_SHOPPING_MARKET.md](./10_EXTENSION_SHOPPING_MARKET.md) | 크롬 확장 — 쇼핑 시장 분석(C1) 설계·API 계약 |
+| [12_SMARTPLACE_REPORT.md](./12_SMARTPLACE_REPORT.md) | 스마트플레이스 리포트 수집(통계·리뷰·스마트콜·예약) 이식 설계 + N2 캘리브레이션·가중치 학습 |
+| [13_KEYWORD_ANALYSIS.md](./13_KEYWORD_ANALYSIS.md) | 마케팅 키워드 분석 페이지(검색량·성별/연령·트렌드·연관키워드) 설계 |
+| [14_SHOPPING_RANK.md](./14_SHOPPING_RANK.md) | 쇼핑 순위추적(openapi shop.json · 상품/업체 × 키워드) — 플레이스 순위추적 미러 |
+| [15_SELLER_POWER.md](./15_SELLER_POWER.md) | 셀러력 — 쇼핑 상품 SEO·지수 경쟁 비교(5축·확장 수집·서버 계산·패널/웹 UI) |
+| [16_DEPLOYMENT.md](./16_DEPLOYMENT.md) | 배포 — jcurve2(crm) 서버에 PHP 8.3 공존(apxs mod_proxy_fcgi + php83-fpm)·MariaDB·vhost·런북 |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

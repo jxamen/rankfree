@@ -1,11 +1,12 @@
 /* ------------------------------------------------------------------ *
- * rankfree — Cal.com 디자인 시스템 (Tailwind v4 @theme)
- * 원본: getdesign.md/cal (DESIGN.md 참조)
- * 한글 서비스이므로 본문=Pretendard, 디스플레이=Manrope+Pretendard
+ * rankfree — Coinbase 디자인 시스템 (Tailwind v4 @theme)
+ * 원본: getdesign.md/coinbase (DESIGN.md 참조)
+ * 한글 서비스이므로 본문=Pretendard, 디스플레이=Inter+Pretendard(weight 400)
  * 모든 색/타이포/radius는 토큰으로만 사용 — 하드코딩 hex 금지
+ * 토큰 이름은 기존(Cal.com 시절)과 동일하게 유지 — 값만 Coinbase로 리매핑
  * ------------------------------------------------------------------ */
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css');
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -13,63 +14,85 @@
 @source '../views/**/*.blade.php';
 
 @theme {
-    /* ---- Typography --------------------------------------------- */
+    /* ---- Typography --------------------------------------------- *
+     * CoinbaseSans → Inter/Pretendard, CoinbaseDisplay → Inter 400,
+     * CoinbaseMono → JetBrains Mono (DESIGN.md 대체 폰트 지침) */
     --font-sans: 'Pretendard Variable', Pretendard, 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-    --font-display: 'Manrope', 'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Inter', 'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-    /* ---- Brand & Action (monochrome) ---------------------------- */
-    --color-primary: #111111;
-    --color-primary-active: #242424;
-    --color-primary-disabled: #e5e7eb;
-    --color-accent: #3b82f6;
+    /* ---- Font size scale (디자인 토큰) --------------------------- *
+     * 폰트 크기는 절대 인라인 px 금지. 이 토큰(또는 .fs-* 클래스)만 사용.
+     * 시스템 전체 최소 폰트는 --fs-xs 한 곳으로 조절한다. */
+    --fs-xs: 0.875rem;   /* 14px — 시스템 최소 */
+    --fs-sm: 0.9375rem;  /* 15px */
+    --fs-base: 1rem;     /* 16px */
+    --fs-md: 1.125rem;   /* 18px */
+    --fs-lg: 1.3125rem;  /* 21px */
+    --fs-xl: 1.5625rem;  /* 25px */
+    --fs-2xl: 1.9375rem; /* 31px */
+    --fs-3xl: 2.75rem;   /* 44px */
 
-    /* ---- Ink / Text --------------------------------------------- */
-    --color-ink: #111111;
-    --color-body: #374151;
-    --color-muted: #6b7280;
-    --color-muted-soft: #898989;
+    /* ---- Brand & Action (Coinbase Blue — 단일 브랜드 컬러) -------- *
+     * primary=CTA·활성·포커스(원색 유지), accent=그래프·링크(면적이 커서 한 톤 부드럽게) */
+    --color-primary: #0052ff;
+    --color-primary-active: #003ecc;
+    --color-primary-disabled: #a8b8cc;
+    --color-accent: #4d7ce4;
+
+    /* ---- Ink / Text (쿨그레이 스케일) ----------------------------- *
+     * Coinbase 원본(#5b616e/#7c828a/#a8acb3)은 마케팅 페이지 기준이라
+     * 데이터 밀도가 높은 콘솔에선 흐릿함 — 각 단계를 진하게 조정 */
+    --color-ink: #0a0b0d;
+    --color-body: #454b57;
+    --color-muted: #646b76;
+    --color-muted-soft: #8d929b;
     --color-on-primary: #ffffff;
     --color-on-dark: #ffffff;
-    --color-on-dark-soft: #a1a1aa;
+    --color-on-dark-soft: #a8acb3;
 
     /* ---- Surfaces ----------------------------------------------- */
     --color-canvas: #ffffff;
-    --color-surface-soft: #f8f9fa;
-    --color-surface-card: #f5f5f5;
-    --color-surface-strong: #e5e7eb;
-    --color-surface-dark: #101010;
-    --color-surface-dark-elevated: #1a1a1a;
+    --color-surface-soft: #f7f7f7;
+    --color-surface-card: #f7f7f7;
+    --color-surface-strong: #eef0f3;
+    --color-surface-dark: #0a0b0d;
+    --color-surface-dark-elevated: #16181c;
+    --color-surface-dark-deep: #0a0b0d;
 
     /* ---- Lines -------------------------------------------------- */
-    --color-hairline: #e5e7eb;
-    --color-hairline-soft: #f3f4f6;
+    --color-hairline: #dee1e6;
+    --color-hairline-soft: #eef0f3;
 
-    /* ---- Semantic ----------------------------------------------- */
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
+    /* ---- Semantic (트레이딩 시맨틱 — 텍스트/상태 색, 배경 금지) ---- *
+     * 그래프·지표 면적에 쓰여 원색(#05b169/#cf202f)보다 부드럽게 */
+    --color-success: #2fa476;
+    --color-warning: #dfa63c;
+    --color-error: #d05560;
 
-    /* ---- Badge pastels ------------------------------------------ */
-    --color-badge-orange: #fb923c;
-    --color-badge-pink: #ec4899;
-    --color-badge-violet: #8b5cf6;
-    --color-badge-emerald: #34d399;
+    /* ---- 데이터 시각화 카테고리 컬러 (시스템 외 확장 — 등급/차트용) *
+     * Coinbase는 단일 브랜드 컬러 원칙이지만 분석 서비스 특성상
+     * 등급 배지·차트 구분색이 필요해 유지. 브랜드 CTA에는 사용 금지 */
+    --color-badge-orange: #e0a94e;
+    --color-badge-pink: #e07bb0;
+    --color-badge-violet: #9d82e8;
+    --color-badge-emerald: #48ad88;
 
-    /* ---- Radius (Cal.com scale) --------------------------------- */
+    /* ---- Radius (Coinbase scale — pill 인터랙션·큰 카드 radius) --- */
     --radius-xs: 4px;
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    --radius-2xl: 20px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-2xl: 24px;
+    --radius-pill: 100px;
 
     /* ---- Spacing rhythm ----------------------------------------- */
     --spacing-section: 96px;
 
-    /* ---- Shadows (soft, modern — no heavy elevation) ------------ */
-    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.08);
+    /* ---- Shadows (단일 섀도 티어 — Coinbase soft drop) ------------ */
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* ------------------------------------------------------------------ *
@@ -90,16 +113,53 @@
         line-height: 1.5;
     }
 
-    /* 디스플레이 헤드라인 — Cal Sans 대체(Manrope+Pretendard, 음수 자간) */
+    /* 디스플레이 헤드라인 — CoinbaseDisplay 대체(Inter+Pretendard).
+       weight 400 + 음수 자간이 Coinbase의 시그니처(차분한 institutional 톤) */
     .font-display {
         font-family: var(--font-display);
-        font-weight: 700;
-        letter-spacing: -0.03em;
+        font-weight: 400;
+        letter-spacing: -0.02em;
     }
 
     ::selection {
         background-color: var(--color-primary);
         color: var(--color-on-primary);
+    }
+
+    /* ---- 다크 테마 스코프 (홈페이지 — 다크 히어로 밴드) ------------- *
+     * 시맨틱 토큰을 다크 값으로 재매핑 → 기존 btn/card/input/badge와
+     * text-ink/text-muted 등이 코드 변경 없이 다크로 렌더된다.
+     * Coinbase: 다크 히어로에서도 CTA는 Coinbase Blue 유지 */
+    .theme-dark {
+        color-scheme: dark;
+        /* 다크에서 순색 #0052ff는 채도가 튀어 눈이 피로 — 한 톤 완화한 블루.
+           accent(그래프·링크)는 CTA(primary)보다 한 단계 더 낮춰 큰 면적에서도 편안하게 */
+        --color-primary: #3773f5;
+        --color-primary-active: #2e64de;
+        --color-primary-disabled: #2b3341;
+        --color-accent: #5b82d8;
+        --color-on-primary: #ffffff;
+        /* ink — 순백(#fff)은 다크 캔버스에서 눈부심(halation)이 있어 오프화이트로 */
+        --color-ink: #e2e5ea;
+        /* 텍스트 그레이 — 데이터 밀도가 높은 콘솔 기준으로 라이트보다 한 단계 밝게(가독성) */
+        --color-body: #c9cdd4;
+        --color-muted: #9ba1ab;
+        --color-muted-soft: #8a8f98;
+        --color-canvas: #0a0b0d;
+        --color-surface-soft: #101216;
+        --color-surface-card: #16181c;
+        --color-surface-strong: #22252b;
+        /* 헤어라인 — 다크 캔버스에서 카드 윤곽이 보이도록 대비 강화 */
+        --color-hairline: rgba(255, 255, 255, 0.16);
+        --color-hairline-soft: rgba(255, 255, 255, 0.09);
+        /* 시맨틱(상승/하락/주의) — 순색은 다크에서 네온처럼 튀어 채도 완화 */
+        --color-success: #4d9c78;
+        --color-error: #c26b70;
+        --color-warning: #d9a63f;
+    }
+    .theme-dark .input:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 1px var(--color-primary);
     }
 }
 
@@ -108,7 +168,7 @@
  * 사용처: 홈페이지 + 콘솔 공통
  * ------------------------------------------------------------------ */
 @layer components {
-    /* 기본 버튼 (primary=near-black CTA) */
+    /* 기본 버튼 — Coinbase pill 지오메트리(모든 CTA는 pill) */
     .btn {
         display: inline-flex;
         align-items: center;
@@ -116,7 +176,7 @@
         gap: 0.5rem;
         height: 40px;
         padding: 0 20px;
-        border-radius: var(--radius-md);
+        border-radius: var(--radius-pill);
         font-family: var(--font-sans);
         font-size: 14px;
         font-weight: 600;
@@ -133,36 +193,49 @@
     .btn-primary:hover { background-color: var(--color-primary-active); }
     .btn-primary:disabled {
         background-color: var(--color-primary-disabled);
-        color: var(--color-muted);
+        color: var(--color-on-primary);
         cursor: default;
     }
+    /* 세컨더리 — 소프트 그레이 필(Coinbase button-secondary-light), 보더 없음 */
     .btn-secondary {
-        background-color: var(--color-canvas);
+        background-color: var(--color-surface-strong);
         color: var(--color-ink);
-        border-color: var(--color-hairline);
     }
-    .btn-secondary:hover { background-color: var(--color-surface-card); }
+    .btn-secondary:hover { background-color: color-mix(in srgb, var(--color-surface-strong) 88%, var(--color-ink)); }
     .btn-ghost {
         background-color: transparent;
         color: var(--color-ink);
     }
-    .btn-ghost:hover { background-color: var(--color-surface-card); }
-    .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: var(--radius-sm); }
+    .btn-ghost:hover { background-color: var(--color-surface-strong); }
+    .btn-sm { height: 32px; padding: 0 14px; font-size: 13px; border-radius: var(--radius-pill); }
     .btn-lg { height: 48px; padding: 0 26px; font-size: 15px; }
+    /* 액센트 버튼 — primary와 동일(단일 브랜드 컬러 원칙) */
+    .btn-accent {
+        background-color: var(--color-primary);
+        color: var(--color-on-primary);
+    }
+    .btn-accent:hover { background-color: var(--color-primary-active); }
+    /* 다크 카드 위 흰색 버튼 — 다크모드에선 ink(오프화이트)로 떨어져 눈부심 없음 */
+    .btn-on-dark {
+        background-color: var(--color-on-primary);
+        color: var(--color-surface-dark);
+    }
+    .btn-on-dark:hover { filter: brightness(0.95); }
+    .theme-dark .btn-on-dark { background-color: var(--color-ink); }
 
-    /* 카드 */
+    /* 카드 — 컨테이너는 16px, 피처/모형 카드는 뷰에서 --radius-xl(24px) */
     .card {
         background-color: var(--color-canvas);
         border: 1px solid var(--color-hairline);
         border-radius: var(--radius-lg);
     }
     .card-soft {
-        background-color: var(--color-surface-card);
+        background-color: var(--color-surface-soft);
         border: 0;
         border-radius: var(--radius-lg);
     }
 
-    /* 입력 */
+    /* 입력 — 포커스 시 Coinbase Blue 2px(보더+링 1px로 구현) */
     .input {
         height: 40px;
         width: 100%;
@@ -176,18 +249,18 @@
     .input::placeholder { color: var(--color-muted-soft); }
     .input:focus {
         outline: none;
-        border-color: var(--color-ink);
-        box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.06);
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 1px var(--color-primary);
     }
 
-    /* 배지/필 */
+    /* 배지/필 — Coinbase badge-pill(surface-strong 필) */
     .badge {
         display: inline-flex;
         align-items: center;
         gap: 4px;
         padding: 4px 12px;
-        border-radius: 9999px;
-        background-color: var(--color-surface-card);
+        border-radius: var(--radius-pill);
+        background-color: var(--color-surface-strong);
         color: var(--color-ink);
         font-size: 13px;
         font-weight: 500;
@@ -200,4 +273,302 @@
         margin-inline: auto;
         padding-inline: 24px;
     }
+
+    /* ---- 상단 메가 메뉴 (NAVER Cloud 스타일) --------------------- */
+    /* .nav-item은 position 없이 둔다 — 패널이 헤더(sticky) 전폭 기준으로 붙도록.
+       헤더 전체 높이로 늘여(트리거~패널 사이 틈 제거) 호버가 끊기지 않게 한다 */
+    .nav-item {
+        display: inline-flex;
+        align-items: center;
+        align-self: stretch;
+    }
+    .nav-mega {
+        display: none;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        background-color: var(--color-canvas);
+        border-bottom: 1px solid var(--color-hairline);
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.08);
+    }
+    .nav-item:hover .nav-mega,
+    .nav-item:focus-within .nav-mega { display: block; }
+    .nav-item:hover > .nav-link { color: var(--color-primary); }
+    .nav-mega-link {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--color-hairline-soft);
+        color: var(--color-ink);
+        font-size: 15px;
+        font-weight: 500;
+        transition: color 0.15s ease;
+    }
+    .nav-mega-link:hover { color: var(--color-primary); }
+    /* Update/New 필 배지 (메가 메뉴 링크 옆) */
+    .badge-update {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+        background-color: color-mix(in srgb, var(--color-success) 14%, transparent);
+        color: var(--color-success);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    /* ---- 콘솔 셸 — PC 최소 가로폭 (미만이면 가로 스크롤) ----------- */
+    @media (min-width: 1024px) {
+        .console-shell {
+            min-width: 1100px;
+        }
+    }
+
+    /* 대시보드 홍보 배너 — 다크모드에서 어두운 배너 배경이 캔버스와 동화되지 않게 윤곽선 */
+    .theme-dark .rf-banner { border: 1px solid var(--color-hairline); }
+
+    /* ---- 콘솔 사이드바 (Expo Docs 스타일) ------------------------- *
+     * 상단 검색 + 아이콘 상위 항목 + 굵은 그룹 헤더 + 텍스트 전용 하위 항목.
+     * 활성/호버는 블루 틴트, radius는 md(라운드 사각) */
+
+    /* 메뉴 검색 박스 */
+    .sb-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        padding: 0 12px;
+        border-radius: var(--radius-md);
+        background-color: var(--color-surface-soft);
+        border: 1px solid var(--color-hairline);
+        cursor: text;
+    }
+    .sb-search:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+    .sb-search .ic { color: var(--color-muted-soft); flex: none; }
+    .sb-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; color: var(--color-ink); font-size: var(--fs-sm); }
+    .sb-search input::placeholder { color: var(--color-muted-soft); }
+    .sb-kbd {
+        flex: none; font-size: 11px; color: var(--color-muted-soft);
+        border: 1px solid var(--color-hairline); border-radius: 6px; padding: 1px 6px; font-family: var(--font-mono);
+    }
+
+    /* 상위(아이콘) 항목 */
+    .sb-link {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        border-radius: var(--radius-md);
+        color: var(--color-body);
+        font-size: var(--fs-sm);
+        font-weight: 500;
+        transition: background-color 0.12s ease, color 0.12s ease;
+    }
+    .sb-link .ic, .sb-group-head .ic { width: 20px; text-align: center; line-height: 1; flex: none; font-size: var(--fs-sm); }
+    .sb-link:hover {
+        background-color: color-mix(in srgb, var(--color-primary) 6%, var(--color-canvas));
+        color: var(--color-ink);
+    }
+    .theme-dark .sb-link:hover, .theme-dark .sb-sublink:hover { background-color: var(--color-surface-strong); }
+    /* 상위(아이콘) 활성 — 블루 틴트 pill */
+    .sb-link.on {
+        background-color: color-mix(in srgb, var(--color-primary) 9%, var(--color-canvas));
+        color: var(--color-primary);
+        font-weight: 600;
+    }
+    /* 하위 활성 — 왼쪽 파란 점 + 파란 텍스트(배경 없음, Expo Docs 스타일) */
+    .sb-sublink.on {
+        background-color: transparent;
+        color: var(--color-primary);
+        font-weight: 600;
+    }
+    .sb-sublink.on::before {
+        content: ''; position: absolute; left: 20px; top: 50%; margin-top: -2.5px;
+        width: 5px; height: 5px; border-radius: 9999px; background: var(--color-primary);
+    }
+
+    /* 그룹 래퍼 — 헤더+항목을 한 단위로. 그룹 간 간격을 래퍼 margin으로 고정(접힘 무관) */
+    .sb-group { margin-top: 6px; }
+    .sb-group:first-child { margin-top: 2px; }
+    .sb-group-items { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+    .sb-group.collapsed .sb-group-items { display: none; }
+    /* 검색 중엔 접힘 무시하고 매칭 항목 표시 */
+    #rf-nav.searching .sb-group.collapsed .sb-group-items { display: flex; }
+
+    /* 그룹 헤더 — 굵은 잉크 + 접기 박스(테두리 회색톤, Expo Docs 스타일) */
+    .sb-group-head {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 8px; color: var(--color-ink);
+    }
+    .sb-group-head .tx { font-size: var(--fs-sm); font-weight: 700; letter-spacing: -0.01em; }
+
+    /* 그룹 하위 항목 — 텍스트 전용, 헤더 텍스트에 맞춰 들여쓰기 */
+    .sb-sublink {
+        position: relative;
+        display: flex; align-items: center;
+        height: 32px; padding: 0 12px 0 34px;
+        border-radius: var(--radius-md);
+        color: var(--color-muted);
+        font-size: var(--fs-sm);
+        font-weight: 500;
+        transition: background-color 0.12s ease, color 0.12s ease;
+    }
+    .sb-sublink:hover {
+        background-color: color-mix(in srgb, var(--color-primary) 6%, var(--color-canvas));
+        color: var(--color-ink);
+    }
+
+    /* 상단 고정 항목과 스크롤 그룹 사이 구분선 */
+    .sb-divider { height: 1px; background: var(--color-hairline-soft); margin: 8px 12px; flex: none; }
+
+    /* 사이드바 스크롤바 — 아주 흐릿하게(호버 시에만 살짝 진해짐) */
+    #rf-nav { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--color-muted-soft) 22%, transparent) transparent; }
+    #rf-nav::-webkit-scrollbar { width: 6px; }
+    #rf-nav::-webkit-scrollbar-track { background: transparent; }
+    #rf-nav::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-muted-soft) 18%, transparent); border-radius: 9999px; }
+    #rf-nav:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-muted-soft) 34%, transparent); }
+
+    /* 그룹 접기 버튼 — 테두리 있는 회색 사각 박스(Expo Docs 스타일). 펼침=아래/접힘=오른쪽 */
+    .sb-group-head { cursor: pointer; user-select: none; }
+    .sb-group-head .chev {
+        width: 15px; height: 15px; flex: none;
+        display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--color-hairline); border-radius: var(--radius-xs);
+        background: var(--color-surface-soft); color: var(--color-muted-soft);
+        transition: transform 0.15s ease, border-color 0.12s ease, color 0.12s ease;
+    }
+    /* 박스만 작게 — 꺽쇠(화살표)는 유지하고 박스 안 여백만 줄임 */
+    .sb-group-head .chev svg { width: 11px; height: 11px; }
+    .sb-group.collapsed .sb-group-head .chev { transform: rotate(-90deg); }
+    .sb-group-head:hover .chev { border-color: var(--color-muted-soft); color: var(--color-body); }
+
+    /* 즐겨찾기 / 전체 메뉴 툴바 */
+    .sb-toolrow { display: flex; gap: 6px; }
+    .sb-fav-wrap { position: relative; flex: 1; }
+    /* 즐겨찾기는 아이콘 전용(고정 폭), 전체 메뉴가 남은 폭 차지 */
+    .sb-fav-icon { flex: none; }
+    .sb-fav-icon .sb-tool { width: 40px; padding: 0; }
+    .sb-tool {
+        width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        height: 34px; padding: 0 10px; border-radius: var(--radius-md);
+        border: 1px solid var(--color-hairline); background: var(--color-canvas);
+        color: var(--color-body); font-size: var(--fs-xs); font-weight: 600; cursor: pointer;
+        transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    }
+    .sb-tool:hover { background: var(--color-surface-soft); border-color: var(--color-primary); color: var(--color-ink); }
+    .sb-tool .star { color: var(--color-warning); }
+
+    /* 즐겨찾기 호버 팝오버 (사이드바 우측) */
+    .sb-fav-pop {
+        position: absolute; left: calc(100% + 10px); top: -4px; width: 232px; z-index: 60;
+        background: var(--color-canvas); border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 10px;
+        opacity: 0; visibility: hidden; transform: translateX(-6px);
+        transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+    }
+    /* 트리거~팝오버 사이 hover 브릿지(간격을 건너도 유지) */
+    .sb-fav-wrap::after { content: ''; position: absolute; left: 100%; top: 0; width: 12px; height: 100%; }
+    .sb-fav-wrap:hover .sb-fav-pop, .sb-fav-pop:hover { opacity: 1; visibility: visible; transform: translateX(0); }
+    .sb-fav-pop-head { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: 700; color: var(--color-ink); padding: 2px 6px 8px; }
+    .sb-fav-pop-head .star { color: var(--color-warning); }
+    .sb-fav-row { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 4px 0 6px; border-radius: var(--radius-md); color: var(--color-body); font-size: var(--fs-sm); }
+    .sb-fav-row:hover { background: var(--color-surface-soft); }
+    .sb-fav-row.dragging { opacity: 0.4; }
+    .sb-fav-row .hand { cursor: grab; color: var(--color-muted-soft); flex: none; font-size: 12px; line-height: 1; }
+    .sb-fav-row a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+    .sb-fav-row .rm { flex: none; border: 0; background: none; color: var(--color-muted-soft); cursor: pointer; line-height: 1; font-size: 15px; padding: 2px 4px; }
+    .sb-fav-row .rm:hover { color: var(--color-error); }
+    .sb-fav-empty { color: var(--color-muted-soft); font-size: var(--fs-xs); padding: 10px 6px; line-height: 1.6; }
+
+    /* 전체 메뉴 오버레이 */
+    .rf-am-overlay { position: fixed; inset: 0; z-index: 70; background: var(--color-canvas); display: flex; flex-direction: column; }
+    .rf-am-head { display: flex; align-items: center; gap: 14px; height: 60px; padding: 0 20px; border-bottom: 1px solid var(--color-hairline); flex: none; }
+    .rf-am-head .ttl { display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); font-weight: 700; color: var(--color-ink); white-space: nowrap; }
+    .rf-am-head input { flex: 1; max-width: 380px; height: 38px; padding: 0 14px; border-radius: var(--radius-md); border: 1px solid var(--color-hairline); background: var(--color-surface-soft); color: var(--color-ink); font-size: var(--fs-sm); }
+    .rf-am-head input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+    .rf-am-close { margin-left: auto; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--color-muted); cursor: pointer; border-radius: var(--radius-md); font-size: 22px; line-height: 1; }
+    .rf-am-close:hover { background: var(--color-surface-soft); color: var(--color-ink); }
+    .rf-am-body { flex: 1; overflow: auto; padding: 24px 28px; columns: 230px; column-gap: 30px; }
+    .rf-am-group { break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 26px; display: inline-block; width: 100%; }
+    .rf-am-gt { display: flex; align-items: center; gap: 8px; color: var(--color-ink); font-weight: 700; font-size: var(--fs-sm); padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--color-hairline); }
+    .rf-am-item { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 8px; border-radius: var(--radius-sm); font-size: var(--fs-sm); color: var(--color-body); }
+    .rf-am-item:hover { background: var(--color-surface-soft); }
+    .rf-am-item a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+    .rf-am-star { flex: none; border: 0; background: none; cursor: pointer; color: var(--color-muted-soft); font-size: 16px; line-height: 1; padding: 2px; }
+    .rf-am-star.on { color: var(--color-warning); }
+    .rf-am-empty { color: var(--color-muted-soft); font-size: var(--fs-sm); padding: 20px; }
+
+    /* 유저 프로필 (헤더 우측) */
+    .rf-user { position: relative; }
+    .rf-user-btn { display: inline-flex; align-items: center; padding: 3px; border: 1px solid transparent; border-radius: 9999px; background: none; cursor: pointer; transition: background-color 0.12s ease; }
+    .rf-user-btn:hover { background: var(--color-surface-soft); }
+    .rf-avatar { width: 28px; height: 28px; flex: none; border-radius: 9999px; display: grid; place-items: center; background: color-mix(in srgb, var(--color-primary) 14%, var(--color-canvas)); color: var(--color-primary); font-size: var(--fs-xs); font-weight: 700; }
+    .rf-user-name { font-size: var(--fs-sm); font-weight: 600; color: var(--color-ink); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rf-user-btn svg { color: var(--color-muted-soft); flex: none; }
+    .rf-user-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 220px; z-index: 50; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 12px; }
+    .rf-user-info { padding: 4px 6px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--color-hairline-soft); }
+
+    /* ---- 콘솔 사이드바 — 모바일 드로어 ---------------------------- */
+    /* lg 미만: 화면 밖으로 밀어두고 .open 시 슬라이드 인(햄버거 토글) */
+    .console-sidebar {
+        transition: translate 0.2s ease;
+    }
+    @media (max-width: 1023.98px) {
+        .console-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 50;
+            translate: -100% 0;
+        }
+        .console-sidebar.open {
+            translate: 0 0;
+            box-shadow: var(--shadow-card);
+        }
+    }
+
+    /* ---- 홈페이지 장식 (다크 히어로 밴드) -------------------------- */
+    /* 그라데이션 하이라이트 텍스트 */
+    .text-gradient {
+        background: linear-gradient(92deg, var(--color-primary), var(--color-badge-violet));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+    /* 배경 글로우 오브 — 히어로/CTA 배경 장식. 색은 뷰에서
+       color-mix(in srgb, var(--color-accent) N%, transparent)로 지정 */
+    .glow-orb {
+        position: absolute;
+        border-radius: 9999px;
+        filter: blur(90px);
+        opacity: 0.55;
+        pointer-events: none;
+    }
+
+    /* 토글 스위치 (Cal.com 모노크롬) — 콘솔·admin 공통 */
+    .rf-switch { position: relative; display: inline-flex; width: 36px; height: 20px; flex: 0 0 auto; vertical-align: middle; cursor: pointer; }
+    .rf-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+    .rf-switch .rf-track { position: absolute; inset: 0; background: var(--color-surface-strong); border-radius: 9999px; transition: background 0.15s ease; }
+    .rf-switch .rf-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(17, 17, 17, 0.25); transition: transform 0.15s ease; }
+    .rf-switch input:checked + .rf-track { background: var(--color-primary); }
+    .rf-switch input:checked + .rf-track::after { transform: translateX(16px); }
+    .rf-switch input:focus-visible + .rf-track { box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.12); }
+}
+
+/* ------------------------------------------------------------------ *
+ * 폰트 크기 유틸 — 인라인 px 금지. 이 클래스 또는 var(--fs-*) 토큰만 사용.
+ * 시스템 전체 최소 폰트는 @theme 의 --fs-xs 한 곳으로 조절한다.
+ * ------------------------------------------------------------------ */
+@layer utilities {
+    .fs-xs   { font-size: var(--fs-xs); }
+    .fs-sm   { font-size: var(--fs-sm); }
+    .fs-base { font-size: var(--fs-base); }
+    .fs-md   { font-size: var(--fs-md); }
+    .fs-lg   { font-size: var(--fs-lg); }
+    .fs-xl   { font-size: var(--fs-xl); }
+    .fs-2xl  { font-size: var(--fs-2xl); }
+    .fs-3xl  { font-size: var(--fs-3xl); }
 }

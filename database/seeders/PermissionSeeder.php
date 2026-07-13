@@ -21,24 +21,36 @@ class PermissionSeeder extends Seeder
             MemberGrade::updateOrCreate(['slug' => $g['slug']], $g);
         }
 
-        // ── 운영자 레벨 ──
+        // ── 운영자 레벨 (슈퍼 + 직원 2단) ──
         foreach ([
             ['name' => '슈퍼관리자', 'slug' => 'super', 'level' => 100, 'is_super' => true, 'description' => '전권', 'sort_order' => 0],
-            ['name' => '관리자', 'slug' => 'admin', 'level' => 50, 'is_super' => false, 'description' => '운영 관리', 'sort_order' => 1],
-            ['name' => '운영자', 'slug' => 'operator', 'level' => 10, 'is_super' => false, 'description' => '제한 운영', 'sort_order' => 2],
+            ['name' => '직원', 'slug' => 'operator', 'level' => 10, 'is_super' => false, 'description' => '운영 지원', 'sort_order' => 1],
         ] as $r) {
             OperatorRole::updateOrCreate(['slug' => $r['slug']], $r);
+        }
+        // 구 '관리자' 역할 제거 — 소속 회원은 '직원'으로 이관
+        if ($adminRole = OperatorRole::where('slug', 'admin')->first()) {
+            $staffId = OperatorRole::where('slug', 'operator')->value('id');
+            \App\Models\User::where('operator_role_id', $adminRole->id)->update(['operator_role_id' => $staffId]);
+            $adminRole->delete();
         }
 
         // ── 메뉴 (신규 설치 시에만; 기존 DB는 parent/정렬 보존 위해 icon/이름 갱신 안 함) ──
         $console = [
             ['name' => '대시보드', 'route' => 'console.dashboard', 'icon' => '🏠'],
             ['name' => '순위 추적', 'route' => 'console.rank', 'icon' => '📈'],
+            ['name' => '쇼핑 순위추적', 'route' => 'console.shop-rank', 'icon' => '🛒'],
             ['name' => '경쟁 분석', 'route' => 'console.compete', 'icon' => '📊'],
+            ['name' => '스마트플레이스', 'route' => 'console.smartplace', 'icon' => '🏪'],
             ['name' => '키워드 분석', 'route' => 'console.keyword', 'icon' => '🔍'],
-            ['name' => '설정', 'route' => 'console.settings', 'icon' => '⚙️'],
+            ['name' => '키워드 추천', 'route' => 'console.keyword-recommend', 'icon' => '💡'],
+            ['name' => '키워드 대량 분석', 'route' => 'console.bulk', 'icon' => '📚'],
+            ['name' => '블로그 지수 분석', 'route' => 'console.blog', 'icon' => '✍️'],
+            ['name' => '블로그 1개 분석', 'route' => 'console.blog-single', 'icon' => '📝'],
         ];
         $admin = [
+            ['name' => '마케팅 상품', 'route' => 'admin.products', 'icon' => '🧩'],
+            ['name' => '주문 관리', 'route' => 'admin.orders', 'icon' => '🧾'],
             ['name' => '회원 관리', 'route' => 'admin.members', 'icon' => '👥'],
             ['name' => '구독 관리', 'route' => 'admin.subscriptions', 'icon' => '💳'],
             ['name' => '메뉴 관리', 'route' => 'admin.menus', 'icon' => '📋'],
@@ -76,11 +88,10 @@ class PermissionSeeder extends Seeder
                 );
             }
         }
-        $adminRoleId = OperatorRole::where('slug', 'admin')->value('id');
+        // 직원(operator) 역할은 관리 메뉴 접근 허용 (슈퍼는 항상 전권이라 별도 설정 불필요)
         $operatorRoleId = OperatorRole::where('slug', 'operator')->value('id');
         foreach ($adminIds as $mid) {
-            MenuPermission::firstOrCreate(['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $adminRoleId], ['can_access' => true, 'can_create' => true, 'can_update' => true, 'can_delete' => true]);
-            MenuPermission::firstOrCreate(['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $operatorRoleId], ['can_access' => true, 'can_create' => false, 'can_update' => false, 'can_delete' => false]);
+            MenuPermission::firstOrCreate(['menu_id' => $mid, 'subject_type' => 'role', 'subject_id' => $operatorRoleId], ['can_access' => true]);
         }
     }
 }

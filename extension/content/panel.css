@@ -1,50 +1,56 @@
 /**
- * RankFree 확장 패널 — Cal.com 디자인 시스템 미러.
+ * RankFree 확장 패널 — Coinbase 디자인 시스템 미러 (primary #0052ff).
  * 값은 resources/css/app.css 의 @theme 토큰과 동일하게 유지한다
  * (확장에서는 Tailwind 빌드를 쓸 수 없어 CSS 변수로 미러링).
  */
 #rankfree-panel,
 #rankfree-fab {
-  --rf-primary: #111111;
-  --rf-primary-active: #242424;
-  --rf-accent: #3b82f6;
-  --rf-ink: #111111;
-  --rf-body: #374151;
-  --rf-muted: #6b7280;
-  --rf-muted-soft: #898989;
+  /* Coinbase 디자인 시스템 (primary #0052ff) — 웹 @theme와 동기화 */
+  --rf-primary: #0052ff;
+  --rf-primary-active: #003ecc;
+  --rf-accent: #0052ff;
+  --rf-ink: #0a0b0d;
+  --rf-body: #454b54;      /* 가독성 위해 Coinbase 기본값보다 진하게 */
+  --rf-muted: #5c626b;
+  --rf-muted-soft: #767d86;
   --rf-canvas: #ffffff;
-  --rf-surface-soft: #f8f9fa;
-  --rf-surface-card: #f5f5f5;
-  --rf-hairline: #e5e7eb;
-  --rf-hairline-soft: #f3f4f6;
-  --rf-error: #ef4444;
-  --rf-success: #10b981;
-  --rf-warning: #f59e0b;
-  --rf-radius-sm: 6px;
-  --rf-radius-md: 8px;
-  --rf-radius-lg: 12px;
-  --rf-shadow: 0 12px 40px rgba(17, 17, 17, 0.14);
+  --rf-surface-soft: #f7f7f7;
+  --rf-surface-card: #f7f7f7;
+  --rf-surface-strong: #eef0f3;
+  --rf-hairline: #dee1e6;
+  --rf-hairline-soft: #eef0f3;
+  --rf-error: #cf202f;
+  --rf-success: #05b169;
+  --rf-warning: #f4b000;
+  --rf-radius-sm: 8px;
+  --rf-radius-md: 12px;
+  --rf-radius-lg: 16px;
+  --rf-shadow: 0 12px 40px rgba(10, 11, 13, 0.14);
   --rf-font: Pretendard, 'Pretendard Variable', -apple-system, BlinkMacSystemFont,
     'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', Roboto, sans-serif;
 }
 
-/* ---------- 플로팅 버튼 ---------- */
+/* ---------- 실행 버튼 (우측 상단 텍스트형) ---------- */
 #rankfree-fab {
   position: fixed;
-  right: 20px;
-  bottom: 24px;
+  top: 96px;
+  right: 16px;
   z-index: 2147483000;
-  width: 48px;
-  height: 48px;
-  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 52px;
+  padding: 0 20px 0 14px;
+  border-radius: 16px;
   border: 1px solid var(--rf-primary);
   background: var(--rf-primary);
   color: #ffffff;
+  font-family: var(--rf-font);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow: var(--rf-shadow);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   transition: background 0.15s ease, transform 0.15s ease;
 }
 #rankfree-fab:hover {
@@ -52,18 +58,29 @@
   transform: translateY(-1px);
 }
 #rankfree-fab .rf-fab-logo {
-  font: 800 20px/1 var(--rf-font);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--rf-primary);
+  font: 800 18px/1 var(--rf-font);
   letter-spacing: -0.03em;
+}
+#rankfree-fab .rf-fab-text {
+  white-space: nowrap;
 }
 
 /* ---------- 패널 셸 ---------- */
 #rankfree-panel {
   position: fixed;
-  top: 72px;
+  top: 148px;
   right: 16px;
-  bottom: 88px;
+  bottom: 24px;
   z-index: 2147483000;
-  width: 420px;
+  width: 520px;
   max-width: calc(100vw - 32px);
   display: flex;
   flex-direction: column;
@@ -105,20 +122,48 @@
   gap: 8px;
   min-width: 0;
 }
+/* 브랜드명 '랭크프리' — 한 요소로 묶어 flex gap(8px)이 글자 사이에 끼지 않게. 클릭 시 홈으로. */
+#rankfree-panel .rf-brand-name {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+#rankfree-panel .rf-brand-name:hover { color: var(--rf-primary); }
+#rankfree-panel .rf-brand-name:hover b { color: var(--rf-primary); }
 #rankfree-panel .rf-brand b {
   color: var(--rf-muted);
   font-weight: 800;
 }
 #rankfree-panel .rf-query {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--rf-muted);
-  letter-spacing: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--rf-ink);
+  letter-spacing: -0.01em;
+  background: var(--rf-surface-card);
+  border: 1px solid var(--rf-hairline);
+  border-radius: 9999px;
+  padding: 3px 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 200px;
 }
-#rankfree-panel .rf-close {
+#rankfree-panel .rf-query:empty {
+  display: none;
+}
+#rankfree-panel .rf-head-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+#rankfree-panel .rf-close,
+#rankfree-panel .rf-gear {
   border: 0;
   background: transparent;
   color: var(--rf-muted);
@@ -128,7 +173,11 @@
   padding: 2px 6px;
   border-radius: var(--rf-radius-sm);
 }
-#rankfree-panel .rf-close:hover {
+#rankfree-panel .rf-gear {
+  font-size: 15px;
+}
+#rankfree-panel .rf-close:hover,
+#rankfree-panel .rf-gear:hover {
   background: var(--rf-surface-card);
   color: var(--rf-ink);
 }
@@ -136,16 +185,16 @@
 /* ---------- 탭 ---------- */
 #rankfree-panel .rf-tabs {
   display: flex;
-  gap: 4px;
-  padding: 8px 12px 0;
+  gap: 2px;
+  padding: 8px 10px 0;
   border-bottom: 1px solid var(--rf-hairline);
 }
 #rankfree-panel .rf-tab {
   appearance: none;
   border: 0;
   background: transparent;
-  padding: 8px 12px 10px;
-  font-size: 13.5px;
+  padding: 8px 9px 10px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--rf-muted);
   cursor: pointer;
@@ -153,7 +202,27 @@
   margin-bottom: -1px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  white-space: nowrap; /* 라벨 줄바꿈 방지 */
+  position: relative;
+}
+/* 탭 hover 안내 툴팁(쇼핑 기반/통합검색 기반 등) */
+#rankfree-panel .rf-tab[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--rf-ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 #rankfree-panel .rf-tab:hover {
   color: var(--rf-ink);
@@ -169,6 +238,28 @@
   background: var(--rf-surface-card);
   border-radius: 9999px;
   padding: 1px 6px;
+}
+/* 쇼핑 계열 표시 — 탭명 우상단 작은 위첨자 'S' */
+#rankfree-panel .rf-tab-shop {
+  align-self: flex-start;
+  margin-top: 3px;
+  margin-left: -4px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--rf-muted-soft);
+}
+#rankfree-panel .rf-tab.is-active .rf-tab-shop {
+  color: var(--rf-primary);
+}
+/* 쇼핑 3탭 그룹 구분선 */
+#rankfree-panel .rf-tab-sep {
+  align-self: center;
+  width: 1px;
+  height: 15px;
+  margin: 0 2px;
+  background: var(--rf-hairline);
 }
 
 /* ---------- 본문 ---------- */
@@ -186,6 +277,12 @@
   padding: 14px;
   margin-bottom: 12px;
 }
+/* 리스트형(내역 등) — 테두리·배경 없이 목록만(상품목록 리스트와 동일한 톤) */
+#rankfree-panel .rf-card-bare {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
 #rankfree-panel .rf-card-title {
   font-size: 13.5px;
   font-weight: 700;
@@ -197,7 +294,7 @@
   flex-wrap: wrap;
 }
 #rankfree-panel .rf-chip {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--rf-muted);
   background: var(--rf-surface-card);
@@ -218,7 +315,7 @@
   min-width: 0;
 }
 #rankfree-panel .rf-stat-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--rf-muted);
   margin-bottom: 2px;
 }
@@ -230,7 +327,7 @@
   white-space: nowrap;
 }
 #rankfree-panel .rf-stat-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rf-muted-soft);
   margin-top: 2px;
 }
@@ -239,14 +336,269 @@
   border: 1px solid var(--rf-hairline);
   border-radius: var(--rf-radius-sm);
   padding: 1px 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rf-body);
   background: var(--rf-canvas);
 }
 #rankfree-panel .rf-note {
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rf-muted-soft);
+}
+
+/* 연관 키워드 칩 */
+#rankfree-panel .rf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#rankfree-panel .rf-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--rf-hairline);
+  background: var(--rf-canvas);
+  color: var(--rf-ink);
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+#rankfree-panel .rf-tag:hover {
+  border-color: var(--rf-ink);
+  background: var(--rf-surface-soft);
+}
+#rankfree-panel .rf-tag-vol {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--rf-muted-soft);
+}
+/* 상품 분석 — 인기 옵션 (옵션명 한 줄 + 아래 그래프·비율) */
+#rankfree-panel .rf-opt {
+  margin: 9px 0;
+}
+#rankfree-panel .rf-opt-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rf-ink);
+  line-height: 1.45;
+  word-break: break-all;
+  margin-bottom: 3px;
+}
+#rankfree-panel .rf-opt-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#rankfree-panel .rf-opt-pct {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rf-body);
+  white-space: nowrap;
+}
+
+/* 상품 분석 — 옵션별 예상 판매·매출 입력 */
+#rankfree-panel .rf-est-inputs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--rf-muted);
+}
+#rankfree-panel .rf-est-in {
+  width: 110px;
+  height: 30px;
+  margin-left: 5px;
+  border: 1px solid var(--rf-hairline);
+  border-radius: var(--rf-radius-sm);
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--rf-ink);
+  background: var(--rf-canvas);
+}
+/* 수동 URL 입력(상품분석) */
+#rankfree-panel .rf-manual {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0 6px;
+  width: 100%;
+}
+#rankfree-panel .rf-manual .rf-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+}
+#rankfree-panel .rf-manual .rf-btn-primary {
+  flex: 0 0 auto;
+  width: auto;
+  height: 40px;
+  margin: 0;
+  padding: 0 20px;
+  white-space: nowrap;
+}
+/* 상품분석 빈/에러 카드 */
+#rankfree-panel .rf-empty-card { text-align: center; }
+#rankfree-panel .rf-empty-card .rf-manual { text-align: left; }
+#rankfree-panel .rf-empty-t { font-size: 15px; font-weight: 700; color: var(--rf-ink); margin-bottom: 6px; }
+#rankfree-panel .rf-empty-d { font-size: 13px; color: var(--rf-muted); line-height: 1.55; margin-bottom: 4px; }
+#rankfree-panel .rf-empty-card .rf-note { text-align: center; }
+/* 큰 보조 버튼(상품 목록으로 / 다시 분석) — 수집하기와 동일 크기 */
+#rankfree-panel .rf-btn-lg-ghost {
+  width: 100%;
+  height: 40px;
+  margin-top: 12px;
+  border: 1px solid var(--rf-hairline);
+  border-radius: var(--rf-radius-md);
+  background: var(--rf-canvas);
+  color: var(--rf-ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#rankfree-panel .rf-btn-lg-ghost:hover { background: var(--rf-surface-card); }
+
+/* 상품 분석 — 부제/약점 단어/저평점 발췌 */
+#rankfree-panel .rf-sub {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rf-muted);
+  border-bottom: 1px solid var(--rf-hairline);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#rankfree-panel .rf-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--rf-hairline);
+  background: var(--rf-surface-soft);
+  color: var(--rf-ink);
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 500;
+}
+/* 감정 분석 바 + 장단점 칩 */
+#rankfree-panel .rf-sent-bar {
+  display: flex;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  gap: 1px;
+}
+#rankfree-panel .rf-sent-pos { background: var(--rf-success); }
+#rankfree-panel .rf-sent-neu { background: var(--rf-muted-soft); }
+#rankfree-panel .rf-sent-neg { background: var(--rf-error); }
+#rankfree-panel .rf-sent-lab {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--rf-body);
+}
+#rankfree-panel .rf-dot-pos { background: var(--rf-success); }
+#rankfree-panel .rf-dot-neu { background: var(--rf-muted-soft); }
+#rankfree-panel .rf-dot-neg { background: var(--rf-error); }
+#rankfree-panel .rf-word-pos {
+  border-color: color-mix(in srgb, var(--rf-success) 40%, var(--rf-hairline));
+  background: color-mix(in srgb, var(--rf-success) 8%, transparent);
+}
+#rankfree-panel .rf-word-neg {
+  border-color: color-mix(in srgb, var(--rf-error) 40%, var(--rf-hairline));
+  background: color-mix(in srgb, var(--rf-error) 8%, transparent);
+}
+
+#rankfree-panel .rf-worst {
+  margin-top: 10px;
+  border-top: 1px solid var(--rf-hairline-soft);
+  padding-top: 8px;
+}
+#rankfree-panel .rf-worst p {
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--rf-body);
+  line-height: 1.55;
+}
+#rankfree-panel .rf-worst b {
+  color: var(--rf-error);
+  font-weight: 700;
+}
+#rankfree-panel .rf-rvnum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--rf-primary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+/* 장점=오이색(green)·단점/약점=핑크 — 리뷰 번호 배지를 단어 칩과 동일한 파스텔 배경으로(톤 낮춤) */
+#rankfree-panel .rf-rvnum-pos {
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--rf-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rf-success) 40%, var(--rf-hairline));
+  color: var(--rf-success);
+}
+#rankfree-panel .rf-rvnum-neg {
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--rf-error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rf-error) 40%, var(--rf-hairline));
+  color: var(--rf-error);
+}
+
+#rankfree-panel .rf-copy-group {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+#rankfree-panel .rf-copy {
+  border: 1px solid var(--rf-hairline);
+  background: var(--rf-canvas);
+  color: var(--rf-body);
+  border-radius: var(--rf-radius-sm);
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-copy:hover {
+  background: var(--rf-surface-card);
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-copy:disabled {
+  color: var(--rf-success);
+  border-color: var(--rf-hairline);
+  cursor: default;
+}
+
+/* 수집 전 화면 */
+#rankfree-panel .rf-collect {
+  text-align: center;
+  padding: 10px 4px 4px;
+}
+#rankfree-panel .rf-collect .rf-muted {
+  margin-bottom: 12px;
+}
+#rankfree-panel .rf-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--rf-muted);
 }
 
 /* 컨트롤 줄 */
@@ -260,13 +612,20 @@
   flex-wrap: wrap;
 }
 #rankfree-panel .rf-select {
+  height: 30px; /* 버튼과 높이 통일 — 찌그러짐 방지 */
   border: 1px solid var(--rf-hairline);
   border-radius: var(--rf-radius-sm);
   background: var(--rf-canvas);
   color: var(--rf-ink);
   font-size: 12.5px;
-  padding: 4px 6px;
+  line-height: 1.2;
+  padding: 0 26px 0 10px; /* 우측: 네이티브 화살표가 텍스트를 덮지 않게 여유 */
   margin-left: 4px;
+  min-width: 116px; /* '최신 1000개'·'상위 240개'가 잘리지 않게 */
+  max-width: 100%;
+  width: auto;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 #rankfree-panel .rf-check {
   display: inline-flex;
@@ -328,7 +687,7 @@
   text-decoration: underline;
 }
 #rankfree-panel .rf-td-mall {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--rf-muted-soft);
   margin-top: 1px;
 }
@@ -386,8 +745,8 @@
   outline: none;
 }
 #rankfree-panel .rf-input:focus {
-  border-color: var(--rf-ink);
-  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.06);
+  border-color: var(--rf-primary);
+  box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.12);
 }
 #rankfree-panel .rf-input::placeholder {
   color: var(--rf-muted-soft);
@@ -444,6 +803,325 @@
   text-decoration: underline;
 }
 
+/* 경쟁도 등급 배지 — 상태색은 라벨 텍스트와 함께만 사용 */
+#rankfree-panel .rf-grade {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  vertical-align: 2px;
+}
+#rankfree-panel .rf-grade-good {
+  color: var(--rf-success);
+  background: color-mix(in srgb, var(--rf-success) 12%, transparent);
+}
+#rankfree-panel .rf-grade-mid {
+  color: var(--rf-warning);
+  background: color-mix(in srgb, var(--rf-warning) 14%, transparent);
+}
+#rankfree-panel .rf-grade-bad {
+  color: var(--rf-error);
+  background: color-mix(in srgb, var(--rf-error) 11%, transparent);
+}
+
+/* 키워드 분석 탭 헤더 */
+#rankfree-panel .rf-kw-head {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rf-ink);
+  margin: 4px 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#rankfree-panel .rf-kw-head b { color: var(--rf-primary, #111); }
+#rankfree-panel .rf-kw-refresh {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+#rankfree-panel .rf-kw-refresh:disabled { opacity: 0.5; cursor: default; }
+
+/* ---------- 키워드 상세 차트 ---------- */
+#rankfree-panel .rf-kw-sec {
+  margin-top: 14px;
+}
+#rankfree-panel .rf-kw-sec-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rf-muted);
+  margin-bottom: 6px;
+}
+#rankfree-panel .rf-wd-peak-lab {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rf-muted-soft);
+  margin-left: 6px;
+}
+
+/* 월간 검색량 — 한 줄 전체 + PC/모바일 표 */
+#rankfree-panel .rf-kw-vol {
+  background: var(--rf-surface-soft);
+  border-radius: var(--rf-radius-md);
+  padding: 12px 14px;
+}
+#rankfree-panel .rf-kw-vol-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+#rankfree-panel .rf-kw-vol-head .lab { font-size: 12px; font-weight: 600; color: var(--rf-muted); }
+#rankfree-panel .rf-kw-vol-head .num { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--rf-ink); }
+#rankfree-panel .rf-kw-dev {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+#rankfree-panel .rf-kw-dev .cell {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--rf-canvas);
+  border: 1px solid var(--rf-hairline);
+  border-radius: var(--rf-radius-sm);
+  padding: 6px 10px;
+}
+#rankfree-panel .rf-kw-dev .cell .k { font-size: 12px; font-weight: 600; color: var(--rf-muted); min-width: 32px; }
+#rankfree-panel .rf-kw-dev .cell .v { font-size: 15px; font-weight: 700; color: var(--rf-ink); }
+#rankfree-panel .rf-kw-dev .cell .p { font-size: 12.5px; color: var(--rf-muted-soft); margin-left: auto; }
+
+/* 키워드 인사이트 — 데이터 기반 요약 */
+#rankfree-panel .rf-insight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+#rankfree-panel .rf-insight-list li { position: relative; padding-left: 15px; font-size: 13px; color: var(--rf-ink); line-height: 1.4; }
+#rankfree-panel .rf-insight-list li::before { content: '•'; position: absolute; left: 3px; color: var(--rf-muted-soft); }
+#rankfree-panel .rf-insight-list li b { font-weight: 700; }
+
+/* 키워드 인사이트 — PC식 자연어 요약(시즌/타겟 칩 + 요약 문장) */
+#rankfree-panel .rf-ins-grp { margin-bottom: 10px; }
+#rankfree-panel .rf-ins-grp-t { font-size: 12px; font-weight: 700; color: var(--rf-muted); margin-bottom: 6px; }
+#rankfree-panel .rf-ins-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#rankfree-panel .rf-ins-chip { background: var(--rf-surface); border: 1px solid var(--rf-hairline); border-radius: 10px; padding: 8px 6px; text-align: center; }
+#rankfree-panel .rf-ins-chip-l { display: block; font-size: 12px; font-weight: 600; color: var(--rf-muted); }
+#rankfree-panel .rf-ins-chip-v { display: block; font-size: 13px; font-weight: 700; color: var(--rf-ink); margin-top: 2px; line-height: 1.3; }
+#rankfree-panel .rf-ins-summary {
+  display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0;
+  padding: 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--rf-primary) 6%, transparent);
+  font-size: 13px; line-height: 1.65; font-weight: 600; color: var(--rf-ink);
+}
+#rankfree-panel .rf-ins-ico { flex: none; font-size: 15px; line-height: 1.4; }
+
+/* 요일별 검색 비율 — 세로 막대(월~일) */
+#rankfree-panel .rf-wd {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 96px;
+}
+#rankfree-panel .rf-wd-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+#rankfree-panel .rf-wd-p { font-size: 11.5px; color: var(--rf-muted-soft); margin-bottom: 2px; white-space: nowrap; }
+#rankfree-panel .rf-wd-track { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+#rankfree-panel .rf-wd-bar { width: 70%; background: var(--rf-hairline); border-radius: 4px 4px 0 0; }
+#rankfree-panel .rf-wd-col.is-peak .rf-wd-bar { background: var(--rf-primary); }
+#rankfree-panel .rf-wd-col.is-peak .rf-wd-p { color: var(--rf-ink); font-weight: 700; }
+#rankfree-panel .rf-wd-x { font-size: 12px; color: var(--rf-muted); margin-top: 4px; }
+/* 12개월 트렌드 — 단일 시리즈 미니 컬럼 */
+#rankfree-panel .rf-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 40px;
+  padding-top: 14px;
+  box-sizing: content-box;
+}
+#rankfree-panel .rf-tr-col {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+#rankfree-panel .rf-tr-bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--rf-primary);
+  border-radius: 2px 2px 0 0;
+}
+#rankfree-panel .rf-tr-col:hover .rf-tr-bar {
+  background: var(--rf-primary-active);
+}
+#rankfree-panel .rf-tr-peak {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--rf-muted);
+  white-space: nowrap;
+}
+#rankfree-panel .rf-trend-x {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--rf-muted-soft);
+}
+/* 월별 트렌드(값 전체 표기) — 값·막대·월 세로 배치 */
+#rankfree-panel .rf-trend-lg {
+  height: 132px;
+  padding-top: 0;
+  align-items: stretch;
+  gap: 3px;
+}
+#rankfree-panel .rf-trend-lg .rf-tr-col {
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+#rankfree-panel .rf-tr-val {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--rf-muted-soft);
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+#rankfree-panel .rf-tr-val.is-peak { color: var(--rf-ink); font-weight: 700; }
+#rankfree-panel .rf-tr-track {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+#rankfree-panel .rf-trend-lg .rf-tr-bar { width: 74%; }
+#rankfree-panel .rf-tr-m {
+  font-size: 9px;
+  color: var(--rf-muted);
+  margin-top: 3px;
+  line-height: 1;
+}
+/* 성별 비율 — 100% 분할 바 (라벨 병기) */
+#rankfree-panel .rf-gender {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+}
+#rankfree-panel .rf-gender-f {
+  background: var(--rf-primary);
+}
+#rankfree-panel .rf-gender-m {
+  background: var(--rf-muted-soft);
+}
+#rankfree-panel .rf-gender-lab {
+  display: flex;
+  gap: 14px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--rf-body);
+}
+#rankfree-panel .rf-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+#rankfree-panel .rf-dot-f {
+  background: var(--rf-ink);
+}
+#rankfree-panel .rf-dot-m {
+  background: var(--rf-muted-soft);
+}
+/* 연령대 분포 — 단색 가로 바 */
+#rankfree-panel .rf-age-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+  font-size: 12px;
+}
+#rankfree-panel .rf-age-lab {
+  width: 38px;
+  text-align: right;
+  color: var(--rf-muted);
+}
+#rankfree-panel .rf-age-track {
+  flex: 1;
+  height: 8px;
+  background: var(--rf-surface-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#rankfree-panel .rf-age-bar {
+  display: block;
+  height: 100%;
+  background: var(--rf-primary);
+  border-radius: 4px;
+}
+#rankfree-panel .rf-age-pct {
+  width: 40px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--rf-body);
+}
+
+/* ---------- 설정 ---------- */
+#rankfree-panel .rf-settings {
+  padding: 8px 4px;
+}
+#rankfree-panel .rf-settings h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-set-hint {
+  margin: 8px 0 14px;
+  font-size: 12px;
+  color: var(--rf-muted);
+  line-height: 1.55;
+}
+#rankfree-panel .rf-set-actions {
+  display: flex;
+  gap: 8px;
+}
+#rankfree-panel .rf-set-actions .rf-btn-primary {
+  flex: 1;
+  margin-top: 0;
+}
+#rankfree-panel .rf-set-actions .rf-btn-ghost {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--rf-radius-md);
+  margin-left: 0;
+  font-size: 14px;
+}
+#rankfree-panel .rf-set-msg {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--rf-success);
+}
+
 /* ---------- 상태(로딩/에러/빈) ---------- */
 #rankfree-panel .rf-loading {
   display: flex;
@@ -453,6 +1131,20 @@
   padding: 48px 0;
   color: var(--rf-muted);
   font-size: 13px;
+  text-align: center;
+}
+#rankfree-panel .rf-loading-prog {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-loading-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--rf-muted-soft);
 }
 #rankfree-panel .rf-spinner {
   width: 22px;
@@ -491,6 +1183,153 @@
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 10px;
+}
+
+/* 시장 구성 — 몰 등급 (이름 → 개수·% → 그래프) */
+#rankfree-panel .rf-grade-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12.5px;
+}
+#rankfree-panel .rf-grade-name {
+  width: 72px;
+  color: var(--rf-body);
+  white-space: nowrap;
+}
+#rankfree-panel .rf-grade-num {
+  width: 78px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--rf-ink);
+  white-space: nowrap;
+}
+#rankfree-panel .rf-grade-track {
+  flex: 1;
+  height: 8px;
+  background: var(--rf-surface-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#rankfree-panel .rf-grade-bar {
+  display: block;
+  height: 100%;
+  background: var(--rf-primary);
+  border-radius: 4px;
+}
+
+/* 시장 구성 — 1등 카테고리 / 카테고리 목록 */
+#rankfree-panel .rf-lead-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--rf-surface-soft);
+  border-radius: var(--rf-radius-md);
+  padding: 9px 12px;
+}
+#rankfree-panel .rf-lead-lab {
+  font-size: 12.5px;
+  color: var(--rf-muted);
+}
+#rankfree-panel .rf-lead-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--rf-ink);
+  line-height: 1.4;
+  word-break: keep-all;
+}
+#rankfree-panel .rf-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#rankfree-panel .rf-cat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 3px 0;
+  border-top: 1px solid var(--rf-hairline-soft);
+}
+#rankfree-panel .rf-cat-row:first-child {
+  border-top: 0;
+}
+#rankfree-panel .rf-cat-name {
+  color: var(--rf-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-cat-cnt {
+  color: var(--rf-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- 내역 / 저장본 ---------- */
+#rankfree-panel .rf-snapbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--rf-surface-soft);
+  border: 1px solid var(--rf-hairline);
+  border-radius: var(--rf-radius-md);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-hist {
+  display: flex;
+  flex-direction: column;
+}
+#rankfree-panel .rf-hist-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--rf-hairline-soft);
+  background: transparent;
+  padding: 10px 4px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--rf-radius-sm);
+}
+#rankfree-panel .rf-hist-row:first-child {
+  border-top: 0;
+}
+#rankfree-panel .rf-hist-row:hover {
+  background: var(--rf-surface-soft);
+}
+#rankfree-panel .rf-hist-badge {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-hb-seller { color: #7c3aed; background: #f1ecfe; }
+#rankfree-panel .rf-hb-market { color: #05b169; background: #e6f6ee; }
+#rankfree-panel .rf-hb-product { color: #b06a00; background: #fff3e0; }
+#rankfree-panel .rf-hist-kw {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-hist-meta {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--rf-muted);
 }
 
 /* ---------- 푸터 ---------- */

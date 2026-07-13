@@ -9,7 +9,10 @@
 - 트랙 1개를 "분석"하면: 같은 키워드 pcmap 상위 N(경쟁셋) 수집 → 내 매장 + 상위 상세 수집 → 지표 점수화 → 일자별 저장.
 - 점수는 **관측 신호 기반 자체 추정치**(N1/N2/N3, D1~D10). "네이버 공식 점수" 아님.
 
-## 점수 산식 (고정 — `App\Domain\Place\PlaceScorer`)
+## 점수 산식 (`App\Domain\Place\PlaceScorer`)
+
+> N2 가중치는 **config `scoring.n2_weights`** 로 외부화됨(프라이어=아래 표). 소유매장 실측 조회수로 학습해 개선 가능 — [12_SMARTPLACE_REPORT.md](./12_SMARTPLACE_REPORT.md) "N2 가중치 학습" · `PlaceWeightLearner` · `php artisan place:learn-weights`. 라벨(소유매장)이 `apply_min_stores` 미만이면 프라이어 유지.
+
 
 | 코드 | 지표 | 계산 | N2 가중치 | 산출대상 |
 |------|------|------|-----------|----------|
@@ -17,7 +20,8 @@
 | D2 | 블로그/카페 리뷰수 | `absP90` | 0.09 | 전체 |
 | D3 | 예약자 리뷰수 | `absP90`; 없으면 방문맥락 예약이용(bv_raw) | 0.07 | booking 업종/상위10 |
 | D4 | 평점(베이지안) | `(v·s+20·μ)/(v+20)` → `100·clamp((st−3.5)/1.5)` | 0.12 | 평점·방문자 존재 |
-| D5 | 저장수 | `absP90` | 0.08 | **restaurant만** |
+| D5 | 저장수(saveCount) | `absP90` | 0.08 | **restaurant만**(네이버 리스트 제약) |
+| D6 | 사진 충실도(imageCount) | `absP90` | 0.08 | **전체**(전 업종 list 가용) |
 | D7 | 정보충실성 | 체크리스트 가중합(아래) | 0.14 | 상세수집 매장 |
 | D8=N1 | 키워드 일치 | L.30/B.30/T.30/M.10 | (N1로 승격) | 전체 |
 | D9 | 최근 리뷰 활동성 | `absP90(rec_raw)` (4주 신규) | 0.20 | 내+상위10 |
@@ -31,7 +35,8 @@
 ## 데이터 수집 (`App\Domain\Place\PlaceRankChecker`)
 
 - `serpFetch(keyword, cat, myPid, topN)` — pcmap GraphQL 최대 6p × 50 순회 → 상위 topN 리스트 + `my_rank` + `total`. **nCaptcha 토큰 필수**(없으면 blocked). 좌표 서울 고정.
-  - serp item: id·name·visitor_cnt·blog_cnt·booking_cnt·save_cnt·review_score·tags·address·rnk.
+  - serp item: id·name·visitor_cnt·blog_cnt·booking_cnt·save_cnt·img_cnt(imageCount)·review_score·tags·address·rnk.
+  - **저장수(saveCount)는 restaurant 리스트 타입만** 제공(실측: hairshop=BeautySummary·hospital=HospitalSummary·place=PlaceSummary 스키마에 필드 없음). imageCount 는 전 업종 실값 제공 → D6.
 - `placeDetailFull(placeId, cat)` — m.place `/home` SSR `__APOLLO_STATE__` 전체 파싱(로그인 불필요).
   - `PlaceDetailBase:{pid}` → name·category·categoryCount·visitorReviewsTotal·visitorReviewsScore·cafeBlogReviewsTotal·road·conveniences·paymentInfo·hideBusinessHours·hidePrice·talktalkUrl·chatBotUrl·missingInfo.
   - 노드 카운트: `Menu:`→menu_cnt, `PlaceDetailTopPhotoItem:`→photo_cnt, `Stylist:`→stylist_cnt.
@@ -41,7 +46,7 @@
 ## 저장 스키마 (task B)
 
 순위추적 슬롯을 트랙으로 재사용 + 일별 스냅샷 append(멱등 upsert):
-- `place_seo_serp` (slot_id, ymd, rnk, place_id, name, visitor_cnt, blog_cnt, booking_cnt, save_cnt, review_score, tags, address, is_mine, list_total) · UNIQUE(slot_id,ymd,rnk,is_mine)
+- `place_seo_serp` (slot_id, ymd, rnk, place_id, name, visitor_cnt, blog_cnt, booking_cnt, save_cnt, image_cnt, review_score, tags, address, is_mine, list_total) · UNIQUE(slot_id,ymd,rnk,is_mine)
 - `place_seo_scores` (slot_id, place_id, ymd, d1..d10, n1, n2, n3, avail_mask, tier, is_mine) · UNIQUE(slot_id,place_id,ymd)
 - `place_seo_daily` (place_id, ymd, 상세신호 컬럼…, review_weekly, place_plus, review_keywords, review_quality, missing_labels) · UNIQUE(place_id,ymd) — place 단위 공유
 

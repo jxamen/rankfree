@@ -19,6 +19,18 @@
     }
   }
 
+  // 페이지가 이미 받아온 검색 응답 본문을 그대로 content로 전달(우리 재요청 불필요).
+  function reportResponse(url, bodyText) {
+    if (!bodyText) return;
+    try {
+      document.dispatchEvent(
+        new CustomEvent('rankfree:search-response', { detail: JSON.stringify({ url: String(url), body: String(bodyText) }) })
+      );
+    } catch (e) {
+      /* noop */
+    }
+  }
+
   function extractFromHeaders(headers) {
     if (!headers) return null;
     try {
@@ -40,11 +52,12 @@
     return null;
   }
 
-  // fetch 후킹
+  // fetch 후킹 — 토큰 캡처 + 검색 응답 본문 캡처(우리 재요청 불필요)
   var origFetch = window.fetch;
   window.fetch = function (input, init) {
+    var url = '';
     try {
-      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      url = typeof input === 'string' ? input : (input && input.url) || '';
       if (url.indexOf('/api/search/') !== -1) {
         var token =
           extractFromHeaders(init && init.headers) ||
@@ -56,7 +69,20 @@
     } catch (e) {
       /* noop */
     }
-    return origFetch.apply(this, arguments);
+    var pr = origFetch.apply(this, arguments);
+    try {
+      if (url && url.indexOf('/api/search/') !== -1) {
+        pr.then(function (res) {
+          try {
+            // clone 후 본문만 읽음 — 페이지가 쓰는 원본 응답은 그대로 통과
+            res.clone().text().then(function (t) { reportResponse(url, t); }, function () {});
+          } catch (e) { /* noop */ }
+        }, function () {});
+      }
+    } catch (e) {
+      /* noop */
+    }
+    return pr;
   };
 
   // XHR 후킹

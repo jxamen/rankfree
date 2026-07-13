@@ -13,7 +13,7 @@ class PlaceSeoScore extends Model
 
     protected $fillable = [
         'slot_id', 'place_id', 'ymd', 'rnk',
-        'd1', 'd2', 'd3', 'd4', 'd5', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3',
+        'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3',
         'avail_mask', 'tier', 'is_mine', 'created_at',
     ];
 

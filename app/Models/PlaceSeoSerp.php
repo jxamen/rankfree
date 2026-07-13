@@ -13,7 +13,7 @@ class PlaceSeoSerp extends Model
 
     protected $fillable = [
         'slot_id', 'ymd', 'rnk', 'place_id', 'name', 'visitor_cnt', 'blog_cnt',
-        'booking_cnt', 'save_cnt', 'review_score', 'tags', 'address', 'is_mine', 'list_total', 'created_at',
+        'booking_cnt', 'save_cnt', 'image_cnt', 'review_score', 'tags', 'address', 'is_mine', 'list_total', 'created_at',
     ];
 
     protected $casts = [

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\SearchAdWeb\SearchAdWebClient;
 use App\Domain\SearchAdWeb\WebSessionStore;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
@@ -9,12 +10,19 @@ use Illuminate\Support\Facades\Process;
 /** 네이버 검색광고 웹 콘솔 자동 로그인 → 세션 쿠키 저장(암호화). */
 class SearchAdWebLogin extends Command
 {
-    protected $signature = 'searchadweb:login';
+    protected $signature = 'searchadweb:login {--if-stale : 세션이 유효하면 로그인 생략(크론 유지용)}';
 
     protected $description = '네이버 검색광고 웹 콘솔 자동 로그인 후 세션 쿠키를 암호화 저장';
 
-    public function handle(WebSessionStore $store): int
+    public function handle(WebSessionStore $store, SearchAdWebClient $client): int
     {
+        // 크론 유지: 세션이 살아있으면 Playwright 로그인 생략(저비용 probe)
+        if ($this->option('if-stale') && $client->check()) {
+            $this->info('세션 유효 — 로그인 생략.');
+
+            return self::SUCCESS;
+        }
+
         $id = (string) config('searchadweb.login.id');
         $pw = (string) config('searchadweb.login.pw');
         if ($id === '' || $pw === '') {

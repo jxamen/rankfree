@@ -1,0 +1,1039 @@
+{
+    "types": [
+        {
+            "code": "REWARD",
+            "name": "참여형 리워드",
+            "description": "매체\/로직\/비율\/시간대 설정 가능",
+            "has_fulfillment": 1,
+            "sort_order": 0
+        },
+        {
+            "code": "EXPERIENCE",
+            "name": "체험단",
+            "description": "주문 수량 = 실제 수량",
+            "has_fulfillment": 0,
+            "sort_order": 1
+        },
+        {
+            "code": "SNS",
+            "name": "SNS",
+            "description": "SNS 마케팅",
+            "has_fulfillment": 0,
+            "sort_order": 2
+        },
+        {
+            "code": "BLOG_REVIEW",
+            "name": "블로그 리뷰",
+            "description": "블로그 리뷰 배포",
+            "has_fulfillment": 0,
+            "sort_order": 3
+        },
+        {
+            "code": "REVIEW",
+            "name": "리뷰",
+            "description": "영수증 리뷰, 쇼핑 리뷰 등",
+            "has_fulfillment": 0,
+            "sort_order": 4
+        }
+    ],
+    "sub_types": [
+        {
+            "product_type": "BLOG_REVIEW",
+            "code": "AI_BLOG",
+            "name": "AI 배포",
+            "description": null,
+            "sort_order": 0
+        },
+        {
+            "product_type": "BLOG_REVIEW",
+            "code": "REAL_BLOG",
+            "name": "실제 사람 배포",
+            "description": null,
+            "sort_order": 1
+        },
+        {
+            "product_type": "BLOG_REVIEW",
+            "code": "PREMIUM_BLOG",
+            "name": "프리미엄 배포",
+            "description": null,
+            "sort_order": 2
+        },
+        {
+            "product_type": "EXPERIENCE",
+            "code": "PRODUCT_REVIEW",
+            "name": "상품 체험",
+            "description": null,
+            "sort_order": 0
+        },
+        {
+            "product_type": "EXPERIENCE",
+            "code": "VISIT_REVIEW",
+            "name": "방문 체험",
+            "description": null,
+            "sort_order": 1
+        },
+        {
+            "product_type": "EXPERIENCE",
+            "code": "SERVICE_REVIEW",
+            "name": "서비스 체험",
+            "description": null,
+            "sort_order": 2
+        },
+        {
+            "product_type": "REVIEW",
+            "code": "RECEIPT_REVIEW",
+            "name": "영수증 리뷰",
+            "description": null,
+            "sort_order": 0
+        },
+        {
+            "product_type": "REVIEW",
+            "code": "SHOPPING_REVIEW",
+            "name": "쇼핑 리뷰",
+            "description": null,
+            "sort_order": 1
+        },
+        {
+            "product_type": "REWARD",
+            "code": "NAVER_PLACE_QUIZ",
+            "name": "플레이스 퀴즈",
+            "description": null,
+            "sort_order": 0
+        },
+        {
+            "product_type": "REWARD",
+            "code": "NAVER_PLACE_SAVE",
+            "name": "플레이스 저장",
+            "description": null,
+            "sort_order": 1
+        },
+        {
+            "product_type": "REWARD",
+            "code": "NAVER_SHOP_QUIZ",
+            "name": "네이버 쇼핑 퀴즈",
+            "description": null,
+            "sort_order": 2
+        },
+        {
+            "product_type": "REWARD",
+            "code": "NAVER_SHOP_WISH",
+            "name": "네이버 쇼핑 찜",
+            "description": null,
+            "sort_order": 3
+        },
+        {
+            "product_type": "REWARD",
+            "code": "NAVER_SHOP_CART",
+            "name": "네이버 쇼핑 장바구니",
+            "description": null,
+            "sort_order": 4
+        },
+        {
+            "product_type": "REWARD",
+            "code": "SHOP_QUIZ_EXPERIENCE",
+            "name": "쇼핑 퀴즈+체험단",
+            "description": null,
+            "sort_order": 5
+        },
+        {
+            "product_type": "REWARD",
+            "code": "TALK_MESSAGE",
+            "name": "톡톡 메세지 발송",
+            "description": null,
+            "sort_order": 6
+        },
+        {
+            "product_type": "REWARD",
+            "code": "CUSTOM_URL_VISIT",
+            "name": "커스텀 URL",
+            "description": null,
+            "sort_order": 7
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_LIKE",
+            "name": "인스타 좋아요",
+            "description": null,
+            "sort_order": 0
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_FOLLOW",
+            "name": "인스타 팔로우",
+            "description": null,
+            "sort_order": 1
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_SAVE",
+            "name": "인스타 저장",
+            "description": null,
+            "sort_order": 2
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_VIEW",
+            "name": "인스타 조회수",
+            "description": null,
+            "sort_order": 3
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_COMMENT",
+            "name": "인스타 댓글",
+            "description": null,
+            "sort_order": 4
+        },
+        {
+            "product_type": "SNS",
+            "code": "INSTAGRAM_SHARE",
+            "name": "인스타 공유",
+            "description": null,
+            "sort_order": 5
+        }
+    ],
+    "products": [
+        {
+            "product_type": "REWARD",
+            "sub_type_code": "NAVER_PLACE_QUIZ",
+            "title": "네이버 플레이스 퀴즈",
+            "description": "네이버 지도 플레이스 퀴즈 참여 미션",
+            "base_cost": 150,
+            "min_price": 300,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 2,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 100,
+            "field_render_mode": "inline",
+            "default_fulfillment": 50,
+            "daily_cutoff_hour": 17,
+            "process_weekends": 0,
+            "process_holidays": 0,
+            "processing_lag_days": 2,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": [
+                {
+                    "group_code": "basic",
+                    "field_key": "keyword",
+                    "field_type": "TEXT",
+                    "label": "검색 키워드",
+                    "placeholder": "예: 강남 맛집",
+                    "help_text": "네이버에서 검색할 키워드를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 0
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "place_url",
+                    "field_type": "URL",
+                    "label": "플레이스 주소",
+                    "placeholder": "https:\/\/map.naver.com\/...",
+                    "help_text": "네이버 지도 플레이스 링크를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 1
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "daily_qty",
+                    "field_type": "NUMBER",
+                    "label": "일수량",
+                    "placeholder": "예: 100",
+                    "help_text": "하루에 실행할 참여 수량",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 2
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "start_date",
+                    "field_type": "DATE",
+                    "label": "시작일",
+                    "placeholder": null,
+                    "help_text": "미션 시작 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 3
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "end_date",
+                    "field_type": "DATE",
+                    "label": "종료일",
+                    "placeholder": null,
+                    "help_text": "미션 종료 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 4
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "field_6",
+                    "field_type": "TEXT",
+                    "label": "유입키워드 1",
+                    "placeholder": "유입키워드 1",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 5
+                }
+            ]
+        },
+        {
+            "product_type": "REWARD",
+            "sub_type_code": "NAVER_PLACE_SAVE",
+            "title": "네이버 플레이스 저장",
+            "description": "네이버 지도 플레이스 저장하기 미션",
+            "base_cost": 100,
+            "min_price": 200,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 100,
+            "field_render_mode": "inline",
+            "default_fulfillment": 40,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": [
+                {
+                    "group_code": "basic",
+                    "field_key": "keyword",
+                    "field_type": "TEXT",
+                    "label": "검색 키워드",
+                    "placeholder": "예: 강남 맛집",
+                    "help_text": "네이버에서 검색할 키워드를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 0
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "place_url",
+                    "field_type": "URL",
+                    "label": "플레이스 주소",
+                    "placeholder": "https:\/\/map.naver.com\/...",
+                    "help_text": "네이버 지도 플레이스 링크를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 1
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "daily_qty",
+                    "field_type": "NUMBER",
+                    "label": "일수량",
+                    "placeholder": "예: 100",
+                    "help_text": "하루에 실행할 참여 수량",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 2
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "start_date",
+                    "field_type": "DATE",
+                    "label": "시작일",
+                    "placeholder": null,
+                    "help_text": "미션 시작 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 3
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "end_date",
+                    "field_type": "DATE",
+                    "label": "종료일",
+                    "placeholder": null,
+                    "help_text": "미션 종료 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 4
+                }
+            ]
+        },
+        {
+            "product_type": "REWARD",
+            "sub_type_code": "NAVER_SHOP_QUIZ",
+            "title": "네이버 쇼핑 퀴즈",
+            "description": "네이버 쇼핑 상품 방문 미션",
+            "base_cost": 80,
+            "min_price": 150,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 100,
+            "field_render_mode": "inline",
+            "default_fulfillment": 40,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": [
+                {
+                    "group_code": "basic",
+                    "field_key": "keyword",
+                    "field_type": "TEXT",
+                    "label": "검색 키워드",
+                    "placeholder": "예: 강남 맛집",
+                    "help_text": "네이버에서 검색할 키워드를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 0
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "shop_url",
+                    "field_type": "URL",
+                    "label": "스마트스토어\/가격비교 주소",
+                    "placeholder": "https:\/\/smartstore.naver.com\/... 또는 https:\/\/search.shopping.naver.com\/...",
+                    "help_text": "스마트스토어 상품 URL 또는 네이버 쇼핑 가격비교 URL을 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 1
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "daily_qty",
+                    "field_type": "NUMBER",
+                    "label": "일수량",
+                    "placeholder": "예: 100",
+                    "help_text": "하루에 실행할 참여 수량",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 2
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "start_date",
+                    "field_type": "DATE",
+                    "label": "시작일",
+                    "placeholder": null,
+                    "help_text": "미션 시작 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 3
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "end_date",
+                    "field_type": "DATE",
+                    "label": "종료일",
+                    "placeholder": null,
+                    "help_text": "미션 종료 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 4
+                }
+            ]
+        },
+        {
+            "product_type": "REWARD",
+            "sub_type_code": "NAVER_SHOP_WISH",
+            "title": "네이버 쇼핑 찜하기",
+            "description": "네이버 쇼핑 상품 찜하기 미션",
+            "base_cost": 120,
+            "min_price": 250,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 100,
+            "field_render_mode": "inline",
+            "default_fulfillment": 45,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": [
+                {
+                    "group_code": "basic",
+                    "field_key": "keyword",
+                    "field_type": "TEXT",
+                    "label": "검색 키워드",
+                    "placeholder": "예: 강남 맛집",
+                    "help_text": "네이버에서 검색할 키워드를 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 0
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "shop_url",
+                    "field_type": "URL",
+                    "label": "스마트스토어\/가격비교 주소",
+                    "placeholder": "https:\/\/smartstore.naver.com\/... 또는 https:\/\/search.shopping.naver.com\/...",
+                    "help_text": "스마트스토어 상품 URL 또는 네이버 쇼핑 가격비교 URL을 입력하세요",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 1
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "daily_qty",
+                    "field_type": "NUMBER",
+                    "label": "일수량",
+                    "placeholder": "예: 100",
+                    "help_text": "하루에 실행할 참여 수량",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 2
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "start_date",
+                    "field_type": "DATE",
+                    "label": "시작일",
+                    "placeholder": null,
+                    "help_text": "미션 시작 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 3
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "end_date",
+                    "field_type": "DATE",
+                    "label": "종료일",
+                    "placeholder": null,
+                    "help_text": "미션 종료 날짜",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 4
+                }
+            ]
+        },
+        {
+            "product_type": "EXPERIENCE",
+            "sub_type_code": null,
+            "title": "체험단 리뷰",
+            "description": "체험단 상품 리뷰 작성 미션",
+            "base_cost": 5000,
+            "min_price": 8000,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "total",
+            "min_daily_quantity": 0,
+            "field_render_mode": "inline",
+            "default_fulfillment": 100,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": []
+        },
+        {
+            "product_type": "SNS",
+            "sub_type_code": null,
+            "title": "SNS 팔로우",
+            "description": "SNS 계정 팔로우 미션",
+            "base_cost": 50,
+            "min_price": 100,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 0,
+            "field_render_mode": "inline",
+            "default_fulfillment": 70,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 0,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": []
+        },
+        {
+            "product_type": "BLOG_REVIEW",
+            "sub_type_code": null,
+            "title": "블로그 리뷰 읽기 미션 (수정됨)",
+            "description": "네이버 블로그 리뷰를 읽고 참여하는 미션입니다",
+            "base_cost": 200,
+            "min_price": 500,
+            "min_quantity": 10,
+            "max_quantity": 10000,
+            "min_days": 1,
+            "quantity_mode": "daily",
+            "min_daily_quantity": 0,
+            "field_render_mode": "inline",
+            "default_fulfillment": 55,
+            "daily_cutoff_hour": null,
+            "process_weekends": 1,
+            "process_holidays": 1,
+            "processing_lag_days": 0,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                }
+            ],
+            "fields": []
+        },
+        {
+            "product_type": "EXPERIENCE",
+            "sub_type_code": null,
+            "title": "체험단 모집",
+            "description": "체험단을 모집합니다. 방문 \/ 상품 제공 \/ 구매 리뷰 중 선택할 수 있습니다.",
+            "base_cost": 1000,
+            "min_price": 1000,
+            "min_quantity": 10,
+            "max_quantity": 100,
+            "min_days": 1,
+            "quantity_mode": "total",
+            "min_daily_quantity": 0,
+            "field_render_mode": "step",
+            "default_fulfillment": 100,
+            "daily_cutoff_hour": 17,
+            "process_weekends": 0,
+            "process_holidays": 0,
+            "processing_lag_days": 2,
+            "is_active": 1,
+            "groups": [
+                {
+                    "code": "basic",
+                    "name": "기본 정보",
+                    "is_system": 0,
+                    "sort_order": 0
+                },
+                {
+                    "code": "schedule_quantity",
+                    "name": "일정 · 수량",
+                    "is_system": 1,
+                    "sort_order": 1
+                },
+                {
+                    "code": "custom_1776221095499",
+                    "name": "매장\/브랜드 정보",
+                    "is_system": 0,
+                    "sort_order": 2
+                },
+                {
+                    "code": "custom_1776221209862",
+                    "name": "상품 정보",
+                    "is_system": 0,
+                    "sort_order": 3
+                }
+            ],
+            "fields": [
+                {
+                    "group_code": "basic",
+                    "field_key": "type",
+                    "field_type": "SELECT",
+                    "label": "체험단 타입",
+                    "placeholder": null,
+                    "help_text": "방문\/상품\/구매 리뷰 중 선택",
+                    "is_required": 1,
+                    "default_value": "방문형",
+                    "options": [
+                        "방문형",
+                        "배송형",
+                        "기자단",
+                        "구매평",
+                        "영수증",
+                        "숏폼"
+                    ],
+                    "condition": null,
+                    "sort_order": 0
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "리뷰_방식",
+                    "field_type": "MULTI_SELECT",
+                    "label": "리뷰 방식",
+                    "placeholder": null,
+                    "help_text": "리뷰어가 참여 후 콘텐츠를 등록 할 채널",
+                    "is_required": 1,
+                    "default_value": "네이버 블로그",
+                    "options": [
+                        "네이버 블로그",
+                        "인스타 게시물",
+                        "인스타 릴스",
+                        "스마트스토어",
+                        "플레이스",
+                        "예약",
+                        "영수증"
+                    ],
+                    "condition": null,
+                    "sort_order": 1
+                },
+                {
+                    "group_code": "custom_1776221095499",
+                    "field_key": "매장\/브랜드명",
+                    "field_type": "TEXT",
+                    "label": "매장\/브랜드명",
+                    "placeholder": "매장\/브랜드명",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 2
+                },
+                {
+                    "group_code": "custom_1776221095499",
+                    "field_key": "offer_name",
+                    "field_type": "TEXT",
+                    "label": "제공 서비스\/상품명",
+                    "placeholder": "예: 프리미엄 세럼 30ml",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 3
+                },
+                {
+                    "group_code": "custom_1776221095499",
+                    "field_key": "제공되는_제품\/서비스_금액_(원)",
+                    "field_type": "NUMBER",
+                    "label": "제공되는 제품\/서비스 금액 (원)",
+                    "placeholder": null,
+                    "help_text": "판매가 기준 금액",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 4
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "start_date",
+                    "field_type": "DATE",
+                    "label": "모집 시작일",
+                    "placeholder": null,
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 5
+                },
+                {
+                    "group_code": "custom_1776221095499",
+                    "field_key": "visit_address",
+                    "field_type": "ADDRESS",
+                    "label": "방문 주소",
+                    "placeholder": null,
+                    "help_text": "리뷰어가 방문할 매장\/공간 주소 (카카오맵)",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": {
+                        "field": "type",
+                        "op": "eq",
+                        "value": "방문"
+                    },
+                    "sort_order": 6
+                },
+                {
+                    "group_code": "custom_1776221095499",
+                    "field_key": "reward_points",
+                    "field_type": "NUMBER",
+                    "label": "체험 완료 시 추가 포인트",
+                    "placeholder": null,
+                    "help_text": "리뷰 완료 후 리뷰어에게 지급(선택)",
+                    "is_required": 0,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 7
+                },
+                {
+                    "group_code": "schedule_quantity",
+                    "field_key": "end_date",
+                    "field_type": "DATE",
+                    "label": "모집 종료일",
+                    "placeholder": null,
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 8
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "미션_옵션_(체험단_아이콘)",
+                    "field_type": "MISSION_OPTIONS",
+                    "label": "미션 옵션 (체험단 아이콘)",
+                    "placeholder": null,
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 9
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "리뷰어_미션",
+                    "field_type": "TEXTAREA",
+                    "label": "리뷰어 미션",
+                    "placeholder": "체험 내용\/리뷰 조건\/유의사항을 자세히 작성",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 10
+                },
+                {
+                    "group_code": "custom_1776221209862",
+                    "field_key": "product_url",
+                    "field_type": "URL",
+                    "label": "상품 링크",
+                    "placeholder": "https:\/\/smartstore.naver.com\/...",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": {
+                        "field": "type",
+                        "op": "in",
+                        "value": [
+                            "상품",
+                            "구매 리뷰"
+                        ]
+                    },
+                    "sort_order": 11
+                },
+                {
+                    "group_code": "custom_1776221209862",
+                    "field_key": "purchase_option",
+                    "field_type": "TEXT",
+                    "label": "구매 옵션",
+                    "placeholder": "예: 블랙 \/ XL",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": {
+                        "field": "type",
+                        "op": "eq",
+                        "value": "구매 리뷰"
+                    },
+                    "sort_order": 12
+                },
+                {
+                    "group_code": "custom_1776221209862",
+                    "field_key": "purchase_quantity",
+                    "field_type": "NUMBER",
+                    "label": "구매 수량",
+                    "placeholder": "1",
+                    "help_text": null,
+                    "is_required": 1,
+                    "default_value": "1",
+                    "options": null,
+                    "condition": {
+                        "field": "type",
+                        "op": "eq",
+                        "value": "구매 리뷰"
+                    },
+                    "sort_order": 13
+                },
+                {
+                    "group_code": "custom_1776221209862",
+                    "field_key": "purchase_amount",
+                    "field_type": "NUMBER",
+                    "label": "구매 금액 (원)",
+                    "placeholder": null,
+                    "help_text": "리뷰어가 결제할 총 금액",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": {
+                        "field": "type",
+                        "op": "eq",
+                        "value": "구매 리뷰"
+                    },
+                    "sort_order": 14
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "메인_키워드",
+                    "field_type": "TAGS",
+                    "label": "메인 키워드",
+                    "placeholder": "메인키워드를 입력해 주세요.",
+                    "help_text": "엔터로 여래개 추가 가능",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 15
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "세부_키워드",
+                    "field_type": "TAGS",
+                    "label": "세부 키워드",
+                    "placeholder": "세부 키워드를 입력하세요.",
+                    "help_text": "엔터로 여래개 추가 가능",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 16
+                },
+                {
+                    "group_code": "basic",
+                    "field_key": "intro_images",
+                    "field_type": "IMAGE",
+                    "label": "소개 이미지",
+                    "placeholder": null,
+                    "help_text": "체험 대상에게 보여줄 이미지 (최대 10장)",
+                    "is_required": 1,
+                    "default_value": null,
+                    "options": null,
+                    "condition": null,
+                    "sort_order": 17
+                }
+            ]
+        }
+    ]
+}

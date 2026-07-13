@@ -40,6 +40,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | 경쟁분석 점수(N2) 가중치 — 실측 학습으로 개선 가능
+    |--------------------------------------------------------------------------
+    | N2 관련성 = D1~D10 세부지표의 가중평균(weighted() 가 present 차원으로 재정규화).
+    | 기본값은 crm 이식 수동 튜닝치(프라이어). 소유매장의 실제 조회수(스마트플레이스)를
+    | 라벨로 PlaceWeightLearner 가 학습해 개선하며, 표본이 충분(≥ apply_min_stores)해질 때까지
+    | 이 프라이어를 그대로 사용한다. 학습이 확정되면 이 값을 갱신(수동/자동)한다.
+    */
+    'scoring' => [
+        'n2_weights' => [
+            'd1' => 0.18, 'd2' => 0.09, 'd3' => 0.07, 'd4' => 0.12,
+            'd5' => 0.08, 'd6' => 0.08, 'd7' => 0.14, 'd9' => 0.20, 'd10' => 0.12,
+        ],
+        // 학습 가중치를 실제 반영하기 위한 최소 라벨(소유매장) 수. 미만이면 프라이어 유지.
+        'apply_min_stores' => (int) env('RANKFREE_WEIGHT_APPLY_MIN', 10),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | 네이버 검색광고 API — 키워드 도구(keywordstool)
     |--------------------------------------------------------------------------
     | 크롬 확장 '키워드 분석'(월간 검색량·경쟁강도)에 사용.
@@ -52,5 +70,28 @@ return [
         'secret_key' => env('NAVER_SEARCHAD_SECRET', ''),
         'customer_id' => env('NAVER_SEARCHAD_CUSTOMER_ID', ''),
         'timeout' => (int) env('NAVER_SEARCHAD_TIMEOUT', 10),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 네이버 쇼핑 검색 OpenAPI — 쇼핑 순위추적
+    |--------------------------------------------------------------------------
+    | openapi.naver.com/v1/search/shop.json (query·display·start·sort). 헤더 X-Naver-Client-Id/Secret.
+    | 다중 키(콤마 구분 "id:secret,...") — 429(한도)면 다음 키로 로테이션. .env 에만 보관.
+    */
+    'shopping' => [
+        // "id:secret,id:secret,…" → [['id'=>,'secret'=>], …]
+        'api_keys' => array_values(array_filter(array_map(
+            function ($pair) {
+                $p = array_map('trim', explode(':', trim($pair), 2));
+
+                return (count($p) === 2 && $p[0] !== '' && $p[1] !== '') ? ['id' => $p[0], 'secret' => $p[1]] : null;
+            },
+            explode(',', (string) env('NAVER_SHOPPING_API_KEYS', '')),
+        ))),
+        'display' => 100,       // 페이지당 결과(최대 100)
+        'max_pages' => (int) env('NAVER_SHOPPING_MAX_PAGES', 10),  // 100×10 = 1000위까지
+        'page_delay_ms' => (int) env('NAVER_SHOPPING_PAGE_DELAY_MS', 200),
+        'timeout' => (int) env('NAVER_SHOPPING_TIMEOUT', 15),
     ],
 ];

@@ -84,7 +84,7 @@ class CompeteController extends Controller
             $explain = [
                 'components' => PlaceScorer::keywordComponents($slot->keyword, $mineDaily->name, (string) $mineDaily->category, (string) $mineSerp->address, $mineDaily->tags ?? [], $cat),
                 'seo' => PlaceScorer::seoItems($mineDaily->toArray(), $cat),
-                'dims' => $mineScore ? $mineScore->only(['d1', 'd2', 'd3', 'd4', 'd5', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3']) : null,
+                'dims' => $mineScore ? $mineScore->only(['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'd10', 'n1', 'n2', 'n3']) : null,
                 'review_kw' => $mineDaily->review_kw,
                 'review_weekly' => $mineDaily->review_weekly,
                 'review_quality' => $mineDaily->review_quality,
