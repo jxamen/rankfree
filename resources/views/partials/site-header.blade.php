@@ -84,17 +84,12 @@
             <a href="/support" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">고객지원</a>
         </nav>
 
-        {{-- 우측 액션 — 문의하기 필 + 로그인 상태 분기 --}}
+        {{-- 우측 액션 — 로그인 상태 분기 --}}
         <div class="flex items-center gap-2">
-            <a href="/support" class="hidden sm:inline-flex btn btn-secondary btn-sm">
-                문의하기
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </a>
             @auth
                 <a href="{{ route('console.dashboard') }}" class="btn btn-primary btn-sm">콘솔</a>
             @else
-                <a href="{{ route('login', ['from' => request()->fullUrl()]) }}" class="hidden sm:inline-flex btn btn-ghost btn-sm">로그인</a>
-                <a href="{{ route('register') }}" class="btn btn-primary btn-sm">무료로 시작</a>
+                <a href="{{ route('login', ['from' => request()->fullUrl()]) }}" class="btn btn-ghost btn-sm">로그인</a>
             @endauth
         </div>
     </div>

@@ -45,6 +45,9 @@ Route::get('/', function () {
 Route::post('/rank-check', [RankCheckController::class, 'check'])->name('rank.check');
 Route::post('/shop-check', [RankCheckController::class, 'shopCheck'])->name('shop.check');
 Route::get('/rank-check', fn () => redirect('/#hero-form')); // 구 GET 링크 안전 처리
+// 홈 폼 자동입력(공개) — URL → m.place 변환·업체명 / 쇼핑 상품명
+Route::post('/rank-resolve/place', [RankCheckController::class, 'resolvePlace'])->middleware('throttle:30,1')->name('rank.resolve.place');
+Route::post('/rank-resolve/shop', [RankCheckController::class, 'resolveShop'])->middleware('throttle:30,1')->name('rank.resolve.shop');
 
 // 순위 추적 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');

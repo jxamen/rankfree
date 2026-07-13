@@ -18,6 +18,7 @@
     <div class="rf-tabs" role="tablist">
         <button type="button" class="rf-tab on" data-tab="basic" role="tab">광고·데이터 API</button>
         <button type="button" class="rf-tab" data-tab="api" role="tab">AI API</button>
+        <button type="button" class="rf-tab" data-tab="integ" role="tab">외부 연동</button>
         <button type="button" class="rf-tab" data-tab="custom" role="tab">커스텀 코드</button>
     </div>
 
@@ -76,6 +77,47 @@
             'providers' => $aiProviders,
             'live' => $liveAi,
         ])
+    </div>
+
+    {{-- ── 외부 연동: Cloudflare · 소셜 로그인 · 알리고 SMS ──────────────── --}}
+    <div class="rf-tabpane" data-tab="integ" hidden>
+        <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
+            봇 차단(Cloudflare)·소셜 로그인(구글·카카오)·알리고 SMS 키를 관리합니다. 값은 <b>암호화 저장</b>되며 <code>.env</code>보다 우선 적용됩니다.
+            저장하면 해당 기능(순위조회 봇검증·소셜 로그인·문자 발송)에 <b>즉시 반영</b>됩니다. 비밀 키는 <i class="fa-regular fa-eye"></i>(보기)·<i class="fa-regular fa-copy"></i>(복사)할 수 있습니다.
+        </p>
+
+        {{-- Cloudflare Turnstile --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">Cloudflare Turnstile <span class="text-muted-soft" style="font-weight:400;">무료 순위조회 봇 차단</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">dash.cloudflare.com → Turnstile 에서 위젯 생성 후 발급. 미설정 시 비회원 봇 검증을 건너뜁니다.</p>
+            @include('admin.settings._simplefield', ['name' => 'turnstile_site_key', 'label' => '사이트 키 (공개)', 'value' => $turnstileSiteKey, 'secret' => false, 'placeholder' => '0x4AAAAAAA...'])
+            @include('admin.settings._simplefield', ['name' => 'turnstile_secret', 'label' => '시크릿 키', 'value' => $turnstileSecret, 'secret' => true, 'placeholder' => '0x4AAAAAAA...'])
+        </div>
+
+        {{-- Google 로그인 --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">Google 로그인 <span class="text-muted-soft" style="font-weight:400;">소셜 로그인·가입</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">console.cloud.google.com → OAuth 클라이언트. 승인된 리디렉션 URI: <code>{{ url('/auth/google/callback') }}</code></p>
+            @include('admin.settings._simplefield', ['name' => 'google_client_id', 'label' => 'Client ID', 'value' => $googleClientId, 'secret' => false])
+            @include('admin.settings._simplefield', ['name' => 'google_client_secret', 'label' => 'Client Secret', 'value' => $googleClientSecret, 'secret' => true])
+        </div>
+
+        {{-- Kakao 로그인 --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">Kakao 로그인 <span class="text-muted-soft" style="font-weight:400;">소셜 로그인·가입</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">developers.kakao.com → 내 애플리케이션. Client ID = REST API 키. Redirect URI: <code>{{ url('/auth/kakao/callback') }}</code> (Secret 은 선택)</p>
+            @include('admin.settings._simplefield', ['name' => 'kakao_client_id', 'label' => 'Client ID (REST API 키)', 'value' => $kakaoClientId, 'secret' => false])
+            @include('admin.settings._simplefield', ['name' => 'kakao_client_secret', 'label' => 'Client Secret (선택)', 'value' => $kakaoClientSecret, 'secret' => true])
+        </div>
+
+        {{-- 알리고 SMS --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">알리고 SMS <span class="text-muted-soft" style="font-weight:400;">전화번호 인증 문자</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">smartsms.aligo.in → 발신번호 사전 등록 후 API 키 발급. 발신번호는 등록된 번호만 사용 가능합니다.</p>
+            @include('admin.settings._simplefield', ['name' => 'aligo_user_id', 'label' => '알리고 아이디', 'value' => $aligoUserId, 'secret' => false])
+            @include('admin.settings._simplefield', ['name' => 'aligo_api_key', 'label' => 'API 키', 'value' => $aligoApiKey, 'secret' => true])
+            @include('admin.settings._simplefield', ['name' => 'aligo_sender', 'label' => '발신번호', 'value' => $aligoSender, 'secret' => false, 'placeholder' => '1668-3721'])
+        </div>
     </div>
 
     {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}

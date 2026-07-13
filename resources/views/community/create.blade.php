@@ -1,9 +1,9 @@
-@extends('layouts.site')
+@extends('console.layout')
 @section('title', '글쓰기 · 커뮤니티 · 랭크프리')
-@section('follow-theme', '1')
+@section('page-title', '글쓰기')
 
-@section('content')
-<section class="container-page py-10 lg:py-14" style="max-width:720px;">
+@section('console-content')
+<section class="container-page py-10 lg:py-14" style="max-width:720px;padding-left:0;padding-right:0;">
     <h1 class="font-display text-ink mb-5" style="font-size:clamp(22px,2.6vw,28px);">글쓰기</h1>
 
     @if ($errors->any())

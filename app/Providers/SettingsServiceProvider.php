@@ -84,5 +84,24 @@ class SettingsServiceProvider extends ServiceProvider
             $seen[$p] = true;
             config([$providerConfig[$p] => trim((string) $row['api_key'])]);
         }
+
+        // 5) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
+        //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS
+        foreach ([
+            'turnstile.site_key' => 'services.turnstile.key',
+            'turnstile.secret' => 'services.turnstile.secret',
+            'google.client_id' => 'services.google.client_id',
+            'google.client_secret' => 'services.google.client_secret',
+            'kakao.client_id' => 'services.kakao.client_id',
+            'kakao.client_secret' => 'services.kakao.client_secret',
+            'aligo.user_id' => 'services.aligo.user_id',
+            'aligo.api_key' => 'services.aligo.key',
+            'aligo.sender' => 'services.aligo.sender',
+        ] as $mk => $cfg) {
+            $v = trim((string) ($m[$mk] ?? ''));
+            if ($v !== '') {
+                config([$cfg => $v]);
+            }
+        }
     }
 }

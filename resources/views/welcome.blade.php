@@ -12,7 +12,7 @@
         <div class="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             {{-- 좌: 카피 + 순위조회 폼 --}}
             <div>
-                <div class="badge mb-5 border border-hairline" style="background:color-mix(in srgb, var(--color-canvas) 70%, transparent);">
+                <div class="badge mb-5 border border-hairline" style="background:color-mix(in srgb, var(--color-canvas) 70%, transparent);font-size:var(--fs-base);padding:7px 14px;">
                     <span class="w-1.5 h-1.5 rounded-full" style="background:var(--color-accent);"></span>
                     가입 없이 무료 · 30초 완료
                 </div>
@@ -24,50 +24,8 @@
                     키워드만 넣으면 내 순위와 경쟁사, 시장 규모까지 — 회원가입 없이 지금 바로 확인하세요.
                 </p>
 
-                {{-- 무료 순위 조회 — 플레이스 / 쇼핑 2탭. 비회원도 조회 가능(비회원은 Cloudflare Turnstile 봇 검증) --}}
+                {{-- 순위조회 폼은 우측 컬럼으로 이동(아래) — $__tsKey 는 폼·스크립트가 참조하므로 여기서 선언 유지 --}}
                 @php $__tsKey = \App\Support\Turnstile::siteKey(); @endphp
-                <div id="hero-form" class="mt-8" style="max-width:560px;">
-                    <div class="card overflow-hidden" style="box-shadow:var(--shadow-card);">
-                        {{-- 탭: 카드 폭 전체 세그먼트 --}}
-                        <div class="rc-tabs">
-                            <button type="button" class="rc-tab on" data-rc="place">플레이스 순위</button>
-                            <button type="button" class="rc-tab" data-rc="shop">쇼핑 순위</button>
-                        </div>
-
-                        @error('captcha')
-                            <div class="mx-4 mt-4 -mb-1 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
-                        @enderror
-
-                        {{-- 플레이스 --}}
-                        <form class="rc-form" data-rc="place" action="{{ route('rank.check') }}" method="POST">
-                            @csrf
-                            <div class="p-4 flex flex-col gap-2.5">
-                                <input name="keyword" class="input" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
-                                <input name="place" class="input" placeholder="내 업체명 또는 플레이스 URL" value="{{ old('place') }}" required>
-                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
-                                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
-                            </div>
-                        </form>
-
-                        {{-- 쇼핑 --}}
-                        <form class="rc-form hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST">
-                            @csrf
-                            <div class="p-4 flex flex-col gap-2.5">
-                                <input name="keyword" class="input" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
-                                <input name="target" class="input" placeholder="상품 URL·상품ID 또는 스토어명" value="{{ old('target') }}" required>
-                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
-                                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
-                            </div>
-                        </form>
-                    </div>
-
-                    @guest @if ($__tsKey)
-                        <p class="mt-2 text-muted-soft flex items-center gap-1" style="font-size:var(--fs-xs);">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            Cloudflare가 자동 조회(봇)를 차단합니다
-                        </p>
-                    @endif @endguest
-                </div>
 
                 @guest @if ($__tsKey)
                     @push('scripts')<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>@endpush
@@ -101,44 +59,79 @@
                             try { window.turnstile.execute(w); } catch (err) { window.__rcForm = null; f.submit(); }
                         });
                     });
+
+                    // URL 입력 시 자동: 플레이스=m.place 변환+업체명 / 쇼핑=상품명 (readonly 칸)
+                    document.querySelectorAll('.rc-form').forEach(function (form) {
+                        var urlEl = form.querySelector('.rc-url');
+                        var nameEl = form.querySelector('.rc-name');
+                        var endpoint = form.dataset.resolve;
+                        if (!urlEl || !endpoint) return;
+                        var tokenEl = form.querySelector('input[name="_token"]');
+                        function resolve() {
+                            var v = (urlEl.value || '').trim();
+                            if (!v) { if (nameEl) nameEl.value = ''; return; }
+                            if (nameEl) { nameEl.value = ''; nameEl.placeholder = '불러오는 중…'; }
+                            fetch(endpoint, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': tokenEl ? tokenEl.value : '', 'Accept': 'application/json' },
+                                body: JSON.stringify({ url: v }),
+                            }).then(function (r) { return r.json(); }).then(function (d) {
+                                if (d && d.ok) {
+                                    if (d.url) urlEl.value = d.url;         // 플레이스: m.place 로 정규화
+                                    if (nameEl) nameEl.value = d.name || '';
+                                }
+                                if (nameEl) nameEl.placeholder = nameEl.value ? '' : '자동으로 불러오지 못했습니다';
+                            }).catch(function () { if (nameEl) nameEl.placeholder = 'URL 입력 시 자동'; });
+                        }
+                        urlEl.addEventListener('blur', resolve);
+                        urlEl.addEventListener('paste', function () { setTimeout(resolve, 120); });
+                    });
                 })();
                 </script>
                 @endpush
 
-                <p class="mt-5 text-muted-soft" style="font-size:var(--fs-xs);">
-                    이미 <b class="text-muted">1,200+</b> 사장님이 순위를 확인했어요.
+                <p class="mt-6 text-muted" style="font-size:var(--fs-md);">
+                    이미 <b class="text-ink">1,200+</b> 사장님이 순위를 확인했어요.
                 </p>
+                <a href="{{ route('register') }}" class="btn btn-primary btn-lg mt-4 inline-flex">무료로 시작</a>
             </div>
 
-            {{-- 우: 순위 결과 목업 카드 --}}
-            <div class="card overflow-hidden" style="box-shadow:0 0 80px color-mix(in srgb, var(--color-accent) 16%, transparent);">
-                <div class="flex items-center justify-between px-5 border-b border-hairline" style="height:52px;">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full" style="background:var(--color-badge-orange);"></span>
-                        <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">순위 결과</span>
+            {{-- 우: 무료 순위 조회 — 플레이스 / 쇼핑 2탭. 비회원도 조회 가능(비회원은 Cloudflare Turnstile 봇 검증) --}}
+            <div id="hero-form">
+                <div class="card overflow-hidden" style="box-shadow:var(--shadow-card);">
+                    {{-- 탭: 카드 폭 전체 세그먼트 --}}
+                    <div class="rc-tabs">
+                        <button type="button" class="rc-tab on" data-rc="place">플레이스 순위</button>
+                        <button type="button" class="rc-tab" data-rc="shop">쇼핑 순위</button>
                     </div>
-                    <span class="text-muted-soft" style="font-size:var(--fs-sm);">키워드 · 강남 미용실</span>
-                </div>
-                <div class="p-5">
-                    <div class="card-soft p-4 flex items-center justify-between mb-4">
-                        <div>
-                            <div class="text-muted" style="font-size:var(--fs-xs);">내 매장</div>
-                            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">라온헤어 강남점</div>
+
+                    @error('captcha')
+                        <div class="mx-4 mt-4 -mb-1 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
+                    @enderror
+
+                    {{-- 플레이스 --}}
+                    <form class="rc-form" data-rc="place" action="{{ route('rank.check') }}" method="POST" data-resolve="{{ route('rank.resolve.place') }}">
+                        @csrf
+                        <div class="p-5 flex flex-col gap-4">
+                            <input name="keyword" class="input" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
+                            <input name="place" class="input rc-url" placeholder="플레이스 URL" value="{{ old('place') }}" required>
+                            <input name="place_name" class="input rc-name" placeholder="업체명 (URL 입력 시 자동)" value="{{ old('place_name') }}" readonly style="background:var(--color-surface-soft);">
+                            @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
+                            <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                         </div>
-                        <div class="text-right">
-                            <div class="font-display text-ink" style="font-size:var(--fs-2xl);line-height:1;">7<span style="font-size:var(--fs-sm);" class="text-muted">위</span></div>
-                            <div class="mt-1 inline-flex items-center gap-1" style="font-size:var(--fs-xs);color:var(--color-success);font-weight:700;">▲ 2</div>
+                    </form>
+
+                    {{-- 쇼핑 --}}
+                    <form class="rc-form hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST" data-resolve="{{ route('rank.resolve.shop') }}">
+                        @csrf
+                        <div class="p-5 flex flex-col gap-4">
+                            <input name="keyword" class="input" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
+                            <input name="target" class="input rc-url" placeholder="스마트스토어 상품 URL 또는 검색·가격비교 URL" value="{{ old('target') }}" required>
+                            <input name="target_name" class="input rc-name" placeholder="상품명 (URL 입력 시 자동)" value="{{ old('target_name') }}" readonly style="background:var(--color-surface-soft);">
+                            @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
+                            <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                         </div>
-                    </div>
-                    <div class="flex flex-col">
-                        @foreach ([['1','수앤수 헤어','리뷰 1,284'],['2','블로우 강남','리뷰 980'],['3','제로그램','리뷰 872'],['4','살롱드메이','리뷰 641']] as $row)
-                        <div class="flex items-center gap-3 py-2.5 border-b border-hairline-soft">
-                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-surface-card text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $row[0] }}</span>
-                            <span class="text-ink flex-1" style="font-size:var(--fs-xs);">{{ $row[1] }}</span>
-                            <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $row[2] }}</span>
-                        </div>
-                        @endforeach
-                    </div>
+                    </form>
                 </div>
             </div>
         </div>

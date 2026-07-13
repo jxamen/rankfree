@@ -44,8 +44,31 @@ class SettingsController extends Controller
             // 커스텀 head 코드(모든 페이지 <head> 주입)
             'customCss' => AppSetting::read('custom.head_css'),
             'customHtml' => AppSetting::read('custom.head_html'),
+            // 외부 연동 키 — Cloudflare Turnstile · Google/Kakao 소셜 · 알리고 SMS
+            'turnstileSiteKey' => AppSetting::read('turnstile.site_key'),
+            'turnstileSecret' => AppSetting::read('turnstile.secret'),
+            'googleClientId' => AppSetting::read('google.client_id'),
+            'googleClientSecret' => AppSetting::read('google.client_secret'),
+            'kakaoClientId' => AppSetting::read('kakao.client_id'),
+            'kakaoClientSecret' => AppSetting::read('kakao.client_secret'),
+            'aligoUserId' => AppSetting::read('aligo.user_id'),
+            'aligoApiKey' => AppSetting::read('aligo.api_key'),
+            'aligoSender' => AppSetting::read('aligo.sender') ?: '1668-3721',
         ]);
     }
+
+    /** 단일 값 연동 키: setting키 => 폼필드명. config('services.*')는 SettingsServiceProvider 가 오버라이드. */
+    private const SIMPLE = [
+        'turnstile.site_key' => 'turnstile_site_key',
+        'turnstile.secret' => 'turnstile_secret',
+        'google.client_id' => 'google_client_id',
+        'google.client_secret' => 'google_client_secret',
+        'kakao.client_id' => 'kakao_client_id',
+        'kakao.client_secret' => 'kakao_client_secret',
+        'aligo.user_id' => 'aligo_user_id',
+        'aligo.api_key' => 'aligo_api_key',
+        'aligo.sender' => 'aligo_sender',
+    ];
 
     public function update(Request $request)
     {
@@ -58,6 +81,11 @@ class SettingsController extends Controller
         AppSetting::write('custom.head_css', (string) $request->input('custom_head_css', ''));
         AppSetting::write('custom.head_html', (string) $request->input('custom_head_html', ''));
         Cache::forget(AppSetting::CUSTOM_HEAD_CACHE);
+
+        // 외부 연동 단일 값 키 저장(Turnstile·소셜·알리고)
+        foreach (self::SIMPLE as $key => $field) {
+            AppSetting::write($key, trim((string) $request->input($field, '')));
+        }
 
         return redirect()->route('admin.settings')->with('status', '환경 설정을 저장했습니다.');
     }

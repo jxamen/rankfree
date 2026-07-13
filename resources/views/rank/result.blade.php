@@ -4,14 +4,14 @@
 
 @section('content')
 <section class="container-page py-16 lg:py-20" style="max-width:760px;">
-    <a href="/#hero-form" class="text-muted hover:text-ink transition" style="font-size:var(--fs-xs);">← 다시 조회</a>
-
-    <div class="mt-4 mb-8">
-        <div class="badge mb-3">순위 조회 결과</div>
-        <h1 class="font-display text-ink" style="font-size:clamp(26px,3.5vw,36px);line-height:1.15;">
-            “{{ $keyword }}”
-        </h1>
-        <p class="mt-2 text-muted" style="font-size:var(--fs-sm);">대상 · {{ $result['place_name'] ?: $place }}</p>
+    @php
+        $catLabel = ['place'=>'플레이스','restaurant'=>'음식점','hospital'=>'병원','hairshop'=>'미용','nailshop'=>'네일','accommodation'=>'숙박'][$result['category']] ?? '플레이스';
+    @endphp
+    <div class="mb-8">
+        @if (($result['list_total'] ?? 0) > 0)
+            <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $catLabel }} · 총 {{ number_format($result['list_total']) }}개 노출</div>
+        @endif
+        <h1 class="font-display text-ink mt-1" style="font-size:clamp(24px,3vw,32px);line-height:1.2;">{{ $keyword }} · {{ $result['place_name'] ?: $place }}</h1>
     </div>
 
     @if ($result['blocked'])

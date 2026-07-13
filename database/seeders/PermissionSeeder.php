@@ -47,6 +47,7 @@ class PermissionSeeder extends Seeder
             ['name' => '키워드 대량 분석', 'route' => 'console.bulk', 'icon' => '📚'],
             ['name' => '블로그 지수 분석', 'route' => 'console.blog', 'icon' => '✍️'],
             ['name' => '블로그 1개 분석', 'route' => 'console.blog-single', 'icon' => '📝'],
+            ['name' => '커뮤니티', 'route' => 'community', 'icon' => '💬'],
         ];
         $admin = [
             ['name' => '마케팅 상품', 'route' => 'admin.products', 'icon' => '🧩'],
