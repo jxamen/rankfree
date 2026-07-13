@@ -4,6 +4,11 @@
         $sz = $sm ? 24 : 32;
         return '<span style="width:'.$sz.'px;height:'.$sz.'px;flex:none;border-radius:50%;display:grid;place-items:center;background:'.$item->authorColor().';color:#fff;font-size:'.($sm ? 11 : 13).'px;font-weight:700;">'.e($item->authorInitial()).'</span>';
     };
+    // 관리 권한 — 본인이 쓴 글/댓글이거나 운영자(전체 수정·삭제·이동)
+    $canManage = function ($item) {
+        $u = auth()->user();
+        return $u && ($u->isOperator() || ($item->author_type === 'user' && $item->user_id === $u->id));
+    };
 @endphp
 <section class="container-page py-10 lg:py-14" style="max-width:820px;">
     <a href="{{ route('community', ['cat' => $post->category->slug]) }}" class="text-muted hover:text-ink inline-flex items-center gap-1 mb-4" style="font-size:var(--fs-xs);">← {{ $post->category->icon }} {{ $post->category->name }}</a>
@@ -17,11 +22,14 @@
                 <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $post->authorName() }}</div>
                 <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $post->created_at->format('Y-m-d H:i') }} · 조회 {{ number_format($post->views) }}</div>
             </div>
-            @if (auth()->id() && $post->author_type === 'user' && $post->user_id === auth()->id())
-                <form method="POST" action="{{ route('community.destroy', $post) }}" class="ml-auto" onsubmit="return confirm('삭제할까요?');">
-                    @csrf @method('DELETE')
-                    <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
-                </form>
+            @if ($canManage($post))
+                <div class="ml-auto flex items-center gap-3">
+                    <a href="{{ route('community.edit', $post) }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);">수정</a>
+                    <form method="POST" action="{{ route('community.destroy', $post) }}" onsubmit="return confirm('삭제할까요?');">
+                        @csrf @method('DELETE')
+                        <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
+                    </form>
+                </div>
             @endif
         </div>
         <div class="text-body mt-5" style="font-size:var(--fs-base);line-height:1.8;white-space:pre-wrap;">{{ $post->body }}</div>
@@ -44,10 +52,12 @@
         <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">댓글 {{ number_format($post->comments_count) }}</div>
 
         @auth
-            <form method="POST" action="{{ route('community.comment', $post) }}" class="flex gap-2 mb-6">
+            <form method="POST" action="{{ route('community.comment', $post) }}" class="mb-6">
                 @csrf
-                <input name="body" class="input" style="flex:1;" placeholder="댓글을 남겨보세요" maxlength="2000" required>
-                <button type="submit" class="btn btn-primary">등록</button>
+                <textarea name="body" class="input" style="min-height:80px;padding:10px 12px;line-height:1.6;" placeholder="댓글을 남겨보세요 (여러 줄 입력 가능)" maxlength="2000" required></textarea>
+                <div class="mt-2 flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm">등록</button>
+                </div>
             </form>
         @else
             <div class="card-soft px-4 py-3 mb-6 text-muted" style="font-size:var(--fs-xs);">
@@ -65,16 +75,50 @@
                                 <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $comment->authorName() }}</span>
                                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $comment->created_at->diffForHumans() }}</span>
                             </div>
-                            <div class="text-body mt-1" style="font-size:var(--fs-sm);line-height:1.6;white-space:pre-wrap;">{{ $comment->body }}</div>
+                            <div id="cbody-{{ $comment->id }}" class="text-body mt-1" style="font-size:var(--fs-sm);line-height:1.6;white-space:pre-wrap;">{{ $comment->body }}</div>
+                            @if ($canManage($comment))
+                                <div class="flex items-center gap-3 mt-1.5">
+                                    <button type="button" data-cedit="{{ $comment->id }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">수정</button>
+                                    <form method="POST" action="{{ route('community.comment.destroy', $comment) }}" onsubmit="return confirm('댓글을 삭제할까요?');">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
+                                    </form>
+                                </div>
+                                <form method="POST" action="{{ route('community.comment.update', $comment) }}" id="cedit-{{ $comment->id }}" class="hidden mt-2">
+                                    @csrf @method('PUT')
+                                    <textarea name="body" class="input" style="min-height:64px;padding:8px 10px;line-height:1.6;font-size:var(--fs-sm);" maxlength="2000" required>{{ $comment->body }}</textarea>
+                                    <div class="mt-1.5 flex gap-2">
+                                        <button type="submit" class="btn btn-primary btn-sm">저장</button>
+                                        <button type="button" data-ccancel="{{ $comment->id }}" class="btn btn-secondary btn-sm">취소</button>
+                                    </div>
+                                </form>
+                            @endif
                             @foreach ($comment->replies as $reply)
                                 <div class="flex items-start gap-2 mt-3" style="padding-left:12px;border-left:2px solid var(--color-hairline);">
                                     {!! $authorRow($reply, true) !!}
-                                    <div style="min-width:0;">
+                                    <div style="min-width:0;flex:1;">
                                         <div class="flex items-center gap-2">
                                             <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $reply->authorName() }}</span>
                                             <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $reply->created_at->diffForHumans() }}</span>
                                         </div>
-                                        <div class="text-body mt-1" style="font-size:var(--fs-sm);line-height:1.6;white-space:pre-wrap;">{{ $reply->body }}</div>
+                                        <div id="cbody-{{ $reply->id }}" class="text-body mt-1" style="font-size:var(--fs-sm);line-height:1.6;white-space:pre-wrap;">{{ $reply->body }}</div>
+                                        @if ($canManage($reply))
+                                            <div class="flex items-center gap-3 mt-1.5">
+                                                <button type="button" data-cedit="{{ $reply->id }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">수정</button>
+                                                <form method="POST" action="{{ route('community.comment.destroy', $reply) }}" onsubmit="return confirm('댓글을 삭제할까요?');">
+                                                    @csrf @method('DELETE')
+                                                    <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
+                                                </form>
+                                            </div>
+                                            <form method="POST" action="{{ route('community.comment.update', $reply) }}" id="cedit-{{ $reply->id }}" class="hidden mt-2">
+                                                @csrf @method('PUT')
+                                                <textarea name="body" class="input" style="min-height:64px;padding:8px 10px;line-height:1.6;font-size:var(--fs-sm);" maxlength="2000" required>{{ $reply->body }}</textarea>
+                                                <div class="mt-1.5 flex gap-2">
+                                                    <button type="submit" class="btn btn-primary btn-sm">저장</button>
+                                                    <button type="button" data-ccancel="{{ $reply->id }}" class="btn btn-secondary btn-sm">취소</button>
+                                                </div>
+                                            </form>
+                                        @endif
                                     </div>
                                 </div>
                             @endforeach
@@ -91,6 +135,15 @@
 @auth
 <script>
 (function () {
+    // 댓글 인라인 수정 토글 (수정 → 본문 숨기고 편집폼 표시, 취소 → 되돌리기)
+    function cToggle(id, editing) {
+        var f = document.getElementById('cedit-' + id), body = document.getElementById('cbody-' + id);
+        if (f) f.classList.toggle('hidden', !editing);
+        if (body) body.classList.toggle('hidden', editing);
+    }
+    document.querySelectorAll('[data-cedit]').forEach(function (b) { b.addEventListener('click', function () { cToggle(b.dataset.cedit, true); }); });
+    document.querySelectorAll('[data-ccancel]').forEach(function (b) { b.addEventListener('click', function () { cToggle(b.dataset.ccancel, false); }); });
+
     var btn = document.getElementById('rf-like-btn');
     if (!btn) return;
     btn.addEventListener('click', function () {

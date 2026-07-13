@@ -57,6 +57,31 @@ class CommunityController extends Controller
         return redirect()->route('community.show', $post)->with('status', '글을 등록했습니다.');
     }
 
+    /** 글 수정 폼 — 본인 글 또는 운영자. 운영자는 카테고리 이동(변경) 가능. */
+    public function edit(Request $request, CommunityPost $post)
+    {
+        abort_unless($this->canManagePost($post, $request->user()), 403);
+
+        return view('community.edit', [
+            'post' => $post,
+            'categories' => CommunityCategory::where('is_active', true)->orderBy('sort_order')->get(),
+        ]);
+    }
+
+    /** 글 수정 저장 — 본인 글 또는 운영자. category_id 변경 = 카테고리 이동. */
+    public function update(Request $request, CommunityPost $post)
+    {
+        abort_unless($this->canManagePost($post, $request->user()), 403);
+        $data = $request->validate([
+            'category_id' => 'required|exists:community_categories,id',
+            'title' => 'required|string|max:150',
+            'body' => 'required|string|max:20000',
+        ]);
+        $post->update($data);
+
+        return redirect()->route('community.show', $post)->with('status', '글을 수정했습니다.');
+    }
+
     /** 상세 + 댓글. 조회수 증가. */
     public function show(Request $request, CommunityPost $post)
     {
@@ -94,6 +119,37 @@ class CommunityController extends Controller
         return back()->with('status', '댓글을 등록했습니다.');
     }
 
+    /** 댓글 수정 — 본인 댓글 또는 운영자. */
+    public function commentUpdate(Request $request, CommunityComment $comment)
+    {
+        abort_unless($this->canManageComment($comment, $request->user()), 403);
+        $data = $request->validate(['body' => 'required|string|max:2000']);
+        $comment->update(['body' => $data['body']]);
+
+        return back()->with('status', '댓글을 수정했습니다.');
+    }
+
+    /** 댓글 삭제 — 본인 댓글 또는 운영자. 부모 댓글 삭제 시 대댓글까지 함께 삭제. */
+    public function commentDestroy(Request $request, CommunityComment $comment)
+    {
+        abort_unless($this->canManageComment($comment, $request->user()), 403);
+        $post = $comment->post;
+        $removed = 1;
+        if ($comment->parent_id === null) {
+            $replies = $comment->replies()->get();
+            $removed += $replies->count();
+            foreach ($replies as $reply) {
+                $reply->delete();
+            }
+        }
+        $comment->delete();
+        if ($post) {
+            $post->decrement('comments_count', min($removed, $post->comments_count));
+        }
+
+        return back()->with('status', '댓글을 삭제했습니다.');
+    }
+
     /** 좋아요 토글(AJAX, 로그인 필요). */
     public function like(Request $request, CommunityPost $post)
     {
@@ -112,12 +168,24 @@ class CommunityController extends Controller
         return response()->json(['liked' => $liked, 'count' => $post->fresh()->likes_count]);
     }
 
-    /** 본인 글 삭제. */
+    /** 글 삭제 — 본인 글 또는 운영자. */
     public function destroy(Request $request, CommunityPost $post)
     {
-        abort_unless($post->author_type === 'user' && $post->user_id === $request->user()->id, 403);
+        abort_unless($this->canManagePost($post, $request->user()), 403);
         $post->delete();
 
         return redirect()->route('community')->with('status', '글을 삭제했습니다.');
+    }
+
+    /** 글 관리 권한 — 본인이 쓴 글이거나 운영자(전체 글 수정·삭제·이동). */
+    private function canManagePost(CommunityPost $post, $user): bool
+    {
+        return $user && ($user->isOperator() || ($post->author_type === 'user' && $post->user_id === $user->id));
+    }
+
+    /** 댓글 관리 권한 — 본인 댓글이거나 운영자. */
+    private function canManageComment(CommunityComment $comment, $user): bool
+    {
+        return $user && ($user->isOperator() || ($comment->author_type === 'user' && $comment->user_id === $user->id));
     }
 }

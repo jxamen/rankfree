@@ -19,6 +19,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\FindEmailController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\BulkKeywordController;
+use App\Http\Controllers\Admin\CommunityCategoryController;
 use App\Http\Controllers\Admin\CommunitySeedController;
 use App\Http\Controllers\Admin\PersonaController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -87,7 +88,11 @@ Route::get('/community/post/{post}', [CommunityController::class, 'show'])->name
 Route::middleware('auth')->group(function () {
     Route::get('/community/new', [CommunityController::class, 'create'])->name('community.create');
     Route::post('/community', [CommunityController::class, 'store'])->name('community.store');
+    Route::get('/community/post/{post}/edit', [CommunityController::class, 'edit'])->name('community.edit');
+    Route::put('/community/post/{post}', [CommunityController::class, 'update'])->name('community.update');
     Route::post('/community/post/{post}/comment', [CommunityController::class, 'comment'])->name('community.comment');
+    Route::put('/community/comment/{comment}', [CommunityController::class, 'commentUpdate'])->name('community.comment.update');
+    Route::delete('/community/comment/{comment}', [CommunityController::class, 'commentDestroy'])->name('community.comment.destroy');
     Route::post('/community/post/{post}/like', [CommunityController::class, 'like'])->name('community.like');
     Route::delete('/community/post/{post}', [CommunityController::class, 'destroy'])->name('community.destroy');
 });
@@ -328,6 +333,13 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 환경 설정 — 네이버 API 자격증명 관리
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+
+    // 커뮤니티 카테고리 관리 (추가·이름/아이콘/정렬·사용 여부)
+    Route::get('/community-categories', [CommunityCategoryController::class, 'index'])->name('community-categories');
+    Route::post('/community-categories', [CommunityCategoryController::class, 'store'])->name('community-categories.store');
+    Route::put('/community-categories/{category}', [CommunityCategoryController::class, 'update'])->name('community-categories.update');
+    Route::post('/community-categories/{category}/toggle', [CommunityCategoryController::class, 'toggle'])->name('community-categories.toggle');
+    Route::delete('/community-categories/{category}', [CommunityCategoryController::class, 'destroy'])->name('community-categories.destroy');
 
     // 글밥(소스) 관리 — 수집한 글감을 페르소나가 소재로 변형해 사용
     Route::get('/community-seeds', [CommunitySeedController::class, 'index'])->name('community-seeds');

@@ -62,12 +62,14 @@ class AdminMemberSubscriptionTest extends TestCase
         $member = User::create(['name' => '구매자', 'email' => 'buyer@test.kr', 'password' => 'x1234567']);
 
         $this->actingAs($admin)->put("/admin/members/{$member->id}", [
+            'name' => '구매자', 'phone' => '01012345678',
             'grade_id' => $pro->id,
             'subscription_expires_at' => now()->addMonth()->toDateString(),
         ])->assertRedirect();
 
         $member->refresh();
         $this->assertSame($pro->id, $member->grade_id);
+        $this->assertSame('01012345678', $member->phone);
         $this->assertTrue($member->subscriptionActive());
     }
 
@@ -77,7 +79,7 @@ class AdminMemberSubscriptionTest extends TestCase
         $role = OperatorRole::create(['name' => '운영자', 'slug' => 'op', 'level' => 10]);
         $member = User::create(['name' => '직원', 'email' => 'staff@test.kr', 'password' => 'x1234567']);
 
-        $this->actingAs($admin)->put("/admin/members/{$member->id}", ['operator_role_id' => $role->id])->assertRedirect();
+        $this->actingAs($admin)->put("/admin/members/{$member->id}", ['name' => '직원', 'operator_role_id' => $role->id])->assertRedirect();
 
         $member->refresh();
         $this->assertSame($role->id, $member->operator_role_id);

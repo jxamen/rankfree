@@ -26,7 +26,7 @@
 {{-- 검색·필터 --}}
 <form method="GET" class="flex gap-2 flex-wrap items-end mb-4">
     <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">검색</label>
-        <input name="q" value="{{ $q }}" class="input" style="width:220px;" placeholder="이름 · 이메일"></div>
+        <input name="q" value="{{ $q }}" class="input" style="width:220px;" placeholder="이름 · 이메일 · 전화번호"></div>
     <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">등급</label>
         <select name="grade" class="input" style="width:150px;">
             <option value="">전체 등급</option>
@@ -66,10 +66,16 @@
                 @forelse ($members as $m)
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
                         <td class="px-5 py-3">
+                            @php
+                                $d = preg_replace('/[^0-9]/', '', (string) $m->phone);
+                                $phoneFmt = strlen($d) === 11 ? substr($d, 0, 3).'-'.substr($d, 3, 4).'-'.substr($d, 7)
+                                    : (strlen($d) === 10 ? substr($d, 0, 3).'-'.substr($d, 3, 3).'-'.substr($d, 6) : $m->phone);
+                            @endphp
                             <div class="text-ink font-medium" style="font-size:var(--fs-xs);">{{ $m->name }}
                                 @if ($m->role === 'super')<span class="badge" style="font-size:var(--fs-xs);padding:1px 7px;background:color-mix(in srgb,var(--color-error) 12%,transparent);color:var(--color-error);">SUPER</span>@endif
                             </div>
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $m->email }}</div>
+                            <div class="text-muted-soft" style="font-size:var(--fs-xs);">📞 {{ $phoneFmt ?: '—' }}</div>
                         </td>
                         <td class="px-3 py-3">
                             @if ($m->grade)
@@ -105,6 +111,10 @@
                         <td colspan="7" class="px-5 py-4" style="background:var(--color-surface-soft);border-top:1px solid var(--color-hairline-soft);">
                             <form method="POST" action="{{ route('admin.members.update', $m) }}" class="flex gap-3 items-end flex-wrap">
                                 @csrf @method('PUT')
+                                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">이름</label>
+                                    <input name="name" class="input" style="width:130px;" maxlength="50" value="{{ $m->name }}" required></div>
+                                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">전화번호</label>
+                                    <input name="phone" class="input" style="width:150px;" maxlength="20" value="{{ $m->phone }}" placeholder="01012345678"></div>
                                 <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">등급(요금제)</label>
                                     <select name="grade_id" class="input" style="width:150px;">
                                         <option value="">— 없음 —</option>

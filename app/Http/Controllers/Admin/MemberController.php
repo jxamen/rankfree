@@ -21,8 +21,12 @@ class MemberController extends Controller
         $query = User::with(['grade', 'operatorRole'])->latest();
 
         if ($q !== '') {
-            $query->where(function ($w) use ($q) {
+            $digits = preg_replace('/[^0-9]/', '', $q);
+            $query->where(function ($w) use ($q, $digits) {
                 $w->where('name', 'like', "%{$q}%")->orWhere('email', 'like', "%{$q}%");
+                if ($digits !== '') {
+                    $w->orWhere('phone', 'like', "%{$digits}%");
+                }
             });
         }
         if ($gradeId === 'none') {
@@ -59,6 +63,8 @@ class MemberController extends Controller
     public function update(Request $request, User $user)
     {
         $data = $request->validate([
+            'name' => ['required', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:20'],
             'grade_id' => ['nullable', 'exists:member_grades,id'],
             'subscription_expires_at' => ['nullable', 'date'],
             'operator_role_id' => ['nullable', 'exists:operator_roles,id'],
@@ -69,6 +75,8 @@ class MemberController extends Controller
 
         // 운영자 권한(역할) 부여·회수는 슈퍼관리자만
         $payload = [
+            'name' => trim($data['name']),
+            'phone' => ($data['phone'] ?? '') !== '' ? preg_replace('/[^0-9]/', '', $data['phone']) : null,
             'grade_id' => $data['grade_id'] ?? null,
             'subscription_expires_at' => ($data['subscription_expires_at'] ?? null)
                 ? Carbon::parse($data['subscription_expires_at'])->endOfDay()
