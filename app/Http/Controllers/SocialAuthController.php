@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\PhoneVerification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -34,6 +35,8 @@ class SocialAuthController extends Controller
         try {
             $su = Socialite::driver($provider)->user();
         } catch (\Throwable $e) {
+            Log::warning('[Social] callback 실패', ['provider' => $provider, 'error' => $e->getMessage()]);
+
             return redirect()->route('login')->withErrors(['email' => '소셜 로그인에 실패했습니다. 다시 시도해 주세요.']);
         }
 

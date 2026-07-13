@@ -34,6 +34,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    @include('partials.custom-head')
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
 <div class="flex min-h-screen console-shell">

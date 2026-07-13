@@ -31,27 +31,28 @@
     $desc = array_reverse($rows); // 최신 → 과거
 @endphp
 <style>
-.hx{font-size:.875rem;color:#333}
-.hx .mut{color:#8a94a6}
-.hx .sec{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:12px}
-.hx .sec .tt{font-weight:700;color:#1f2937;margin-bottom:10px;font-size:.95rem}
-.hx .hup{color:#12b886;font-weight:700;font-size:.78rem}.hx .hdn{color:#e5484d;font-weight:700;font-size:.78rem}
+/* 색은 전부 테마 토큰 — 라이트/다크(.theme-dark) 자동 적응. 하드코딩 hex 금지 */
+.hx{font-size:.875rem;color:var(--color-body)}
+.hx .mut{color:var(--color-muted)}
+.hx .sec{background:var(--color-surface-soft);border:1px solid var(--color-hairline);border-radius:8px;padding:14px 18px;margin-bottom:12px}
+.hx .sec .tt{font-weight:700;color:var(--color-ink);margin-bottom:10px;font-size:.95rem}
+.hx .hup{color:var(--color-success);font-weight:700;font-size:.78rem}.hx .hdn{color:var(--color-error);font-weight:700;font-size:.78rem}
 .hx .hgrid{display:flex;flex-wrap:wrap;gap:8px}
-.hx .hcard{border:1px solid #eef0f2;border-radius:8px;background:#fafbfc;padding:9px 12px;min-width:128px;text-align:center}
-.hx .hcard .hd{color:#8a94a6;font-size:.8rem}
-.hx .hcard .hr{font-weight:800;font-size:1.15rem;color:#111;margin:2px 0 4px}
-.hx .hcard .hm{font-size:.8rem;color:#5b6472;line-height:1.8;white-space:nowrap}
-.hx .hcard .hm b{color:#1f2937;font-weight:700}
-.hx .hcard .lb{color:#adb5bd}
+.hx .hcard{border:1px solid var(--color-hairline);border-radius:8px;background:var(--color-surface-card);padding:9px 12px;min-width:128px;text-align:center}
+.hx .hcard .hd{color:var(--color-muted);font-size:.8rem}
+.hx .hcard .hr{font-weight:800;font-size:1.15rem;color:var(--color-ink);margin:2px 0 4px}
+.hx .hcard .hm{font-size:.8rem;color:var(--color-body);line-height:1.8;white-space:nowrap}
+.hx .hcard .hm b{color:var(--color-ink);font-weight:700}
+.hx .hcard .lb{color:var(--color-muted-soft)}
 .hx table.xtb{width:100%;border-collapse:collapse}
-.hx table.xtb th{background:#fafbfc;color:#8a94a6;font-weight:600;font-size:.8rem;padding:8px 12px;border-bottom:1px solid #eef0f2;text-align:center;white-space:nowrap}
-.hx table.xtb td{padding:9px 12px;border-bottom:1px solid #f4f6f8;vertical-align:middle;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:.86rem}
-.hx table.xtb td:first-child{text-align:left;font-weight:600;color:#555}
-.hx .note{color:#8a94a6;font-size:.8rem;margin-top:8px}
+.hx table.xtb th{background:var(--color-surface-soft);color:var(--color-muted);font-weight:600;font-size:.8rem;padding:8px 12px;border-bottom:1px solid var(--color-hairline);text-align:center;white-space:nowrap}
+.hx table.xtb td{padding:9px 12px;border-bottom:1px solid var(--color-hairline-soft);vertical-align:middle;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:.86rem;color:var(--color-body)}
+.hx table.xtb td:first-child{text-align:left;font-weight:600;color:var(--color-ink)}
+.hx .note{color:var(--color-muted);font-size:.8rem;margin-top:8px}
 .hx .pplus2{display:inline-block;font-size:.66rem;font-weight:700;color:#fff;background:#03c75a;border-radius:4px;padding:0 4px;vertical-align:middle}
-.hx .htabs{display:flex;gap:4px;border-bottom:1px solid #e5e7eb;margin-bottom:14px}
-.hx .htabs button{padding:9px 20px;border:0;background:none;font-weight:700;color:#888;cursor:pointer;border-bottom:2px solid transparent;font-size:.875rem}
-.hx .htabs button.on{color:#111;border-bottom-color:#03c75a}
+.hx .htabs{display:flex;gap:4px;border-bottom:1px solid var(--color-hairline);margin-bottom:14px}
+.hx .htabs button{padding:9px 20px;border:0;background:none;font-weight:700;color:var(--color-muted);cursor:pointer;border-bottom:2px solid transparent;font-size:.875rem}
+.hx .htabs button.on{color:var(--color-ink);border-bottom-color:var(--color-primary)}
 </style>
 <div class="hx">
   @if (count($rows) < 1)
@@ -69,10 +70,10 @@
       @endphp
       <div class="sec"><div class="tt">순위 추이 <span class="mut">— 위쪽일수록 상위</span></div>
         <svg viewBox="0 0 {{ $W }} {{ $H }}" style="width:100%;height:auto;max-height:150px;font-size:var(--fs-xs)">
-          <text x="{{ $pL - 5 }}" y="{{ $yO($mn) + 3 }}" text-anchor="end" fill="#94a0ac">{{ $mn }}위</text>
-          <text x="{{ $pL - 5 }}" y="{{ $yO($mxv) + 3 }}" text-anchor="end" fill="#c0c6cd">{{ $mxv }}위</text>
-          <polyline points="{{ implode(' ', $pts) }}" fill="none" stroke="#03c75a" stroke-width="2"/>
-          @foreach ($rks as $i => $v)<circle cx="{{ $xO($i) }}" cy="{{ $yO($v) }}" r="2.8" fill="#03c75a"/>@endforeach
+          <text x="{{ $pL - 5 }}" y="{{ $yO($mn) + 3 }}" text-anchor="end" style="fill:var(--color-muted)">{{ $mn }}위</text>
+          <text x="{{ $pL - 5 }}" y="{{ $yO($mxv) + 3 }}" text-anchor="end" style="fill:var(--color-muted-soft)">{{ $mxv }}위</text>
+          <polyline points="{{ implode(' ', $pts) }}" fill="none" style="stroke:var(--color-success)" stroke-width="2"/>
+          @foreach ($rks as $i => $v)<circle cx="{{ $xO($i) }}" cy="{{ $yO($v) }}" r="2.8" style="fill:var(--color-success)"/>@endforeach
         </svg>
       </div>
     @endif

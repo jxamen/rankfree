@@ -44,7 +44,7 @@
                             <div class="p-4 flex flex-col gap-2.5">
                                 <input name="keyword" class="input" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
                                 <input name="place" class="input" placeholder="내 업체명 또는 플레이스 URL" value="{{ old('place') }}" required>
-                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}"></div>@endif @endguest
+                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
                                 <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                             </div>
                         </form>
@@ -55,7 +55,7 @@
                             <div class="p-4 flex flex-col gap-2.5">
                                 <input name="keyword" class="input" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
                                 <input name="target" class="input" placeholder="상품 URL·상품ID 또는 스토어명" value="{{ old('target') }}" required>
-                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}"></div>@endif @endguest
+                                @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
                                 <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                             </div>
                         </form>
@@ -84,6 +84,23 @@
                     });
                     // 제출 실패(입력 유지) 시 방금 사용한 탭으로 복귀
                     @if (old('target')) document.querySelector('.rc-tab[data-rc="shop"]').click(); @endif
+
+                    // Turnstile(봇 검증)은 '무료 순위 조회' 클릭 시에만 실행(execute 모드) — 평소엔 숨김.
+                    // 성공 콜백이 폼을 제출(그 시점 cf-turnstile-response 토큰이 폼에 주입됨).
+                    window.rcTsToken = function () {
+                        var f = window.__rcForm; window.__rcForm = null;
+                        if (f) f.submit();
+                    };
+                    document.querySelectorAll('.rc-form').forEach(function (f) {
+                        f.addEventListener('submit', function (e) {
+                            var w = f.querySelector('.cf-turnstile');
+                            if (!w || !window.turnstile) return;            // 위젯 없음(회원) 또는 미로드 → 정상 제출
+                            e.preventDefault();
+                            if (!f.checkValidity()) { f.reportValidity(); return; }  // 필수 입력부터 검사
+                            window.__rcForm = f;
+                            try { window.turnstile.execute(w); } catch (err) { window.__rcForm = null; f.submit(); }
+                        });
+                    });
                 })();
                 </script>
                 @endpush

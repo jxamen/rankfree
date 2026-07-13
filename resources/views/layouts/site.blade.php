@@ -16,6 +16,7 @@
     @endif
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')
+    @include('partials.custom-head')
 </head>
 {{-- 페이지가 @section('theme-dark', '1')을 선언하면 다크 테마(expo.dev 스타일)로 렌더 --}}
 <body class="@hasSection('theme-dark') theme-dark bg-surface-dark-deep @else bg-canvas @endif text-body font-sans antialiased min-h-screen flex flex-col">

@@ -18,6 +18,7 @@
     <div class="rf-tabs" role="tablist">
         <button type="button" class="rf-tab on" data-tab="basic" role="tab">광고·데이터 API</button>
         <button type="button" class="rf-tab" data-tab="api" role="tab">AI API</button>
+        <button type="button" class="rf-tab" data-tab="custom" role="tab">커스텀 코드</button>
     </div>
 
     {{-- ── 기본: 네이버 데이터 수집 자격증명 ───────────────────────────── --}}
@@ -75,6 +76,26 @@
             'providers' => $aiProviders,
             'live' => $liveAi,
         ])
+    </div>
+
+    {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}
+    <div class="rf-tabpane" data-tab="custom" hidden>
+        <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
+            아래 코드가 모든 공개 페이지(홈·콘솔)의 <code>&lt;head&gt;</code>에 삽입됩니다. 웹폰트·분석 스크립트(GA·GTM·메타 픽셀)·커스텀 CSS 등에 사용하세요.
+            <b class="text-error">주의</b>: 잘못된 코드는 화면을 깨뜨릴 수 있습니다. 스크립트/외부 링크는 신뢰할 수 있는 것만 넣으세요(어드민 화면에는 적용되지 않습니다).
+        </p>
+
+        <div class="mb-5">
+            <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 CSS</label>
+            <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><code>&lt;style&gt;</code>로 자동 감싸 삽입됩니다. CSS만 입력하세요.</div>
+            <textarea name="custom_head_css" rows="8" spellcheck="false" placeholder=".btn-primary { border-radius: 8px; }" class="input" style="width:100%;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_css', $customCss) }}</textarea>
+        </div>
+
+        <div class="mb-2">
+            <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 스크립트 · head HTML</label>
+            <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><b>원문 그대로</b> 삽입됩니다. <code>&lt;script&gt;</code>·<code>&lt;meta&gt;</code>·<code>&lt;link&gt;</code> 태그를 직접 포함하세요.</div>
+            <textarea name="custom_head_html" rows="10" spellcheck="false" placeholder="&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
+        </div>
     </div>
 
     <div class="flex items-center gap-2">

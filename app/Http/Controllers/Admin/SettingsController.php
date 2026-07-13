@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * 환경 설정 (운영자) — 네이버 API 자격증명 관리(모두 다중 등록/삭제).
@@ -40,6 +41,9 @@ class SettingsController extends Controller
             'liveOpenapi' => count((array) config('rankfree.shopping.api_keys', [])),
             'liveAi' => collect(['services.anthropic.key', 'services.gemini.key', 'services.openai.key'])
                 ->filter(fn ($k) => ! empty(config($k)))->count(),
+            // 커스텀 head 코드(모든 페이지 <head> 주입)
+            'customCss' => AppSetting::read('custom.head_css'),
+            'customHtml' => AppSetting::read('custom.head_html'),
         ]);
     }
 
@@ -49,6 +53,11 @@ class SettingsController extends Controller
             $this->saveGroup($request, $key, $def['g'], $def['plain'], $def['secret']);
         }
         $this->saveAiKeys($request);
+
+        // 커스텀 head 코드(CSS·스크립트/HTML) 저장 + 캐시 무효화
+        AppSetting::write('custom.head_css', (string) $request->input('custom_head_css', ''));
+        AppSetting::write('custom.head_html', (string) $request->input('custom_head_html', ''));
+        Cache::forget(AppSetting::CUSTOM_HEAD_CACHE);
 
         return redirect()->route('admin.settings')->with('status', '환경 설정을 저장했습니다.');
     }
