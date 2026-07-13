@@ -96,8 +96,8 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
 
     // 소셜 로그인/가입 (google 내장 · naver/kakao SocialiteProviders)
-    Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect')->where('provider', 'google|naver|kakao');
-    Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback')->where('provider', 'google|naver|kakao');
+    Route::get('/auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])->name('social.redirect')->where('provider', 'google|kakao');
+    Route::get('/auth/{provider}/callback', [SocialAuthController::class, 'callback'])->name('social.callback')->where('provider', 'google|kakao');
     Route::get('/auth/complete', [SocialAuthController::class, 'complete'])->name('social.complete');
     Route::post('/auth/complete', [SocialAuthController::class, 'completeStore']);
 

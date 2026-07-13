@@ -2,7 +2,7 @@
 @section('title', '가입 마무리')
 
 @php
-    $__pname = ['google' => '구글', 'naver' => '네이버', 'kakao' => '카카오'][$social['provider']] ?? '소셜';
+    $__pname = ['google' => '구글', 'kakao' => '카카오'][$social['provider']] ?? '소셜';
 @endphp
 
 @section('auth-content')

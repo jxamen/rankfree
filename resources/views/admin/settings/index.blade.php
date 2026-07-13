@@ -12,7 +12,7 @@
 @endpush
 
 @section('admin-content')
-<form method="POST" action="{{ route('admin.settings.update') }}" class="max-w-3xl">
+<form method="POST" action="{{ route('admin.settings.update') }}">
     @csrf @method('PUT')
 
     <div class="rf-tabs" role="tablist">
@@ -88,13 +88,13 @@
         <div class="mb-5">
             <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 CSS</label>
             <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><code>&lt;style&gt;</code>로 자동 감싸 삽입됩니다. CSS만 입력하세요.</div>
-            <textarea name="custom_head_css" rows="8" spellcheck="false" placeholder=".btn-primary { border-radius: 8px; }" class="input" style="width:100%;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_css', $customCss) }}</textarea>
+            <textarea name="custom_head_css" spellcheck="false" placeholder=".btn-primary { border-radius: 8px; }" class="input" style="width:100%;height:500px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_css', $customCss) }}</textarea>
         </div>
 
         <div class="mb-2">
             <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 스크립트 · head HTML</label>
             <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><b>원문 그대로</b> 삽입됩니다. <code>&lt;script&gt;</code>·<code>&lt;meta&gt;</code>·<code>&lt;link&gt;</code> 태그를 직접 포함하세요.</div>
-            <textarea name="custom_head_html" rows="10" spellcheck="false" placeholder="&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
+            <textarea name="custom_head_html" spellcheck="false" placeholder="&lt;meta name=&quot;...&quot; content=&quot;...&quot;&gt;&#10;&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;height:500px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
         </div>
     </div>
 

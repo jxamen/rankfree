@@ -63,11 +63,6 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
     ],
-    'naver' => [
-        'client_id' => env('NAVER_CLIENT_ID'),
-        'client_secret' => env('NAVER_CLIENT_SECRET'),
-        'redirect' => env('NAVER_REDIRECT_URI', '/auth/naver/callback'),
-    ],
     'kakao' => [
         'client_id' => env('KAKAO_CLIENT_ID'),
         'client_secret' => env('KAKAO_CLIENT_SECRET'), // 카카오는 선택(REST API 키만으로도 가능)

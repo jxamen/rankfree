@@ -36,7 +36,7 @@ class SocialAuthTest extends TestCase
     public function test_login_and_register_show_social_buttons(): void
     {
         $this->get('/login')->assertOk()
-            ->assertSee('Google로 계속하기')->assertSee('네이버로 계속하기')->assertSee('카카오로 계속하기');
+            ->assertSee('Google로 계속하기')->assertSee('카카오로 계속하기')->assertDontSee('네이버로 계속하기');
         $this->get('/register')->assertOk()
             ->assertSee('인증번호 받기')->assertSee('Google로 계속하기');
     }
@@ -78,11 +78,11 @@ class SocialAuthTest extends TestCase
     public function test_social_callback_links_existing_email(): void
     {
         $u = User::create(['name' => '기존', 'email' => 'exist@rf.kr', 'password' => 'x', 'role' => 'user']);
-        $this->mockSocialite('naver', 'exist@rf.kr');
+        $this->mockSocialite('google', 'exist@rf.kr');
 
-        $this->get('/auth/naver/callback')->assertRedirect(route('console.dashboard'));
+        $this->get('/auth/google/callback')->assertRedirect(route('console.dashboard'));
         $this->assertAuthenticatedAs($u->fresh());
-        $this->assertSame('naver', $u->fresh()->provider);
+        $this->assertSame('google', $u->fresh()->provider);
     }
 
     public function test_social_callback_new_user_goes_to_complete(): void
@@ -105,8 +105,9 @@ class SocialAuthTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'g@rf.kr', 'phone' => '01055556666', 'provider' => 'google']);
     }
 
-    public function test_invalid_provider_is_404(): void
+    public function test_removed_and_unknown_providers_are_404(): void
     {
+        $this->get('/auth/naver/redirect')->assertNotFound();   // 네이버 제거됨
         $this->get('/auth/facebook/redirect')->assertNotFound();
     }
 

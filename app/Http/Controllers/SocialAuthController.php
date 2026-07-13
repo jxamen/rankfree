@@ -17,7 +17,7 @@ use Laravel\Socialite\Facades\Socialite;
  */
 class SocialAuthController extends Controller
 {
-    private const PROVIDERS = ['google', 'naver', 'kakao'];
+    private const PROVIDERS = ['google', 'kakao'];
 
     /** 소셜 인증 페이지로 이동. */
     public function redirect(string $provider)
