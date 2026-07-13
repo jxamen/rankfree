@@ -19,3 +19,10 @@ Schedule::command('searchadweb:login --if-stale')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+// 커뮤니티 페르소나 자동 활동 — 살아있는 게시판(설정으로 on/off). 30분마다 소량 활동.
+if (config('rankfree.community.schedule_enabled', true)) {
+    Schedule::command('community:simulate')
+        ->everyThirtyMinutes()
+        ->withoutOverlapping();
+}

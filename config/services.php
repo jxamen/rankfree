@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // Anthropic Claude API — 커뮤니티 페르소나 콘텐츠 생성용. 키 없으면 템플릿 폴백.
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'), // 대량 활동 시 'claude-haiku-4-5' 로 비용 절감 가능
+    ],
+
 ];

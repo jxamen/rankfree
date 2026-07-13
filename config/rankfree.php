@@ -94,4 +94,20 @@ return [
         'page_delay_ms' => (int) env('NAVER_SHOPPING_PAGE_DELAY_MS', 200),
         'timeout' => (int) env('NAVER_SHOPPING_TIMEOUT', 15),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 커뮤니티 페르소나 자동 활동
+    |--------------------------------------------------------------------------
+    | 스케줄러(schedule:run)가 주기적으로 community:simulate 를 실행하고,
+    | 어드민 '지금 활동 생성' 버튼도 같은 시뮬레이터를 쓴다.
+    */
+    'community' => [
+        // 스케줄 1회 실행 시 시도할 활동(글/댓글/좋아요) 총 개수
+        'tick_actions' => (int) env('COMMUNITY_TICK_ACTIONS', 8),
+        // 스케줄 자동 활동 on/off (수동 버튼은 항상 동작)
+        'schedule_enabled' => (bool) env('COMMUNITY_SCHEDULE_ENABLED', true),
+        // 한 번의 활동에서 글:댓글:좋아요 기본 비율(페르소나 가중치와 곱해짐)
+        'mix' => ['post' => 1, 'comment' => 3, 'like' => 5],
+    ],
 ];

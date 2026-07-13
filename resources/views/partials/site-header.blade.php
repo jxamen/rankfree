@@ -78,6 +78,7 @@
             </div>
 
             {{-- 단일 링크 --}}
+            <a href="{{ route('community') }}" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">커뮤니티</a>
             <a href="/developers" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">개발자</a>
             <a href="/#pricing" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">요금</a>
             <a href="/support" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">고객지원</a>

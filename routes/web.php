@@ -15,6 +15,9 @@ use App\Http\Controllers\SupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BlogIndexController;
 use App\Http\Controllers\BulkKeywordController;
+use App\Http\Controllers\Admin\CommunitySeedController;
+use App\Http\Controllers\Admin\PersonaController;
+use App\Http\Controllers\CommunityController;
 use App\Http\Controllers\CompeteController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\KeywordAnalysisController;
@@ -64,6 +67,17 @@ Route::middleware('auth')->group(function () {
 
 // API 문서 (공개)
 Route::view('/developers', 'site.developers')->name('developers');
+
+// 커뮤니티 (공개 열람, 작성은 로그인 필요)
+Route::get('/community', [CommunityController::class, 'index'])->name('community');
+Route::get('/community/post/{post}', [CommunityController::class, 'show'])->name('community.show');
+Route::middleware('auth')->group(function () {
+    Route::get('/community/new', [CommunityController::class, 'create'])->name('community.create');
+    Route::post('/community', [CommunityController::class, 'store'])->name('community.store');
+    Route::post('/community/post/{post}/comment', [CommunityController::class, 'comment'])->name('community.comment');
+    Route::post('/community/post/{post}/like', [CommunityController::class, 'like'])->name('community.like');
+    Route::delete('/community/post/{post}', [CommunityController::class, 'destroy'])->name('community.destroy');
+});
 
 // 인증
 Route::middleware('guest')->group(function () {
@@ -266,6 +280,23 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/menus/{menu}/toggle', [MenuController::class, 'toggle'])->name('menus.toggle');
     Route::post('/menus/reorder', [MenuController::class, 'reorder'])->name('menus.reorder');
     Route::post('/menus/{menu}/permissions', [MenuController::class, 'savePermissions'])->name('menus.permissions');
+
+    // 커뮤니티 페르소나 관리 + 자동 활동 시뮬레이션
+    Route::get('/personas', [PersonaController::class, 'index'])->name('personas');
+    Route::get('/personas/create', [PersonaController::class, 'create'])->name('personas.create');
+    Route::post('/personas', [PersonaController::class, 'store'])->name('personas.store');
+    Route::post('/personas/generate', [PersonaController::class, 'generate'])->name('personas.generate');
+    Route::post('/personas/simulate', [PersonaController::class, 'simulate'])->name('personas.simulate');
+    Route::get('/personas/{persona}/edit', [PersonaController::class, 'edit'])->name('personas.edit');
+    Route::put('/personas/{persona}', [PersonaController::class, 'update'])->name('personas.update');
+    Route::post('/personas/{persona}/toggle', [PersonaController::class, 'toggle'])->name('personas.toggle');
+    Route::delete('/personas/{persona}', [PersonaController::class, 'destroy'])->name('personas.destroy');
+
+    // 글밥(소스) 관리 — 수집한 글감을 페르소나가 소재로 변형해 사용
+    Route::get('/community-seeds', [CommunitySeedController::class, 'index'])->name('community-seeds');
+    Route::post('/community-seeds', [CommunitySeedController::class, 'store'])->name('community-seeds.store');
+    Route::post('/community-seeds/{seed}/toggle', [CommunitySeedController::class, 'toggle'])->name('community-seeds.toggle');
+    Route::delete('/community-seeds/{seed}', [CommunitySeedController::class, 'destroy'])->name('community-seeds.destroy');
 
     Route::view('/permissions', 'admin.stub', ['title' => '권한 설정'])->name('permissions');
 });
