@@ -116,34 +116,4 @@ class RankCheckController extends Controller
             'name' => (string) ($sum['name'] ?? ''),
         ]);
     }
-
-    /** 홈 폼 자동입력 — 쇼핑 상품 URL(스마트스토어·검색·가격비교) → 상품명(og:title). */
-    public function resolveShop(Request $request): JsonResponse
-    {
-        $url = trim((string) $request->input('url', ''));
-        if (! preg_match('#^https?://#i', $url)) {
-            return response()->json(['ok' => false]);
-        }
-        $html = '';
-        try {
-            $res = \Illuminate\Support\Facades\Http::withHeaders([
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-                'Accept-Language' => 'ko-KR,ko;q=0.9',
-            ])->timeout((int) config('rankfree.place.timeout', 12))->get($url);
-            $html = $res->ok() ? $res->body() : '';
-        } catch (\Throwable) {
-            $html = '';
-        }
-
-        $name = '';
-        if ($html !== '') {
-            if (preg_match('#<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)#i', $html, $m)
-                || preg_match('#<title>([^<]+)</title>#i', $html, $m)) {
-                $name = trim(html_entity_decode($m[1], ENT_QUOTES, 'UTF-8'));
-                $name = trim(preg_replace('/\s*[:|]\s*(네이버|스마트스토어|NAVER).*$/u', '', $name));
-            }
-        }
-
-        return response()->json(['ok' => $name !== '', 'name' => $name]);
-    }
 }

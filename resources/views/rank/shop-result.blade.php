@@ -4,9 +4,7 @@
 
 @section('content')
 <section class="container-page py-16 lg:py-20" style="max-width:760px;">
-    <a href="/#hero-form" class="text-muted hover:text-ink transition" style="font-size:var(--fs-xs);">← 다시 조회</a>
-
-    <div class="mt-4 mb-8">
+    <div class="mb-8">
         <div class="badge mb-3">쇼핑 순위 조회 결과</div>
         <h1 class="font-display text-ink" style="font-size:clamp(26px,3.5vw,36px);line-height:1.15;">“{{ $keyword }}”</h1>
         <p class="mt-2 text-muted" style="font-size:var(--fs-sm);">대상 · {{ $result['title'] ?: ($result['mall_name'] ?: $target) }}</p>
@@ -63,7 +61,8 @@
                 <div class="p-5 text-center" style="border-color:var(--color-hairline);">
                     <div class="text-muted" style="font-size:var(--fs-xs);">상품</div>
                     <div class="mt-1" style="font-size:var(--fs-sm);">
-                        @if ($result['link'])<a href="{{ $result['link'] }}" target="_blank" rel="noopener" class="text-accent hover:underline">상품 보기 →</a>@else<span class="text-muted-soft">—</span>@endif
+                        @php $productUrl = \Illuminate\Support\Str::startsWith($target, ['http://', 'https://']) ? $target : ($result['link'] ?? ''); @endphp
+                        @if ($productUrl)<a href="{{ $productUrl }}" target="_blank" rel="noopener" class="text-accent hover:underline">상품 보기 →</a>@else<span class="text-muted-soft">—</span>@endif
                     </div>
                 </div>
             </div>

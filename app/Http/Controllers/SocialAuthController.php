@@ -94,11 +94,21 @@ class SocialAuthController extends Controller
             return redirect()->route('register');
         }
 
-        $data = $request->validate([
+        // 소셜이 이메일을 제공했으면 그 이메일을 고정(변조 방지). 없을 때만 직접 입력받는다.
+        $socialEmail = $social['email'] ?? null;
+        $rules = [
             'name' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'phone' => ['required', 'string', 'max:20'],
-        ]);
+        ];
+        if (! $socialEmail) {
+            $rules['email'] = ['required', 'email', 'max:150', 'unique:users,email'];
+        }
+        $data = $request->validate($rules);
+        $email = $socialEmail ?: $data['email'];
+
+        if ($socialEmail && User::where('email', $email)->exists()) {
+            return redirect()->route('login')->withErrors(['email' => '이미 가입된 이메일입니다. 로그인해 주세요.']);
+        }
 
         $phone = PhoneVerification::normalize($data['phone']);
         if (! PhoneVerification::isVerified($phone)) {
@@ -109,11 +119,11 @@ class SocialAuthController extends Controller
         }
 
         $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
-        $role = in_array(strtolower($data['email']), $superAdmins, true) ? 'super' : 'user';
+        $role = in_array(strtolower($email), $superAdmins, true) ? 'super' : 'user';
 
         $user = User::create([
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $email,
             'phone' => $phone,
             'phone_verified_at' => now(),
             'provider' => $social['provider'],

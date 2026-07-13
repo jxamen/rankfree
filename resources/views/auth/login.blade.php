@@ -5,6 +5,11 @@
     <h1 class="font-display text-ink text-center" style="font-size:var(--fs-xl);">다시 오신 걸 환영해요</h1>
     <p class="text-muted text-center mt-1" style="font-size:var(--fs-xs);">순위 추적을 이어가세요</p>
 
+    @if (session('status'))
+        <div class="mt-5 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-success) 10%,#fff);color:var(--color-success);font-size:var(--fs-xs);">
+            {{ session('status') }}
+        </div>
+    @endif
     @if ($errors->any())
         <div class="mt-5 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:var(--fs-xs);">
             {{ $errors->first() }}
@@ -31,13 +36,18 @@
             <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">비밀번호</label>
             <input name="password" type="password" class="input" required>
         </div>
-        <label class="flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);">
-            <input type="checkbox" name="remember"> 로그인 상태 유지
-        </label>
+        <div class="flex items-center justify-between">
+            <label class="flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);">
+                <input type="checkbox" name="remember"> 로그인 상태 유지
+            </label>
+            <a href="{{ route('password.request') }}" class="text-muted hover:text-ink transition" style="font-size:var(--fs-xs);">비밀번호 찾기</a>
+        </div>
         <button type="submit" class="btn btn-primary btn-lg mt-1">로그인</button>
     </form>
 @endsection
 
 @section('auth-footer')
+    <a href="{{ route('find-email') }}" class="text-muted hover:text-ink transition">아이디 찾기</a>
+    <span class="text-muted-soft mx-1">·</span>
     아직 회원이 아니세요? <a href="{{ route('register') }}" class="text-ink font-semibold">무료로 시작</a>
 @endsection

@@ -43,22 +43,40 @@
                     // 제출 실패(입력 유지) 시 방금 사용한 탭으로 복귀
                     @if (old('target')) document.querySelector('.rc-tab[data-rc="shop"]').click(); @endif
 
-                    // Turnstile(봇 검증)은 '무료 순위 조회' 클릭 시에만 실행(execute 모드) — 평소엔 숨김.
-                    // 성공 콜백이 폼을 제출(그 시점 cf-turnstile-response 토큰이 폼에 주입됨).
-                    window.rcTsToken = function () {
+                    // Turnstile(봇 검증) — '무료 순위 조회' 클릭 시 모달 오버레이로 떴다가, 통과하면 사라지고 폼 제출.
+                    var tsModal = document.getElementById('ts-modal');
+                    var tsWidget = document.getElementById('ts-widget');
+                    window.rcTsToken = function (token) {
                         var f = window.__rcForm; window.__rcForm = null;
-                        if (f) f.submit();
+                        if (tsModal) tsModal.style.display = 'none';
+                        if (f) {
+                            var inp = f.querySelector('input[name="cf-turnstile-response"]');
+                            if (inp) inp.value = token;
+                            f.submit();
+                        }
                     };
+                    window.rcTsErr = function () { window.__rcForm = null; if (tsModal) tsModal.style.display = 'none'; };
+                    if (tsModal) tsModal.addEventListener('click', function (e) {
+                        if (e.target === tsModal) { window.__rcForm = null; tsModal.style.display = 'none'; try { window.turnstile.reset(tsWidget); } catch (x) {} }
+                    });
                     document.querySelectorAll('.rc-form').forEach(function (f) {
                         f.addEventListener('submit', function (e) {
-                            var w = f.querySelector('.cf-turnstile');
-                            if (!w || !window.turnstile) return;            // 위젯 없음(회원) 또는 미로드 → 정상 제출
+                            if (!tsWidget || !window.turnstile) return;      // 위젯 없음(회원) 또는 미로드 → 정상 제출
                             e.preventDefault();
                             if (!f.checkValidity()) { f.reportValidity(); return; }  // 필수 입력부터 검사
                             window.__rcForm = f;
-                            try { window.turnstile.execute(w); } catch (err) { window.__rcForm = null; f.submit(); }
+                            tsModal.style.display = 'flex';
+                            try { window.turnstile.reset(tsWidget); window.turnstile.execute(tsWidget); }
+                            catch (err) { window.__rcForm = null; tsModal.style.display = 'none'; f.submit(); }
                         });
                     });
+
+                    // 쇼핑 유형 선택 → URL 안내 문구 변경
+                    var shopType = document.getElementById('rc-shop-type'), shopUrl = document.getElementById('rc-shop-url');
+                    if (shopType && shopUrl) {
+                        var syncShopPh = function () { shopUrl.placeholder = shopType.value === 'catalog' ? 'https://search.shopping.naver.com/catalog/상품번호' : 'https://smartstore.naver.com/몰아이디/products/상품번호'; };
+                        shopType.addEventListener('change', syncShopPh); syncShopPh();
+                    }
 
                     // URL 입력 시 자동: 플레이스=m.place 변환+업체명 / 쇼핑=상품명 (readonly 칸)
                     document.querySelectorAll('.rc-form').forEach(function (form) {
@@ -109,31 +127,44 @@
                         <div class="mx-4 mt-4 -mb-1 px-3 py-2 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $message }}</div>
                     @enderror
 
-                    {{-- 플레이스 --}}
+                    {{-- 플레이스 — URL 입력 시 m.place 변환 + 업체명 자동 --}}
                     <form class="rc-form" data-rc="place" action="{{ route('rank.check') }}" method="POST" data-resolve="{{ route('rank.resolve.place') }}">
                         @csrf
                         <div class="p-5 flex flex-col gap-4">
                             <input name="keyword" class="input" placeholder="검색 키워드 (예: 강남 미용실)" value="{{ old('place') ? old('keyword') : '' }}" required>
                             <input name="place" class="input rc-url" placeholder="플레이스 URL" value="{{ old('place') }}" required>
                             <input name="place_name" class="input rc-name" placeholder="업체명 (URL 입력 시 자동)" value="{{ old('place_name') }}" readonly style="background:var(--color-surface-soft);">
-                            @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
+                            @guest @if ($__tsKey)<input type="hidden" name="cf-turnstile-response" value="">@endif @endguest
                             <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                         </div>
                     </form>
 
-                    {{-- 쇼핑 --}}
-                    <form class="rc-form hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST" data-resolve="{{ route('rank.resolve.shop') }}">
+                    {{-- 쇼핑 — 스마트스토어/가격비교 선택 + 상품 URL --}}
+                    <form class="rc-form hidden" data-rc="shop" action="{{ route('shop.check') }}" method="POST">
                         @csrf
                         <div class="p-5 flex flex-col gap-4">
                             <input name="keyword" class="input" placeholder="검색 키워드 (예: 캠핑 의자)" value="{{ old('target') ? old('keyword') : '' }}" required>
-                            <input name="target" class="input rc-url" placeholder="스마트스토어 상품 URL 또는 검색·가격비교 URL" value="{{ old('target') }}" required>
-                            <input name="target_name" class="input rc-name" placeholder="상품명 (URL 입력 시 자동)" value="{{ old('target_name') }}" readonly style="background:var(--color-surface-soft);">
-                            @guest @if ($__tsKey)<div class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-appearance="execute" data-callback="rcTsToken"></div>@endif @endguest
+                            <select name="shop_type" id="rc-shop-type" class="input">
+                                <option value="smartstore" {{ old('shop_type') === 'catalog' ? '' : 'selected' }}>스마트스토어</option>
+                                <option value="catalog" {{ old('shop_type') === 'catalog' ? 'selected' : '' }}>가격비교</option>
+                            </select>
+                            <input name="target" id="rc-shop-url" class="input" placeholder="https://smartstore.naver.com/몰아이디/products/상품번호" value="{{ old('target') }}" required>
+                            @guest @if ($__tsKey)<input type="hidden" name="cf-turnstile-response" value="">@endif @endguest
                             <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">무료 순위 조회</button>
                         </div>
                     </form>
                 </div>
             </div>
+
+            @guest @if ($__tsKey)
+                {{-- 봇 검증 모달 — '무료 순위 조회' 클릭 시 오버레이로 떴다가, 통과하면 사라지고 폼 제출 --}}
+                <div id="ts-modal" style="display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;background:color-mix(in srgb, var(--color-ink) 45%, transparent);">
+                    <div class="card" style="padding:24px 26px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:var(--shadow-card);max-width:calc(100% - 32px);">
+                        <div class="text-muted" style="font-size:var(--fs-xs);">자동 조회 방지 확인 중…</div>
+                        <div id="ts-widget" class="cf-turnstile" data-sitekey="{{ $__tsKey }}" data-execution="execute" data-callback="rcTsToken" data-error-callback="rcTsErr" data-expired-callback="rcTsErr"></div>
+                    </div>
+                </div>
+            @endif @endguest
         </div>
     </div>
 </section>

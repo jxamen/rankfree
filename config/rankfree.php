@@ -10,6 +10,7 @@ return [
     */
     'super_admins' => [
         'jxamen@gmail.com',
+        'jcurve19@gmail.com',
     ],
 
     /*

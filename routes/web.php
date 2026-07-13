@@ -15,6 +15,8 @@ use App\Http\Controllers\SupportController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BlogIndexController;
 use App\Http\Controllers\PhoneVerificationController;
+use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\FindEmailController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\BulkKeywordController;
 use App\Http\Controllers\Admin\CommunitySeedController;
@@ -45,9 +47,8 @@ Route::get('/', function () {
 Route::post('/rank-check', [RankCheckController::class, 'check'])->name('rank.check');
 Route::post('/shop-check', [RankCheckController::class, 'shopCheck'])->name('shop.check');
 Route::get('/rank-check', fn () => redirect('/#hero-form')); // 구 GET 링크 안전 처리
-// 홈 폼 자동입력(공개) — URL → m.place 변환·업체명 / 쇼핑 상품명
+// 홈 폼 자동입력(공개) — 플레이스 URL → m.place 변환·업체명
 Route::post('/rank-resolve/place', [RankCheckController::class, 'resolvePlace'])->middleware('throttle:30,1')->name('rank.resolve.place');
-Route::post('/rank-resolve/shop', [RankCheckController::class, 'resolveShop'])->middleware('throttle:30,1')->name('rank.resolve.shop');
 
 // 순위 추적 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');
@@ -107,6 +108,16 @@ Route::middleware('guest')->group(function () {
     // 전화번호 SMS 인증(가입 폼 AJAX) — 발송 남용 방지 throttle
     Route::post('/phone/send-code', [PhoneVerificationController::class, 'send'])->middleware('throttle:10,1')->name('phone.send');
     Route::post('/phone/verify-code', [PhoneVerificationController::class, 'verify'])->middleware('throttle:30,1')->name('phone.verify');
+
+    // 비밀번호 찾기(재설정) — Laravel Password 브로커
+    Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'email'])->middleware('throttle:6,1')->name('password.email');
+    Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'update'])->name('password.update');
+
+    // 아이디(이메일) 찾기 — 전화 SMS 인증 후 마스킹 이메일 조회
+    Route::get('/find-email', [FindEmailController::class, 'show'])->name('find-email');
+    Route::post('/find-email', [FindEmailController::class, 'find'])->middleware('throttle:10,1')->name('find-email.find');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
 

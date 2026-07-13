@@ -23,7 +23,13 @@
         </div>
         <div>
             <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">이메일</label>
-            <input name="email" type="email" class="input" value="{{ old('email', $social['email'] ?? '') }}" required>
+            @if (! empty($social['email']))
+                {{-- 소셜이 제공한 이메일 — 변경 불가(name 미전송, 서버가 세션 값으로 강제) --}}
+                <input type="email" class="input" value="{{ $social['email'] }}" readonly style="background:var(--color-surface-soft);color:var(--color-muted);cursor:not-allowed;">
+                <p class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">{{ $__pname }} 계정 이메일로 가입됩니다 (변경 불가)</p>
+            @else
+                <input name="email" type="email" class="input" value="{{ old('email') }}" placeholder="이메일을 입력하세요" required>
+            @endif
         </div>
         @include('auth._phone-verify')
         <button type="submit" class="btn btn-primary btn-lg mt-1">가입 완료</button>

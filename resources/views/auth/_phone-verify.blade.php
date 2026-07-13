@@ -66,6 +66,7 @@
                 send.disabled = true; verify.disabled = true;
                 verify.textContent = '완료';
                 showMsg('✓ 전화번호가 인증되었습니다.', true);
+                document.dispatchEvent(new CustomEvent('phone-verified', { detail: { phone: p } }));
             } else {
                 showMsg(res.json.message || '인증에 실패했습니다.', false);
             }
