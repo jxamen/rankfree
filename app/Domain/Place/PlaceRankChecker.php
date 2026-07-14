@@ -671,9 +671,12 @@ class PlaceRankChecker
         return [
             'rnk' => $rnk, 'place_id' => (string) $g('id'), 'name' => (string) $g('name'),
             'visitor_cnt' => $num($g('visitorReviewCount')), 'blog_cnt' => $num($g('blogCafeReviewCount')),
-            'booking_cnt' => $num($g('bookingReviewCount')), 'save_cnt' => $num($g('saveCount')),
+            'booking_cnt' => $num($g('bookingReviewCount')),
+            'save_cnt' => (($sv = $g('saveCount')) === null || $sv === '') ? null : (int) preg_replace('/[^0-9]/', '', (string) $sv), // "~100" 등 근사 표기 → 숫자
             'img_cnt' => $num($g('imageCount')),
             'review_score' => ($g('visitorReviewScore') !== null && $g('visitorReviewScore') !== '') ? (float) $g('visitorReviewScore') : null,
+            'place_plus' => ! empty($it['posInfo']['isPOS']),  // 플레이스+ (posInfo.isPOS)
+            'new_opening' => ! empty($g('newOpening')),         // 새로오픈
             'tags' => $tags, 'address' => (string) ($g('address') ?: $g('roadAddress')),
         ];
     }

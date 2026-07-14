@@ -18,7 +18,7 @@ JSON;
 
         // getRestaurantsPcmap → restaurants.businesses.items. item에 리뷰수·저장수·평점·태그 포함.
         $restaurants = <<<'JSON'
-[{"operationName":"getRestaurantsPcmap","variables":{"input":{"query":"{#query}","start":{#start},"display":50,"isCurrentLocationSearch":null,"deviceType":"pcmap","isPcmap":true}},"query":"query getRestaurantsPcmap($input: PlaceListInput) {  restaurants: placeList(input: $input) {    businesses {      total      items {        id        name        category        businessCategory        x        y        visitorReviewCount        blogCafeReviewCount        bookingReviewCount        visitorReviewScore        tags        saveCount        imageCount        __typename      }      __typename    }    __typename  }}"}]
+[{"operationName":"getRestaurantsPcmap","variables":{"input":{"query":"{#query}","start":{#start},"display":50,"isCurrentLocationSearch":null,"deviceType":"pcmap","isPcmap":true}},"query":"query getRestaurantsPcmap($input: PlaceListInput) {  restaurants: placeList(input: $input) {    businesses {      total      items {        id        name        category        businessCategory        x        y        visitorReviewCount        blogCafeReviewCount        bookingReviewCount        visitorReviewScore        tags        saveCount        imageCount        newOpening        posInfo {          isPOS          __typename        }        __typename      }      __typename    }    __typename  }}"}]
 JSON;
 
         $hospital = <<<'JSON'

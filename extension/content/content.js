@@ -1188,7 +1188,10 @@
     const rows = items.map((it) =>
       '<tr>' +
       '<td class="rf-td-rank">' + it.rank + '</td>' +
-      '<td class="rf-td-title"><a href="#" data-pm-store="' + esc(String(it.place_id)) + '" title="상세 분석">' + esc(it.name) + '</a></td>' +
+      '<td class="rf-td-title"><a href="#" data-pm-store="' + esc(String(it.place_id)) + '" title="상세 분석">' + esc(it.name) + '</a>' +
+      (it.place_plus ? '<sup class="rf-pl-badge" title="플레이스+">＋</sup>' : '') +
+      (it.new_opening ? '<sup class="rf-pl-badge rf-new" title="새로오픈">N</sup>' : '') +
+      '</td>' +
       '<td class="rf-td-num">' + comma(it.visitor_cnt || 0) + '</td>' +
       '<td class="rf-td-num">' + comma(it.blog_cnt || 0) + '</td>' +
       '<td class="rf-td-num">' + comma(it.save_cnt || 0) + '</td>' +

@@ -319,6 +319,18 @@
   margin-left: 2px;
   line-height: 1;
 }
+/* 플레이스 시장분석 리스트 — place+(＋)·새로오픈(N) 아이콘 */
+#rankfree-panel .rf-pl-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--rf-primary);
+  vertical-align: super;
+  margin-left: 2px;
+  line-height: 1;
+}
+#rankfree-panel .rf-pl-badge.rf-new {
+  color: var(--rf-success);
+}
 #rankfree-panel .rf-tab.is-active {
   color: var(--rf-ink);
   border-bottom-color: var(--rf-primary);

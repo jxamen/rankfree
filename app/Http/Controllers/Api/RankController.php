@@ -142,6 +142,8 @@ class RankController extends Controller
                 'save_cnt' => $it['save_cnt'],
                 'booking_cnt' => $it['booking_cnt'],
                 'img_cnt' => $it['img_cnt'] ?? null,
+                'place_plus' => ! empty($it['place_plus']),
+                'new_opening' => ! empty($it['new_opening']),
                 'n1' => $sc['n1'],
                 'n2' => $sc['n2'],
                 'n3' => $sc['n3'],
