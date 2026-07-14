@@ -185,6 +185,13 @@ class RankController extends Controller
                 'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'],
                 'd6' => $sc['d6'], 'd7' => $sc['d7'], 'd9' => $sc['d9'], 'd10' => $sc['d10'],
             ],
+            // web 경쟁분석 explain과 동일한 상세 지표
+            'kc' => $sc['kc'] ?? null,               // N1 요소 L/B/T/M
+            'seo' => $sc['seo'] ?? [],               // 정보충실 체크리스트(D7 세부)
+            'category' => $sc['category'] ?? '',
+            'rep_keywords' => $sc['rep_keywords'] ?? [],
+            'review_kw' => $sc['review_kw'] ?? null,
+            'review_quality' => $sc['review_quality'] ?? null,
         ]]);
     }
 

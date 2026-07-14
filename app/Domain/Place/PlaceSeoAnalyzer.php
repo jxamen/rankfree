@@ -160,9 +160,21 @@ class PlaceSeoAnalyzer
 
         $sc = PlaceScorer::computeScores($target, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr, $imgArr);
 
+        $name = $target['name'] ?: ($detail['name'] ?? '');
+        $tags = $detail['tags'] ?? $target['tags'] ?? [];
+        // web 경쟁분석 explain과 동일한 상세 지표 — N1 요소(L/B/T/M) + 정보충실 체크리스트
+        $kc = PlaceScorer::keywordComponents($keyword, $name, (string) ($detail['category'] ?? ''), (string) ($target['address'] ?? ''), $tags, $cat);
+        $seo = ! empty($detail['ok']) ? PlaceScorer::seoItems($detail, $cat) : [];
+
         return $sc + [
-            'rnk' => $target['rnk'], 'name' => $target['name'] ?: ($detail['name'] ?? ''),
+            'rnk' => $target['rnk'], 'name' => $name,
             'visitor_cnt' => $target['visitor_cnt'], 'blog_cnt' => $target['blog_cnt'], 'save_cnt' => $target['save_cnt'],
+            'category' => (string) ($detail['category'] ?? ''),
+            'rep_keywords' => is_array($tags) ? array_values($tags) : [],
+            'kc' => $kc,
+            'seo' => $seo,
+            'review_kw' => $detail['review_kw'] ?? null,
+            'review_quality' => $detail['review_quality'] ?? null,
         ];
     }
 

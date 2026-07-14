@@ -299,6 +299,17 @@
 #rankfree-panel .rf-subtab.is-active:hover {
   color: #ffffff;
 }
+/* 매장분석 수동 입력 — 키워드·URL 1줄씩 세로 + 분석 버튼 아래 */
+#rankfree-panel .rf-manual-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+#rankfree-panel .rf-manual-col .rf-input,
+#rankfree-panel .rf-manual-col .rf-btn-primary {
+  width: 100%;
+}
 #rankfree-panel .rf-tab.is-active {
   color: var(--rf-ink);
   border-bottom-color: var(--rf-primary);

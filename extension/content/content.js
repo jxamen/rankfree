@@ -1238,7 +1238,8 @@
   /** 매장분석 수동 입력 폼 — 상품분석의 수동 URL 분석과 동일 패턴(저장본 있으면 재사용) */
   function placeManualFormHtml() {
     const kw = state.placeManualKw != null ? state.placeManualKw : (state.query || getQueryFromUrl() || '');
-    return '<div class="rf-manual"><input type="text" class="rf-input" data-ctl="ps-kw" placeholder="키워드 (예: 강남 미용실)" value="' + esc(kw) + '">' +
+    return '<div class="rf-manual-col">' +
+      '<input type="text" class="rf-input" data-ctl="ps-kw" placeholder="키워드 (예: 강남 미용실)" value="' + esc(kw) + '">' +
       '<input type="url" class="rf-input" data-ctl="ps-url" placeholder="플레이스 URL 또는 ID 붙여넣기" value="' + esc(state.placeManualUrl || '') + '">' +
       '<button type="button" class="rf-btn-primary" data-act="ps-manual">분석하기</button></div>' +
       '<p class="rf-note">m.place.naver.com·map.naver.com 플레이스 URL(또는 플레이스 숫자 ID)을 넣으세요. 이미 분석한 매장×키워드는 저장본을 바로 불러옵니다.</p>';
@@ -1272,6 +1273,7 @@
       statTile('저장수', comma(sel.save_cnt || 0)) +
       '</div></div>';
     const dimCard = d ? placeDimCard(d) : '';
+    const explainCards = pd ? placeExplainCards(pd) : '';
     let precise;
     if (state.place.detailLoading) {
       precise = '<div class="rf-loading"><div class="rf-spinner"></div>정밀 분석 중… <span class="rf-loading-sub">정보충실성·최근활동·리뷰어 영향력 수집(수 초 소요)</span></div>';
@@ -1286,7 +1288,7 @@
     } else {
       precise = '<div class="rf-card rf-empty-card"><p class="rf-empty-d">D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 <b>정밀 분석</b>하려면 아래를 누르세요(수 초 소요).</p><button type="button" class="rf-btn-primary" data-act="ps-detail">정밀 분석</button></div>';
     }
-    return head + brief + dimCard + precise;
+    return head + brief + dimCard + explainCards + precise;
   }
 
   /** D1~D10 세부 지표 막대 */
@@ -1299,6 +1301,42 @@
       dim('D4 평점', d.d4) + dim('D5 저장수', d.d5) + dim('D6 사진수', d.d6) +
       dim('D7 정보충실', d.d7) + dim('D9 최근활동', d.d9) + dim('D10 리뷰어영향력', d.d10) +
       '</div>';
+  }
+
+  /** web 경쟁분석 explain 지표 — N1 요소(L/B/T/M)·정보충실 체크리스트·대표키워드·리뷰키워드 */
+  function placeExplainCards(pd) {
+    let html = '';
+    const bar = (label, v, sub) => '<div class="rf-grade-row"><span class="rf-grade-name">' + label +
+      (sub != null && sub !== '' ? ' <span style="color:var(--rf-muted-soft);font-weight:400;">' + esc(String(sub)) + '</span>' : '') + '</span>' +
+      '<span class="rf-grade-num">' + (v == null ? '–' : Math.round(v)) + '</span>' +
+      '<span class="rf-grade-track"><span class="rf-grade-bar" style="width:' + (v == null ? 0 : Math.max(2, Math.min(100, Math.round(v)))) + '%"></span></span></div>';
+    const kc = pd.kc;
+    if (kc) {
+      const pct = (v) => (v == null ? null : v * 100); // kc 요소는 0~1 스케일
+      html += '<div class="rf-card"><div class="rf-card-title">N1 유사도 요소 <span class="rf-chip">검색어↔업체정보 정합</span></div>' +
+        bar('지역 L', pct(kc.L), kc.region) + bar('업종 B', pct(kc.B), kc.bizterm) +
+        bar('대표키워드 T', pct(kc.T), kc.core) + bar('상호 M', pct(kc.M)) + '</div>';
+    }
+    const seo = (pd.seo || []).filter((s) => s.avail);
+    if (seo.length) {
+      const rows = seo.map((s) => bar(esc(s.label), Math.round((s.grade || 0) * 100), s.raw)).join('');
+      html += '<div class="rf-card"><div class="rf-card-title">정보충실성 (D7 세부)</div>' + rows + '</div>';
+    }
+    const rk = pd.rep_keywords || [];
+    if (rk.length) {
+      html += '<div class="rf-card"><div class="rf-card-title">대표키워드</div><div class="rf-tags">' +
+        rk.slice(0, 20).map((t) => '<span class="rf-tag" style="cursor:default;">' + esc(String(t)) + '</span>').join('') + '</div></div>';
+    }
+    let rvList = [];
+    const rvkw = pd.review_kw;
+    if (Array.isArray(rvkw)) rvList = rvkw.map((t) => (t && typeof t === 'object') ? (t.keyword || t.name || t.text || '') : t);
+    else if (rvkw && typeof rvkw === 'object') rvList = Object.keys(rvkw);
+    rvList = rvList.filter(Boolean);
+    if (rvList.length) {
+      html += '<div class="rf-card"><div class="rf-card-title">리뷰 키워드</div><div class="rf-tags">' +
+        rvList.slice(0, 20).map((t) => '<span class="rf-tag" style="cursor:default;">' + esc(String(t)) + '</span>').join('') + '</div></div>';
+    }
+    return html;
   }
 
   function loadPlaceDetail() {
