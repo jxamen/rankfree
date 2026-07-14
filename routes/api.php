@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ExtMarketController;
 use App\Http\Controllers\Api\ExtPlaceController;
 use App\Http\Controllers\Api\ExtProductController;
 use App\Http\Controllers\Api\ExtSellerPowerController;
+use App\Http\Controllers\Api\ExtShoppingSeoController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\RankController;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,9 @@ Route::prefix('ext')->group(function (): void {
         Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');
         Route::get('/product-analyses', [ExtProductController::class, 'index']);
         Route::get('/product-analyses/{analysis}', [ExtProductController::class, 'show']);
+
+        // 쇼핑 상품명 SEO 분석(제목 점수·공통단어·추천 상품명·노출 키워드)
+        Route::post('/shopping-seo', [ExtShoppingSeoController::class, 'analyze'])->middleware('throttle:20,1');
 
         // 셀러력(상품 SEO·지수 경쟁 비교) 수집·계산·저장/내역
         Route::get('/seller-power/competitors', [ExtSellerPowerController::class, 'competitors'])->middleware('throttle:30,1');

@@ -154,6 +154,15 @@ const handlers = {
     return { ok: false, data: [] };
   },
 
+  /** 쇼핑 상품명 SEO 분석 — 상품명 배열 → 제목 점수·공통단어·추천·노출 키워드 */
+  async shoppingSeo({ keyword, products }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, json } = await apiFetch('/api/ext/shopping-seo', { method: 'POST', body: { keyword, products }, token, apiBase });
+    if (ok && json) return { ok: true, data: json.data };
+    return { ok: false, message: (json && json.message) || '상품명 SEO 분석에 실패했습니다.' };
+  },
+
   /** 플레이스 리스트 순위(map.naver 배지) — 키워드 상위 오가닉 순위 목록(광고 제외·서울 고정 좌표) */
   async placeSerp({ keyword, cat, top }) {
     const { token, apiBase } = await getStore();

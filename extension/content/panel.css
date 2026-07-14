@@ -331,6 +331,38 @@
 #rankfree-panel .rf-pl-badge.rf-new {
   color: var(--rf-error);
 }
+/* 쇼핑 상품명 SEO — 제목 점수·키워드·추천 상품명 */
+#rankfree-panel .rf-seo-score {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--rf-primary);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+#rankfree-panel .rf-seo-kw {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--rf-primary);
+  line-height: 1.4;
+}
+#rankfree-panel .rf-seo-sug {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--rf-ink);
+  border-top: 1px solid var(--rf-hairline-soft);
+}
+#rankfree-panel .rf-seo-sug:first-of-type {
+  border-top: 0;
+}
 #rankfree-panel .rf-tab.is-active {
   color: var(--rf-ink);
   border-bottom-color: var(--rf-primary);

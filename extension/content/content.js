@@ -1511,6 +1511,7 @@
       return '<div class="rf-empty"><p>' + (s.error ? esc(s.error) + '<br>' : '') + '상품을 수집하지 못했습니다.</p>' +
         '<button type="button" class="rf-btn-primary" data-act="sp-collect">상품 수집</button></div>';
     }
+    if (state.shopSeo === undefined && !state.shopSeoLoading) loadShopSeo(); // 상품 수집분으로 상품명 SEO 분석
     return (s.error ? '<div class="rf-error" style="margin-bottom:10px;">' + esc(s.error) + '</div>' : '') + sellerListHtml();
   }
 
@@ -1531,19 +1532,57 @@
         ? '<button type="button" class="rf-sp-act seller" data-sp-idx="' + i + '">🎯 셀러력</button>' +
           '<button type="button" class="rf-sp-act review" data-rv-idx="' + i + '">📝 상품분석</button>'
         : '<span class="rf-sp-act-na" title="네이버 스마트스토어 상품만 분석 가능합니다(옥션·지마켓·자사몰 불가)">스토어 외 상품</span>';
+      const seo = (state.shopSeo && state.shopSeo.products && state.shopSeo.products[i]) || null;
       return '<div class="rf-sp-item' + (p.isAd ? ' is-ad' : '') + (ss ? '' : ' is-na') + '" data-idx="' + i + '">' +
         (p.isAd ? '<span class="rk ad">광고</span>' : '<span class="rk">' + (p.rank || i + 1) + '</span>') + // 광고=표기, 조직=실제 rank
         '<span class="ti">' + esc((p.title || '').slice(0, 46)) +
-        '<span class="mt">' + esc(p.mallName || '') + ' · 리뷰 ' + comma(p.reviewCountSum || p.reviewCount) + ' · 구매 ' + (p.purchase6m > 0 ? comma(p.purchase6m) : '비공개') + ' · 찜 ' + comma(p.keepCount) + '</span></span>' +
+        (seo && !p.isAd ? '<span class="rf-seo-score" title="제목 SEO 점수(키워드·공통단어·길이)">' + seo.score + '</span>' : '') +
+        '<span class="mt">' + esc(p.mallName || '') + ' · 리뷰 ' + comma(p.reviewCountSum || p.reviewCount) + ' · 구매 ' + (p.purchase6m > 0 ? comma(p.purchase6m) : '비공개') + ' · 찜 ' + comma(p.keepCount) + '</span>' +
+        (seo && seo.used_keywords && seo.used_keywords.length ? '<span class="rf-seo-kw">제목 키워드 ' + seo.used_keywords.map((k) => esc(k)).join('·') + '</span>' : '') +
+        '</span>' +
         '<span class="acts">' + actBtns + '</span></div>';
     }).join('');
     const cnt = state.seller.count || 80;
     const sel = '<select class="rf-sp-count" data-ctl="sp-count">' +
       [40, 80, 160, 240].map((c) => '<option value="' + c + '"' + (c === cnt ? ' selected' : '') + '>상위 ' + c + '개</option>').join('') +
       '</select>';
-    return '<div class="rf-sp-list-head">상품에 마우스를 올려 <b>셀러력·상품분석</b> 선택 ' +
+    return shopSeoCardsHtml() +
+      '<div class="rf-sp-list-head">상품에 마우스를 올려 <b>셀러력·상품분석</b> 선택 ' +
       sel + '<button type="button" class="rf-sp-recollect" data-act="sp-collect" title="다시 수집">↻</button></div>' +
       '<div class="rf-sp-list">' + rows + '</div>';
+  }
+
+  /** 쇼핑 상품명 SEO — 상품 수집분으로 서버 분석(제목 점수·공통단어·추천·노출 키워드) */
+  function loadShopSeo() {
+    const q = state.query || getQueryFromUrl();
+    if (!q || state.shopSeoLoading) return;
+    const prods = sellerProducts().map((p) => ({ title: p.title || '', rank: p.rank || null, is_ad: !!p.isAd }));
+    if (!prods.length) return;
+    state.shopSeoLoading = true;
+    sendBg('shoppingSeo', { keyword: q, products: prods }).then((res) => {
+      state.shopSeoLoading = false;
+      if (res && res.ok && res.data) { state.shopSeo = res.data; render(); }
+    });
+  }
+
+  /** 추천 상품명 + 노출 예상 키워드 + 공통단어 카드 (상품 목록 상단) */
+  function shopSeoCardsHtml() {
+    const s = state.shopSeo;
+    if (!s) return '';
+    let html = '';
+    if (s.suggested_titles && s.suggested_titles.length) {
+      html += '<div class="rf-card"><div class="rf-card-title">추천 상품명 <span class="rf-chip">상위 공통단어 조합</span></div>' +
+        s.suggested_titles.map((t) => '<div class="rf-seo-sug"><span>' + esc(t) + '</span><button type="button" class="rf-copy" data-copy-text="' + esc(t) + '">복사</button></div>').join('') + '</div>';
+    }
+    if (s.exposure_keywords && s.exposure_keywords.length) {
+      html += '<div class="rf-card"><div class="rf-card-title">노출 예상 키워드 <span class="rf-chip">연관어 ∩ 공통단어</span></div><div class="rf-tags">' +
+        s.exposure_keywords.slice(0, 15).map((e) => '<button type="button" class="rf-tag" data-kw="' + esc(e.keyword) + '">' + esc(e.keyword) + (e.volume ? '<span class="rf-tag-vol">' + krw(e.volume) + '</span>' : '') + '</button>').join('') + '</div></div>';
+    }
+    if (s.common_words && s.common_words.length) {
+      html += '<div class="rf-card"><div class="rf-card-title">상위 상품 공통단어 <span class="rf-chip">광고 제외 상위</span></div><div class="rf-tags">' +
+        s.common_words.slice(0, 15).map((c) => '<span class="rf-tag" style="cursor:default;">' + esc(c.word) + '<span class="rf-tag-vol">' + c.count + '</span></span>').join('') + '</div></div>';
+    }
+    return html;
   }
 
   function bindSeller(body) {
@@ -1554,9 +1593,15 @@
       b.addEventListener('click', (e) => { e.stopPropagation(); runProductAnalysis(num(b.dataset.rvIdx)); })
     );
     const collect = body.querySelector('[data-act="sp-collect"]');
-    if (collect) collect.addEventListener('click', () => { state.products = []; state.seller.error = null; ensureProducts(true); });
+    if (collect) collect.addEventListener('click', () => { state.products = []; state.seller.error = null; state.shopSeo = undefined; ensureProducts(true); });
     const cntSel = body.querySelector('[data-ctl="sp-count"]');
-    if (cntSel) cntSel.addEventListener('change', () => { state.seller.count = num(cntSel.value) || 80; state.products = []; ensureProducts(false); }); // 캐시 우선(개수만큼 확보돼 있으면 재사용)
+    if (cntSel) cntSel.addEventListener('change', () => { state.seller.count = num(cntSel.value) || 80; state.products = []; state.shopSeo = undefined; ensureProducts(false); }); // 캐시 우선(개수만큼 확보돼 있으면 재사용)
+    body.querySelectorAll('[data-copy-text]').forEach((b) => b.addEventListener('click', () => {
+      try { navigator.clipboard.writeText(b.dataset.copyText); const o = b.textContent; b.textContent = '복사됨'; setTimeout(() => { b.textContent = o; }, 1000); } catch (e) { /* noop */ }
+    }));
+    body.querySelectorAll('.rf-card [data-kw]').forEach((b) => b.addEventListener('click', () => {
+      try { window.location.href = window.location.origin + '/search/all?query=' + encodeURIComponent(b.dataset.kw); } catch (e) { /* noop */ }
+    }));
     const back = body.querySelector('[data-act="sp-back"]');
     if (back) back.addEventListener('click', () => { state.seller.result = null; render(); });
     const web = body.querySelector('[data-act="sp-web"]');
@@ -3267,6 +3312,7 @@
         state.keywordData = undefined;
         state.relatedTags = [];
         state.products = [];
+        state.shopSeo = undefined;
         state.totalCount = 0;
         state.error = null;
         state.lastAnalyzedQuery = null;
