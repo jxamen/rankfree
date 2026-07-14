@@ -104,6 +104,65 @@ class PlaceSeoAnalyzer
         return ['blocked' => false, 'my_rank' => $myRank, 'total' => $total, 'competitors' => count($items), 'my_score' => $myScore];
     }
 
+    /**
+     * 단일 매장 정밀 분석 — 저장 없이 완전 N1/N2/N3 + D1~D10 반환(확장 매장분석용).
+     * serpFetch(30) 정규화 모집단 + 대상 매장 상세(placeDetailFull + reviewWeekly) → D7/D9/D10까지.
+     *
+     * @return array|null null=차단/실패
+     */
+    public function analyzeOne(string $keyword, string $cat, string $placeId): ?array
+    {
+        $keyword = trim($keyword);
+        $cat = $cat ?: 'place';
+        $pid = preg_replace('/\D/', '', $placeId);
+        if ($pid === '') {
+            return null;
+        }
+        $ymd = now()->toDateString();
+
+        $serp = $this->checker->serpFetch($keyword, $cat, $pid, 30);
+        if ($serp['blocked']) {
+            return null;
+        }
+        $items = $serp['items'];
+
+        $visArr = array_map(fn ($i) => $i['visitor_cnt'], $items);
+        $blogArr = array_map(fn ($i) => $i['blog_cnt'], $items);
+        $saveArr = array_map(fn ($i) => $i['save_cnt'], $items);
+        $scoreArr = array_map(fn ($i) => $i['review_score'], $items);
+        $bookingArr = array_map(fn ($i) => $i['booking_cnt'], $items);
+        $imgArr = array_map(fn ($i) => $i['img_cnt'] ?? null, $items);
+
+        $target = null;
+        foreach ($items as $it) {
+            if ((string) $it['place_id'] === $pid) {
+                $target = $it;
+                break;
+            }
+        }
+
+        $detail = $this->checker->placeDetailFull($pid, $cat);
+        $recArr = [];
+        $authArr = [];
+        $bvArr = [];
+        $this->attachReview($detail, $pid, $cat, $ymd, $recArr, $authArr, $bvArr);
+
+        if ($target === null) {
+            // 상위30 밖 — 상세로 대상 item 구성
+            $target = [
+                'rnk' => (int) ($serp['my_rank'] ?: 300), 'place_id' => $pid,
+                'name' => $detail['name'] ?? '',
+                'visitor_cnt' => $detail['visitor_cnt'] ?? null, 'blog_cnt' => $detail['blog_cnt'] ?? null,
+                'booking_cnt' => null, 'save_cnt' => null, 'img_cnt' => null,
+                'review_score' => $detail['review_score'] ?? null, 'tags' => $detail['tags'] ?? [], 'address' => '',
+            ];
+        }
+
+        $sc = PlaceScorer::computeScores($target, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr, $imgArr);
+
+        return $sc + ['rnk' => $target['rnk'], 'name' => $target['name'] ?: ($detail['name'] ?? '')];
+    }
+
     /** 리뷰 주별수집 → rec_raw(D9)·auth_raw(D10)·bv_raw(D3대체) 를 $detail 에 부착 + 정규화 배열 push. */
     private function attachReview(array &$detail, string $pid, string $cat, string $ymd, array &$recArr, array &$authArr, array &$bvArr): void
     {

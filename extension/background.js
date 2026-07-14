@@ -161,6 +161,22 @@ const handlers = {
     return { ok: false, message: (json && json.message) || '플레이스 순위를 조회하지 못했습니다.' };
   },
 
+  /** 단일 매장 정밀 분석(매장분석) — 완전 N1/N2/N3 + D1~D10(D7/D9/D10 포함) */
+  async placeDetail({ place_id, keyword, cat }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const q = '?place_id=' + encodeURIComponent(place_id || '') + '&keyword=' + encodeURIComponent(keyword || '') + '&cat=' + encodeURIComponent(cat || '');
+    const { ok, status, json } = await apiFetch('/api/ext/place-detail' + q, { token, apiBase });
+    if (status === 401) {
+      await chrome.storage.local.remove(['rfToken', 'rfUser']);
+      return { ok: false, loggedIn: false };
+    }
+    if (ok && json) {
+      return { ok: true, detail: json.detail };
+    }
+    return { ok: false, message: (json && json.message) || '매장 상세 분석에 실패했습니다.' };
+  },
+
   /** 시장 분석 결과 서버 저장 */
   async saveMarketAnalysis(payload) {
     const { token, apiBase } = await getStore();

@@ -1219,20 +1219,33 @@
   function placeStoreHtml() {
     const sel = state.place.selected;
     if (!sel) return '<div class="rf-card rf-empty-card"><p class="rf-empty-d"><b>시장분석</b>에서 업체를 선택하면 상세 분석이 표시됩니다.</p><button type="button" class="rf-btn-lg-ghost" data-act="ps-back">시장분석으로</button></div>';
+    // 정밀 분석 결과가 있으면 완전 지수, 없으면 간이(시장분석 리스트값)
+    const pd = (state.place.detail && !state.place.detail.error) ? state.place.detail : null;
+    const n1 = pd ? pd.n1 : sel.n1, n2 = pd ? pd.n2 : sel.n2, n3 = pd ? pd.n3 : sel.n3;
+    const d = pd ? pd.d : sel.d;
     const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div></div>' +
       '<div class="rf-prod-name">' + esc(sel.name) + '</div>';
-    const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">순위 ' + sel.rank + '위</span></div>' +
+    const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">순위 ' + sel.rank + '위</span>' + (pd ? ' <span class="rf-chip">정밀</span>' : '') + '</div>' +
       '<div class="rf-stats">' +
-      statTile('N1 유사도', Math.round(sel.n1 || 0)) +
-      statTile('N2 관련성', Math.round(sel.n2 || 0)) +
-      statTile('N3 랭킹', Math.round(sel.n3 || 0)) +
+      statTile('N1 유사도', Math.round(n1 || 0)) +
+      statTile('N2 관련성', Math.round(n2 || 0)) +
+      statTile('N3 랭킹', Math.round(n3 || 0)) +
       statTile('영수증리뷰', comma(sel.visitor_cnt || 0)) +
       statTile('블로그리뷰', comma(sel.blog_cnt || 0)) +
       statTile('저장수', comma(sel.save_cnt || 0)) +
       '</div></div>';
-    const dimCard = sel.d ? placeDimCard(sel.d) : '';
-    return head + brief + dimCard +
-      '<p class="rf-note">D7 정보충실·D9 최근활동·D10 리뷰어영향력은 상세 수집이 필요해 요약에선 생략(–)됩니다. 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님).</p>';
+    const dimCard = d ? placeDimCard(d) : '';
+    let precise;
+    if (state.place.detailLoading) {
+      precise = '<div class="rf-loading"><div class="rf-spinner"></div>정밀 분석 중… <span class="rf-loading-sub">정보충실성·최근활동·리뷰어 영향력 수집(수 초 소요)</span></div>';
+    } else if (state.place.detail && state.place.detail.error) {
+      precise = '<div class="rf-card rf-empty-card"><div class="rf-error" style="margin-bottom:12px;">' + esc(state.place.detail.error) + '</div><button type="button" class="rf-btn-lg-ghost" data-act="ps-detail">다시 시도</button></div>';
+    } else if (pd) {
+      precise = '<p class="rf-note">✓ 정밀 분석 완료 — D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 반영됨. 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님).</p>';
+    } else {
+      precise = '<div class="rf-card rf-empty-card"><p class="rf-empty-d">D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 <b>정밀 분석</b>하려면 아래를 누르세요(수 초 소요).</p><button type="button" class="rf-btn-primary" data-act="ps-detail">정밀 분석</button></div>';
+    }
+    return head + brief + dimCard + precise;
   }
 
   /** D1~D10 세부 지표 막대 */
@@ -1247,9 +1260,25 @@
       '</div>';
   }
 
+  function loadPlaceDetail() {
+    const sel = state.place.selected;
+    if (!sel || state.place.detailLoading) return;
+    state.place.detailLoading = true;
+    state.place.detail = null;
+    render();
+    sendBg('placeDetail', { place_id: sel.place_id, keyword: state.query || getQueryFromUrl(), cat: placeCatFromUrl() }).then((res) => {
+      state.place.detailLoading = false;
+      if (!res || !res.ok) state.place.detail = { error: (res && res.loggedIn === false) ? '로그인이 필요합니다.' : ((res && res.message) || '정밀 분석에 실패했습니다.') };
+      else state.place.detail = res.detail || {};
+      render();
+    });
+  }
+
   function bindPlaceStore(body) {
     const back = body.querySelector('[data-act="ps-back"]');
     if (back) back.addEventListener('click', () => { state.tab = 'pmarket'; render(); });
+    const det = body.querySelector('[data-act="ps-detail"]');
+    if (det) det.addEventListener('click', loadPlaceDetail);
   }
 
   function summaryHtml() {

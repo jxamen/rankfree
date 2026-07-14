@@ -24,8 +24,10 @@ Route::prefix('ext')->group(function (): void {
         Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1');
         Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1');
 
-        // 플레이스 리스트 순위(map.naver 배지) — 키워드 상위 오가닉 순위 목록
+        // 플레이스 리스트 순위(map.naver 배지·시장분석) — 키워드 상위 오가닉 순위 + N1/N2/N3
         Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');
+        // 단일 매장 정밀 분석(매장분석) — D7/D9/D10 포함 완전 지표(상세 수집으로 수 초 소요)
+        Route::get('/place-detail', [RankController::class, 'placeDetail'])->middleware('throttle:10,1');
 
         // 쇼핑 시장 분석 저장/내역
         Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1');

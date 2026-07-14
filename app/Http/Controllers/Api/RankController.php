@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Place\PlaceRankChecker;
 use App\Domain\Place\PlaceScorer;
+use App\Domain\Place\PlaceSeoAnalyzer;
 use App\Domain\Place\RankSlotService;
 use App\Http\Controllers\Controller;
 use App\Models\PlaceRankSlot;
@@ -157,6 +158,32 @@ class RankController extends Controller
             'total' => $result['total'],
             'items' => $out,
         ]);
+    }
+
+    /**
+     * 단일 매장 정밀 분석(매장분석) — 완전 N1/N2/N3 + D1~D10(D7 정보충실·D9 최근활동·D10 리뷰어영향력 포함).
+     * 업체 상세 + 리뷰 주별 수집이 있어 수 초 소요.
+     */
+    public function placeDetail(Request $request, PlaceSeoAnalyzer $analyzer)
+    {
+        $data = $request->validate([
+            'keyword' => ['required', 'string', 'max:100'],
+            'place_id' => ['required', 'string', 'max:30'],
+            'cat' => ['nullable', 'string', 'max:30'],
+        ]);
+        $sc = $analyzer->analyzeOne($data['keyword'], $data['cat'] ?? '', $data['place_id']);
+        if (! $sc) {
+            return response()->json(['message' => '분석이 차단되었거나 실패했습니다(순위 토큰 필요).'], 503);
+        }
+
+        return response()->json(['detail' => [
+            'n1' => $sc['n1'], 'n2' => $sc['n2'], 'n3' => $sc['n3'], 'tier' => $sc['tier'],
+            'rank' => $sc['rnk'], 'name' => $sc['name'],
+            'd' => [
+                'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'],
+                'd6' => $sc['d6'], 'd7' => $sc['d7'], 'd9' => $sc['d9'], 'd10' => $sc['d10'],
+            ],
+        ]]);
     }
 
     private function slotJson(PlaceRankSlot $s): array
