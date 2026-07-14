@@ -55,6 +55,13 @@ Route::post('/rank-resolve/place', [RankCheckController::class, 'resolvePlace'])
 Route::get('/r/{token}', [RankTrackController::class, 'shared'])->name('rank.shared');
 // 경쟁 분석 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/rc/{token}', [CompeteController::class, 'shared'])->name('compete.shared');
+
+// 플레이스 매장 분석 공개 공유(비로그인) — 확장 매장분석 저장본
+Route::get('/ps/{token}', function (string $token) {
+    $a = \App\Models\PlaceStoreAnalysis::where('share_token', $token)->firstOrFail();
+
+    return view('place.share', ['a' => $a]);
+})->name('place-store.shared');
 // 쇼핑 순위추적 공개 리포트 — 공유 토큰으로 비로그인 열람
 Route::get('/sr/{token}', [ShopRankTrackController::class, 'shared'])->name('shop-rank.shared');
 // 시장 분석 공개 리포트 — 공유 토큰으로 비로그인 열람

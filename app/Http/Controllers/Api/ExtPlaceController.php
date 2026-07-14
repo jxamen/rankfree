@@ -45,7 +45,7 @@ class ExtPlaceController extends Controller
             $data,
         );
 
-        return response()->json(['ok' => true, 'id' => $analysis->id]);
+        return response()->json(['ok' => true, 'id' => $analysis->id, 'share_url' => $analysis->shareUrl()]);
     }
 
     public function index(Request $request): JsonResponse

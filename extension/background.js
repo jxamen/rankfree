@@ -255,7 +255,7 @@ const handlers = {
       token,
       apiBase,
     });
-    return { ok, status, id: json && json.id, apiBase, message: json && json.message };
+    return { ok, status, id: json && json.id, share_url: json && json.share_url, apiBase, message: json && json.message };
   },
 
   async listPlaceAnalyses({ limit } = {}) {

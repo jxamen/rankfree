@@ -1386,10 +1386,15 @@
       visitor_cnt: sel.visitor_cnt != null ? sel.visitor_cnt : null,
       blog_cnt: sel.blog_cnt != null ? sel.blog_cnt : null,
       save_cnt: sel.save_cnt != null ? sel.save_cnt : null,
-      detail: { d: det.d || null, tier: det.tier || null },
+      detail: {
+        d: det.d || null, tier: det.tier || null,
+        kc: det.kc || null, seo: det.seo || null,
+        rep_keywords: det.rep_keywords || null, review_kw: det.review_kw || null,
+      },
     }).then((r) => {
       if (r && r.ok) {
         state.history = undefined; // 내역 캐시 무효화
+        if (r.share_url) { sel.shareUrl = r.share_url; render(); } // 공유 버튼 활성화
       } else if (r && r.message) {
         state.place.saveMsg = r.message;
         render();
