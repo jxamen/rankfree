@@ -179,6 +179,8 @@ class RankController extends Controller
         return response()->json(['detail' => [
             'n1' => $sc['n1'], 'n2' => $sc['n2'], 'n3' => $sc['n3'], 'tier' => $sc['tier'],
             'rank' => $sc['rnk'], 'name' => $sc['name'],
+            // 수동 매장분석(시장분석 리스트 없이 진입)에서도 지수 요약 카드를 채울 수 있게 counts 포함
+            'visitor_cnt' => $sc['visitor_cnt'] ?? null, 'blog_cnt' => $sc['blog_cnt'] ?? null, 'save_cnt' => $sc['save_cnt'] ?? null,
             'd' => [
                 'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'],
                 'd6' => $sc['d6'], 'd7' => $sc['d7'], 'd9' => $sc['d9'], 'd10' => $sc['d10'],

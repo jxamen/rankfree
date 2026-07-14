@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\CompeteController;
 use App\Http\Controllers\Api\ExtAuthController;
 use App\Http\Controllers\Api\ExtKeywordController;
 use App\Http\Controllers\Api\ExtMarketController;
+use App\Http\Controllers\Api\ExtPlaceController;
 use App\Http\Controllers\Api\ExtProductController;
 use App\Http\Controllers\Api\ExtSellerPowerController;
 use App\Http\Controllers\Api\KeywordController;
@@ -28,6 +29,11 @@ Route::prefix('ext')->group(function (): void {
         Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');
         // 단일 매장 정밀 분석(매장분석) — D7/D9/D10 포함 완전 지표(상세 수집으로 수 초 소요)
         Route::get('/place-detail', [RankController::class, 'placeDetail'])->middleware('throttle:10,1');
+
+        // 플레이스 매장 분석 저장/내역
+        Route::post('/place-analyses', [ExtPlaceController::class, 'store'])->middleware('throttle:20,1');
+        Route::get('/place-analyses', [ExtPlaceController::class, 'index']);
+        Route::get('/place-analyses/{analysis}', [ExtPlaceController::class, 'show']);
 
         // 쇼핑 시장 분석 저장/내역
         Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1');

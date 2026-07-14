@@ -59,9 +59,17 @@
 5. 이력: 일자별 카드 + 지표별 표(직전 대비 델타), 순위/점수 추이 그래프.
 - 모든 기능 **api/v1/compete/\*** 동시 제공(확장·외부).
 
+## 확장 패널 매장분석 (2026-07-14)
+
+- 확장 상위 탭은 **통합분석·플레이스·쇼핑·내역** — 4번째 탭은 통합 '내역'으로 유지(요약 placeholder 폐지, 태훈님 지시).
+- **매장분석 수동 분석**: 매장분석 탭에서 분석한 매장이 없으면 상품분석과 동일 패턴의 수동 폼(키워드 + 플레이스 URL/ID → `parsePlaceId`) 노출. 같은 매장×키워드 저장본이 있으면 재수집 없이 저장본을 연다(`openSavedPlaceOrAnalyze`).
+- **저장/내역**: 정밀 분석 완료 시 자동 저장 — `place_store_analyses`(user_id, place_id, keyword UNIQUE → updateOrCreate 갱신), API `POST/GET /api/ext/place-analyses(+/{id})` (`ExtPlaceController`), 기능 한도 키 `place_analysis`. 확장 내역 탭은 셀러력·시장분석·상품분석·**매장분석** 4종 통합 목록.
+- `placeDetail` 응답에 `visitor_cnt/blog_cnt/save_cnt` 포함(수동 진입 시 지수 요약 카드 채움 — `PlaceSeoAnalyzer::analyzeOne` 반환 확장).
+
 ## 진행 상태
 
 - [x] **A. 점수 엔진** — `PlaceScorer`(전 산식) + `PlaceRankChecker::serpFetch/placeDetailFull`. 실측 검증(강남 미용실 → 준오헤어 삼성역점 N1=48/N2=98.7/N3=100).
 - [x] B. 저장/일별 스냅샷 + 이력
 - [x] C. 웹 비교표·explain + API
 - [x] D. 리뷰 주별수집(D9/D10)·품질·블로그
+- [x] E. 확장 매장분석 수동 분석 + 내역 저장(위 섹션)

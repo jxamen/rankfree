@@ -245,6 +245,39 @@ const handlers = {
     return { ok, status, data: json && json.data };
   },
 
+  /** 플레이스 매장 분석 저장(정밀 분석 완료분) — 같은 매장×키워드는 서버에서 갱신 */
+  async savePlaceAnalysis(payload) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, status, json } = await apiFetch('/api/ext/place-analyses', {
+      method: 'POST',
+      body: payload,
+      token,
+      apiBase,
+    });
+    return { ok, status, id: json && json.id, apiBase, message: json && json.message };
+  },
+
+  async listPlaceAnalyses({ limit } = {}) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, status, json } = await apiFetch('/api/ext/place-analyses?limit=' + (limit || 30), {
+      token,
+      apiBase,
+    });
+    return { ok, status, data: (json && json.data) || [] };
+  },
+
+  async getPlaceAnalysis({ id }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, status, json } = await apiFetch('/api/ext/place-analyses/' + encodeURIComponent(id), {
+      token,
+      apiBase,
+    });
+    return { ok, status, data: json && json.data };
+  },
+
   async listSellerPower({ limit } = {}) {
     const { token, apiBase } = await getStore();
     if (!token) return { ok: false, loggedIn: false };

@@ -1388,6 +1388,7 @@
 #rankfree-panel .rf-hb-seller { color: #7c3aed; background: #f1ecfe; }
 #rankfree-panel .rf-hb-market { color: #05b169; background: #e6f6ee; }
 #rankfree-panel .rf-hb-product { color: #b06a00; background: #fff3e0; }
+#rankfree-panel .rf-hb-place { color: #0052ff; background: #e8efff; }
 #rankfree-panel .rf-hist-kw {
   display: flex;
   flex-direction: column;

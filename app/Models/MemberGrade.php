@@ -12,6 +12,7 @@ class MemberGrade extends Model
         'keyword_analysis' => '키워드 분석(API)',
         'market_analysis' => '쇼핑 시장 분석',
         'product_analysis' => '상품 리뷰 분석',
+        'place_analysis' => '플레이스 매장 분석',
         'compete_analysis' => '경쟁 분석',
     ];
 

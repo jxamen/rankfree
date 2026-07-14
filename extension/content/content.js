@@ -25,7 +25,7 @@
       if (/(^|\.)map\.naver\.com$/.test(location.hostname)) return 'pmarket';
       return 'seller';
     })(),
-    topTab: (function () { // 상위 탭: unified(통합분석)·place(플레이스)·shop(쇼핑)·summary(요약)
+    topTab: (function () { // 상위 탭: unified(통합분석)·place(플레이스)·shop(쇼핑)·history(내역)
       if (typeof location === 'undefined') return 'shop';
       if (location.hostname === 'search.naver.com') return 'unified';
       if (/(^|\.)map\.naver\.com$/.test(location.hostname)) return 'place';
@@ -1040,8 +1040,6 @@
     } else if (state.tab === 'pstore') {
       body.innerHTML = placeStoreHtml();
       bindPlaceStore(body);
-    } else if (state.tab === 'summary') {
-      body.innerHTML = summaryHtml();
     } else if (state.tab === 'market') {
       // 셀러 탭 공유 수집분으로 결과를 볼 때도 키워드 분석(검색량 등)을 조회 — 없으면 1회 조회
       if (state.keywordData === undefined && !state.keywordLoading && getQueryFromUrl()) {
@@ -1080,7 +1078,7 @@
     });
   }
 
-  // 2단 탭: 상위(통합분석·플레이스·쇼핑·요약) + 세부(상위에 subs가 있을 때만)
+  // 2단 탭: 상위(통합분석·플레이스·쇼핑·내역) + 세부(상위에 subs가 있을 때만)
   const TOP_TABS = [
     { key: 'unified', label: '통합분석', tab: 'keyword' }, // 하위 없음 — 바로 키워드 분석
     { key: 'place', label: '플레이스', subs: [
@@ -1092,7 +1090,7 @@
       { key: 'market', label: '시장 분석' },
       { key: 'product', label: '상품 분석' },
     ] },
-    { key: 'summary', label: '요약', tab: 'summary' }, // 하위 없음
+    { key: 'history', label: '내역', tab: 'history' }, // 하위 없음 — 저장된 분석 내역(매장분석 포함)
   ];
 
   /** 상위 탭의 기본 세부 탭 */
@@ -1148,11 +1146,14 @@
   // ==================================================================
   // 플레이스 탭 — 시장분석(경쟁 업체 리스트) + 매장분석(1개 상세)
   // ==================================================================
-  /** 지도 상위 URL엔 카테고리가 없어 검색어로 추정(맛집·카페 등 → restaurant) */
-  function placeCatFromUrl() {
-    const q = state.query || getQueryFromUrl() || '';
-    if (/맛집|식당|밥집|카페|술집|고기|초밥|스시|파스타|국밥|치킨|피자|디저트|브런치|베이커리|호프|포차|곱창|막창|삼겹|해장/.test(q)) return 'restaurant';
+  /** 키워드로 카테고리 추정(맛집·카페 등 → restaurant) — 지도 URL엔 카테고리가 없음 */
+  function placeCatFor(q) {
+    if (/맛집|식당|밥집|카페|술집|고기|초밥|스시|파스타|국밥|치킨|피자|디저트|브런치|베이커리|호프|포차|곱창|막창|삼겹|해장/.test(String(q || ''))) return 'restaurant';
     return 'place';
+  }
+
+  function placeCatFromUrl() {
+    return placeCatFor(state.query || getQueryFromUrl() || '');
   }
 
   function loadPlaceSerp() {
@@ -1208,7 +1209,12 @@
     body.querySelectorAll('[data-pm-store]').forEach((a) => a.addEventListener('click', (e) => {
       e.preventDefault();
       const pid = a.dataset.pmStore;
-      state.place.selected = (state.place.items || []).find((x) => String(x.place_id) === pid) || null;
+      const found = (state.place.items || []).find((x) => String(x.place_id) === pid) || null;
+      // 복사본에 분석 기준 키워드·카테고리를 실어 저장/재분석에 사용(리스트 원본은 건드리지 않음)
+      state.place.selected = found ? Object.assign({}, found, {
+        keyword: state.query || getQueryFromUrl() || '',
+        cat: state.place.cat || placeCatFromUrl(),
+      }) : null;
       state.place.detail = undefined;
       state.place.detailLoading = false;
       state.tab = 'pstore';
@@ -1216,16 +1222,47 @@
     }));
   }
 
+  /** 플레이스 URL → place_id 추출 (m.place/pcmap 상세, map.naver entry, 숫자 ID 직접 입력) */
+  function parsePlaceId(url) {
+    const s = String(url || '').trim();
+    if (/^\d{5,}$/.test(s)) return s;
+    let m = s.match(/(?:m\.place|pcmap\.place)\.naver\.com\/[a-z-]+\/(\d+)/);
+    if (m) return m[1];
+    m = s.match(/map\.naver\.com\/.*?(?:entry\/place|\/place)\/(\d+)/);
+    if (m) return m[1];
+    m = s.match(/place\.naver\.com\/.*?\/(\d+)/);
+    if (m) return m[1];
+    return null;
+  }
+
+  /** 매장분석 수동 입력 폼 — 상품분석의 수동 URL 분석과 동일 패턴(저장본 있으면 재사용) */
+  function placeManualFormHtml() {
+    const kw = state.placeManualKw != null ? state.placeManualKw : (state.query || getQueryFromUrl() || '');
+    return '<div class="rf-manual"><input type="text" class="rf-input" data-ctl="ps-kw" placeholder="키워드 (예: 강남 미용실)" value="' + esc(kw) + '">' +
+      '<input type="url" class="rf-input" data-ctl="ps-url" placeholder="플레이스 URL 또는 ID 붙여넣기" value="' + esc(state.placeManualUrl || '') + '">' +
+      '<button type="button" class="rf-btn-primary" data-act="ps-manual">분석하기</button></div>' +
+      '<p class="rf-note">m.place.naver.com·map.naver.com 플레이스 URL(또는 플레이스 숫자 ID)을 넣으세요. 이미 분석한 매장×키워드는 저장본을 바로 불러옵니다.</p>';
+  }
+
   function placeStoreHtml() {
     const sel = state.place.selected;
-    if (!sel) return '<div class="rf-card rf-empty-card"><p class="rf-empty-d"><b>시장분석</b>에서 업체를 선택하면 상세 분석이 표시됩니다.</p><button type="button" class="rf-btn-lg-ghost" data-act="ps-back">시장분석으로</button></div>';
+    if (!sel) {
+      // 분석한 매장이 없으면 — 시장분석 선택 안내 + 수동 분석(URL 직접 입력)
+      return '<div class="rf-card rf-empty-card">' +
+        (state.placeManualErr ? '<div class="rf-error" style="margin-bottom:12px;">' + esc(state.placeManualErr) + '</div>' : '') +
+        '<p class="rf-empty-d"><b>시장분석</b>에서 업체를 선택하거나, 아래에 플레이스 URL을 넣어 분석하세요.</p>' +
+        placeManualFormHtml() +
+        '<button type="button" class="rf-btn-lg-ghost" data-act="ps-back">시장분석으로</button></div>';
+    }
     // 정밀 분석 결과가 있으면 완전 지수, 없으면 간이(시장분석 리스트값)
     const pd = (state.place.detail && !state.place.detail.error) ? state.place.detail : null;
     const n1 = pd ? pd.n1 : sel.n1, n2 = pd ? pd.n2 : sel.n2, n3 = pd ? pd.n3 : sel.n3;
     const d = pd ? pd.d : sel.d;
-    const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div></div>' +
-      '<div class="rf-prod-name">' + esc(sel.name) + '</div>';
-    const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">순위 ' + sel.rank + '위</span>' + (pd ? ' <span class="rf-chip">정밀</span>' : '') + '</div>' +
+    const rankTxt = (sel.rank == null) ? '순위 조회 중' : (sel.rank >= 300 ? '상위권 밖' : '순위 ' + sel.rank + '위');
+    const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div>' +
+      '<div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-manual-open">✎ 수동 분석</button></div></div>' +
+      '<div class="rf-prod-name">' + esc(sel.name || '매장') + '</div>';
+    const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">' + rankTxt + '</span>' + (pd ? ' <span class="rf-chip">정밀</span>' : '') + '</div>' +
       '<div class="rf-stats">' +
       statTile('N1 유사도', Math.round(n1 || 0)) +
       statTile('N2 관련성', Math.round(n2 || 0)) +
@@ -1241,7 +1278,11 @@
     } else if (state.place.detail && state.place.detail.error) {
       precise = '<div class="rf-card rf-empty-card"><div class="rf-error" style="margin-bottom:12px;">' + esc(state.place.detail.error) + '</div><button type="button" class="rf-btn-lg-ghost" data-act="ps-detail">다시 시도</button></div>';
     } else if (pd) {
-      precise = '<p class="rf-note">✓ 정밀 분석 완료 — D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 반영됨. 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님).</p>';
+      precise = pd.saved
+        ? '<p class="rf-note">💾 저장된 매장분석(내역) — 최신 지표로 갱신하려면 다시 분석하세요.</p>' +
+          '<div class="rf-card rf-empty-card"><button type="button" class="rf-btn-lg-ghost" data-act="ps-detail" style="margin-top:0;">↻ 다시 분석</button></div>'
+        : '<p class="rf-note">✓ 정밀 분석 완료 — D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 반영됨. 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님). 결과는 <b>내역</b>에 저장됩니다.</p>' +
+          (state.place.saveMsg ? '<div class="rf-error">' + esc(state.place.saveMsg) + '</div>' : '');
     } else {
       precise = '<div class="rf-card rf-empty-card"><p class="rf-empty-d">D7 정보충실·D9 최근활동·D10 리뷰어영향력까지 <b>정밀 분석</b>하려면 아래를 누르세요(수 초 소요).</p><button type="button" class="rf-btn-primary" data-act="ps-detail">정밀 분석</button></div>';
     }
@@ -1263,15 +1304,118 @@
   function loadPlaceDetail() {
     const sel = state.place.selected;
     if (!sel || state.place.detailLoading) return;
+    const kw = sel.keyword || state.query || getQueryFromUrl() || '';
     state.place.detailLoading = true;
     state.place.detail = null;
     render();
-    sendBg('placeDetail', { place_id: sel.place_id, keyword: state.query || getQueryFromUrl(), cat: placeCatFromUrl() }).then((res) => {
+    sendBg('placeDetail', { place_id: sel.place_id, keyword: kw, cat: sel.cat || placeCatFor(kw) }).then((res) => {
       state.place.detailLoading = false;
-      if (!res || !res.ok) state.place.detail = { error: (res && res.loggedIn === false) ? '로그인이 필요합니다.' : ((res && res.message) || '정밀 분석에 실패했습니다.') };
-      else state.place.detail = res.detail || {};
+      if (!res || !res.ok) {
+        state.place.detail = { error: (res && res.loggedIn === false) ? '로그인이 필요합니다.' : ((res && res.message) || '정밀 분석에 실패했습니다.') };
+        render();
+        return;
+      }
+      const det = res.detail || {};
+      state.place.detail = det;
+      // 수동 분석(시장분석 리스트 없이 진입) — 상세 결과로 요약 카드(상호·순위·리뷰수) 보강
+      if (!sel.name && det.name) sel.name = det.name;
+      if (sel.rank == null && det.rank != null) sel.rank = det.rank;
+      if (sel.visitor_cnt == null && det.visitor_cnt != null) sel.visitor_cnt = det.visitor_cnt;
+      if (sel.blog_cnt == null && det.blog_cnt != null) sel.blog_cnt = det.blog_cnt;
+      if (sel.save_cnt == null && det.save_cnt != null) sel.save_cnt = det.save_cnt;
+      sel.keyword = kw;
+      savePlaceAnalysisResult(sel, det); // 정밀 분석 완료분 자동 저장 → 내역 탭·저장본 재사용
       render();
     });
+  }
+
+  /** 정밀 분석 결과 서버 저장 — 같은 매장×키워드는 서버에서 갱신(내역 중복 없음) */
+  function savePlaceAnalysisResult(sel, det) {
+    state.place.saveMsg = null;
+    const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
+    sendBg('savePlaceAnalysis', {
+      place_id: String(sel.place_id),
+      name: String(sel.name || det.name || '매장').slice(0, 120),
+      keyword: String(sel.keyword || '').slice(0, 100),
+      cat: sel.cat || placeCatFor(sel.keyword) || '',
+      rank: det.rank != null ? det.rank : (sel.rank != null ? sel.rank : null),
+      n1: r1(det.n1), n2: r1(det.n2), n3: r1(det.n3),
+      visitor_cnt: sel.visitor_cnt != null ? sel.visitor_cnt : null,
+      blog_cnt: sel.blog_cnt != null ? sel.blog_cnt : null,
+      save_cnt: sel.save_cnt != null ? sel.save_cnt : null,
+      detail: { d: det.d || null, tier: det.tier || null },
+    }).then((r) => {
+      if (r && r.ok) {
+        state.history = undefined; // 내역 캐시 무효화
+      } else if (r && r.message) {
+        state.place.saveMsg = r.message;
+        render();
+      }
+    });
+  }
+
+  /** 수동 입력(키워드+URL) 분석 — 저장본(같은 매장×키워드) 있으면 재수집 없이 열기 */
+  function runPlaceManual(body) {
+    const kwEl = body.querySelector('[data-ctl="ps-kw"]');
+    const urlEl = body.querySelector('[data-ctl="ps-url"]');
+    const kw = String((kwEl && kwEl.value) || '').trim();
+    const url = String((urlEl && urlEl.value) || '').trim();
+    state.placeManualKw = kw;
+    state.placeManualUrl = url;
+    if (!kw) {
+      state.placeManualErr = '키워드를 입력하세요. (순위·유사도 산출 기준)';
+      render();
+      return;
+    }
+    const pid = parsePlaceId(url);
+    if (!pid) {
+      state.placeManualErr = '플레이스 URL에서 ID를 찾지 못했습니다. m.place.naver.com/…/{ID} 형태의 URL 또는 숫자 ID를 넣어주세요.';
+      render();
+      return;
+    }
+    state.placeManualErr = null;
+    state.placeManualUrl = '';
+    openSavedPlaceOrAnalyze(pid, kw);
+  }
+
+  /** 이미 분석한 매장×키워드(내역 일치)면 저장본을, 아니면 새로 정밀 분석. */
+  async function openSavedPlaceOrAnalyze(pid, kw) {
+    if (!Array.isArray(state.history)) { try { await loadHistory(); } catch (e) { /* noop */ } }
+    const saved = (state.history || []).find((h) => h.type === 'place' && String(h.place_id) === String(pid) && String(h.keyword || '') === kw);
+    if (saved) return openSavedPlace(saved.id);
+    state.place.selected = { place_id: pid, name: '', rank: null, visitor_cnt: null, blog_cnt: null, save_cnt: null, keyword: kw, cat: placeCatFor(kw), manual: true };
+    state.place.detail = undefined;
+    state.tab = 'pstore';
+    loadPlaceDetail();
+  }
+
+  /** 저장된 매장분석 열기 — 재수집 없이 매장분석 탭에 저장 당시 지표 재생 */
+  async function openSavedPlace(id) {
+    state.topTab = 'place';
+    state.tab = 'pstore';
+    state.place.selected = { place_id: '', name: '저장본 불러오는 중…', rank: null, keyword: '' };
+    state.place.detail = undefined;
+    state.place.detailLoading = true;
+    render();
+    const res = await sendBg('getPlaceAnalysis', { id });
+    state.place.detailLoading = false;
+    const a = res && res.ok && res.data;
+    if (!a) {
+      state.place.selected = null;
+      state.placeManualErr = '저장된 매장분석을 불러오지 못했습니다.';
+      render();
+      return;
+    }
+    state.place.selected = {
+      place_id: a.place_id, name: a.name, rank: a.rank,
+      visitor_cnt: a.visitor_cnt, blog_cnt: a.blog_cnt, save_cnt: a.save_cnt,
+      keyword: a.keyword, cat: a.cat, manual: true,
+    };
+    state.place.detail = {
+      n1: Number(a.n1), n2: Number(a.n2), n3: Number(a.n3), rank: a.rank, name: a.name,
+      d: (a.detail && a.detail.d) || null, tier: (a.detail && a.detail.tier) || null, saved: true,
+    };
+    render();
   }
 
   function bindPlaceStore(body) {
@@ -1279,10 +1423,21 @@
     if (back) back.addEventListener('click', () => { state.tab = 'pmarket'; render(); });
     const det = body.querySelector('[data-act="ps-detail"]');
     if (det) det.addEventListener('click', loadPlaceDetail);
-  }
-
-  function summaryHtml() {
-    return '<div class="rf-empty"><div class="rf-empty-badge">준비 중</div><p>플레이스 관련 요약은 곧 제공됩니다.</p></div>';
+    // ✎ 수동 분석 — 선택을 비우고 URL 입력 폼으로
+    const manualOpen = body.querySelector('[data-act="ps-manual-open"]');
+    if (manualOpen) manualOpen.addEventListener('click', () => {
+      state.place.selected = null;
+      state.place.detail = undefined;
+      state.place.detailLoading = false;
+      state.placeManualErr = null;
+      render();
+    });
+    const manualBtn = body.querySelector('[data-act="ps-manual"]');
+    if (manualBtn) {
+      manualBtn.addEventListener('click', () => runPlaceManual(body));
+      body.querySelectorAll('[data-ctl="ps-url"],[data-ctl="ps-kw"]').forEach((inp) =>
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') runPlaceManual(body); }));
+    }
   }
 
   // ==================================================================
@@ -1812,16 +1967,17 @@
   }
 
   // ---------- 내역 / 저장본 ----------
-  /** 내역 통합 — 셀러력·시장분석·상품분석 3종을 한 목록으로(타입 배지·날짜순). */
+  /** 내역 통합 — 셀러력·시장분석·상품분석·매장분석 4종을 한 목록으로(타입 배지·날짜순). */
   async function loadHistory(force) {
     if (state.historyLoading) return;
     if (!force && Array.isArray(state.history)) return;
     state.historyLoading = true;
     render();
-    const [mk, sp, pr] = await Promise.all([
+    const [mk, sp, pr, pl] = await Promise.all([
       sendBg('listMarketAnalyses', { limit: 30 }),
       sendBg('listSellerPower', { limit: 30 }),
       sendBg('listProductAnalyses', { limit: 30 }),
+      sendBg('listPlaceAnalyses', { limit: 30 }),
     ]);
     const items = [];
     ((mk && mk.ok && mk.data) || []).forEach((a) => items.push({
@@ -1837,6 +1993,12 @@
       origin_product_no: a.origin_product_no, // 저장본 재사용 매칭용
       meta: '상품 분석' + (a.total_reviews ? ' · 리뷰 ' + comma(a.total_reviews) : ''),
     }));
+    ((pl && pl.ok && pl.data) || []).forEach((a) => items.push({
+      type: 'place', id: a.id, title: a.name || '', date: a.updated_at || a.created_at || '',
+      place_id: a.place_id, keyword: a.keyword, // 저장본 재사용 매칭용(매장×키워드)
+      meta: (a.keyword ? '‘' + a.keyword + '’ · ' : '') + 'N2 ' + Math.round(a.n2 || 0) +
+        (a.rank != null ? ' · ' + (a.rank >= 300 ? '상위권 밖' : a.rank + '위') : ''),
+    }));
     items.sort((x, y) => String(y.date).localeCompare(String(x.date)));
     state.history = items;
     state.historyWebBase = (sp && sp.apiBase) || (mk && mk.apiBase) || state.apiBase;
@@ -1850,9 +2012,9 @@
     }
     const list = Array.isArray(state.history) ? state.history : [];
     if (!list.length) {
-      return '<div class="rf-empty"><p>저장된 분석 내역이 없습니다.<br>셀러력·시장분석·상품분석을 실행하면 자동으로 저장됩니다.</p></div>';
+      return '<div class="rf-empty"><p>저장된 분석 내역이 없습니다.<br>셀러력·시장분석·상품분석·매장분석을 실행하면 자동으로 저장됩니다.</p></div>';
     }
-    const label = (t) => ({ market: '시장분석', seller: '셀러력', product: '상품분석' })[t] || t;
+    const label = (t) => ({ market: '시장분석', seller: '셀러력', product: '상품분석', place: '매장분석' })[t] || t;
     return (
       '<div class="rf-card rf-card-bare"><div class="rf-card-title">최근 분석 내역 <span class="rf-chip">' + list.length + '건</span>' +
       '<span class="rf-copy-group"><button type="button" class="rf-copy" data-act="hist-refresh">새로고침</button></span></div>' +
@@ -1880,10 +2042,11 @@
     if (refresh) refresh.addEventListener('click', () => loadHistory(true));
   }
 
-  /** 내역 항목 열기 — 타입별 라우팅(시장→시장탭, 셀러력→리포트, 상품→저장본 재생). */
+  /** 내역 항목 열기 — 타입별 라우팅(시장→시장탭, 셀러력→리포트, 상품→저장본 재생, 매장→매장분석 탭). */
   async function openHistory(id, type) {
     if (type === 'seller') return openSavedSeller(id);
     if (type === 'product') return openSavedProduct(id);
+    if (type === 'place') return openSavedPlace(id);
     return openSaved(id); // market
   }
 

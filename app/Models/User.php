@@ -153,6 +153,11 @@ class User extends Authenticatable
         return $this->hasMany(ProductAnalysis::class);
     }
 
+    public function placeStoreAnalyses(): HasMany
+    {
+        return $this->hasMany(PlaceStoreAnalysis::class);
+    }
+
     public function sellerPowerAnalyses(): HasMany
     {
         return $this->hasMany(SellerPowerAnalysis::class);

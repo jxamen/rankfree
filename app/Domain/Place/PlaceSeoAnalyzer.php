@@ -160,7 +160,10 @@ class PlaceSeoAnalyzer
 
         $sc = PlaceScorer::computeScores($target, $detail, $keyword, $cat, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $recArr, $authArr, $bvArr, $imgArr);
 
-        return $sc + ['rnk' => $target['rnk'], 'name' => $target['name'] ?: ($detail['name'] ?? '')];
+        return $sc + [
+            'rnk' => $target['rnk'], 'name' => $target['name'] ?: ($detail['name'] ?? ''),
+            'visitor_cnt' => $target['visitor_cnt'], 'blog_cnt' => $target['blog_cnt'], 'save_cnt' => $target['save_cnt'],
+        ];
     }
 
     /** 리뷰 주별수집 → rec_raw(D9)·auth_raw(D10)·bv_raw(D3대체) 를 $detail 에 부착 + 정규화 배열 push. */
