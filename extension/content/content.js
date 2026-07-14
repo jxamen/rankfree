@@ -686,7 +686,8 @@
       let node = el;
       for (let up = 0; up < 8 && node && node !== document.body; up++) {
         node = node.parentElement;
-        if (node && node.querySelectorAll('a[href*="query="]').length >= 3) { root = node; break; }
+        const qn = node ? node.querySelectorAll('a[href*="query="]').length : 0;
+        if (qn >= 3 && qn <= 30) { root = node; break; } // 함께많이찾는 블록만 — 검색결과(main_pack 45+) 같은 큰 영역 제외
       }
       if (root) break;
     }
@@ -699,7 +700,7 @@
       let kw = '';
       if (m) { try { kw = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim(); } catch (e) { kw = ''; } }
       if (!kw) kw = (a.textContent || '').trim();
-      if (kw && kw.length <= 30 && !seen.has(kw)) { seen.add(kw); out.push(kw); }
+      if (kw && kw.length <= 30 && kw.indexOf('site:') === -1 && !seen.has(kw)) { seen.add(kw); out.push(kw); }
     });
     return out;
   }
@@ -1260,13 +1261,12 @@
     const n1 = pd ? pd.n1 : sel.n1, n2 = pd ? pd.n2 : sel.n2, n3 = pd ? pd.n3 : sel.n3;
     const d = pd ? pd.d : sel.d;
     const rankTxt = (sel.rank == null) ? '순위 조회 중' : (sel.rank >= 300 ? '상위권 밖' : '순위 ' + sel.rank + '위');
-    const shareBtn = sel.shareUrl ? '<button type="button" class="rf-sp-refresh" data-rf-share="' + esc(sel.shareUrl) + '">🔗 공유</button>' : '';
     const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left">' +
-      '<button type="button" class="rf-sp-refresh" data-act="ps-manual-open">✎ 수동 분석</button>' +
-      '<button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button>' +
       '<button type="button" class="rf-sp-refresh" data-rf-web="' + esc(webBase() + '/') + '">랭크프리에서 보기</button>' +
-      shareBtn +
-      '</div></div>' +
+      (sel.shareUrl ? '<button type="button" class="rf-sp-refresh" data-rf-share="' + esc(sel.shareUrl) + '">🔗 공유</button>' : '') +
+      '</div><div class="rf-sp-bar-left">' +
+      '<button type="button" class="rf-sp-refresh" data-act="ps-manual-open">✎ 수동 분석</button>' +
+      '<button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div></div>' +
       '<div class="rf-prod-name">' + esc(sel.name || '매장') + '</div>';
     const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">' + rankTxt + '</span>' + (pd ? ' <span class="rf-chip">정밀</span>' : '') + '</div>' +
       '<div class="rf-stats">' +
@@ -1331,15 +1331,6 @@
     if (rk.length) {
       html += '<div class="rf-card"><div class="rf-card-title">대표키워드</div><div class="rf-tags">' +
         rk.slice(0, 20).map((t) => '<span class="rf-tag" style="cursor:default;">' + esc(String(t)) + '</span>').join('') + '</div></div>';
-    }
-    let rvList = [];
-    const rvkw = pd.review_kw;
-    if (Array.isArray(rvkw)) rvList = rvkw.map((t) => (t && typeof t === 'object') ? (t.keyword || t.name || t.text || '') : t);
-    else if (rvkw && typeof rvkw === 'object') rvList = Object.keys(rvkw);
-    rvList = rvList.filter(Boolean);
-    if (rvList.length) {
-      html += '<div class="rf-card"><div class="rf-card-title">리뷰 키워드</div><div class="rf-tags">' +
-        rvList.slice(0, 20).map((t) => '<span class="rf-tag" style="cursor:default;">' + esc(String(t)) + '</span>').join('') + '</div></div>';
     }
     return html;
   }
@@ -2988,6 +2979,15 @@
     state.aiKeywords = scrapeAiKeywordsFromDom(); // '함께 많이 찾는'(AI 제안) — 통합검색에만 존재
     state.extracting = false;
     render();
+    // '함께 많이 찾는'은 lazy 로드(초기엔 블록 자체가 없음) — 더 나올 때까지 재시도(최대 ~11초)
+    if (state.aiKeywords.length < 4) {
+      let tries = 0;
+      const retry = setInterval(() => {
+        const ai = scrapeAiKeywordsFromDom();
+        if (ai.length > state.aiKeywords.length) { state.aiKeywords = ai; render(); }
+        if (state.aiKeywords.length >= 4 || ++tries >= 16) clearInterval(retry);
+      }, 700);
+    }
   }
 
   /** 상품 수집 + 시장분석 — 사용자가 수집 버튼(또는 연관 키워드 칩)을 눌렀을 때만. force=재수집 */
