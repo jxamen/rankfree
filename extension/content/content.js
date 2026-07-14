@@ -1260,8 +1260,9 @@
     const n1 = pd ? pd.n1 : sel.n1, n2 = pd ? pd.n2 : sel.n2, n3 = pd ? pd.n3 : sel.n3;
     const d = pd ? pd.d : sel.d;
     const rankTxt = (sel.rank == null) ? '순위 조회 중' : (sel.rank >= 300 ? '상위권 밖' : '순위 ' + sel.rank + '위');
-    const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div>' +
-      '<div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-manual-open">✎ 수동 분석</button></div></div>' +
+    const head = rankfreeBar(webBase() + '/', sel.shareUrl || '') +
+      '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-manual-open">✎ 수동 분석</button></div>' +
+      '<div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div></div>' +
       '<div class="rf-prod-name">' + esc(sel.name || '매장') + '</div>';
     const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">' + rankTxt + '</span>' + (pd ? ' <span class="rf-chip">정밀</span>' : '') + '</div>' +
       '<div class="rf-stats">' +
@@ -1457,6 +1458,7 @@
   }
 
   function bindPlaceStore(body) {
+    bindRankfreeBar(body); // 랭크프리에서 보기·공유
     const back = body.querySelector('[data-act="ps-back"]');
     if (back) back.addEventListener('click', () => { state.tab = 'pmarket'; render(); });
     const det = body.querySelector('[data-act="ps-detail"]');
