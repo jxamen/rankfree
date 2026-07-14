@@ -42,6 +42,12 @@
       "run_at": "document_idle"
     },
     {
+      "matches": ["https://map.naver.com/*"],
+      "js": ["content/content.js"],
+      "css": ["content/panel.css", "content/seller-power.css"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": [
         "https://smartstore.naver.com/*/products/*",
         "https://brand.naver.com/*/products/*"

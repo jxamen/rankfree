@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Place\PlaceRankChecker;
+use App\Domain\Place\PlaceScorer;
 use App\Domain\Place\RankSlotService;
 use App\Http\Controllers\Controller;
 use App\Models\PlaceRankSlot;
@@ -113,19 +114,48 @@ class RankController extends Controller
             'cat' => ['nullable', 'string', 'max:30'],
             'top' => ['nullable', 'integer', 'min:10', 'max:300'],
         ]);
-        $result = $checker->serpFetch($data['keyword'], $data['cat'] ?? '', null, $data['top'] ?? 100);
+        $cat = $data['cat'] ?? '';
+        $result = $checker->serpFetch($data['keyword'], $cat, null, $data['top'] ?? 100);
+        $items = $result['items'];
 
-        return response()->json([
-            'blocked' => $result['blocked'],
-            'total' => $result['total'],
-            'items' => array_map(fn ($it) => [
+        // N1/N2/N3 계산용 정규화 모집단(상위 리스트 전체 · P90 기준)
+        $visArr = array_map(fn ($i) => $i['visitor_cnt'], $items);
+        $blogArr = array_map(fn ($i) => $i['blog_cnt'], $items);
+        $saveArr = array_map(fn ($i) => $i['save_cnt'], $items);
+        $scoreArr = array_map(fn ($i) => $i['review_score'], $items);
+        $bookingArr = array_map(fn ($i) => $i['booking_cnt'], $items);
+        $imgArr = array_map(fn ($i) => $i['img_cnt'] ?? null, $items);
+        $catForScore = $cat !== '' ? $cat : 'place';
+
+        $out = array_map(function ($it) use ($data, $catForScore, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, $imgArr) {
+            // 간이 점수 — detail=null(D7/D9/D10 결측, N2는 간이). 업체별 추가 요청 0.
+            $sc = PlaceScorer::computeScores($it, null, $data['keyword'], $catForScore, $visArr, $blogArr, $saveArr, $scoreArr, $bookingArr, [], [], [], $imgArr);
+
+            return [
                 'rank' => $it['rnk'],
                 'place_id' => $it['place_id'],
                 'name' => $it['name'],
                 'review_score' => $it['review_score'],
                 'visitor_cnt' => $it['visitor_cnt'],
                 'blog_cnt' => $it['blog_cnt'],
-            ], $result['items']),
+                'save_cnt' => $it['save_cnt'],
+                'booking_cnt' => $it['booking_cnt'],
+                'img_cnt' => $it['img_cnt'] ?? null,
+                'n1' => $sc['n1'],
+                'n2' => $sc['n2'],
+                'n3' => $sc['n3'],
+                'tier' => $sc['tier'],
+                'd' => [
+                    'd1' => $sc['d1'], 'd2' => $sc['d2'], 'd3' => $sc['d3'], 'd4' => $sc['d4'], 'd5' => $sc['d5'],
+                    'd6' => $sc['d6'], 'd7' => $sc['d7'], 'd9' => $sc['d9'], 'd10' => $sc['d10'],
+                ],
+            ];
+        }, $items);
+
+        return response()->json([
+            'blocked' => $result['blocked'],
+            'total' => $result['total'],
+            'items' => $out,
         ]);
     }
 

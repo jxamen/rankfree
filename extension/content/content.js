@@ -19,7 +19,19 @@
     loggedIn: false,
     user: null,
     query: null,
-    tab: (typeof location !== 'undefined' && location.hostname === 'search.naver.com') ? 'keyword' : 'seller', // 통합검색은 키워드 탭 기본
+    tab: (function () { // 세부 탭
+      if (typeof location === 'undefined') return 'seller';
+      if (location.hostname === 'search.naver.com') return 'keyword';
+      if (/(^|\.)map\.naver\.com$/.test(location.hostname)) return 'pmarket';
+      return 'seller';
+    })(),
+    topTab: (function () { // 상위 탭: unified(통합분석)·place(플레이스)·shop(쇼핑)·summary(요약)
+      if (typeof location === 'undefined') return 'shop';
+      if (location.hostname === 'search.naver.com') return 'unified';
+      if (/(^|\.)map\.naver\.com$/.test(location.hostname)) return 'place';
+      return 'shop';
+    })(),
+    place: { loading: false, error: null, items: null, total: 0, cat: '', selected: null }, // 플레이스 시장/매장 분석
     count: 80, // 시장분석 수집 상품수(40/80/160/240)
     includeAds: false,
     marginPct: 30,
@@ -371,7 +383,13 @@
 
   function getQueryFromUrl() {
     try {
-      const p = new URL(location.href).searchParams;
+      const url = new URL(location.href);
+      // 네이버 지도: 검색어가 경로에 있음 (/p/search/{검색어} 또는 /search/{검색어})
+      if (/(^|\.)map\.naver\.com$/.test(url.hostname)) {
+        const m = url.pathname.match(/\/search\/([^/?]+)/);
+        if (m) return decodeURIComponent(m[1]);
+      }
+      const p = url.searchParams;
       return p.get('query') || p.get('origQuery') || null;
     } catch (e) {
       return null;
@@ -1016,6 +1034,14 @@
       }
       body.innerHTML = keywordTabHtml();
       bindKeyword(body);
+    } else if (state.tab === 'pmarket') {
+      body.innerHTML = placeMarketHtml();
+      bindPlaceMarket(body);
+    } else if (state.tab === 'pstore') {
+      body.innerHTML = placeStoreHtml();
+      bindPlaceStore(body);
+    } else if (state.tab === 'summary') {
+      body.innerHTML = summaryHtml();
     } else if (state.tab === 'market') {
       // 셀러 탭 공유 수집분으로 결과를 볼 때도 키워드 분석(검색량 등)을 조회 — 없으면 1회 조회
       if (state.keywordData === undefined && !state.keywordLoading && getQueryFromUrl()) {
@@ -1054,41 +1080,180 @@
     });
   }
 
-  const TABS = [
-    { key: 'keyword', label: '키워드 분석', ready: true, tip: '통합검색 기반' },
-    { key: 'seller', label: '상품 목록', ready: true, shop: true, tip: '네이버 쇼핑 기반' },
-    { key: 'market', label: '시장 분석', ready: true, shop: true, tip: '네이버 쇼핑 기반' },
-    { key: 'product', label: '상품 분석', ready: true, shop: true, tip: '네이버 쇼핑 기반' },
-    { key: 'history', label: '내역', ready: true },
+  // 2단 탭: 상위(통합분석·플레이스·쇼핑·요약) + 세부(상위에 subs가 있을 때만)
+  const TOP_TABS = [
+    { key: 'unified', label: '통합분석', tab: 'keyword' }, // 하위 없음 — 바로 키워드 분석
+    { key: 'place', label: '플레이스', subs: [
+      { key: 'pmarket', label: '시장분석' },
+      { key: 'pstore', label: '매장분석' },
+    ] },
+    { key: 'shop', label: '쇼핑', subs: [
+      { key: 'seller', label: '상품 목록' },
+      { key: 'market', label: '시장 분석' },
+      { key: 'product', label: '상품 분석' },
+    ] },
+    { key: 'summary', label: '요약', tab: 'summary' }, // 하위 없음
   ];
+
+  /** 상위 탭의 기본 세부 탭 */
+  function topDefaultTab(topKey) {
+    const t = TOP_TABS.find((x) => x.key === topKey);
+    if (!t) return 'keyword';
+    if (t.tab) return t.tab;
+    return (t.subs && t.subs[0]) ? t.subs[0].key : 'keyword';
+  }
 
   function renderTabs(panel) {
     const wrap = panel.querySelector('.rf-tabs');
-    let html = '';
-    TABS.forEach((t, i) => {
-      const prev = TABS[i - 1];
-      const next = TABS[i + 1];
-      // 쇼핑 그룹 경계에 세로 구분선(그룹핑)
-      if (t.shop && (!prev || !prev.shop)) html += '<span class="rf-tab-sep" aria-hidden="true"></span>';
-      html +=
-        '<button type="button" class="rf-tab' +
-        (t.shop ? ' is-shop' : '') +
-        (state.tab === t.key ? ' is-active' : '') +
-        '" data-tab="' + t.key + '"' + (t.tip ? ' data-tip="' + esc(t.tip) + '"' : '') + '>' +
-        esc(t.label) +
-        (t.shop ? '<sup class="rf-tab-shop">S</sup>' : '') + // 쇼핑 계열 표시(위첨자)
-        (t.ready ? '' : '<span class="rf-tab-soon">곧</span>') +
-        '</button>';
-      if (t.shop && (!next || !next.shop)) html += '<span class="rf-tab-sep" aria-hidden="true"></span>';
+    const top = state.topTab || 'shop';
+    let html = '<div class="rf-toptabs">';
+    TOP_TABS.forEach((t) => {
+      html += '<button type="button" class="rf-toptab' + (top === t.key ? ' is-active' : '') +
+        '" data-top="' + t.key + '">' + esc(t.label) + '</button>';
     });
+    html += '</div>';
+    const cur = TOP_TABS.find((x) => x.key === top);
+    if (cur && cur.subs) {
+      html += '<div class="rf-subtabs">';
+      cur.subs.forEach((s) => {
+        html += '<button type="button" class="rf-subtab' + (state.tab === s.key ? ' is-active' : '') +
+          '" data-sub="' + s.key + '">' + esc(s.label) + '</button>';
+      });
+      html += '</div>';
+    }
     wrap.innerHTML = html;
-    wrap.querySelectorAll('.rf-tab').forEach((btn) => {
+    // 상위 탭 — 클릭/마우스오버(쇼핑처럼 올리면 동작) 모두 전환
+    wrap.querySelectorAll('.rf-toptab').forEach((btn) => {
+      const go = () => {
+        const k = btn.dataset.top;
+        if (state.topTab === k) return;
+        state.topTab = k;
+        state.tab = topDefaultTab(k);
+        if (state.tab === 'history') loadHistory(true);
+        render();
+      };
+      btn.addEventListener('click', go);
+      btn.addEventListener('mouseenter', go);
+    });
+    // 세부 탭
+    wrap.querySelectorAll('.rf-subtab').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.tab = btn.dataset.tab;
-        if (state.tab === 'history') loadHistory(true); // 진입 시 항상 최신 갱신(직전 저장분 즉시 반영)
+        state.tab = btn.dataset.sub;
+        if (state.tab === 'history') loadHistory(true);
         render();
       });
     });
+  }
+
+  // ==================================================================
+  // 플레이스 탭 — 시장분석(경쟁 업체 리스트) + 매장분석(1개 상세)
+  // ==================================================================
+  /** 지도 상위 URL엔 카테고리가 없어 검색어로 추정(맛집·카페 등 → restaurant) */
+  function placeCatFromUrl() {
+    const q = state.query || getQueryFromUrl() || '';
+    if (/맛집|식당|밥집|카페|술집|고기|초밥|스시|파스타|국밥|치킨|피자|디저트|브런치|베이커리|호프|포차|곱창|막창|삼겹|해장/.test(q)) return 'restaurant';
+    return 'place';
+  }
+
+  function loadPlaceSerp() {
+    const q = state.query || getQueryFromUrl();
+    if (!q || state.place.loading) return;
+    const cat = placeCatFromUrl();
+    state.place.loading = true;
+    state.place.error = null;
+    sendBg('placeSerp', { keyword: q, cat, top: 30 }).then((res) => {
+      state.place.loading = false;
+      if (!res || !res.ok) {
+        state.place.items = null;
+        state.place.error = (res && res.loggedIn === false) ? '로그인이 필요합니다.' : ((res && res.message) || '플레이스 순위를 조회하지 못했습니다.');
+      } else {
+        state.place.items = res.items || [];
+        state.place.total = res.total || 0;
+        state.place.cat = cat;
+      }
+      render();
+    });
+  }
+
+  function placeMarketHtml() {
+    const q = state.query || getQueryFromUrl() || '';
+    if (!q) return '<div class="rf-empty"><p>검색어를 찾을 수 없습니다.<br>네이버 지도·통합검색에서 이용하세요.</p></div>';
+    if (state.place.items === null && !state.place.loading && !state.place.error) loadPlaceSerp();
+    if (state.place.loading) return '<div class="rf-loading"><div class="rf-spinner"></div>플레이스 순위·지수 분석 중…</div>';
+    if (state.place.error) return '<div class="rf-card rf-empty-card"><div class="rf-error" style="margin-bottom:12px;">' + esc(state.place.error) + '</div><button type="button" class="rf-btn-lg-ghost" data-act="pm-retry">다시 시도</button></div>';
+    const items = state.place.items || [];
+    if (!items.length) return '<div class="rf-empty"><p>플레이스 순위 데이터가 없습니다.</p></div>';
+    const rows = items.map((it) =>
+      '<tr>' +
+      '<td class="rf-td-rank">' + it.rank + '</td>' +
+      '<td class="rf-td-title"><a href="#" data-pm-store="' + esc(String(it.place_id)) + '" title="상세 분석">' + esc(it.name) + '</a></td>' +
+      '<td class="rf-td-num">' + comma(it.visitor_cnt || 0) + '</td>' +
+      '<td class="rf-td-num">' + comma(it.blog_cnt || 0) + '</td>' +
+      '<td class="rf-td-num">' + comma(it.save_cnt || 0) + '</td>' +
+      '<td class="rf-td-num rf-td-strong">' + Math.round(it.n1 || 0) + '</td>' +
+      '<td class="rf-td-num rf-td-strong">' + Math.round(it.n2 || 0) + '</td>' +
+      '<td class="rf-td-num rf-td-strong">' + Math.round(it.n3 || 0) + '</td>' +
+      '</tr>'
+    ).join('');
+    return '<div class="rf-kw-head"><span>‘<b>' + esc(q) + '</b>’ 플레이스 시장분석</span>' +
+      '<button type="button" class="rf-btn-ghost" data-act="pm-retry" title="다시 분석">↻</button></div>' +
+      '<div class="rf-card"><div class="rf-card-title">경쟁 업체 순위·지수 <span class="rf-chip">상위 ' + items.length + '개 · 광고 제외</span></div>' +
+      '<div class="rf-table-wrap"><table class="rf-table"><thead><tr><th>#</th><th>업체</th><th>영수증</th><th>블로그</th><th>저장</th><th>N1</th><th>N2</th><th>N3</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p class="rf-note">업체명을 누르면 매장 상세 분석. N1 유사도·N2 관련성·N3 랭킹은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님).</p></div>';
+  }
+
+  function bindPlaceMarket(body) {
+    const retry = body.querySelector('[data-act="pm-retry"]');
+    if (retry) retry.addEventListener('click', () => { state.place.items = null; state.place.error = null; loadPlaceSerp(); });
+    body.querySelectorAll('[data-pm-store]').forEach((a) => a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pid = a.dataset.pmStore;
+      state.place.selected = (state.place.items || []).find((x) => String(x.place_id) === pid) || null;
+      state.place.detail = undefined;
+      state.place.detailLoading = false;
+      state.tab = 'pstore';
+      render();
+    }));
+  }
+
+  function placeStoreHtml() {
+    const sel = state.place.selected;
+    if (!sel) return '<div class="rf-card rf-empty-card"><p class="rf-empty-d"><b>시장분석</b>에서 업체를 선택하면 상세 분석이 표시됩니다.</p><button type="button" class="rf-btn-lg-ghost" data-act="ps-back">시장분석으로</button></div>';
+    const head = '<div class="rf-sp-refresh-bar rf-sticky"><div class="rf-sp-bar-left"><button type="button" class="rf-sp-refresh" data-act="ps-back">← 시장분석</button></div></div>' +
+      '<div class="rf-prod-name">' + esc(sel.name) + '</div>';
+    const brief = '<div class="rf-card"><div class="rf-card-title">지수 요약 <span class="rf-chip">순위 ' + sel.rank + '위</span></div>' +
+      '<div class="rf-stats">' +
+      statTile('N1 유사도', Math.round(sel.n1 || 0)) +
+      statTile('N2 관련성', Math.round(sel.n2 || 0)) +
+      statTile('N3 랭킹', Math.round(sel.n3 || 0)) +
+      statTile('영수증리뷰', comma(sel.visitor_cnt || 0)) +
+      statTile('블로그리뷰', comma(sel.blog_cnt || 0)) +
+      statTile('저장수', comma(sel.save_cnt || 0)) +
+      '</div></div>';
+    const dimCard = sel.d ? placeDimCard(sel.d) : '';
+    return head + brief + dimCard +
+      '<p class="rf-note">D7 정보충실·D9 최근활동·D10 리뷰어영향력은 상세 수집이 필요해 요약에선 생략(–)됩니다. 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 점수 아님).</p>';
+  }
+
+  /** D1~D10 세부 지표 막대 */
+  function placeDimCard(d) {
+    const dim = (label, v) => '<div class="rf-grade-row"><span class="rf-grade-name">' + label + '</span>' +
+      '<span class="rf-grade-num">' + (v == null ? '–' : Math.round(v)) + '</span>' +
+      '<span class="rf-grade-track"><span class="rf-grade-bar" style="width:' + (v == null ? 0 : Math.max(2, Math.min(100, Math.round(v)))) + '%"></span></span></div>';
+    return '<div class="rf-card"><div class="rf-card-title">세부 지표 (D1~D10)</div>' +
+      dim('D1 영수증리뷰', d.d1) + dim('D2 블로그리뷰', d.d2) + dim('D3 예약리뷰', d.d3) +
+      dim('D4 평점', d.d4) + dim('D5 저장수', d.d5) + dim('D6 사진수', d.d6) +
+      dim('D7 정보충실', d.d7) + dim('D9 최근활동', d.d9) + dim('D10 리뷰어영향력', d.d10) +
+      '</div>';
+  }
+
+  function bindPlaceStore(body) {
+    const back = body.querySelector('[data-act="ps-back"]');
+    if (back) back.addEventListener('click', () => { state.tab = 'pmarket'; render(); });
+  }
+
+  function summaryHtml() {
+    return '<div class="rf-empty"><div class="rf-empty-badge">준비 중</div><p>플레이스 관련 요약은 곧 제공됩니다.</p></div>';
   }
 
   // ==================================================================

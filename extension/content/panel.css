@@ -235,6 +235,70 @@
 #rankfree-panel .rf-tab:hover {
   color: var(--rf-ink);
 }
+/* ---------- 2단 탭 (상위 통합분석·플레이스·쇼핑·요약 + 세부) ---------- */
+#rankfree-panel .rf-tabs {
+  display: block;
+  padding: 0;
+  gap: 0;
+}
+#rankfree-panel .rf-toptabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px 0;
+  border-bottom: 1px solid var(--rf-hairline);
+}
+#rankfree-panel .rf-toptab {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 9px 6px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rf-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-toptab.is-active {
+  color: var(--rf-primary);
+  border-bottom-color: var(--rf-primary);
+}
+#rankfree-panel .rf-toptab:hover {
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--rf-hairline) 30%, var(--rf-canvas));
+  border-bottom: 1px solid var(--rf-hairline);
+}
+#rankfree-panel .rf-subtab {
+  appearance: none;
+  padding: 5px 12px;
+  background: var(--rf-canvas);
+  border: 1px solid var(--rf-hairline);
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rf-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-subtab.is-active {
+  background: var(--rf-primary);
+  border-color: var(--rf-primary);
+  color: #ffffff;
+}
+#rankfree-panel .rf-subtab:hover {
+  color: var(--rf-ink);
+}
+#rankfree-panel .rf-subtab.is-active:hover {
+  color: #ffffff;
+}
 #rankfree-panel .rf-tab.is-active {
   color: var(--rf-ink);
   border-bottom-color: var(--rf-primary);
