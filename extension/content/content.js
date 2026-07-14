@@ -2701,6 +2701,7 @@
 
     const openPanel = async () => {
       panel.hidden = false;
+      positionPanel();
       try {
         sessionStorage.setItem('rfPanelOpen', '1');
       } catch (e) {
@@ -2728,7 +2729,94 @@
       }
     };
 
-    fab.addEventListener('click', () => (panel.hidden ? openPanel() : closePanel()));
+    // ---- FAB 드래그 이동 + 위치 저장/복원 (패널은 FAB 위치를 따라 열림) ----
+    let suppressClick = false;
+    // 패널을 FAB 위치 기준으로 화면 안쪽에 배치 — FAB가 오른쪽이면 우측 정렬, 아래 공간 부족하면 위로 열림
+    function positionPanel() {
+      const r = fab.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      panel.style.width = Math.min(520, vw - 32) + 'px';
+      if ((r.left + r.width / 2) > vw / 2) {
+        panel.style.right = Math.max(8, vw - r.right) + 'px';
+        panel.style.left = 'auto';
+      } else {
+        panel.style.left = Math.max(8, r.left) + 'px';
+        panel.style.right = 'auto';
+      }
+      if (vh - r.bottom > 260) {
+        panel.style.top = (r.bottom + 8) + 'px';
+        panel.style.bottom = '24px';
+      } else {
+        panel.style.top = '24px';
+        panel.style.bottom = Math.max(8, vh - r.top + 8) + 'px';
+      }
+    }
+    function clampFab(left, top) {
+      const w = fab.offsetWidth || 130, hh = fab.offsetHeight || 52;
+      return {
+        left: Math.min(Math.max(4, left), window.innerWidth - w - 4),
+        top: Math.min(Math.max(4, top), window.innerHeight - hh - 4),
+      };
+    }
+    function applyFabPos(pos) {
+      if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
+      const c = clampFab(pos.left, pos.top);
+      fab.style.left = c.left + 'px';
+      fab.style.top = c.top + 'px';
+      fab.style.right = 'auto';
+    }
+    (function makeDraggable() {
+      let sx = 0, sy = 0, ox = 0, oy = 0, moved = false, dragging = false;
+      const onMove = (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 5) return; // 5px 미만은 클릭으로 간주
+        moved = true;
+        fab.classList.add('rf-dragging');
+        const c = clampFab(ox + dx, oy + dy);
+        fab.style.left = c.left + 'px';
+        fab.style.top = c.top + 'px';
+        fab.style.right = 'auto';
+        if (!panel.hidden) positionPanel();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup', onUp, true);
+        dragging = false;
+        fab.classList.remove('rf-dragging');
+        if (moved) {
+          suppressClick = true; // 드래그 직후의 click은 토글하지 않음
+          const r = fab.getBoundingClientRect();
+          try { chrome.storage.local.set({ rfFabPos: { top: r.top, left: r.left } }); } catch (e) { /* noop */ }
+        }
+      };
+      fab.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        const r = fab.getBoundingClientRect();
+        sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+        moved = false; dragging = true;
+        e.preventDefault();
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup', onUp, true);
+      });
+    })();
+
+    fab.addEventListener('click', () => {
+      if (suppressClick) { suppressClick = false; return; }
+      panel.hidden ? openPanel() : closePanel();
+    });
+    // 저장된 FAB 위치 복원
+    try {
+      chrome.storage.local.get('rfFabPos', (o) => {
+        if (o && o.rfFabPos) { applyFabPos(o.rfFabPos); if (!panel.hidden) positionPanel(); }
+      });
+    } catch (e) { /* noop */ }
+    // 창 크기 변경 시 뷰포트 안으로 clamp + 패널 재배치
+    window.addEventListener('resize', () => {
+      const r = fab.getBoundingClientRect();
+      applyFabPos({ left: r.left, top: r.top });
+      if (!panel.hidden) positionPanel();
+    });
     panel.querySelector('.rf-close').addEventListener('click', closePanel);
     const brandName = panel.querySelector('.rf-brand-name');
     if (brandName) brandName.addEventListener('click', () => { try { window.open(webBase() + '/', '_blank', 'noopener'); } catch (e) { /* noop */ } });

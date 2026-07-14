@@ -57,6 +57,14 @@
   background: var(--rf-primary-active);
   transform: translateY(-1px);
 }
+/* 드래그 중 — hover 애니메이션 억제, grabbing 커서 */
+#rankfree-fab.rf-dragging {
+  cursor: grabbing;
+  transition: none;
+  transform: none;
+  opacity: 0.92;
+  user-select: none;
+}
 #rankfree-fab .rf-fab-logo {
   display: flex;
   align-items: center;
