@@ -2404,7 +2404,11 @@
     const list = (state.aiKeywords || []).filter(Boolean);
     if (!list.length) return '';
     const chips = list
-      .map((kw) => '<button type="button" class="rf-tag" data-kw="' + esc(kw) + '" title="‘' + esc(kw) + '’ 분석하기">' + esc(kw) + '</button>')
+      .map((kw) => {
+        const bd = (state.aiKeywordsBadge && state.aiKeywordsBadge[kw]) || '';
+        const icon = /place|플레이스|플러스/i.test(bd) ? '＋' : (/새로|오픈/.test(bd) ? 'N' : '');
+        return '<button type="button" class="rf-tag" data-kw="' + esc(kw) + '" title="' + (bd ? esc(bd) + ' · ' : '') + '‘' + esc(kw) + '’ 분석하기">' + esc(kw) + (icon ? '<sup class="rf-ai-badge">' + icon + '</sup>' : '') + '</button>';
+      })
       .join('');
     return (
       '<div class="rf-card"><div class="rf-card-title">함께 많이 찾는 ' +
@@ -2976,17 +2980,21 @@
     if (!tags.length) logKeywordDiagnostics();
 
     state.relatedTags = tags;
-    state.aiKeywords = scrapeAiKeywordsFromDom(); // '함께 많이 찾는'(AI 제안) — 통합검색에만 존재
+    state.aiKeywords = scrapeAiKeywordsFromDom(); // 즉시 폴백(블록이 이미 렌더돼 있으면)
     state.extracting = false;
     render();
-    // '함께 많이 찾는'은 lazy 로드(초기엔 블록 자체가 없음) — 더 나올 때까지 재시도(최대 ~11초)
-    if (state.aiKeywords.length < 4) {
-      let tries = 0;
-      const retry = setInterval(() => {
-        const ai = scrapeAiKeywordsFromDom();
-        if (ai.length > state.aiKeywords.length) { state.aiKeywords = ai; render(); }
-        if (state.aiKeywords.length >= 4 || ++tries >= 16) clearInterval(retry);
-      }, 700);
+    // 서버에서 '함께 많이 찾는'(badge 포함) 확정 — DOM lazy 로드 문제를 서버 SERP 크롤링으로 회피(웹과 동일 소스)
+    const tq = state.query || getQueryFromUrl();
+    if (tq) {
+      sendBg('keywordTogether', { keyword: tq }).then((res) => {
+        if (res && res.ok && Array.isArray(res.data) && res.data.length) {
+          state.aiKeywords = res.data.map((x) => (typeof x === 'string' ? x : (x && x.keyword) || '')).filter(Boolean);
+          const badges = {};
+          res.data.forEach((x) => { if (x && x.keyword && x.badge) badges[x.keyword] = x.badge; });
+          state.aiKeywordsBadge = badges;
+          render();
+        }
+      });
     }
   }
 

@@ -145,6 +145,15 @@ const handlers = {
     return { ok: false, data: null, message: '키워드 분석 데이터를 조회하지 못했습니다.' };
   },
 
+  /** '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 서버가 SERP 크롤링. 확장 DOM scrape 대체 */
+  async keywordTogether({ keyword }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, json } = await apiFetch('/api/ext/keyword-together?keyword=' + encodeURIComponent(keyword || ''), { token, apiBase });
+    if (ok && json) return { ok: true, data: json.data || [] };
+    return { ok: false, data: [] };
+  },
+
   /** 플레이스 리스트 순위(map.naver 배지) — 키워드 상위 오가닉 순위 목록(광고 제외·서울 고정 좌표) */
   async placeSerp({ keyword, cat, top }) {
     const { token, apiBase } = await getStore();

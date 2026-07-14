@@ -310,6 +310,15 @@
 #rankfree-panel .rf-manual-col .rf-btn-primary {
   width: 100%;
 }
+/* 함께많이찾는 badge — place+(＋)·새로오픈(N) */
+#rankfree-panel .rf-ai-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--rf-primary);
+  vertical-align: super;
+  margin-left: 2px;
+  line-height: 1;
+}
 #rankfree-panel .rf-tab.is-active {
   color: var(--rf-ink);
   border-bottom-color: var(--rf-primary);

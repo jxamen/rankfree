@@ -24,6 +24,8 @@ Route::prefix('ext')->group(function (): void {
         Route::post('/logout', [ExtAuthController::class, 'logout']);
         Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1');
         Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1');
+        // '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 확장이 서버에서 받아 표시(DOM scrape 대체)
+        Route::get('/keyword-together', [KeywordController::class, 'together'])->middleware('throttle:20,1');
 
         // 플레이스 리스트 순위(map.naver 배지·시장분석) — 키워드 상위 오가닉 순위 + N1/N2/N3
         Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');

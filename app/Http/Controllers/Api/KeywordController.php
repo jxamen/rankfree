@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Keyword\KeywordAnalysisPresenter;
 use App\Domain\Keyword\NaverDataLabService;
 use App\Domain\Keyword\NaverKeywordService;
+use App\Domain\Keyword\NaverSerpService;
 use App\Domain\SearchAdWeb\SearchAdWebClient;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,22 @@ class KeywordController extends Controller
             'data' => $data,
             'message' => $data === null ? '키워드 검색량 데이터를 조회하지 못했습니다.' : null,
         ]);
+    }
+
+    /**
+     * '함께 많이 찾는'(SERP qra 모듈) — 확장이 DOM scrape 대신 서버에서 받아 사용.
+     * 각 항목 badge(place+·새로오픈 등) 포함. 서버가 SERP를 크롤링(24h 캐시)하므로 확장 lazy 로드 문제 없음.
+     */
+    public function together(Request $request, NaverSerpService $serp): JsonResponse
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+        if ($keyword === '') {
+            return response()->json(['data' => []], 422);
+        }
+
+        $data = $serp->sections($keyword);
+
+        return response()->json(['data' => $data['related'] ?? []]);
     }
 
     /** 상세 분석 — 경량 지표 + 성별/연령 분포 + 월별 트렌드. */
