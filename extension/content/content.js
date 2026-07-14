@@ -1189,7 +1189,7 @@
       '<tr>' +
       '<td class="rf-td-rank">' + it.rank + '</td>' +
       '<td class="rf-td-title"><a href="#" data-pm-store="' + esc(String(it.place_id)) + '" title="상세 분석">' + esc(it.name) + '</a>' +
-      (it.place_plus ? '<sup class="rf-pl-badge" title="플레이스+">＋</sup>' : '') +
+      (it.place_plus ? '<sup class="rf-pl-badge" title="place+">＋</sup>' : '') +
       (it.new_opening ? '<sup class="rf-pl-badge rf-new" title="새로오픈">N</sup>' : '') +
       '</td>' +
       '<td class="rf-td-num">' + comma(it.visitor_cnt || 0) + '</td>' +
@@ -1452,10 +1452,15 @@
       place_id: a.place_id, name: a.name, rank: a.rank,
       visitor_cnt: a.visitor_cnt, blog_cnt: a.blog_cnt, save_cnt: a.save_cnt,
       keyword: a.keyword, cat: a.cat, manual: true,
+      shareUrl: a.share_token ? (webBase() + '/ps/' + a.share_token) : '', // 저장본 공유 링크 복원
     };
+    const sd = a.detail || {};
     state.place.detail = {
       n1: Number(a.n1), n2: Number(a.n2), n3: Number(a.n3), rank: a.rank, name: a.name,
-      d: (a.detail && a.detail.d) || null, tier: (a.detail && a.detail.tier) || null, saved: true,
+      d: sd.d || null, tier: sd.tier || null,
+      kc: sd.kc || null, seo: sd.seo || null, // explain 지표 복원
+      rep_keywords: sd.rep_keywords || null, review_kw: sd.review_kw || null,
+      saved: true,
     };
     render();
   }
