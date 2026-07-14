@@ -102,6 +102,33 @@ class RankController extends Controller
         return response()->json(['result' => $result]);
     }
 
+    /**
+     * 키워드 상위 리스트 순위 조회(슬롯 없이) — map.naver 플레이스 리스트 배지용.
+     * pcmap GraphQL 오가닉 순위(광고 제외·서울 고정 좌표). cat은 pcmap 경로에서 판별.
+     */
+    public function serp(Request $request, PlaceRankChecker $checker)
+    {
+        $data = $request->validate([
+            'keyword' => ['required', 'string', 'max:100'],
+            'cat' => ['nullable', 'string', 'max:30'],
+            'top' => ['nullable', 'integer', 'min:10', 'max:300'],
+        ]);
+        $result = $checker->serpFetch($data['keyword'], $data['cat'] ?? '', null, $data['top'] ?? 100);
+
+        return response()->json([
+            'blocked' => $result['blocked'],
+            'total' => $result['total'],
+            'items' => array_map(fn ($it) => [
+                'rank' => $it['rnk'],
+                'place_id' => $it['place_id'],
+                'name' => $it['name'],
+                'review_score' => $it['review_score'],
+                'visitor_cnt' => $it['visitor_cnt'],
+                'blog_cnt' => $it['blog_cnt'],
+            ], $result['items']),
+        ]);
+    }
+
     private function slotJson(PlaceRankSlot $s): array
     {
         return [

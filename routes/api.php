@@ -24,6 +24,9 @@ Route::prefix('ext')->group(function (): void {
         Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1');
         Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1');
 
+        // 플레이스 리스트 순위(map.naver 배지) — 키워드 상위 오가닉 순위 목록
+        Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');
+
         // 쇼핑 시장 분석 저장/내역
         Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1');
         Route::get('/market-analyses', [ExtMarketController::class, 'index']);

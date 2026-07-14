@@ -1,0 +1,31 @@
+/* RankFree — 지도 플레이스 리스트 순위 배지 (pcmap iframe에 주입, 업체명 앞 인라인) */
+.rf-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 19px;
+  padding: 0 6px;
+  margin-right: 5px;
+  border-radius: 6px;
+  background: #0052ff;
+  color: #ffffff;
+  font: 700 11.5px/1 -apple-system, BlinkMacSystemFont, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  letter-spacing: -0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 82, 255, 0.25);
+  position: relative;
+  top: -1px;
+}
+/* 광고 노출 카드 — 회색(오가닉 순위가 있으면 순위 텍스트, 없으면 '광고') */
+.rf-rank-badge.rf-rank-ad {
+  background: #8a8f99;
+  box-shadow: none;
+}
+/* 상위 순위권 밖 */
+.rf-rank-badge.rf-rank-none {
+  background: rgba(120, 126, 138, 0.85);
+  box-shadow: none;
+}

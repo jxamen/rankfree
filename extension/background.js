@@ -145,6 +145,22 @@ const handlers = {
     return { ok: false, data: null, message: '키워드 분석 데이터를 조회하지 못했습니다.' };
   },
 
+  /** 플레이스 리스트 순위(map.naver 배지) — 키워드 상위 오가닉 순위 목록(광고 제외·서울 고정 좌표) */
+  async placeSerp({ keyword, cat, top }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const q = '?keyword=' + encodeURIComponent(keyword || '') + '&cat=' + encodeURIComponent(cat || '') + '&top=' + (top || 100);
+    const { ok, status, json } = await apiFetch('/api/ext/place-serp' + q, { token, apiBase });
+    if (status === 401) {
+      await chrome.storage.local.remove(['rfToken', 'rfUser']);
+      return { ok: false, loggedIn: false };
+    }
+    if (ok && json) {
+      return { ok: true, blocked: !!json.blocked, total: json.total || 0, items: json.items || [] };
+    }
+    return { ok: false, message: (json && json.message) || '플레이스 순위를 조회하지 못했습니다.' };
+  },
+
   /** 시장 분석 결과 서버 저장 */
   async saveMarketAnalysis(payload) {
     const { token, apiBase } = await getStore();

@@ -640,6 +640,10 @@ class PlaceRankChecker
                     $myRank = $rank;
                 }
             }
+            // 목록 모드(myPid 없음): topN을 채우면 즉시 종료 — 배지용, 불필요한 페이지 조회·지연 방지
+            if (! $myPid && count($items) >= $topN) {
+                break;
+            }
             if ($found && count($items) >= $topN) {
                 break;
             }

@@ -15,7 +15,9 @@
     "https://search.naver.com/*",
     "https://smartstore.naver.com/*",
     "https://brand.naver.com/*",
-    "https://shopping.naver.com/*"
+    "https://shopping.naver.com/*",
+    "https://map.naver.com/*",
+    "https://pcmap.place.naver.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -55,6 +57,13 @@
       ],
       "js": ["content/product.js"],
       "css": ["content/panel.css", "content/seller-power.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://pcmap.place.naver.com/*"],
+      "all_frames": true,
+      "js": ["content/place-rank.js"],
+      "css": ["content/place-rank.css"],
       "run_at": "document_idle"
     }
   ],
