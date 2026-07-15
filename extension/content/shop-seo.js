@@ -10,11 +10,13 @@
   window.__rfShopSeo = true;
 
   const normTitle = (s) => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[·.,()[\]'"‘’“”\-–—&/]/g, '');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   let curKey = '';
   let seoMap = null; // normTitle -> {score, used_keywords, rank, is_ad}
   let loading = false;
   let failed = false;
+  let loadedCount = 0; // 분석한 카드 수 — 스크롤로 상품이 늘면 재분석
 
   function query() {
     try { return new URLSearchParams(location.search).get('query') || ''; } catch (e) { return ''; }
@@ -32,10 +34,12 @@
   }
 
   function cards() {
-    return [...document.querySelectorAll('[class*="product_item"]')].filter((c) => c.querySelector('[class*="product_title"]'));
+    // 일반(product_item) + 광고(adProduct_item) 카드 모두
+    return [...document.querySelectorAll('[class*="product_item"], [class*="adProduct_item"]')]
+      .filter((c) => c.querySelector('[class*="product_title"], [class*="adProduct_title"]'));
   }
   function titleOf(card) {
-    const a = card.querySelector('[class*="product_title"] a');
+    const a = card.querySelector('[class*="product_title"] a, [class*="adProduct_title"] a');
     return a ? (a.getAttribute('title') || a.textContent || '').trim() : '';
   }
   // 광고 카드 — 광고 전용 클래스(adProduct) 또는 카드 내 '광고' 배지
@@ -53,17 +57,20 @@
   async function loadSeo() {
     const q = query();
     if (!q) return;
-    if (q === curKey && (seoMap || loading || failed)) return;
-    curKey = q; seoMap = null; failed = false; loading = true;
-    clearBadges();
+    if (q !== curKey) { curKey = q; loadedCount = 0; seoMap = null; failed = false; clearBadges(); }
     const cs = cards();
+    if (cs.length <= loadedCount && (seoMap || failed)) { apply(); return; } // 카드 안 늘면 배지만
+    if (loading) return;
+    loading = true;
     const products = cs.map((c, i) => ({ title: titleOf(c), rank: rankOf(c, i), is_ad: isAd(c) }));
     if (!products.length) { loading = false; return; }
     const res = await sendBg('shoppingSeo', { keyword: q, products });
     loading = false;
     if (!res || !res.ok || !res.data || !Array.isArray(res.data.products)) { failed = true; return; }
+    failed = false;
     seoMap = new Map();
     res.data.products.forEach((p) => { const k = normTitle(p.title); if (k && !seoMap.has(k)) seoMap.set(k, p); });
+    loadedCount = cs.length;
     apply();
   }
 
@@ -76,13 +83,26 @@
       const box = document.createElement('div');
       box.className = 'rf-shop-seo';
       const scoreCls = seo.score >= 80 ? ' hi' : (seo.score >= 60 ? '' : ' lo');
+      const kws = (seo.used_keywords && seo.used_keywords.length) ? seo.used_keywords : [];
       box.innerHTML =
+        (isAd(card) ? '<span class="rf-ss-ad">광고</span>' : '') +
         '<span class="rf-ss-rank">랭킹 ' + rankOf(card, i) + '</span>' +
         '<span class="rf-ss-score' + scoreCls + '">제목 점수 ' + seo.score + '</span>' +
-        (seo.used_keywords && seo.used_keywords.length
-          ? '<span class="rf-ss-kw">제목 키워드 ' + seo.used_keywords.map((k) => '<b>' + k + '</b>').join(' · ') + '</span>'
+        (kws.length
+          ? '<span class="rf-ss-kw">제목 키워드 ' + kws.map((k) => '<b>' + esc(k) + '</b>').join(' · ') +
+            '<button type="button" class="rf-ss-copy" title="키워드 복사">복사</button></span>'
           : '<span class="rf-ss-kw rf-ss-none">제목에 핵심 키워드 없음</span>');
-      const titleEl = card.querySelector('[class*="product_title"]');
+      const copyBtn = box.querySelector('.rf-ss-copy');
+      if (copyBtn) copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          navigator.clipboard.writeText(kws.join(' '));
+          const o = copyBtn.textContent; copyBtn.textContent = '복사됨';
+          setTimeout(() => { copyBtn.textContent = o; }, 1000);
+        } catch (er) { /* noop */ }
+      });
+      const titleEl = card.querySelector('[class*="product_title"], [class*="adProduct_title"]');
       if (titleEl) titleEl.insertAdjacentElement('afterend', box);
       else card.insertBefore(box, card.firstChild);
     });
@@ -96,7 +116,7 @@
   function schedule() {
     if (scheduled) return;
     scheduled = true;
-    setTimeout(() => { scheduled = false; if (seoMap) apply(); else loadSeo(); }, 400);
+    setTimeout(() => { scheduled = false; loadSeo(); }, 400);
   }
 
   function start() {

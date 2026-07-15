@@ -17,6 +17,16 @@
     // 시즌성 — 시즌 키워드면 "성수기 2개월 전부터 미리 순위작업" 리드 유도 콜아웃 표시
     $season = $dm['season'] ?? null;
     $mlabel = fn ($arr) => implode('·', array_map(fn ($m) => $m.'월', $arr));
+    // 매출 상위 상품 제목 SEO — 점수·사용 키워드·추천 상품명(ShoppingTitleSeoAnalyzer)
+    $seoData = ($a->keyword && $tops)
+        ? app(\App\Domain\Shopping\ShoppingTitleSeoAnalyzer::class)->analyze($a->keyword, array_map(fn ($p) => ['title' => $p['title'] ?? '', 'rank' => 0, 'is_ad' => false], array_values($tops)))
+        : null;
+    $seoByTitle = [];
+    if ($seoData) {
+        foreach ($seoData['products'] as $sp) {
+            $seoByTitle[$sp['title']] = $sp;
+        }
+    }
 @endphp
 
 {{-- 검색 키워드 + 쇼핑 검색 --}}
@@ -227,6 +237,20 @@
     </div>
 @endif
 
+{{-- 추천 상품명 (매출 상위 위) — 매출 상위 공통단어 조합 --}}
+@if ($seoData && !empty($seoData['suggested_titles']))
+<div class="card mb-4 p-5">
+    <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">추천 상품명 <span class="badge" style="font-size:var(--fs-xs);">매출 상위 공통단어 조합</span></div>
+    <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">매출 상위 상품 제목에서 자주 쓰인 단어로 조합한 제안입니다.</p>
+    @foreach ($seoData['suggested_titles'] as $st)
+        <div class="flex items-center justify-between gap-3 py-2" style="border-top:1px solid var(--color-hairline-soft);">
+            <span class="text-ink" style="font-size:var(--fs-sm);">{{ $st }}</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent.trim());const o=this.textContent;this.textContent='복사됨';setTimeout(()=>this.textContent=o,1000)">복사</button>
+        </div>
+    @endforeach
+</div>
+@endif
+
 {{-- 매출 상위 상품 (키워드 분석 위) --}}
 <div class="card overflow-hidden mb-6">
     <div class="px-5 py-4 text-ink font-semibold" style="font-size:var(--fs-xs);">매출 상위 상품</div>
@@ -259,6 +283,16 @@
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">
                                 {{ !empty($p['isCatalog']) ? '가격비교'.(!empty($p['mallCount']) ? ' · '.$p['mallCount'].'몰' : '') : ($p['mallName'] ?? '') }}
                             </div>
+                            @php $sseo = $seoByTitle[$p['title'] ?? ''] ?? null; @endphp
+                            @if ($sseo)
+                                <div class="flex items-center gap-2 flex-wrap mt-1" style="font-size:11px;">
+                                    <span style="font-weight:700;color:{{ $sseo['score'] >= 80 ? 'var(--color-success)' : ($sseo['score'] >= 60 ? 'var(--color-accent)' : 'var(--color-error)') }};">제목점수 {{ $sseo['score'] }}</span>
+                                    @if (!empty($sseo['used_keywords']))
+                                        <span class="text-muted">키워드 {{ implode('·', $sseo['used_keywords']) }}</span>
+                                        <button type="button" class="btn btn-secondary" style="padding:1px 7px;font-size:11px;" onclick="navigator.clipboard.writeText('{{ implode(' ', $sseo['used_keywords']) }}');const o=this.textContent;this.textContent='복사됨';setTimeout(()=>this.textContent=o,1000)">복사</button>
+                                    @endif
+                                </div>
+                            @endif
                         </td>
                         <td class="px-3 py-3 text-right text-body" style="font-size:var(--fs-xs);">{{ number_format((int) ($p['price'] ?? 0)) }}</td>
                         <td class="px-3 py-3 text-right text-body" style="font-size:var(--fs-xs);">{{ number_format((int) ($p['purchase6m'] ?? 0)) }}</td>

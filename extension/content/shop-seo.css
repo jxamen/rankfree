@@ -39,3 +39,25 @@
 .rf-shop-seo .rf-ss-kw.rf-ss-none {
   color: #959595;
 }
+.rf-shop-seo .rf-ss-ad {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #8a8f99;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 11px;
+}
+.rf-shop-seo .rf-ss-copy {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid #d6e4ff;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0052ff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rf-shop-seo .rf-ss-copy:hover {
+  background: #eef4ff;
+}
