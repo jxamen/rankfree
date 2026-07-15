@@ -11,17 +11,11 @@
     $ymd = fn ($d) => ($d && \Illuminate\Support\Carbon::hasFormat((string) $d, 'Ymd')) ? \Illuminate\Support\Carbon::createFromFormat('Ymd', (string) $d)->format('Y-m-d') : (string) $d;
 @endphp
 
-<div class="flex items-end justify-between flex-wrap gap-2 mb-4">
-    <div>
-        <div class="text-ink font-display" style="font-size:var(--fs-xl);">저장 블로거</div>
-        <div class="text-muted-soft" style="font-size:var(--fs-xs);">키워드 분석에서 저장한 블로거 모음 · <b>키워드 × 블로그 ID</b> 조합으로 관리됩니다</div>
-    </div>
-    <div class="flex items-center gap-2">
-        <button type="button" id="sb-del-sel" class="btn btn-secondary btn-sm" style="height:36px;" disabled>선택 삭제 <span id="sb-sel-count">0</span></button>
-        <a href="{{ route('console.blog-saved.export', $kw !== '' ? ['kw' => $kw] : []) }}" class="btn btn-secondary btn-sm" style="height:36px;" title="{{ $kw !== '' ? '‘'.$kw.'’ 저장 블로거만' : '전체 저장 블로거' }} 엑셀 다운로드">엑셀 다운로드</a>
-        <a href="{{ route('console.blog') }}" class="btn btn-secondary btn-sm" style="height:36px;">블로그 수집으로</a>
-    </div>
-</div>
+<x-console.page-head title="저장 블로거" desc="키워드 분석에서 저장한 블로거 모음 · <b>키워드 × 블로그 ID</b> 조합으로 관리됩니다">
+    <button type="button" id="sb-del-sel" class="btn btn-secondary btn-sm" style="height:36px;" disabled>선택 삭제 <span id="sb-sel-count">0</span></button>
+    <a href="{{ route('console.blog-saved.export', $kw !== '' ? ['kw' => $kw] : []) }}" class="btn btn-secondary btn-sm" style="height:36px;" title="{{ $kw !== '' ? '‘'.$kw.'’ 저장 블로거만' : '전체 저장 블로거' }} 엑셀 다운로드">엑셀 다운로드</a>
+    <a href="{{ route('console.blog') }}" class="btn btn-secondary btn-sm" style="height:36px;">블로그 수집으로</a>
+</x-console.page-head>
 
 @if ($keywords->count())
     {{-- 키워드 필터 칩 — 전체 / 키워드별 저장 건수 --}}

@@ -10,14 +10,9 @@
 @section('console-content')
 @php $statusColor = ['new' => 'var(--color-accent)', 'contacted' => 'var(--color-warning)', 'done' => 'var(--color-success)', 'spam' => 'var(--color-muted)']; @endphp
 
-<div class="mb-4">
-    <div class="text-muted" style="font-size:var(--fs-xs);">분석 리포트 "순위 상승 문의하기" 등으로 접수된 상담 리드 (슈퍼어드민 전용)</div>
-    <div class="text-ink font-display mt-1" style="font-size:var(--fs-lg);">{{ number_format($rows->total()) }}건
-        <span class="text-muted-soft" style="font-size:var(--fs-xs);">
-            @foreach (\App\Models\MarketingLead::STATUSES as $sk => $sl)· {{ $sl }} {{ (int) ($counts[$sk] ?? 0) }} @endforeach
-        </span>
-    </div>
-</div>
+<x-console.page-head title="상담 리드">
+    <x-slot:desc>분석 리포트 「순위 상승 문의하기」 등으로 접수된 상담 리드(슈퍼어드민 전용) · 총 <b>{{ number_format($rows->total()) }}</b>건@foreach (\App\Models\MarketingLead::STATUSES as $sk => $sl) · {{ $sl }} {{ (int) ($counts[$sk] ?? 0) }}@endforeach</x-slot:desc>
+</x-console.page-head>
 
 {{-- 상태 필터(좌) + 검색(우) — 카드 --}}
 <form method="GET" class="card p-3 mb-4">

@@ -3,10 +3,7 @@
 
 @section('console-content')
 <div>
-    <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
-        순위추적 중인 <b class="text-ink">키워드 × 플레이스</b>의 SEO 경쟁력을 분석합니다. 같은 키워드 상위 경쟁사와 비교해
-        <b class="text-ink">N1 유사도·N2 관련성·N3 랭킹</b> 점수를 산출합니다.
-    </p>
+    <x-console.page-head title="경쟁 분석" desc="순위추적 중인 <b>키워드 × 플레이스</b>의 SEO 경쟁력 분석 · 같은 키워드 상위 경쟁사와 비교해 <b>N1 유사도·N2 관련성·N3 랭킹</b> 점수를 산출합니다" />
 
     @if ($errors->any())
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>

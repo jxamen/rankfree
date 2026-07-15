@@ -6,6 +6,8 @@
 @endsection
 
 @section('console-content')
+<x-console.page-head title="1:1 문의" desc="궁금한 점을 남겨주시면 확인 후 답변드립니다 · 답변 완료 여부를 목록에서 확인할 수 있습니다" />
+
 <div class="card overflow-hidden">
     @forelse ($qnas as $qna)
         <a href="{{ route('console.qna.show', $qna) }}" class="flex items-center gap-3 px-5 hover:bg-surface-soft transition" style="border-top:{{ $loop->first ? '0' : '1px solid var(--color-hairline-soft)' }};min-height:56px;">

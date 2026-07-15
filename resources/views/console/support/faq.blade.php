@@ -3,6 +3,8 @@
 
 @section('console-content')
 <div>
+    <x-console.page-head title="자주 묻는 질문" desc="자주 묻는 질문 모음 · 궁금한 내용을 검색하거나 카테고리로 찾아보세요" />
+
     {{-- 검색(우) — 카드 --}}
     <form method="GET" action="{{ route('console.faq') }}" class="card p-3 mb-4">
         <div class="flex items-center gap-2">

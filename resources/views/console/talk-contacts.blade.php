@@ -9,10 +9,9 @@
 
 @section('console-content')
 
-<div class="mb-4">
-    <div class="text-muted" style="font-size:var(--fs-xs);">셀러력 수집 중 확보한 판매자 스토어·톡톡 식별자 (슈퍼어드민 전용)</div>
-    <div class="text-ink font-display mt-1" style="font-size:var(--fs-lg);">{{ number_format($total) }}건</div>
-</div>
+<x-console.page-head title="판매자 톡톡 연락처">
+    <x-slot:desc>셀러력 수집 중 확보한 판매자 스토어·톡톡 식별자(슈퍼어드민 전용) · 총 <b>{{ number_format($total) }}</b>건</x-slot:desc>
+</x-console.page-head>
 
 {{-- 검색(우) — 카드 --}}
 <form method="GET" class="card p-3 mb-4">

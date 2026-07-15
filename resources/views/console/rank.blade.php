@@ -8,11 +8,10 @@
     .rf-slot.rf-collapsed .rf-metrics { display: none; }
     .rf-slot.rf-collapsed .rf-cell { width: 78px; padding: 8px 6px; }
 </style>
-{{-- 사용량 --}}
-<div class="text-muted mb-3" style="font-size:var(--fs-xs);">
-    추적 중 <b class="text-ink">{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }}
-    <span class="text-muted-soft">· 플레이스+쇼핑 합산 · 매일 자동 갱신 · 키워드별 순위</span>
-</div>
+{{-- 메뉴명 + 설명 · 사용량 --}}
+<x-console.page-head title="순위 추적">
+    <x-slot:desc>플레이스 <b>키워드별 순위</b>를 매일 자동 갱신합니다 · 추적 중 <b>{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }} (플레이스+쇼핑 합산)</x-slot:desc>
+</x-console.page-head>
 {{-- 기간 필터(좌) + 키워드 검색(우) — 카드. 기간 지정 시 해당 기간의 순위만 표시 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">

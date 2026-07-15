@@ -6,11 +6,10 @@
     .rf-cell { width: 100px; padding: 10px 8px 8px; }
 </style>
 
-{{-- 사용량 --}}
-<div class="text-muted mb-3" style="font-size:var(--fs-xs);">
-    추적 중 <b class="text-ink">{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }}
-    <span class="text-muted-soft">· 플레이스+쇼핑 합산 · 상품/업체 × 키워드 · 매일 순위 기록</span>
-</div>
+{{-- 메뉴명 + 설명 · 사용량 --}}
+<x-console.page-head title="쇼핑 순위추적">
+    <x-slot:desc>네이버 쇼핑 <b>상품/업체 × 키워드</b> 순위를 매일 자동 기록합니다 · 추적 중 <b>{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }} (플레이스+쇼핑 합산)</x-slot:desc>
+</x-console.page-head>
 {{-- 액션(좌) + 기간·키워드 검색(우) — 카드 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">

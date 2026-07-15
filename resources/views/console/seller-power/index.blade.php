@@ -9,9 +9,7 @@
     };
 @endphp
 
-<div class="card-soft mb-6 px-4 py-3 text-muted" style="font-size:var(--fs-xs);">
-    크롬 확장에서 <b>내 상품 페이지</b>를 열고 셀러력을 분석하면, 같은 키워드 <b>검색 상위 10개 경쟁 상품</b>과 비교한 결과가 저장됩니다. 점수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)입니다.
-</div>
+<x-console.page-head title="셀러력" desc="크롬 확장에서 <b>내 상품 페이지</b>의 셀러력을 분석하면 같은 키워드 <b>검색 상위 10개 경쟁 상품</b>과 비교해 저장됩니다 · 점수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)" />
 
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center gap-2">

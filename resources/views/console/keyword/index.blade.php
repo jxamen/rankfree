@@ -3,6 +3,8 @@
 
 @section('console-content')
 
+<x-console.page-head title="키워드 분석" desc="키워드의 <b>검색량·성별/연령·트렌드·연관 키워드</b>를 한 번에 분석합니다 · 분석 결과는 자동 저장되어 다시 볼 수 있습니다" />
+
 {{-- 분석 입력 --}}
 <form method="GET" action="{{ route('console.keyword') }}" class="flex items-center gap-2 mb-4" id="kw-form">
     <input type="text" name="keyword" value="{{ $keyword }}" placeholder="분석할 키워드를 입력하세요 (예: 강남 맛집)"

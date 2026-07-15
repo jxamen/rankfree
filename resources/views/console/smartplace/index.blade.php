@@ -2,14 +2,11 @@
 @section('page-title', '스마트플레이스 리포트')
 
 @section('console-content')
-{{-- 사용량 · 안내 --}}
-<div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-    <div class="text-muted" style="font-size:var(--fs-xs);">
-        등록 계정 <b class="text-ink">{{ $accounts->count() }}</b>개
-        <span class="text-muted-soft">· 스마트플레이스 통계·리뷰·스마트콜·예약을 한 번에 수집</span>
-    </div>
+{{-- 메뉴명 + 설명 · 안내 --}}
+<x-console.page-head title="스마트플레이스 리포트">
+    <x-slot:desc>스마트플레이스 <b>통계·리뷰·스마트콜·예약</b>을 한 번에 수집합니다 · 등록 계정 <b>{{ $accounts->count() }}</b>개</x-slot:desc>
     <button type="button" id="sp-guide-toggle" class="btn btn-ghost btn-sm">등록 방법</button>
-</div>
+</x-console.page-head>
 
 {{-- 안내창 — 아이디/비밀번호 자동 로그인 가이드 (토글) --}}
 <div id="sp-guide" class="card-soft mb-5 hidden" style="padding:18px 20px;">

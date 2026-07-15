@@ -8,9 +8,7 @@
         : ($n >= 10000 ? number_format($n / 10000).'만' : number_format($n));
 @endphp
 
-<div class="card-soft mb-6 px-4 py-3 text-muted" style="font-size:var(--fs-xs);">
-    크롬 확장에서 시장 분석을 실행하면 자동으로 저장됩니다. 네이버 쇼핑 검색 페이지에서 RankFree 확장을 사용해 보세요.
-</div>
+<x-console.page-head title="쇼핑 시장 분석" desc="네이버 쇼핑 검색 페이지에서 크롬 확장으로 실행한 시장 분석이 자동 저장됩니다 · <b>6개월 시장규모·매출·판매량·평균가</b>" />
 
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center gap-2">

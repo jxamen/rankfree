@@ -9,6 +9,8 @@
 @endsection
 
 @section('console-content')
+<x-console.page-head title="API 키" desc="랭크프리 오픈 API 호출용 키를 발급·관리합니다 · <b>권한·허용 IP·만료일</b>로 접근을 제어할 수 있습니다" />
+
 @if ($errors->any())
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif

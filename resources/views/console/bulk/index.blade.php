@@ -9,6 +9,8 @@
     };
 @endphp
 
+<x-console.page-head title="키워드 대량 분석" desc="여러 키워드를 한 번에 분석합니다 · 최대 500개 · <b>검색량·발행량·포화·성별연령·요일·섹션배치</b>" />
+
 @if (session('status'))
     <div class="card-soft px-4 py-3 mb-4 text-muted" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
 @endif
@@ -16,8 +18,6 @@
 {{-- 입력 --}}
 <form method="POST" action="{{ route('console.bulk.store') }}" enctype="multipart/form-data" class="card p-5 mb-6" id="bulk-form">
     @csrf
-    <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-xs);">키워드 대량 분석 <span class="text-muted-soft" style="font-weight:400;">최대 500개 · 검색량·발행량·포화·성별연령·요일·섹션배치</span></div>
-
     <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:6px;">키워드 (줄바꿈 또는 쉼표 구분)</label>
     <textarea name="keywords" rows="6" placeholder="강남 맛집&#10;제주 호텔&#10;다이어트 보조제" class="input" style="width:100%;font-size:var(--fs-sm);resize:vertical;min-height:440px;"></textarea>
 

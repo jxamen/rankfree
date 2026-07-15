@@ -16,6 +16,8 @@
     $nf = fn ($v) => $v === null ? '—' : number_format((int) $v);
 @endphp
 
+<x-console.page-head :title="($type ?? '') === 'blog' ? '블로그 지수 분석' : '블로그 수집'" desc="키워드를 넣으면 블로그 검색 상위 블로거를, 블로그 ID·URL을 넣으면 그 블로그 하나를 분석합니다 · 지수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)" />
+
 {{-- 분석 입력 --}}
 <form method="GET" action="{{ route('console.blog') }}" class="flex items-center gap-2 mb-4" id="bi-form">
     <input type="text" name="q" value="{{ $q }}" placeholder="키워드(예: 강남 맛집) 또는 블로그 ID·URL(예: today789)"
@@ -41,9 +43,6 @@
         @endif
     @endif
 </form>
-<p class="text-muted-soft mb-5" style="font-size:var(--fs-xs);">
-    키워드를 넣으면 블로그 검색 상위 블로거들을, 블로그 ID/URL을 넣으면 그 블로그 하나를 분석합니다. 지수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)입니다.
-</p>
 
 @if (! $result && $q === '')
     @if ($history->count())

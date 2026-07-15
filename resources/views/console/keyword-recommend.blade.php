@@ -12,15 +12,14 @@
     foreach ($recommendations as $r) { $maxScore = max($maxScore, (int) $r['score']); }
 @endphp
 
+<x-console.page-head title="키워드 추천" desc="시드 키워드의 <b>연관어·자동완성</b>을 모아 <b>기회 점수</b>(검색량 × 경쟁 낮음 가중치)로 랭킹합니다 · 검색량 많고 경쟁 낮은 <b>황금 키워드</b>를 상단에 노출" />
+
 {{-- 분석(추천) 입력 --}}
 <form method="GET" action="{{ route('console.keyword-recommend') }}" class="flex items-center gap-2 mb-4" id="kr-form">
     <input type="text" name="keyword" value="{{ $keyword }}" placeholder="시드 키워드를 입력하세요 (예: 강남 맛집)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">
     <button type="submit" class="btn btn-primary" style="height:44px;padding:0 22px;">추천</button>
 </form>
-<p class="text-muted-soft mb-5" style="font-size:var(--fs-xs);">
-    시드 키워드의 <b>연관어·자동완성</b>을 모아 <b>기회 점수</b>(검색량 × 경쟁 낮음 가중치)로 랭킹합니다 — 검색량 많고 경쟁 낮은 <b>황금 키워드</b>를 상단에 노출.
-</p>
 
 {{-- 최근 검색 --}}
 @if (isset($history) && $history->count())

@@ -2,6 +2,8 @@
 @section('page-title', '공지사항')
 
 @section('console-content')
+<x-console.page-head title="공지사항" desc="랭크프리 서비스 소식·업데이트·점검 안내를 확인할 수 있습니다" />
+
 <div class="card overflow-hidden">
     @forelse ($notices as $notice)
         <a href="{{ route('console.notices.show', $notice) }}" class="flex items-center gap-3 px-5 hover:bg-surface-soft transition" style="border-top:{{ $loop->first ? '0' : '1px solid var(--color-hairline-soft)' }};min-height:56px;">

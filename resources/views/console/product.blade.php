@@ -2,9 +2,7 @@
 @section('page-title', '상품 분석')
 
 @section('console-content')
-<div class="card-soft mb-6 px-4 py-3 text-muted" style="font-size:var(--fs-xs);">
-    크롬 확장에서 스마트스토어 상품 페이지의 리뷰를 분석하면 자동으로 저장됩니다.
-</div>
+<x-console.page-head title="상품 분석" desc="크롬 확장에서 스마트스토어 상품 페이지의 리뷰를 분석하면 자동 저장됩니다 · <b>리뷰·평점·재구매율·판매량</b>" />
 
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center gap-2">

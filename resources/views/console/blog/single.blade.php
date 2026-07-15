@@ -15,16 +15,14 @@
     };
 @endphp
 
+<x-console.page-head title="블로그 1개 분석" desc="블로그의 <b>이웃·방문·활동성</b>과 <b>게시물 품질(사진·본문·영상)·전문성(빈출 주제어)</b>을 종합해 지수화합니다 · 지수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)" />
+
 {{-- 분석 입력: 블로그 ID/URL 전용 --}}
 <form method="GET" action="{{ route('console.blog-single') }}" class="flex items-center gap-2 mb-4" id="bi-form">
     <input type="text" name="q" value="{{ $q }}" placeholder="블로그 ID 또는 URL (예: today789, https://blog.naver.com/today789)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">
     <button type="submit" class="btn btn-primary" style="height:44px;padding:0 22px;">분석</button>
 </form>
-<p class="text-muted-soft mb-5" style="font-size:var(--fs-xs);">
-    블로그의 <b>이웃·방문·활동성</b>과 <b>게시물 품질(사진·본문·영상)</b>, <b>전문성(빈출 주제어)</b>을 종합해 지수화합니다.
-    지수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)입니다.
-</p>
 
 @if (! $result && $q === '')
     @if ($history->count())
