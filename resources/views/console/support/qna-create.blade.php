@@ -1,11 +1,14 @@
 @extends('console.layout')
 @section('page-title', '1:1 문의하기')
+@section('crumb-title', '문의하기')
 
 @section('page-actions')
     <a href="{{ route('console.qna') }}" class="btn btn-secondary btn-sm">← 내역</a>
 @endsection
 
 @section('console-content')
+<x-console.page-head title="1:1 문의하기" desc="궁금한 점을 남겨주시면 확인 후 답변드립니다 · 비밀글로 작성하면 나와 운영자만 열람합니다" />
+
 <form method="POST" action="{{ route('console.qna.store') }}">
     @csrf
     <div class="card p-6">

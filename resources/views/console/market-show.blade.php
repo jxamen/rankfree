@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '시장 분석 — '.$a->keyword)
+@section('crumb-title', $a->keyword)
 
 @section('page-actions')
     <a href="{{ route('console.market') }}" class="btn btn-secondary btn-sm">← 내역으로</a>

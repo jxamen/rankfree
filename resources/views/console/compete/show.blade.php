@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '경쟁 분석 · '.$slot->keyword)
+@section('crumb-title', $slot->keyword)
 
 @section('console-content')
 @php

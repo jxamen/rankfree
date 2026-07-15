@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '셀러력 진단')
+@section('crumb-title', $a->keyword)
 
 @section('page-actions')
     <div class="flex items-center gap-2">

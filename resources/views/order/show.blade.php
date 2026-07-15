@@ -1,6 +1,10 @@
 @extends('console.layout')
 
 @section('page-title', $product->title.' 주문')
+{{-- 브레드크럼: 셀프마케팅(링크) › 상품명 · 사이드바는 셀프마케팅 메뉴 활성 --}}
+@section('crumb-parent', 'self-marketing')
+@section('crumb-title', $product->title)
+@section('active-menu', 'self-marketing')
 
 @section('console-content')
 @php
@@ -12,6 +16,17 @@
 @endphp
 
 <section>
+    <x-console.page-head title="셀프마케팅" desc="필요한 마케팅을 직접 골라 신청하세요. 분석으로 찾은 약점을 실행으로 연결합니다." />
+
+    {{-- 유형 탭 — 셀프마케팅 카탈로그와 동일. 클릭 시 해당 유형 카탈로그로 이동, 현재 상품 유형 강조 --}}
+    @if (($activeTypeCodes ?? collect())->count())
+        <div class="card p-3 mb-6"><div class="flex flex-wrap items-center gap-2">
+            <a href="{{ route('self-marketing') }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;">전체</a>
+            @foreach ($activeTypeCodes as $code)
+                <a href="{{ route('self-marketing', ['type' => $code]) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ $product->product_type === $code ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">{{ $typeNames[$code] ?? $code }}</a>
+            @endforeach
+        </div></div>
+    @endif
 
     @if (session('order_done'))
         <div class="card p-6 text-center mb-6" style="border:1px solid var(--color-success);">

@@ -48,7 +48,9 @@
     <div class="card overflow-hidden rf-slot" data-slot="{{ $slot->id }}">
         <div class="flex items-center gap-3 px-5 py-3 border-b border-hairline-soft flex-wrap" style="background:var(--color-surface-soft);">
             <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $slot->keyword }}</span>
-            <span class="badge" style="font-size:var(--fs-xs);padding:1px 8px;">{{ $slot->target_type === 'mall' ? '업체' : '상품' }}</span>
+            {{-- 모바일 전용 순위체크 — 키워드 우측. 실제 실행은 아래 rf-run-form 제출(전체 순위체크 중복 방지) --}}
+            <button type="button" class="btn btn-secondary btn-sm sm:hidden rf-cap-hide"
+                    onclick="this.closest('.rf-slot').querySelector('.rf-run-form').requestSubmit()">순위체크</button>
             <span class="text-muted" style="font-size:var(--fs-xs);">{{ $slot->label ? $slot->label.' · ' : '' }}{{ $slot->product_title ?: ($slot->mall_name ?: ($slot->product_id ? 'ID '.$slot->product_id : '')) }}</span>
             @if ($slot->category)<span class="text-muted-soft" style="font-size:var(--fs-xs);">🗂 {{ $slot->category }}</span>@endif
             @if ($slot->monthly_views)<span class="text-muted-soft" style="font-size:var(--fs-xs);">월 조회 {{ number_format($slot->monthly_views) }}</span>@endif
@@ -56,19 +58,20 @@
                 <a href="{{ $slot->product_url }}" target="_blank" class="text-accent truncate" style="font-size:var(--fs-xs);max-width:340px;">{{ $slot->product_url }}</a>
             @endif
             <div class="flex-1"></div>
-            <div class="flex items-center gap-1 rf-cap-hide">
-                <form method="POST" action="{{ route('console.shop-rank.run', $slot) }}" class="rf-run-form" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
+            {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 상품명 옆) --}}
+            <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
+                <form method="POST" action="{{ route('console.shop-rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
                 @if ($slot->share_token)
                     <button type="button" class="btn btn-ghost btn-sm" title="공유 링크 복사 (로그인 없이 열람)"
                             onclick="rfCopyShare(this, @js(route('shop-rank.shared', $slot->share_token)))">공유</button>
                 @endif
+                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-쇼핑순위-'.$slot->keyword.'.png'), this)" title="이 키워드 쇼핑 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"
                         data-action="{{ route('console.shop-rank.update', $slot) }}"
                         data-slot-id="{{ $slot->id }}"
                         data-keyword="{{ $slot->keyword }}"
                         data-target="{{ $slot->product_url ?: ($slot->mall_name ?: $slot->product_id) }}"
                         data-label="{{ $slot->label }}">수정</button>
-                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-쇼핑순위-'.$slot->keyword.'.png'), this)" title="이 키워드 쇼핑 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <form method="POST" action="{{ route('console.shop-rank.destroy', $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
             </div>
         </div>

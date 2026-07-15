@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', ($account->sp_name ?: $account->label ?: '스마트플레이스').' 리포트')
+@section('crumb-title', $account->sp_name ?: $account->label ?: '리포트')
 
 @section('page-actions')
     <a href="{{ route('console.smartplace') }}" class="btn btn-secondary btn-sm">← 계정 목록</a>
@@ -67,6 +68,11 @@
     #sp-report .sp-pane { display: none; }
     #sp-report .sp-pane.on { display: block; }
 </style>
+
+{{-- 메뉴명 + 설명 — 다른 콘솔 상세 페이지와 동일한 page-head 패턴 --}}
+<x-console.page-head :title="($account->sp_name ?: $account->label ?: '스마트플레이스').' 리포트'">
+    <x-slot:desc>스마트플레이스 <b>통계·방문자/블로그 리뷰·스마트콜·예약</b> 수집 결과 리포트</x-slot:desc>
+</x-console.page-head>
 
 <div id="sp-report" class="w-full">
 @if (! $result)

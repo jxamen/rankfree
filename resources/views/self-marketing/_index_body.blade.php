@@ -1,19 +1,26 @@
 {{-- 셀프마케팅 상품 카탈로그 — 게스트(layouts.site)·회원(console.layout) 공용. 관리자 등록 상품을 카드로. --}}
-<section class="py-10 lg:py-14 {{ auth()->check() ? '' : 'container-page' }}" style="padding-left:0;padding-right:0;">
-    <div class="mb-5">
-        <h1 class="font-display text-ink" style="font-size:clamp(24px,2.8vw,32px);line-height:1.2;">셀프마케팅</h1>
-        <p class="text-muted mt-1" style="font-size:var(--fs-sm);">필요한 마케팅을 직접 골라 신청하세요. 분석으로 찾은 약점을 실행으로 연결합니다.</p>
-    </div>
+<section class="{{ auth()->check() ? '' : 'py-10 lg:py-14 container-page' }}" style="padding-left:0;padding-right:0;">
+    @auth
+        {{-- 콘솔 뷰 — 다른 메뉴와 동일한 공통 헤더(메뉴명 + 설명) --}}
+        <x-console.page-head title="셀프마케팅" desc="필요한 마케팅을 직접 골라 신청하세요. 분석으로 찾은 약점을 실행으로 연결합니다." />
+    @else
+        <div class="mb-5">
+            <h1 class="font-display text-ink" style="font-size:clamp(24px,2.8vw,32px);line-height:1.2;">셀프마케팅</h1>
+            <p class="text-muted mt-1" style="font-size:var(--fs-sm);">필요한 마케팅을 직접 골라 신청하세요. 분석으로 찾은 약점을 실행으로 연결합니다.</p>
+        </div>
+    @endauth
 
     {{-- 카테고리(유형) 필터(좌) + 상품명 검색(우) — 카드 --}}
-    <div class="card p-3 mb-6"><div class="flex flex-wrap items-center gap-2">
+    <div class="card p-3 {{ auth()->check() ? 'mb-4' : 'mb-6' }}"><div class="flex flex-wrap items-center gap-2">
         <a href="{{ route('self-marketing', array_filter(['q' => $q])) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ ! $type ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">전체</a>
         @foreach ($activeTypeCodes as $code)
             <a href="{{ route('self-marketing', array_filter(['type' => $code, 'q' => $q])) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ $type === $code ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">{{ $typeNames[$code] ?? $code }}</a>
         @endforeach
-        <form method="GET" class="ml-auto">
+        <form method="GET" class="ml-auto flex items-center gap-2">
             @if ($type)<input type="hidden" name="type" value="{{ $type }}">@endif
+            @if ($q !== '')<a href="{{ route('self-marketing', array_filter(['type' => $type])) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
             <input name="q" value="{{ $q }}" class="input" style="width:240px;font-size:var(--fs-xs);" placeholder="상품명 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
         </form>
     </div></div>
 

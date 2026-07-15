@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '공지사항')
+@section('crumb-title', $notice->title)
 
 @section('page-actions')
     <a href="{{ route('console.notices') }}" class="btn btn-secondary btn-sm">← 목록</a>

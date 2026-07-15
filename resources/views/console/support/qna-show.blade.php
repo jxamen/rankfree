@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '문의 상세')
+@section('crumb-title', $qna->title)
 
 @section('page-actions')
     <a href="{{ route('console.qna') }}" class="btn btn-secondary btn-sm">← 내역</a>

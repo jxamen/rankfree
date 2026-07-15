@@ -1,5 +1,6 @@
 @extends('console.layout')
 @section('page-title', '대량 분석 — '.($bulk->name ?: $bulk->total.'개'))
+@section('crumb-title', $bulk->name ?: $bulk->total.'개 키워드')
 
 @section('page-actions')
     <a href="{{ route('console.bulk') }}" class="btn btn-secondary btn-sm">← 목록</a>
@@ -15,6 +16,8 @@
         default => ['대기', 'var(--color-muted)'],
     };
 @endphp
+
+<x-console.page-head :title="$bulk->name ?: $bulk->total.'개 키워드'" desc="키워드 대량 분석 상세 · <b>검색량·발행량·포화·성별연령·요일·섹션배치</b> 결과" />
 
 {{-- 진행 상태 --}}
 <div class="card p-5 mb-6" id="bulk-progress" data-url="{{ route('console.bulk.process', $bulk) }}" data-finished="{{ $bulk->status === 'done' ? 1 : 0 }}">

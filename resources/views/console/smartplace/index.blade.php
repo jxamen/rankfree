@@ -5,14 +5,15 @@
 {{-- 메뉴명 + 설명 · 안내 --}}
 <x-console.page-head title="스마트플레이스 리포트">
     <x-slot:desc>스마트플레이스 <b>통계·리뷰·스마트콜·예약</b>을 한 번에 수집합니다 · 등록 계정 <b>{{ $accounts->count() }}</b>개</x-slot:desc>
-    <button type="button" id="sp-guide-toggle" class="btn btn-ghost btn-sm">등록 방법</button>
+    <button type="button" id="sp-guide-toggle" class="btn btn-secondary btn-sm">등록 방법</button>
+    <button type="button" id="sp-open-modal" class="btn btn-primary btn-sm">＋ 계정 등록</button>
 </x-console.page-head>
 
 {{-- 안내창 — 아이디/비밀번호 자동 로그인 가이드 (토글) --}}
 <div id="sp-guide" class="card-soft mb-5 hidden" style="padding:18px 20px;">
     <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-xs);">사장님(광고주) 계정 등록 방법</div>
     <ol class="text-body" style="font-size:var(--fs-xs);line-height:1.9;padding-left:18px;list-style:decimal;">
-        <li>우측 상단 <b class="text-ink">＋ 계정 등록</b>에서 <b class="text-ink">광고주 네이버 아이디·비밀번호</b>를 입력하고 <b class="text-ink">[매장 불러오기]</b>를 누릅니다.</li>
+        <li>우측 상단 <b class="text-ink">등록 방법</b> 버튼 옆 <b class="text-ink">＋ 계정 등록</b>에서 <b class="text-ink">광고주 네이버 아이디·비밀번호</b>를 입력하고 <b class="text-ink">[매장 불러오기]</b>를 누릅니다.</li>
         <li>로그인 후 등록된 매장을 자동으로 불러옵니다 — 매장이 <b class="text-ink">1개면 자동 선택</b>, 여러 개면 목록에서 선택하면 <b class="text-ink">업체명·URL이 자동 입력</b>됩니다.</li>
         <li>등록 후 <b class="text-ink">[수집]</b>을 누르면 저장된 세션으로 리포트를 가져옵니다. 세션이 만료되면 자동으로 다시 로그인합니다.</li>
     </ol>
@@ -25,22 +26,13 @@
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif
 
-{{-- 수집기간 컨트롤 — [수집] 실행 시 적용 (비우면 최근 7일) --}}
-<div class="card mb-4 px-5 py-3 flex items-center gap-2 flex-wrap" style="font-size:var(--fs-xs);">
-    <span class="text-ink font-semibold">수집기간</span>
-    <button type="button" class="btn btn-secondary btn-sm" data-period="day">오늘</button>
-    <button type="button" class="btn btn-secondary btn-sm" data-period="week">최근 7일</button>
-    <select id="sp-msel" class="input" style="width:auto;height:32px;font-size:var(--fs-xs);padding:0 8px;"></select>
-    <input type="date" id="sp-sd" class="input" style="width:auto;height:32px;font-size:var(--fs-xs);padding:0 8px;">
-    <span class="text-muted-soft">~</span>
-    <input type="date" id="sp-ed" class="input" style="width:auto;height:32px;font-size:var(--fs-xs);padding:0 8px;">
-    <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 최근 7일 기준으로 수집합니다.</span>
-    <button type="button" id="sp-open-modal" class="btn btn-primary btn-sm" style="height:36px;margin-left:auto;">＋ 계정 등록</button>
-</div>
-
-{{-- 업체명 검색(우) --}}
+{{-- 툴바 — 수집기간 버튼(일주일/오늘/한달, 기본 일주일) · 업체명 검색(우) --}}
 <form method="GET" class="card p-3 mb-4">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-wrap" style="font-size:var(--fs-xs);">
+        <span class="text-ink font-semibold">수집기간</span>
+        <button type="button" class="btn btn-primary btn-sm sp-period" data-period="week">일주일</button>
+        <button type="button" class="btn btn-secondary btn-sm sp-period" data-period="day">오늘</button>
+        <button type="button" class="btn btn-secondary btn-sm sp-period" data-period="month">한달</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
             @if ($q)<a href="{{ route('console.smartplace') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
             <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="업체명 검색">
@@ -219,34 +211,21 @@
         guide.classList.toggle('hidden');
     });
 
-    // ---- 수집기간 컨트롤 ---------------------------------------------------
-    const sd = document.getElementById('sp-sd');
-    const ed = document.getElementById('sp-ed');
-    const msel = document.getElementById('sp-msel');
-    (function () {
-        const d = new Date();
-        let h = '<option value="">월 선택</option>';
-        for (let i = 0; i < 18; i++) {
-            const y = d.getFullYear(), m = d.getMonth() + 1;
-            h += '<option value="' + y + '-' + String(m).padStart(2, '0') + '">' + y + '년 ' + m + '월</option>';
-            d.setMonth(d.getMonth() - 1);
-        }
-        msel.innerHTML = h;
-    })();
-    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-    document.querySelectorAll('[data-period]').forEach(function (btn) {
+    // ---- 수집기간 버튼 (오늘/일주일/한달) — 기본 일주일, 선택 기간이 [수집] 시 start/end로 전송 ----
+    let spPeriod = 'week';
+    const periodBtns = document.querySelectorAll('.sp-period');
+    periodBtns.forEach(function (btn) {
         btn.addEventListener('click', function () {
-            const e = new Date();
-            const s = btn.dataset.period === 'week' ? new Date(Date.now() - 6 * 864e5) : e;
-            sd.value = fmt(s); ed.value = fmt(e);
+            spPeriod = btn.dataset.period;
+            periodBtns.forEach(function (x) { x.classList.remove('btn-primary'); x.classList.add('btn-secondary'); });
+            btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary');
         });
     });
-    msel.addEventListener('change', function () {
-        if (!msel.value) return;
-        const [y, m] = msel.value.split('-').map(Number);
-        sd.value = msel.value + '-01';
-        ed.value = msel.value + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0');
-    });
+    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function periodRange() {
+        const days = spPeriod === 'day' ? 0 : (spPeriod === 'month' ? 29 : 6);
+        return [fmt(new Date(Date.now() - days * 864e5)), fmt(new Date())];
+    }
 
     // ---- 수집 실행 (AJAX + Swal — 순위추적과 동일 패턴) ---------------------
     document.querySelectorAll('.sp-collect-btn').forEach(function (btn) {
@@ -260,7 +239,8 @@
             });
             const fd = new FormData();
             fd.append('_token', @json(csrf_token()));
-            if (sd.value && ed.value) { fd.append('start', sd.value); fd.append('end', ed.value); }
+            const pr = periodRange();
+            fd.append('start', pr[0]); fd.append('end', pr[1]);
             fetch(btn.dataset.url, { method: 'POST', body: fd, headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
                 .then(function (res) {

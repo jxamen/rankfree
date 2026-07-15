@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Domain\Place\PlaceRankChecker;
 use App\Models\MarketingOrder;
 use App\Models\MarketingProduct;
+use App\Models\ProductType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -34,6 +35,9 @@ class OrderController extends Controller
 
         return view('order.show', [
             'product' => $product,
+            // 셀프마케팅 카탈로그와 동일한 유형 탭(전체·블로그 리뷰·체험단…) 노출용
+            'typeNames' => ProductType::orderBy('sort_order')->pluck('name', 'code'),
+            'activeTypeCodes' => MarketingProduct::where('is_active', true)->distinct()->pluck('product_type'),
             'minDate' => $product->earliestStartDate()->toDateString(),
             'qtyField' => $sched['qty'],
             'startField' => $sched['start'],

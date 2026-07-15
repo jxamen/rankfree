@@ -2,6 +2,13 @@
 {{-- 공용 상세(console.blog.show)에서 분석 타입에 맞게 제목·사이드바 활성 — blog=지수분석, keyword=수집 --}}
 @section('page-title', ($type ?? '') === 'blog' ? '블로그 지수 분석' : '블로그 수집')
 @section('active-menu', ($type ?? '') === 'blog' ? 'console.blog-single' : 'console.blog')
+@if (\Illuminate\Support\Facades\Route::currentRouteName() === 'console.blog.show')
+    {{-- 저장된 분석 상세 — 브레드크럼: 블로그 › (수집|지수 분석) › 키워드/블로그명 --}}
+    @section('crumb-parent', ($type ?? '') === 'blog' ? 'console.blog-single' : 'console.blog')
+    @section('crumb-title', ($result['type'] ?? '') === 'blog'
+        ? ((($result['blog']['profile']['blog_name'] ?? '') ?: ($result['blog']['blog_id'] ?? $q)))
+        : ($result['keyword']['keyword'] ?? $q))
+@endif
 
 @section('console-content')
 @php
@@ -23,10 +30,6 @@
     <input type="text" name="q" value="{{ $q }}" placeholder="키워드(예: 강남 맛집) 또는 블로그 ID·URL(예: today789)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">
     <button type="submit" class="btn btn-primary" style="height:44px;padding:0 22px;">분석</button>
-    @if (! $result)
-        {{-- 진입 화면에서도 전체 저장 블로거로 바로 이동 (결과 화면에선 액션 줄에 동일 버튼) --}}
-        <a href="{{ route('console.blog-saved') }}" class="btn btn-secondary" style="height:44px;padding:0 18px;" title="모든 수집에서 저장한 블로거 전체 모아보기·엑셀">★ 저장 블로거</a>
-    @endif
     @if ($result && ($result['type'] ?? '') === 'keyword')
         {{-- 네이버 블로그 검색을 새 탭으로 (N=네이버 브랜드색은 예외적 인라인) --}}
         <a href="https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query={{ urlencode($result['keyword']['keyword']) }}" target="_blank" rel="noopener"

@@ -50,24 +50,28 @@
         <div class="flex items-center gap-3 px-5 py-3 border-b border-hairline-soft flex-wrap" style="background:var(--color-surface-soft);">
             <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $slot->keyword }}</span>
             <span class="text-muted" style="font-size:var(--fs-xs);">{{ $slot->label ? $slot->label.' · ' : '' }}{{ $slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : '') }}</span>
+            {{-- 모바일 전용 순위체크 — 업체명 우측. 실제 실행은 아래 rf-run-form 제출(전체 순위체크 중복 방지) --}}
+            <button type="button" class="btn btn-secondary btn-sm sm:hidden rf-cap-hide"
+                    onclick="this.closest('.rf-slot').querySelector('.rf-run-form').requestSubmit()">순위체크</button>
             @if ($slot->place_url)
                 <a href="{{ $slot->place_url }}" target="_blank" class="text-accent truncate" style="font-size:var(--fs-xs);max-width:340px;">{{ $slot->place_url }}</a>
             @endif
             <div class="flex-1"></div>
-            <div class="flex items-center gap-1 rf-cap-hide">
-                <form method="POST" action="{{ route('console.rank.run', $slot) }}" class="rf-run-form" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
+            {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 업체명 옆) --}}
+            <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
+                <form method="POST" action="{{ route('console.rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
                 <button type="button" class="btn btn-ghost btn-sm rf-metrics-toggle" title="리뷰·저장 접기/펼치기">접기</button>
                 @if ($slot->share_token)
                     <button type="button" class="btn btn-ghost btn-sm" title="공유 링크 복사 (로그인 없이 열람 가능)"
                             onclick="rfCopyShare(this, @js(route('rank.shared', $slot->share_token)))">공유</button>
                 @endif
+                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-순위-'.$slot->keyword.'.png'), this)" title="이 키워드 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"
                         data-action="{{ route('console.rank.update', $slot) }}"
                         data-slot-id="{{ $slot->id }}"
                         data-keyword="{{ $slot->keyword }}"
                         data-place="{{ $slot->place_url ?: ($slot->place_id ?: $slot->place_name) }}"
                         data-label="{{ $slot->label }}">수정</button>
-                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-순위-'.$slot->keyword.'.png'), this)" title="이 키워드 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <form method="POST" action="{{ route('console.rank.destroy', $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
             </div>
         </div>
