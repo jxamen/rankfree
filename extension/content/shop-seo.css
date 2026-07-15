@@ -1,0 +1,41 @@
+/* RankFree — 네이버 쇼핑 검색 결과 상품 아래 SEO 배지 (제목 밑 주입) */
+.rf-shop-seo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  margin: 5px 0 7px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #f0f5ff;
+  border: 1px solid #d6e4ff;
+  font: 600 12px/1.45 -apple-system, BlinkMacSystemFont, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  color: #454b54;
+}
+.rf-shop-seo .rf-ss-rank {
+  color: #454b54;
+}
+.rf-shop-seo .rf-ss-rank::before {
+  content: '📊 ';
+}
+.rf-shop-seo .rf-ss-score {
+  color: #0052ff;
+  font-weight: 800;
+}
+.rf-shop-seo .rf-ss-score.hi {
+  color: #05b169;
+}
+.rf-shop-seo .rf-ss-score.lo {
+  color: #cf202f;
+}
+.rf-shop-seo .rf-ss-kw {
+  color: #5c626b;
+  font-weight: 500;
+}
+.rf-shop-seo .rf-ss-kw b {
+  color: #0052ff;
+  font-weight: 700;
+}
+.rf-shop-seo .rf-ss-kw.rf-ss-none {
+  color: #959595;
+}

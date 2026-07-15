@@ -31,8 +31,8 @@
     },
     {
       "matches": ["https://search.shopping.naver.com/search/*"],
-      "js": ["content/content.js"],
-      "css": ["content/panel.css", "content/seller-power.css"],
+      "js": ["content/content.js", "content/shop-seo.js"],
+      "css": ["content/panel.css", "content/seller-power.css", "content/shop-seo.css"],
       "run_at": "document_idle"
     },
     {
