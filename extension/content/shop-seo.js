@@ -76,7 +76,10 @@
 
   function apply() {
     if (!seoMap) return;
-    cards().forEach((card, i) => {
+    let organicRank = 0; // 광고 제외 순번
+    cards().forEach((card) => {
+      const ad = isAd(card);
+      if (!ad) organicRank++;
       if (card.querySelector(':scope .rf-shop-seo')) return;
       const seo = seoMap.get(normTitle(titleOf(card)));
       if (!seo) return;
@@ -85,8 +88,7 @@
       const scoreCls = seo.score >= 80 ? ' hi' : (seo.score >= 60 ? '' : ' lo');
       const kws = (seo.used_keywords && seo.used_keywords.length) ? seo.used_keywords : [];
       box.innerHTML =
-        (isAd(card) ? '<span class="rf-ss-ad">광고</span>' : '') +
-        '<span class="rf-ss-rank">랭킹 ' + rankOf(card, i) + '</span>' +
+        (ad ? '<span class="rf-ss-ad">광고</span>' : '<span class="rf-ss-rank">랭킹 ' + organicRank + '</span>') +
         '<span class="rf-ss-score' + scoreCls + '">제목 점수 ' + seo.score + '</span>' +
         (kws.length
           ? '<span class="rf-ss-kw">제목 키워드 ' + kws.map((k) => '<b>' + esc(k) + '</b>').join(' · ') +
