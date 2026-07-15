@@ -34,17 +34,20 @@
   }
 
   function cards() {
-    // 일반(product_item) + 광고(adProduct_item) 카드 모두
-    return [...document.querySelectorAll('[class*="product_item"], [class*="adProduct_item"]')]
-      .filter((c) => c.querySelector('[class*="product_title"], [class*="adProduct_title"]'));
+    // 일반(product_item)·광고(adProduct_item)·슈퍼적립 광고(superSavingProduct) 카드 모두.
+    // 제목이 뽑히는 카드만(중첩·빈 컨테이너 제외).
+    return [...document.querySelectorAll('[class*="product_item"], [class*="adProduct_item"], [class*="superSavingProduct"]')]
+      .filter((c) => titleOf(c));
   }
   function titleOf(card) {
-    const a = card.querySelector('[class*="product_title"] a, [class*="adProduct_title"] a');
+    // 일반/광고/슈퍼적립 제목 링크. 클래스가 달라도 title 속성 링크로 폴백.
+    const a = card.querySelector('[class*="product_title"] a, [class*="adProduct_title"] a, [class*="superSavingProduct_title"] a')
+      || card.querySelector('a[title][href]');
     return a ? (a.getAttribute('title') || a.textContent || '').trim() : '';
   }
-  // 광고 카드 — 광고 전용 클래스(adProduct) 또는 카드 내 '광고' 배지
+  // 광고 카드 — 광고 전용 클래스(adProduct)·슈퍼적립(superSaving) 또는 카드 내 '광고' 배지
   function isAd(card) {
-    if (/adProduct|_ad_|__ad/i.test(card.className)) return true;
+    if (/adProduct|superSaving|_ad_|__ad/i.test(card.className)) return true;
     return [...card.querySelectorAll('span,em,i')].some((e) => (e.textContent || '').trim() === '광고');
   }
   // 랭킹 — data-shp-contents-rank 우선, 없으면 카드 순서
@@ -104,7 +107,7 @@
           setTimeout(() => { copyBtn.textContent = o; }, 1000);
         } catch (er) { /* noop */ }
       });
-      const titleEl = card.querySelector('[class*="product_title"], [class*="adProduct_title"]');
+      const titleEl = card.querySelector('[class*="product_title"], [class*="adProduct_title"], [class*="superSavingProduct_title"]');
       if (titleEl) titleEl.insertAdjacentElement('afterend', box);
       else card.insertBefore(box, card.firstChild);
     });
