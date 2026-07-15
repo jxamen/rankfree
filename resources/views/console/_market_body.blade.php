@@ -285,11 +285,11 @@
                             </div>
                             @php $sseo = $seoByTitle[$p['title'] ?? ''] ?? null; @endphp
                             @if ($sseo)
-                                <div class="flex items-center gap-2 flex-wrap mt-1" style="font-size:11px;">
-                                    <span style="font-weight:700;color:{{ $sseo['score'] >= 80 ? 'var(--color-success)' : ($sseo['score'] >= 60 ? 'var(--color-accent)' : 'var(--color-error)') }};">제목점수 {{ $sseo['score'] }}</span>
+                                <div class="flex items-center gap-2 flex-wrap mt-1.5" style="font-size:var(--fs-xs);">
+                                    <span class="font-semibold" style="color:{{ $sseo['score'] >= 80 ? 'var(--color-success)' : ($sseo['score'] >= 60 ? 'var(--color-accent)' : 'var(--color-error)') }};">제목점수 {{ $sseo['score'] }}</span>
                                     @if (!empty($sseo['used_keywords']))
                                         <span class="text-muted">키워드 {{ implode('·', $sseo['used_keywords']) }}</span>
-                                        <button type="button" class="btn btn-secondary" style="padding:1px 7px;font-size:11px;" onclick="navigator.clipboard.writeText('{{ implode(' ', $sseo['used_keywords']) }}');const o=this.textContent;this.textContent='복사됨';setTimeout(()=>this.textContent=o,1000)">복사</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('{{ implode(' ', $sseo['used_keywords']) }}');const o=this.textContent;this.textContent='복사됨';setTimeout(()=>this.textContent=o,1000)">복사</button>
                                     @endif
                                 </div>
                             @endif
