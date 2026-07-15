@@ -35,9 +35,10 @@
 
   function cards() {
     // 일반(product_item)·광고(adProduct_item)·슈퍼적립 광고(superSavingProduct) 카드 모두.
-    // 제목이 뽑히는 카드만(중첩·빈 컨테이너 제외).
-    return [...document.querySelectorAll('[class*="product_item"], [class*="adProduct_item"], [class*="superSavingProduct"]')]
+    const all = [...document.querySelectorAll('[class*="product_item"], [class*="adProduct_item"], [class*="superSavingProduct"]')]
       .filter((c) => titleOf(c));
+    // 다른 후보를 자손으로 포함하는 래퍼(슈퍼적립은 컨테이너+아이템 이중 매칭 → 배지 2개) 제외 → 가장 안쪽만
+    return all.filter((c) => !all.some((o) => o !== c && c.contains(o)));
   }
   function titleOf(card) {
     // 일반/광고/슈퍼적립 제목 링크. 클래스가 달라도 title 속성 링크로 폴백.
