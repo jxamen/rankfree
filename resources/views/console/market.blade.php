@@ -12,6 +12,16 @@
     크롬 확장에서 시장 분석을 실행하면 자동으로 저장됩니다. 네이버 쇼핑 검색 페이지에서 RankFree 확장을 사용해 보세요.
 </div>
 
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center gap-2">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            @if ($q)<a href="{{ route('console.market') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
+            <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="키워드 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+        </div>
+    </div>
+</form>
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:880px;">

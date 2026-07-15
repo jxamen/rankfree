@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\QnaController as AdminQnaController;
 use App\Http\Controllers\Admin\SubscriptionController;
 use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\SupportController;
+use App\Http\Controllers\UploadController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BlogIndexController;
 use App\Http\Controllers\PhoneVerificationController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductAnalysisController;
 use App\Http\Controllers\RankCheckController;
 use App\Http\Controllers\RankTrackController;
+use App\Http\Controllers\SelfMarketingController;
 use App\Http\Controllers\SellerPowerController;
 use App\Http\Controllers\ShopRankTrackController;
 use App\Http\Controllers\SmartplaceController;
@@ -89,10 +91,25 @@ Route::view('/developers', 'site.developers')->name('developers');
 // 개인정보처리방침 (공개 — 크롬 웹스토어 심사 필수)
 Route::view('/privacy', 'site.privacy')->name('privacy');
 
+// 마케팅 상담 (공개 — 푸터·홈 CTA 의 /support. 접수는 기존 POST /lead)
+Route::view('/support', 'site.support')->name('support');
+
+// sitemap.xml (공개 — robots.txt 의 Sitemap 지시자 대상, 1시간 캐시)
+Route::get('/sitemap.xml', [\App\Http\Controllers\SitemapController::class, 'index'])->name('sitemap');
+
+// 커뮤니티 RSS (네이버 서치어드바이저 제출용 — 최신 글 50건)
+Route::get('/community/feed', [\App\Http\Controllers\SitemapController::class, 'communityFeed'])->name('community.feed');
+
+// 셀프마케팅 (공개 카탈로그 — 마케팅 상품 카드, 주문은 로그인)
+Route::get('/self-marketing', [SelfMarketingController::class, 'index'])->name('self-marketing');
+
 // 커뮤니티 (공개 열람, 작성은 로그인 필요)
 Route::get('/community', [CommunityController::class, 'index'])->name('community');
 Route::get('/community/post/{post}', [CommunityController::class, 'show'])->name('community.show');
 Route::middleware('auth')->group(function () {
+    // 에디터 이미지 첨부 업로드 (로그인 사용자 공용)
+    Route::post('/upload/image', [UploadController::class, 'image'])->middleware('throttle:30,1')->name('upload.image');
+
     Route::get('/community/new', [CommunityController::class, 'create'])->name('community.create');
     Route::post('/community', [CommunityController::class, 'store'])->name('community.store');
     Route::get('/community/post/{post}/edit', [CommunityController::class, 'edit'])->name('community.edit');
@@ -158,6 +175,7 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     // 쇼핑 순위추적 (openapi shop.json — 상품/업체 × 키워드)
     Route::get('/shop-rank', [ShopRankTrackController::class, 'index'])->name('shop-rank');
     Route::get('/shop-rank/resolve', [ShopRankTrackController::class, 'resolve'])->name('shop-rank.resolve');
+    Route::get('/shop-rank/export', [ShopRankTrackController::class, 'export'])->name('shop-rank.export');
     Route::post('/shop-rank', [ShopRankTrackController::class, 'store'])->name('shop-rank.store');
     Route::post('/shop-rank/{slot}/run', [ShopRankTrackController::class, 'run'])->name('shop-rank.run');
     Route::put('/shop-rank/{slot}', [ShopRankTrackController::class, 'update'])->name('shop-rank.update');
@@ -167,6 +185,8 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/keyword', [KeywordAnalysisController::class, 'index'])->name('keyword');
     // 통합검색 PC/모바일 섹션 배치 순서 (Playwright 수집 — 비동기 lazy 로드)
     Route::get('/keyword/sections', [KeywordAnalysisController::class, 'sections'])->name('keyword.sections');
+    // 키워드 검색 내역 삭제
+    Route::delete('/keyword/{search}', [KeywordAnalysisController::class, 'destroy'])->name('keyword.destroy');
     // 키워드 추천 (연관·자동완성 → 기회 점수 랭킹, 황금 키워드 발굴)
     Route::get('/keyword-recommend', [KeywordAnalysisController::class, 'recommend'])->name('keyword-recommend');
 

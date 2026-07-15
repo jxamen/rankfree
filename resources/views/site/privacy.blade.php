@@ -1,4 +1,6 @@
 @extends('layouts.site')
+@section('title', '개인정보처리방침 · 랭크프리')
+@section('description', '랭크프리(주식회사 제이커브인터렉티브)의 개인정보 수집 항목·이용 목적·보관 기간·이용자 권리 안내.')
 
 {{-- 타이틀·디스크립션은 메뉴관리 > 사이트 SEO(route: privacy)에서 설정 --}}
 

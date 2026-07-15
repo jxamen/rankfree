@@ -1,14 +1,6 @@
 @extends('console.layout')
 @section('page-title', '순위 추적')
 
-@section('page-actions')
-    <div class="flex items-center gap-2">
-        <button type="button" id="rf-run-all" class="btn btn-secondary btn-sm" @disabled($slots->isEmpty())>전체 순위체크</button>
-        <a href="{{ route('console.rank.export') }}" class="btn btn-secondary btn-sm">엑셀 다운로드</a>
-        <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm" @disabled($maxSlots >= 0 && $usedSlots >= $maxSlots)>＋ 추적 추가</button>
-    </div>
-@endsection
-
 @section('console-content')
 <style>
     /* 날짜 카드 — 슬롯별 접기(날짜+순위만)/펼치기(리뷰·저장 포함) */
@@ -17,31 +9,44 @@
     .rf-slot.rf-collapsed .rf-cell { width: 78px; padding: 8px 6px; }
 </style>
 {{-- 사용량 --}}
-<div class="flex items-center justify-between mb-5 flex-wrap gap-2">
-    <div class="text-muted" style="font-size:var(--fs-xs);">
-        추적 중 <b class="text-ink">{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }}
-        <span class="text-muted-soft">· 플레이스+쇼핑 합산 · 매일 자동 갱신 · 키워드별 순위</span>
-    </div>
-    {{-- 키워드·기간 검색 — 기간 지정 시 해당 기간의 순위만 표시 --}}
-    <form method="GET" class="flex items-center gap-2 flex-wrap">
-        <input name="q" value="{{ $q ?? '' }}" class="input" style="height:36px;width:150px;font-size:var(--fs-xs);" placeholder="키워드 필터">
-        <input type="date" name="from" value="{{ $from ?? '' }}" class="input" style="height:36px;width:148px;font-size:var(--fs-xs);">
-        <span class="text-muted-soft">~</span>
-        <input type="date" name="to" value="{{ $to ?? '' }}" class="input" style="height:36px;width:148px;font-size:var(--fs-xs);">
-        <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
-        @if (($q ?? '') !== '' || ($from ?? null) || ($to ?? null))
-            <a href="{{ route('console.rank') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
-        @endif
-    </form>
+<div class="text-muted mb-3" style="font-size:var(--fs-xs);">
+    추적 중 <b class="text-ink">{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }}
+    <span class="text-muted-soft">· 플레이스+쇼핑 합산 · 매일 자동 갱신 · 키워드별 순위</span>
 </div>
+{{-- 기간 필터(좌) + 키워드 검색(우) — 카드. 기간 지정 시 해당 기간의 순위만 표시 --}}
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+        {{-- 액션 버튼 (좌) --}}
+        <button type="button" id="rf-run-all" class="btn btn-secondary btn-sm" style="height:36px;" @disabled($slots->isEmpty())>전체 순위체크</button>
+        <a href="{{ route('console.rank.export') }}" class="btn btn-secondary btn-sm" style="height:36px;">엑셀 다운로드</a>
+        <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm" style="height:36px;" @disabled($maxSlots >= 0 && $usedSlots >= $maxSlots)>＋ 추적 추가</button>
+        {{-- 기간 + 검색 (우) --}}
+        <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+            @if (($q ?? '') !== '' || ($from ?? null) || ($to ?? null))
+                <a href="{{ route('console.rank') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
+            @endif
+            <input type="date" name="from" value="{{ $from ?? '' }}" class="input" style="width:148px;font-size:var(--fs-xs);">
+            <span class="text-muted-soft">~</span>
+            <input type="date" name="to" value="{{ $to ?? '' }}" class="input" style="width:148px;font-size:var(--fs-xs);">
+            <input name="q" value="{{ $q ?? '' }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="키워드 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+        </div>
+    </div>
+</form>
 
 @if ($errors->any())
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif
 
-{{-- 슬롯 목록 — 키워드별 날짜 카드 그리드 --}}
+{{-- 슬롯 목록 — 키워드(슬롯)별로 각각 이미지 저장 --}}
 @forelse ($slots as $slot)
-    <div class="card mb-4 overflow-hidden rf-slot" data-slot="{{ $slot->id }}">
+    <div id="rf-slot-report-{{ $slot->id }}" class="mb-4">
+        {{-- 캡처 전용 상단 브랜딩 --}}
+        <div class="rf-cap-only" style="align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+            <span class="badge border border-hairline">순위 추적 · 랭크프리</span>
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">rankfree.kr</span>
+        </div>
+    <div class="card overflow-hidden rf-slot" data-slot="{{ $slot->id }}">
         {{-- 헤더: 키워드 · 플레이스 · URL · 액션 --}}
         <div class="flex items-center gap-3 px-5 py-3 border-b border-hairline-soft flex-wrap" style="background:var(--color-surface-soft);">
             <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $slot->keyword }}</span>
@@ -50,7 +55,7 @@
                 <a href="{{ $slot->place_url }}" target="_blank" class="text-accent truncate" style="font-size:var(--fs-xs);max-width:340px;">{{ $slot->place_url }}</a>
             @endif
             <div class="flex-1"></div>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 rf-cap-hide">
                 <form method="POST" action="{{ route('console.rank.run', $slot) }}" class="rf-run-form" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
                 <button type="button" class="btn btn-ghost btn-sm rf-metrics-toggle" title="리뷰·저장 접기/펼치기">접기</button>
                 @if ($slot->share_token)
@@ -63,6 +68,7 @@
                         data-keyword="{{ $slot->keyword }}"
                         data-place="{{ $slot->place_url ?: ($slot->place_id ?: $slot->place_name) }}"
                         data-label="{{ $slot->label }}">수정</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-순위-'.$slot->keyword.'.png'), this)" title="이 키워드 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <form method="POST" action="{{ route('console.rank.destroy', $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
             </div>
         </div>
@@ -70,12 +76,19 @@
         {{-- 날짜별 순위 카드 (최신순) — 공개 리포트와 공용 파셜, 기간 필터 전달 --}}
         @include('rank.partials.cells', ['slot' => $slot, 'from' => $from ?? null, 'to' => $to ?? null])
     </div>
+        {{-- 캡처 전용 하단 홍보 문구 --}}
+        <div class="rf-cap-only" style="flex-direction:column;align-items:center;gap:4px;margin-top:12px;border-top:1px solid var(--color-hairline);padding-top:12px;text-align:center;">
+            <span class="text-muted" style="font-size:var(--fs-xs);">이 리포트는 <b class="text-ink">랭크프리</b>에서 순위 추적으로 생성되었습니다.</span>
+            <span class="text-muted" style="font-size:var(--fs-xs);">네이버에서 <b class="text-ink">랭크프리</b>를 검색 방문하고 무료로 내 순위를 확인해보세요.</span>
+        </div>
+    </div>
 @empty
     <div class="card text-center" style="padding:56px 20px;color:var(--color-muted);">
         <div style="font-size:var(--fs-2xl);opacity:.4;">📈</div>
         <p class="mt-2" style="font-size:var(--fs-xs);">추적 중인 키워드가 없습니다. 우측 상단 "＋ 추적 추가"로 플레이스와 키워드를 등록하세요.</p>
     </div>
 @endforelse
+@include('console.partials._image-save')
 
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     플레이스 1개에 키워드를 여러 개 등록하면 키워드별로 순위를 추적합니다. 순위는 하루 1회 기록(당일 재확인 시 갱신)되며,

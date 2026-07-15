@@ -25,6 +25,11 @@ class AppServiceProvider extends ServiceProvider
         // 상대 시간(diffForHumans) 한글 표기 — "2 days ago" → "2일 전"
         Carbon::setLocale('ko');
 
+        // canonical·og:image 등 절대 URL 의 https 보장 — 프록시/TLS 종단 뒤에서도 APP_URL 이 https 면 강제
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
+
         // 소셜 로그인 — google 은 Socialite 내장, kakao 는 SocialiteProviders 등록
         Event::listen(function (SocialiteWasCalled $event) {
             $event->extendSocialite('kakao', \SocialiteProviders\Kakao\KakaoProvider::class);

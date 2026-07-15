@@ -1,5 +1,5 @@
 {{-- 상단 네비 — NAVER Cloud 스타일 메가 메뉴 (정적 링크, 토큰 기반).
-     구성: 분석 도구(플레이스·쇼핑·키워드·블로그) · 마케팅 · 개발자 · 요금 · 고객지원 --}}
+     구성: 분석 도구(플레이스·쇼핑·키워드·블로그) · 마케팅 · 셀프마케팅 · 커뮤니티 · 요금 --}}
 <header class="sticky top-0 z-40 bg-canvas/95 backdrop-blur border-b border-hairline-soft">
     <div class="container-page flex items-center justify-between" style="height:64px;">
         {{-- 로고 --}}
@@ -78,10 +78,9 @@
             </div>
 
             {{-- 단일 링크 --}}
-            <a href="{{ route('community') }}" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">커뮤니티</a>
-            <a href="/developers" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">개발자</a>
+            <a href="{{ route('self-marketing') }}" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">셀프마케팅</a>
+            <a href="/community?cat=free" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">커뮤니티</a>
             <a href="/#pricing" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">요금</a>
-            <a href="/support" class="px-3 py-2 rounded-md text-muted hover:text-accent hover:bg-surface-card transition">고객지원</a>
         </nav>
 
         {{-- 우측 액션 — 로그인 상태 분기 --}}

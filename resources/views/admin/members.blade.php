@@ -24,27 +24,25 @@
 </div>
 
 {{-- 검색·필터 --}}
-<form method="GET" class="flex gap-2 flex-wrap items-end mb-4">
-    <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">검색</label>
-        <input name="q" value="{{ $q }}" class="input" style="width:220px;" placeholder="이름 · 이메일 · 전화번호"></div>
-    <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">등급</label>
-        <select name="grade" class="input" style="width:150px;">
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+        <select name="grade" class="input" style="width:150px;font-size:var(--fs-xs);">
             <option value="">전체 등급</option>
             <option value="none" @selected($gradeId === 'none')>등급 없음</option>
             @foreach ($grades as $g)
                 <option value="{{ $g->id }}" @selected((string) $gradeId === (string) $g->id)>{{ $g->name }}</option>
             @endforeach
-        </select></div>
-    <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">구분</label>
-        <select name="role" class="input" style="width:130px;">
+        </select>
+        <select name="role" class="input" style="width:130px;font-size:var(--fs-xs);">
             <option value="">전체</option>
             <option value="operator" @selected($role === 'operator')>운영자</option>
             <option value="member" @selected($role === 'member')>일반회원</option>
-        </select></div>
-    <button type="submit" class="btn btn-primary btn-sm">검색</button>
-    @if ($q || $gradeId || $role)
-        <a href="{{ route('admin.members') }}" class="btn btn-ghost btn-sm">초기화</a>
-    @endif
+        </select>
+        @if ($q || $gradeId || $role)
+            <a href="{{ route('admin.members') }}" class="btn btn-ghost btn-sm">초기화</a>
+        @endif
+        <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;" placeholder="이름 · 이메일 · 전화번호">
+    </div>
 </form>
 
 {{-- 목록 --}}

@@ -7,6 +7,15 @@
     <title>{{ $slot->keyword }} 경쟁 분석 · 랭크프리</title>
     <meta property="og:title" content="{{ $slot->keyword }} — {{ $slot->place_name ?: '플레이스' }} 경쟁 분석">
     <meta property="og:description" content="네이버 플레이스 SEO 경쟁력(N1 유사도·N2 관련성·N3 랭킹) 리포트">
+    <meta property="og:site_name" content="랭크프리">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="{{ asset('og-image.png') }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ $slot->keyword }} — {{ $slot->place_name ?: '플레이스' }} 경쟁 분석">
+    <meta name="twitter:image" content="{{ asset('og-image.png') }}">
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     {{-- 공유 리포트 — 사용자의 콘솔 테마 선택(localStorage)을 따라 다크/라이트 렌더 --}}
     <script>if (localStorage.getItem('rf-theme') === 'dark') document.documentElement.classList.add('theme-dark');</script>
     @vite(['resources/css/app.css'])

@@ -6,7 +6,7 @@
 @endsection
 
 @section('console-content')
-<form method="POST" action="{{ route('console.qna.store') }}" style="max-width:760px;">
+<form method="POST" action="{{ route('console.qna.store') }}">
     @csrf
     <div class="card p-6">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">

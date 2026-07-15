@@ -1,21 +1,29 @@
 @extends('console.layout')
 @section('page-title', '경쟁 분석')
 
-@section('page-actions')
-    <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm" @disabled($maxSlots >= 0 && $usedSlots >= $maxSlots)>＋ 트랙 등록</button>
-@endsection
-
 @section('console-content')
 <div>
     <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
         순위추적 중인 <b class="text-ink">키워드 × 플레이스</b>의 SEO 경쟁력을 분석합니다. 같은 키워드 상위 경쟁사와 비교해
         <b class="text-ink">N1 유사도·N2 관련성·N3 랭킹</b> 점수를 산출합니다.
-        <span class="text-muted-soft">점수는 관측 신호 기반 자체 추정치입니다.</span>
     </p>
 
     @if ($errors->any())
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
+
+    <form method="GET" class="card p-3 mb-4">
+        <div class="flex items-center flex-wrap gap-2">
+            {{-- 액션 (좌) --}}
+            <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm" style="height:36px;" @disabled($maxSlots >= 0 && $usedSlots >= $maxSlots)>＋ 트랙 등록</button>
+            {{-- 검색 (우) --}}
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+                @if ($q)<a href="{{ route('console.compete') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
+                <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="키워드 · 업체명 검색">
+                <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+            </div>
+        </div>
+    </form>
 
     <div class="card overflow-x-auto">
         <table class="w-full" style="min-width:840px;">
@@ -94,6 +102,10 @@
                                 <button type="submit" class="btn btn-primary btn-sm">{{ $sc ? '재분석' : '분석' }}</button>
                             </form>
                             <a href="{{ route('console.compete.show', $slot) }}" class="btn btn-secondary btn-sm" @if (! $sc) style="opacity:.45;pointer-events:none;" @endif>상세·비교</a>
+                            <form method="POST" action="{{ route('console.rank.destroy', $slot) }}" style="display:inline;" data-confirm="이 트랙을 삭제할까요?" data-confirm-text="순위추적·경쟁분석에서 함께 제거됩니다.">
+                                @csrf @method('DELETE')
+                                <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button>
+                            </form>
                         </td>
                     </tr>
                 @empty

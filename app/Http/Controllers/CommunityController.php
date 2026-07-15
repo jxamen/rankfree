@@ -6,6 +6,7 @@ use App\Models\CommunityCategory;
 use App\Models\CommunityComment;
 use App\Models\CommunityLike;
 use App\Models\CommunityPost;
+use App\Support\HtmlSanitizer;
 use Illuminate\Http\Request;
 
 /**
@@ -49,10 +50,12 @@ class CommunityController extends Controller
             'title' => 'required|string|max:150',
             'body' => 'required|string|max:20000',
         ]);
+        $data['body'] = HtmlSanitizer::clean($data['body']);
         $post = CommunityPost::create($data + [
             'author_type' => 'user',
             'user_id' => $request->user()->id,
         ]);
+        \Illuminate\Support\Facades\Cache::forget('sitemap:xml'); // 새 글 즉시 sitemap 반영
 
         return redirect()->route('community.show', $post)->with('status', '글을 등록했습니다.');
     }
@@ -77,6 +80,7 @@ class CommunityController extends Controller
             'title' => 'required|string|max:150',
             'body' => 'required|string|max:20000',
         ]);
+        $data['body'] = HtmlSanitizer::clean($data['body']);
         $post->update($data);
 
         return redirect()->route('community.show', $post)->with('status', '글을 수정했습니다.');
@@ -85,7 +89,10 @@ class CommunityController extends Controller
     /** 상세 + 댓글. 조회수 증가. */
     public function show(Request $request, CommunityPost $post)
     {
+        // 조회수는 updated_at 을 건드리지 않는다 — updated_at 은 실제 편집 시각(sitemap lastmod·SEO dateModified 소스)
+        $post->timestamps = false;
         $post->increment('views');
+        $post->timestamps = true;
         $post->load(['persona', 'user', 'category']);
 
         $comments = $post->comments()->with(['persona', 'user', 'replies.persona', 'replies.user'])
@@ -173,6 +180,7 @@ class CommunityController extends Controller
     {
         abort_unless($this->canManagePost($post, $request->user()), 403);
         $post->delete();
+        \Illuminate\Support\Facades\Cache::forget('sitemap:xml'); // 삭제 글 sitemap 즉시 제거
 
         return redirect()->route('community')->with('status', '글을 삭제했습니다.');
     }

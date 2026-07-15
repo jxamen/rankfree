@@ -1,4 +1,5 @@
 @extends('layouts.auth')
+@section('robots', 'noindex') {{-- 계정 유틸 페이지 — 색인 불필요 --}}
 @section('title', '아이디 찾기')
 
 @section('auth-content')

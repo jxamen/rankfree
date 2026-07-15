@@ -3,7 +3,10 @@
     입력: $history (BlogIndexAnalysis 컬렉션). 각 행 클릭 시 /console/blog-index/{id} 로 이동.
 --}}
 <div class="card overflow-hidden">
-    <div class="px-5 py-4 text-ink font-semibold" style="font-size:var(--fs-xs);">최근 분석 내역 <span class="text-muted-soft" style="font-weight:400;">클릭하면 저장된 분석을 다시 봅니다 · 새로 수집하려면 위에서 재검색하세요</span></div>
+    <div class="px-5 py-4 flex items-center justify-between gap-3">
+        <div class="text-ink font-semibold" style="font-size:var(--fs-xs);">최근 분석 내역 <span class="text-muted-soft" style="font-weight:400;">클릭하면 저장된 분석을 다시 봅니다 · 새로 수집하려면 위에서 재검색하세요</span></div>
+        <input type="text" id="rf-blog-hist-filter" class="input flex-none" style="width:200px;height:32px;font-size:var(--fs-xs);" placeholder="목록에서 검색" autocomplete="off">
+    </div>
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:1000px;">
             <thead>
@@ -17,7 +20,7 @@
             </thead>
             <tbody>
                 @foreach ($history as $h)
-                    <tr style="border-top:1px solid var(--color-hairline-soft);cursor:pointer;" onclick="location.href='{{ route('console.blog.show', $h) }}'">
+                    <tr class="rf-blog-hist-row" data-s="{{ \Illuminate\Support\Str::lower($h->title.' '.$h->query) }}" style="border-top:1px solid var(--color-hairline-soft);cursor:pointer;" onclick="location.href='{{ route('console.blog.show', $h) }}'">
                         @php
                             // 전문성 단어 — blog형: quality.top_words / keyword형: 블로거별 top_words 합산 상위
                             $snap = (array) $h->snapshot;
@@ -62,3 +65,16 @@
         </table>
     </div>
 </div>
+<script>
+(function () {
+    var f = document.getElementById('rf-blog-hist-filter');
+    if (!f) return;
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.rf-blog-hist-row'));
+    f.addEventListener('input', function () {
+        var q = f.value.trim().toLowerCase();
+        rows.forEach(function (r) {
+            r.style.display = (!q || (r.getAttribute('data-s') || '').indexOf(q) >= 0) ? '' : 'none';
+        });
+    });
+})();
+</script>

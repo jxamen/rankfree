@@ -3,16 +3,15 @@
 
 @section('console-content')
 <div>
-    {{-- 검색 --}}
-    <form method="GET" action="{{ route('console.faq') }}" class="flex items-center gap-2 mb-4">
-        <div style="flex:1;">
+    {{-- 검색(우) — 카드 --}}
+    <form method="GET" action="{{ route('console.faq') }}" class="card p-3 mb-4">
+        <div class="flex items-center gap-2">
+            @if ($q !== '' || $cat)
+                <a href="{{ route('console.faq') }}" class="btn btn-ghost btn-sm">초기화</a>
+            @endif
             <input type="text" name="q" value="{{ $q }}" placeholder="궁금한 내용을 검색하세요 (예: 순위, 결제, API)"
-                   class="input" style="width:100%;height:46px;font-size:var(--fs-sm);" autocomplete="off" autofocus>
+                   class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;" autocomplete="off">
         </div>
-        <button type="submit" class="btn btn-primary" style="height:46px;padding:0 22px;">검색</button>
-        @if ($q !== '' || $cat)
-            <a href="{{ route('console.faq') }}" class="btn btn-secondary" style="height:46px;">초기화</a>
-        @endif
     </form>
 
     {{-- 카테고리 필터 --}}

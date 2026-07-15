@@ -72,25 +72,48 @@ class Menu extends Model
     public function resolvedUrl(): ?string
     {
         if ($this->route) {
-            foreach ($this->routeCandidates() as $name) {
-                if (Route::has($name)) {
-                    return route($name);
-                }
+            // route 필드에 쿼리스트링을 붙여 쓴 경우(예: community?cat=free, console.community?cat=free) 분리 해석
+            [, $query] = array_pad(explode('?', trim($this->route), 2), 2, null);
+            if ($name = $this->resolvedRouteName()) {
+                $url = route($name);
+
+                return ($query !== null && $query !== '') ? $url.'?'.$query : $url;
             }
         }
 
         return $this->url;
     }
 
-    /** route명 후보(입력 오차 보정). */
-    private function routeCandidates(): array
+    /**
+     * route 필드가 가리키는 실제 라우트명(입력 오차 보정·쿼리스트링 제거 후).
+     * 사이드바 활성 메뉴 판정 등 routeIs() 비교에 사용 — resolvedUrl()과 같은 기준.
+     */
+    public function resolvedRouteName(): ?string
     {
-        $raw = trim((string) $this->route);
+        if (! $this->route) {
+            return null;
+        }
+        [$name] = array_pad(explode('?', trim($this->route), 2), 2, null);
+        foreach ($this->routeCandidates($name) as $cand) {
+            if (Route::has($cand)) {
+                return $cand;
+            }
+        }
+
+        return null;
+    }
+
+    /** route명 후보(입력 오차 보정 — area 접두 누락·과잉, 슬래시 입력 모두 관대하게). */
+    private function routeCandidates(?string $raw = null): array
+    {
+        $raw = trim((string) ($raw ?? $this->route));
         $dotted = trim(str_replace(['/', ' '], ['.', ''], $raw), '.');   // 슬래시·공백 → 점
         $cands = [$raw, $dotted];
         $prefix = $this->area.'.';
         if ($this->area && ! str_starts_with($dotted, $prefix)) {
-            $cands[] = $prefix.$dotted;                                    // area 접두 보정
+            $cands[] = $prefix.$dotted;                                    // area 접두 보정 (community → console.community)
+        } elseif ($this->area && str_starts_with($dotted, $prefix)) {
+            $cands[] = substr($dotted, strlen($prefix));                  // area 접두 제거 보정 (console.community → community)
         }
 
         return array_values(array_unique(array_filter($cands)));

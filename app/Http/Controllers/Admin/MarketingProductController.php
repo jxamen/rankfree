@@ -13,11 +13,24 @@ use Illuminate\Support\Str;
 /** 마케팅 상품 관리(admin) — 상품 CRUD + 동적 주문 필드(폼 빌더) 저장. */
 class MarketingProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $q = trim((string) $request->query('q', ''));
+        $type = $request->query('type');
+
+        $query = MarketingProduct::withCount('fields', 'orders')->latest();
+        if ($q !== '') {
+            $query->where('title', 'like', "%{$q}%");
+        }
+        if ($type) {
+            $query->where('product_type', $type);
+        }
+
         return view('admin.products.index', [
-            'products' => MarketingProduct::withCount('fields', 'orders')->latest()->paginate(20),
+            'products' => $query->paginate(20)->withQueryString(),
             'types' => ProductType::orderBy('sort_order')->get()->keyBy('code'),
+            'q' => $q,
+            'type' => $type,
         ]);
     }
 

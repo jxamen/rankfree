@@ -19,7 +19,10 @@ class CompeteController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $slots = $user->rankSlots()->latest()->get();
+        $q = trim((string) $request->query('q', ''));
+        $slots = $user->rankSlots()
+            ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('keyword', 'like', "%{$q}%")->orWhere('place_name', 'like', "%{$q}%")))
+            ->latest()->get();
 
         // 슬롯별 내 매장 점수 시계열(델타·스파크라인용)
         $mineScores = PlaceSeoScore::whereIn('slot_id', $slots->pluck('id'))
@@ -33,6 +36,7 @@ class CompeteController extends Controller
             'mineScores' => $mineScores,
             'usedSlots' => $user->rankSlotsUsedTotal(),
             'maxSlots' => $user->rankSlotLimit(),
+            'q' => $q,
         ]);
     }
 
@@ -89,6 +93,7 @@ class CompeteController extends Controller
             'rows' => $data['rows'],
             'mine' => $data['mine'],
             'explain' => $data['explain'],
+            'prevYmd' => $data['prevYmd'] ?? null,
             'series' => $series,
             'calibration' => $this->buildCalibration($request->user()->id, $slot, $series),
         ]);
@@ -144,11 +149,18 @@ class CompeteController extends Controller
         $scores = PlaceSeoScore::where('slot_id', $slot->id)->where('ymd', $ymd)->get()->keyBy('place_id');
         $dailies = PlaceSeoDaily::where('ymd', $ymd)->whereIn('place_id', $scores->keys())->get()->keyBy('place_id');
 
+        // 직전 분석일($dates[1]) 스냅샷 — 지표 변화량(델타) 계산용
+        $prevYmd = $dates[1] ?? null;
+        $prevScores = $prevYmd ? PlaceSeoScore::where('slot_id', $slot->id)->where('ymd', $prevYmd)->get()->keyBy('place_id') : collect();
+        $prevSerp = $prevYmd ? PlaceSeoSerp::where('slot_id', $slot->id)->where('ymd', $prevYmd)->get()->keyBy('place_id') : collect();
+
         $rows = PlaceSeoSerp::where('slot_id', $slot->id)->where('ymd', $ymd)
             ->orderByDesc('is_mine')->orderBy('rnk')->get()
-            ->map(function ($s) use ($scores, $dailies, $matrix) {
+            ->map(function ($s) use ($scores, $dailies, $matrix, $prevScores, $prevSerp) {
                 $sc = $scores[$s->place_id] ?? null;
                 $d = $dailies[$s->place_id] ?? null;
+                $psc = $prevScores[$s->place_id] ?? null;
+                $pse = $prevSerp[$s->place_id] ?? null;
                 $wv = $wb = null;
                 if ($d && is_array($d->review_weekly)) {
                     $wv = $this->weekInc($d->review_weekly['v'] ?? null);
@@ -161,6 +173,9 @@ class CompeteController extends Controller
                     'visitor' => $s->visitor_cnt, 'blog' => $s->blog_cnt, 'score' => $s->review_score,
                     'wv' => $wv, 'wb' => $wb,
                     'd7' => $sc?->d7, 'n1' => $sc?->n1, 'n2' => $sc?->n2, 'n3' => $sc?->n3, 'tier' => $sc?->tier,
+                    // 직전 분석일 대비 델타용 prev 값
+                    'rnk_prev' => $pse?->rnk, 'visitor_prev' => $pse?->visitor_cnt, 'blog_prev' => $pse?->blog_cnt, 'score_prev' => $pse?->review_score,
+                    'n1_prev' => $psc?->n1, 'n2_prev' => $psc?->n2, 'n3_prev' => $psc?->n3,
                 ];
             });
 
@@ -179,7 +194,7 @@ class CompeteController extends Controller
             ];
         }
 
-        return ['dates' => $dates, 'rows' => $rows, 'mine' => $mine, 'explain' => $explain];
+        return ['dates' => $dates, 'rows' => $rows, 'mine' => $mine, 'explain' => $explain, 'prevYmd' => $prevYmd];
     }
 
     /** 누적 4주 버킷 → 주별 신규 증가 [1주,2주,3주,4주]. */

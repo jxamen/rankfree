@@ -25,18 +25,19 @@
     @endforeach
 </div>
 
-{{-- 상품·검색 필터 --}}
-<form method="GET" action="{{ route('admin.orders') }}" class="flex items-center gap-2 mb-4 flex-wrap">
-    @if ($filters['status'])<input type="hidden" name="status" value="{{ $filters['status'] }}">@endif
-    <select name="product" class="input" style="width:220px;font-size:var(--fs-xs);height:36px;" onchange="this.form.submit()">
-        <option value="">전체 상품</option>
-        @foreach ($products as $p)
-            <option value="{{ $p->id }}" {{ (string) $filters['product'] === (string) $p->id ? 'selected' : '' }}>{{ $p->title }}</option>
-        @endforeach
-    </select>
-    <input name="q" value="{{ $filters['q'] }}" placeholder="주문번호 · 주문자 · 연락처" class="input" style="width:240px;font-size:var(--fs-xs);height:36px;">
-    <button type="submit" class="btn btn-secondary btn-sm">검색</button>
-    @if ($filters['q'] || $filters['product'])<a href="{{ route('admin.orders', array_filter(['status' => $filters['status']])) }}" class="btn btn-ghost btn-sm">초기화</a>@endif
+{{-- 상품 필터(좌) + 검색(우) — 카드 --}}
+<form method="GET" action="{{ route('admin.orders') }}" class="card p-3 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+        @if ($filters['status'])<input type="hidden" name="status" value="{{ $filters['status'] }}">@endif
+        <select name="product" class="input" style="width:220px;font-size:var(--fs-xs);height:36px;" onchange="this.form.submit()">
+            <option value="">전체 상품</option>
+            @foreach ($products as $p)
+                <option value="{{ $p->id }}" {{ (string) $filters['product'] === (string) $p->id ? 'selected' : '' }}>{{ $p->title }}</option>
+            @endforeach
+        </select>
+        @if ($filters['q'] || $filters['product'])<a href="{{ route('admin.orders', array_filter(['status' => $filters['status']])) }}" class="btn btn-ghost btn-sm">초기화</a>@endif
+        <input name="q" value="{{ $filters['q'] }}" placeholder="주문번호 · 주문자 · 연락처" class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;">
+    </div>
 </form>
 
 <div class="card overflow-hidden">

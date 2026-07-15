@@ -1,5 +1,6 @@
 @extends('layouts.site')
 @section('follow-theme', '1')
+@section('robots', 'noindex, nofollow') {{-- 토큰 공유 리포트 — 색인 제외(OG 미리보기는 유지) --}}
 
 @section('title', $a->name.' 리뷰 분석 리포트 · 랭크프리')
 @section('description', $a->name.' — 스마트스토어 리뷰 감정·옵션·약점 분석 리포트')

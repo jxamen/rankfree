@@ -15,7 +15,7 @@
     };
 @endphp
 
-{{-- 검색: 블로그 ID/URL 전용 --}}
+{{-- 분석 입력: 블로그 ID/URL 전용 --}}
 <form method="GET" action="{{ route('console.blog-single') }}" class="flex items-center gap-2 mb-4" id="bi-form">
     <input type="text" name="q" value="{{ $q }}" placeholder="블로그 ID 또는 URL (예: today789, https://blog.naver.com/today789)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">

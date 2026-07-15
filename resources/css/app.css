@@ -595,3 +595,11 @@
     .fs-2xl  { font-size: var(--fs-2xl); }
     .fs-3xl  { font-size: var(--fs-3xl); }
 }
+
+/* ------------------------------------------------------------------ *
+ * SweetAlert2 — 다크 테마 맞춤(라이트는 기본). 삭제 확인 등 공용 모달.
+ * ------------------------------------------------------------------ */
+.swal2-popup { border-radius: var(--radius-xl, 16px); }
+.theme-dark .swal2-popup { background: var(--color-canvas); color: var(--color-ink); }
+.theme-dark .swal2-title,
+.theme-dark .swal2-html-container { color: var(--color-ink); }

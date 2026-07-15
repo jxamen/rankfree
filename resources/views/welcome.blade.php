@@ -1,5 +1,73 @@
 @extends('layouts.site')
 
+@push('head')
+{{-- 구조화 데이터(JSON-LD) — SEO/AEO/GEO. 수치·요금은 실제 서비스와 일치 유지, 별점(aggregateRating)은 리뷰 데이터가 없어 넣지 않는다. --}}
+@php
+    $__faq = [
+        ['랭크프리는 무료인가요?', '네. 플레이스·쇼핑 순위 조회는 가입 없이 무료이고, 회원가입하면 순위 추적 100개·경쟁 분석·키워드 분석 등 핵심 기능을 무료로 쓸 수 있습니다. 무제한 추적이 필요하면 프로 플랜(월 29,000원)을 이용하세요.'],
+        ['네이버 플레이스 순위는 어떻게 확인하나요?', '홈에서 키워드와 플레이스 URL(또는 지도 링크)을 입력하면 보통 30초 안에 현재 순위를 확인할 수 있습니다. 회원가입하면 등록한 키워드의 순위가 매일 자동 기록되어 변동 추이를 그래프로 볼 수 있습니다.'],
+        ['순위·점수 데이터는 네이버 공식 데이터인가요?', '아닙니다. 랭크프리의 순위와 N1·N2·N3 등 점수는 자체 수집·분석 기반 추정치로, 네이버 공식 지표가 아닙니다. 실제 모바일 검색 순위와 유사하도록 서울 기준으로 설계되어 있습니다.'],
+        ['쇼핑 순위추적은 어떻게 동작하나요?', '스마트스토어·가격비교 상품 URL(또는 업체명)과 키워드를 등록하면 네이버 쇼핑 검색 결과 최대 1,000위까지 순위를 매일 자동 기록합니다. 가격 변동과 노출 수도 함께 저장됩니다.'],
+        ['경쟁 분석의 N1·N2·N3 점수는 무엇인가요?', 'N1(유사도)은 키워드와 매장 정보의 일치도, N2(관련성)는 리뷰·정보충실도 등 품질 신호, N3(랭킹)는 현재 순위 기반 점수입니다. 상위 노출 업체와 내 매장의 차이를 항목별로 비교해 순위 변동의 근거를 확인할 수 있습니다.'],
+        ['데이터를 API로 받을 수 있나요?', '네. REST API를 제공합니다. 콘솔에서 API 키를 발급받으면 순위추적·경쟁분석·키워드 분석 데이터를 내 서비스에 연동할 수 있습니다. 문서는 /developers 페이지에 있습니다.'],
+    ];
+@endphp
+<script type="application/ld+json">{!! json_encode([
+    '@context' => 'https://schema.org',
+    '@graph' => [
+        [
+            '@type' => 'Organization',
+            '@id' => url('/').'#org',
+            'name' => '랭크프리',
+            'legalName' => '(주)제이커브인터렉티브',
+            'url' => url('/'),
+            'logo' => asset('apple-touch-icon.png'),
+            'email' => 'jcurve19@gmail.com',
+            'telephone' => '+82-1668-2612',
+            'vatID' => '753-88-01488',
+            'address' => [
+                '@type' => 'PostalAddress',
+                'streetAddress' => '가산디지털1로, 가산더블유센터 703호',
+                'addressLocality' => '금천구',
+                'addressRegion' => '서울특별시',
+                'addressCountry' => 'KR',
+            ],
+        ],
+        [
+            '@type' => 'WebSite',
+            '@id' => url('/').'#website',
+            'name' => '랭크프리',
+            'url' => url('/'),
+            'inLanguage' => 'ko',
+            'publisher' => ['@id' => url('/').'#org'],
+        ],
+        [
+            '@type' => 'SoftwareApplication',
+            'name' => '랭크프리',
+            'url' => url('/'),
+            'applicationCategory' => 'BusinessApplication',
+            'operatingSystem' => 'Web',
+            'inLanguage' => 'ko',
+            'description' => '네이버 플레이스·쇼핑 순위 추적과 경쟁 분석, 키워드·블로그 분석을 한 곳에서 제공하는 무료 마케팅 분석 도구입니다.',
+            'featureList' => '플레이스 순위추적, 경쟁 분석(N1·N2·N3), 스마트플레이스 리포트, 쇼핑 순위추적, 시장 분석, 셀러력 진단, 키워드 검색량·트렌드 분석, 블로그 지수 분석, REST API',
+            'offers' => [
+                ['@type' => 'Offer', 'name' => '무료', 'price' => '0', 'priceCurrency' => 'KRW', 'description' => '순위 추적 100개·경쟁 분석·키워드 분석'],
+                ['@type' => 'Offer', 'name' => '프로', 'price' => '29000', 'priceCurrency' => 'KRW', 'description' => '순위 추적 무제한 (월 구독)', 'priceSpecification' => ['@type' => 'UnitPriceSpecification', 'price' => '29000', 'priceCurrency' => 'KRW', 'billingDuration' => 'P1M']],
+            ],
+            'publisher' => ['@id' => url('/').'#org'],
+        ],
+        [
+            '@type' => 'FAQPage',
+            'mainEntity' => array_map(fn ($qa) => [
+                '@type' => 'Question',
+                'name' => $qa[0],
+                'acceptedAnswer' => ['@type' => 'Answer', 'text' => $qa[1]],
+            ], $__faq),
+        ],
+    ],
+], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}</script>
+@endpush
+
 @section('content')
 
 {{-- ============================ HERO ============================ --}}
@@ -489,8 +557,8 @@
             <div class="card p-8 flex flex-col">
                 <div class="text-ink font-semibold" style="font-size:var(--fs-lg);">무료</div>
                 <div class="mt-3 font-display text-ink" style="font-size:var(--fs-3xl);line-height:1;">0<span style="font-size:var(--fs-base);" class="text-muted">원</span></div>
-                <p class="mt-2 text-muted" style="font-size:var(--fs-xs);">순위체크로 시작</p>
-                <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-xs);">
+                <p class="mt-2 text-muted" style="font-size:var(--fs-sm);">순위체크로 시작</p>
+                <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-base);">
                     @foreach (['순위체크 100개 무료','추천인 초대 시 최대 200개','플레이스 분석·경쟁분석 월 5회','키워드·블로그·쇼핑 분석'] as $li)
                     <li class="flex gap-2 text-body"><span style="color:var(--color-success);">✓</span>{{ $li }}</li>
                     @endforeach
@@ -507,8 +575,8 @@
                         <span class="badge" style="background:color-mix(in srgb, var(--color-accent) 18%, transparent);color:var(--color-accent);font-size:var(--fs-xs);">인기</span>
                     </div>
                     <div class="mt-3 font-display text-ink" style="font-size:var(--fs-3xl);line-height:1;">29,000<span style="font-size:var(--fs-base);" class="text-muted">원/월</span></div>
-                    <p class="mt-2 text-muted" style="font-size:var(--fs-xs);">본격 순위 관리</p>
-                    <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-xs);">
+                    <p class="mt-2 text-muted" style="font-size:var(--fs-sm);">본격 순위 관리</p>
+                    <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-base);">
                         @foreach (['순위체크 무제한','경쟁분석 자동 추적·알림','순위·추적 API 제공','키워드 트렌드·대량 분석'] as $li)
                         <li class="flex gap-2 text-body"><span style="color:var(--color-accent);">✓</span>{{ $li }}</li>
                         @endforeach
@@ -520,8 +588,8 @@
             <div class="card p-8 flex flex-col">
                 <div class="text-ink font-semibold" style="font-size:var(--fs-lg);">마케팅 대행</div>
                 <div class="mt-3 font-display text-ink" style="font-size:var(--fs-3xl);line-height:1;">맞춤<span style="font-size:var(--fs-base);" class="text-muted"> 견적</span></div>
-                <p class="mt-2 text-muted" style="font-size:var(--fs-xs);">분석 + 실행까지</p>
-                <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-xs);">
+                <p class="mt-2 text-muted" style="font-size:var(--fs-sm);">분석 + 실행까지</p>
+                <ul class="mt-6 flex flex-col gap-2 flex-1" style="font-size:var(--fs-base);">
                     @foreach (['플레이스 최적화','블로그·체험단 매칭','광고 운영 대행','전담 매니저'] as $li)
                     <li class="flex gap-2 text-body"><span style="color:var(--color-success);">✓</span>{{ $li }}</li>
                     @endforeach
@@ -529,6 +597,29 @@
                 <a href="/support" class="btn btn-secondary mt-6">상담 문의</a>
             </div>
         </div>
+    </div>
+</section>
+
+{{-- ============================ FAQ (AEO — head 의 FAQPage JSON-LD 와 문항·답변 동일 유지) ============================ --}}
+<section id="faq" class="border-t border-hairline-soft">
+    <div class="container-page py-20 lg:py-24" style="max-width:860px;">
+        <h2 class="font-display text-ink text-center" style="font-size:clamp(26px,3vw,34px);line-height:1.2;">자주 묻는 질문</h2>
+        <p class="mt-3 text-muted text-center" style="font-size:var(--fs-base);">랭크프리를 처음 쓰는 분들이 가장 많이 묻는 것들이에요.</p>
+        <div class="mt-10 flex flex-col gap-3">
+            @foreach ($__faq as [$q, $a])
+                <details class="card overflow-hidden rf-faq" style="padding:0;">
+                    <summary class="flex items-center justify-between gap-4 cursor-pointer select-none" style="padding:18px 22px;list-style:none;">
+                        <span class="text-ink font-semibold" style="font-size:var(--fs-base);">{{ $q }}</span>
+                        <svg class="rf-faq-chev flex-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-muted-soft);transition:transform .15s ease;"><polyline points="6 9 12 15 18 9"/></svg>
+                    </summary>
+                    <p class="text-muted" style="padding:0 22px 20px;font-size:var(--fs-sm);line-height:1.7;">{{ $a }}</p>
+                </details>
+            @endforeach
+        </div>
+        <style>
+            .rf-faq summary::-webkit-details-marker { display: none; }
+            .rf-faq[open] .rf-faq-chev { transform: rotate(180deg); }
+        </style>
     </div>
 </section>
 

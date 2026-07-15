@@ -9,6 +9,15 @@
     };
     $fmt = fn ($v) => $v === null ? '—' : round($v);
     $nd = $dates->count();
+    $prevYmd = $prevYmd ?? null;
+    // 직전 분석일 대비 델타(인라인). $invert=true 는 순위(작을수록 좋음). 상승/개선=success · 하락=error. 변화 없으면 생략.
+    $delta = function ($cur, $prev, $dec = 0, $invert = false) {
+        if ($cur === null || $prev === null) return '';
+        $d = round((float) $cur - (float) $prev, $dec);
+        if ($d == 0) return '';
+        $good = $invert ? $d < 0 : $d > 0;
+        return ' <span style="font-size:var(--fs-xs);font-weight:600;color:'.($good ? 'var(--color-success)' : 'var(--color-error)').';">'.($good ? '▲' : '▼').number_format(abs($d), $dec).'</span>';
+    };
 @endphp
 
 <div>
@@ -39,21 +48,28 @@
         {{-- KPI --}}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             @php
+                $rnkDelta = ($mine && $mine->rnk < 300 && ($mine->rnk_prev ?? null) !== null && $mine->rnk_prev < 300)
+                    ? $delta($mine->rnk, $mine->rnk_prev, 0, true) : '';
                 $kpis = [
-                    ['순위', $mine && $mine->rnk > 0 && $mine->rnk < 300 ? $mine->rnk.'위' : '300+', null],
-                    ['N1 유사도', $fmt($mine?->n1), $mine?->n1],
-                    ['N2 관련성', $fmt($mine?->n2), $mine?->n2],
-                    ['N3 랭킹', $fmt($mine?->n3), $mine?->n3],
+                    ['순위', $mine && $mine->rnk > 0 && $mine->rnk < 300 ? $mine->rnk.'위' : '300+', null, $rnkDelta],
+                    ['N1 유사도', $fmt($mine?->n1), $mine?->n1, $delta($mine?->n1, $mine?->n1_prev ?? null, 0)],
+                    ['N2 관련성', $fmt($mine?->n2), $mine?->n2, $delta($mine?->n2, $mine?->n2_prev ?? null, 0)],
+                    ['N3 랭킹', $fmt($mine?->n3), $mine?->n3, $delta($mine?->n3, $mine?->n3_prev ?? null, 0)],
                 ];
             @endphp
-            @foreach ($kpis as [$label, $val, $sc])
+            @foreach ($kpis as [$label, $val, $sc, $dlt])
                 <div class="card p-4">
                     <div class="text-muted" style="font-size:var(--fs-xs);">{{ $label }}</div>
-                    <div class="font-display text-ink mt-1" style="font-size:var(--fs-xl);">{{ $val }}</div>
+                    <div class="font-display text-ink mt-1" style="font-size:var(--fs-xl);">{{ $val }}{!! $dlt !!}</div>
                     @if ($sc !== null)<div class="mt-2">{!! $bar($sc) !!}</div>@endif
                 </div>
             @endforeach
         </div>
+        @if ($prevYmd)
+            <p class="text-muted-soft mb-5" style="font-size:var(--fs-xs);margin-top:-8px;">
+                지표 옆 <span class="text-success" style="font-weight:600;">▲</span>/<span class="text-error" style="font-weight:600;">▼</span> 는 직전 분석일(<b>{{ \Illuminate\Support\Carbon::parse($prevYmd)->format('n월 j일') }}</b>) 대비 변화입니다 — 순위 변동의 근거로 활용하세요.
+            </p>
+        @endif
 
         {{-- 실측 검증(스마트플레이스 조회수 ↔ N2) --}}
         @include('compete._calibration', ['cal' => $calibration ?? ['state' => 'unlinked'], 'slot' => $slot])
@@ -110,17 +126,17 @@
                             @for ($k = 0; $k < 4; $k++)
                                 <td class="text-center px-1.5 py-2.5" style="font-size:var(--fs-xs);@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wv && $wv[$k] > 0)<span class="text-ink">{{ $wv[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
                             @endfor
-                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->visitor !== null ? number_format($r->visitor) : '—' }}</td>
+                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->visitor !== null ? number_format($r->visitor) : '—' }}{!! $delta($r->visitor, $r->visitor_prev, 0) !!}</td>
                             @php $wb = $r->wb; @endphp
                             @for ($k = 0; $k < 4; $k++)
                                 <td class="text-center px-1.5 py-2.5" style="font-size:var(--fs-xs);@if($k===0)border-left:1px solid var(--color-hairline-soft);@endif">@if ($wb && $wb[$k] > 0)<span class="text-ink">{{ $wb[$k] }}</span>@else<span class="text-muted-soft">·</span>@endif</td>
                             @endfor
-                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->blog !== null ? number_format($r->blog) : '—' }}</td>
-                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:var(--fs-xs);border-left:1px solid var(--color-hairline-soft);">{{ $r->score !== null ? number_format($r->score, 2) : '—' }}</td>
+                            <td class="text-center px-1.5 py-2.5 text-muted" style="font-size:var(--fs-xs);">{{ $r->blog !== null ? number_format($r->blog) : '—' }}{!! $delta($r->blog, $r->blog_prev, 0) !!}</td>
+                            <td class="px-2 py-2.5 text-right text-muted" style="font-size:var(--fs-xs);border-left:1px solid var(--color-hairline-soft);">{{ $r->score !== null ? number_format($r->score, 2) : '—' }}{!! $delta($r->score, $r->score_prev, 2) !!}</td>
                             <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->d7) }}</td>
-                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n1) }}</td>
-                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n2) }}</td>
-                            <td class="px-3 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);font-weight:600;">{{ $fmt($r->n3) }}</td>
+                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n1) }}{!! $delta($r->n1, $r->n1_prev, 0) !!}</td>
+                            <td class="px-2 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);">{{ $fmt($r->n2) }}{!! $delta($r->n2, $r->n2_prev, 0) !!}</td>
+                            <td class="px-3 py-2.5 text-right text-ink" style="font-size:var(--fs-xs);font-weight:600;">{{ $fmt($r->n3) }}{!! $delta($r->n3, $r->n3_prev, 0) !!}</td>
                         </tr>
                     @endforeach
                 </tbody>

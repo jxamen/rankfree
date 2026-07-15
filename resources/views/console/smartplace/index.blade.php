@@ -1,10 +1,6 @@
 @extends('console.layout')
 @section('page-title', '스마트플레이스 리포트')
 
-@section('page-actions')
-    <button type="button" id="sp-open-modal" class="btn btn-primary btn-sm">＋ 계정 등록</button>
-@endsection
-
 @section('console-content')
 {{-- 사용량 · 안내 --}}
 <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -42,7 +38,19 @@
     <span class="text-muted-soft">~</span>
     <input type="date" id="sp-ed" class="input" style="width:auto;height:32px;font-size:var(--fs-xs);padding:0 8px;">
     <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 최근 7일 기준으로 수집합니다.</span>
+    <button type="button" id="sp-open-modal" class="btn btn-primary btn-sm" style="height:36px;margin-left:auto;">＋ 계정 등록</button>
 </div>
+
+{{-- 업체명 검색(우) --}}
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center gap-2">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            @if ($q)<a href="{{ route('console.smartplace') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
+            <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="업체명 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+        </div>
+    </div>
+</form>
 
 {{-- 계정 목록 — 가로 전체 --}}
 @if ($accounts->count())
@@ -50,6 +58,7 @@
         <table class="w-full" style="min-width:960px;border-collapse:collapse;white-space:nowrap;font-size:var(--fs-xs);">
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
+                    <th class="text-center px-3 py-3 font-semibold" style="width:44px;">No</th>
                     <th class="text-left px-4 py-3 font-semibold">업체명</th>
                     <th class="text-left px-3 py-3 font-semibold">placeSeq</th>
                     <th class="text-left px-3 py-3 font-semibold">수집매장 ID</th>
@@ -63,6 +72,7 @@
             <tbody>
                 @foreach ($accounts as $a)
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
+                        <td class="px-3 py-3 text-center text-muted-soft">{{ $loop->iteration }}</td>
                         <td class="px-4 py-3">
                             <div class="text-ink font-semibold">{{ $a->label }}</div>
                             @if ($a->sp_name && $a->sp_name !== $a->label)
@@ -109,7 +119,7 @@
                                     data-category="{{ $a->category }}"
                                     data-naver-id="{{ $a->naver_id }}"
                                     data-naver-pw="{{ $a->naver_pw }}">수정</button>
-                            <form method="POST" action="{{ route('console.smartplace.destroy', $a) }}" class="inline" onsubmit="return confirm('삭제하시겠습니까? 수집된 리포트도 함께 삭제됩니다.')">
+                            <form method="POST" action="{{ route('console.smartplace.destroy', $a) }}" class="inline" data-confirm="이 업체를 삭제할까요?" data-confirm-text="수집된 리포트도 함께 삭제됩니다.">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button>
                             </form>

@@ -79,7 +79,7 @@
                     <button type="submit" class="badge" style="font-size:var(--fs-xs);padding:2px 10px;cursor:pointer;{{ $cat->is_active ? 'background:color-mix(in srgb,var(--color-success) 14%,var(--color-canvas));color:var(--color-success);' : '' }}">{{ $cat->is_active ? 'ON · 사용중' : 'OFF · 숨김' }}</button>
                 </form>
                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">/community?cat={{ $cat->slug }}</span>
-                <form method="POST" action="{{ route('admin.community-categories.destroy', $cat) }}" class="ml-auto" onsubmit="return confirm('삭제할까요? (글이 있으면 삭제되지 않습니다)');">
+                <form method="POST" action="{{ route('admin.community-categories.destroy', $cat) }}" class="ml-auto" data-confirm="이 카테고리를 삭제할까요?" data-confirm-text="글이 있으면 삭제되지 않습니다.">
                     @csrf @method('DELETE')
                     <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
                 </form>

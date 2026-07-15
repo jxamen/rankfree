@@ -19,19 +19,20 @@
     </div>
 </div>
 
-{{-- 검색 · 상태 필터 --}}
-<form method="GET" class="flex items-center gap-2 flex-wrap mb-4">
-    <input name="q" value="{{ $q }}" class="input" style="height:36px;width:220px;font-size:var(--fs-xs);" placeholder="성함·연락처·키워드·관심">
-    <select name="status" class="input" style="height:36px;width:auto;font-size:var(--fs-xs);padding:0 10px;">
-        <option value="">전체 상태</option>
-        @foreach (\App\Models\MarketingLead::STATUSES as $sk => $sl)
-            <option value="{{ $sk }}" @selected($status === $sk)>{{ $sl }}</option>
-        @endforeach
-    </select>
-    <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
-    @if ($q !== '' || $status !== '')
-        <a href="{{ route('console.leads') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
-    @endif
+{{-- 상태 필터(좌) + 검색(우) — 카드 --}}
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+        <select name="status" class="input" style="height:36px;width:auto;font-size:var(--fs-xs);padding:0 10px;">
+            <option value="">전체 상태</option>
+            @foreach (\App\Models\MarketingLead::STATUSES as $sk => $sl)
+                <option value="{{ $sk }}" @selected($status === $sk)>{{ $sl }}</option>
+            @endforeach
+        </select>
+        @if ($q !== '' || $status !== '')
+            <a href="{{ route('console.leads') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
+        @endif
+        <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;" placeholder="성함·연락처·키워드·관심">
+    </div>
 </form>
 
 <div class="card overflow-hidden">

@@ -54,7 +54,7 @@
         </div>
         <div>
             <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">설명</label>
-            <textarea name="description" rows="2" class="input mt-1" style="width:100%;resize:vertical;">{{ old('description', $product->description) }}</textarea>
+            <textarea name="description" class="input mt-1" style="width:100%;height:500px;padding:12px 14px;line-height:1.7;resize:vertical;">{{ old('description', $product->description) }}</textarea>
         </div>
     </div>
 

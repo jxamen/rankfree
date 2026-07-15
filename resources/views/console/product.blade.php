@@ -6,6 +6,16 @@
     크롬 확장에서 스마트스토어 상품 페이지의 리뷰를 분석하면 자동으로 저장됩니다.
 </div>
 
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center gap-2">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            @if ($q)<a href="{{ route('console.product') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
+            <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="상품명 · 스토어 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+        </div>
+    </div>
+</form>
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:900px;">

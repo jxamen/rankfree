@@ -14,16 +14,14 @@
     <div class="text-ink font-display mt-1" style="font-size:var(--fs-lg);">{{ number_format($total) }}건</div>
 </div>
 
-{{-- 검색 --}}
-<form method="GET" class="flex gap-2 flex-wrap items-end mb-4">
-    <div>
-        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">검색</label>
-        <input name="q" value="{{ $q }}" class="input" style="width:280px;" placeholder="키워드 · 몰이름 · 톡톡아이디">
+{{-- 검색(우) — 카드 --}}
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center gap-2">
+        @if ($q)
+            <a href="{{ route('console.talk-contacts') }}" class="btn btn-ghost btn-sm">초기화</a>
+        @endif
+        <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;" placeholder="키워드 · 몰이름 · 톡톡아이디">
     </div>
-    <button type="submit" class="btn btn-primary btn-sm">검색</button>
-    @if ($q)
-        <a href="{{ route('console.talk-contacts') }}" class="btn btn-ghost btn-sm">초기화</a>
-    @endif
 </form>
 
 {{-- 목록 --}}

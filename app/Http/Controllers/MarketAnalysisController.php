@@ -11,8 +11,13 @@ class MarketAnalysisController extends Controller
 {
     public function index(Request $request)
     {
+        $q = trim((string) $request->query('q', ''));
+
         return view('console.market', [
-            'analyses' => $request->user()->marketAnalyses()->latest()->paginate(20),
+            'analyses' => $request->user()->marketAnalyses()
+                ->when($q !== '', fn ($query) => $query->where('keyword', 'like', "%{$q}%"))
+                ->latest()->paginate(20)->withQueryString(),
+            'q' => $q,
         ]);
     }
 

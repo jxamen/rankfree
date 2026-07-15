@@ -32,8 +32,11 @@
             @foreach ($keywords as $k)
                 <a href="{{ route('console.blog-saved', ['kw' => $k->keyword]) }}" class="sb-chip {{ $kw === $k->keyword ? 'on' : '' }}">{{ $k->keyword }} <span class="cnt">{{ $k->cnt }}</span></a>
             @endforeach
-            <input type="text" id="sb-search" placeholder="블로그명·ID·제목·주제어 검색" autocomplete="off"
-                   class="input" style="height:34px;width:240px;font-size:var(--fs-xs);margin-left:auto;">
+            <div style="margin-left:auto;display:flex;gap:6px;">
+                <input type="text" id="sb-search" placeholder="블로그명·ID·제목·주제어 검색" autocomplete="off"
+                       class="input" style="width:260px;font-size:var(--fs-xs);">
+                <button type="button" id="sb-search-btn" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+            </div>
         </div>
     </div>
 @endif
@@ -158,7 +161,9 @@
         });
     }
 
-    if (search) search.addEventListener('input', applySearch);
+    var searchBtn = document.getElementById('sb-search-btn');
+    if (searchBtn) searchBtn.addEventListener('click', applySearch);
+    if (search) search.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applySearch(); } });
     tbody.addEventListener('change', function (e) {
         if (e.target.classList && e.target.classList.contains('sb-sel')) updateSel();
     });

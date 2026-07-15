@@ -35,7 +35,7 @@
                 <select name="category_id" class="input">
                     <option value="">전체 공용</option>
                     @foreach ($categories as $cat)
-                        <option value="{{ $cat->id }}">{{ $cat->icon }} {{ $cat->name }}</option>
+                        <option value="{{ $cat->id }}">{{ trim($cat->icon.' '.$cat->name) }}</option>
                     @endforeach
                 </select>
             </div>

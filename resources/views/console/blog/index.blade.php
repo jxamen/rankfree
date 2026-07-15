@@ -16,7 +16,7 @@
     $nf = fn ($v) => $v === null ? '—' : number_format((int) $v);
 @endphp
 
-{{-- 검색 --}}
+{{-- 분석 입력 --}}
 <form method="GET" action="{{ route('console.blog') }}" class="flex items-center gap-2 mb-4" id="bi-form">
     <input type="text" name="q" value="{{ $q }}" placeholder="키워드(예: 강남 맛집) 또는 블로그 ID·URL(예: today789)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">
@@ -92,9 +92,6 @@
     {{-- 필터/정렬 툴바 (crm 필터 스타일) --}}
     <div class="card p-3 mb-3" id="bi-toolbar">
         <div class="bi-trow">
-            <input type="text" id="bi-search" placeholder="블로그명·ID·제목·주제어 검색" autocomplete="off"
-                   class="input" style="height:34px;width:240px;font-size:var(--fs-xs);">
-            <span class="bi-div"></span>
             <div class="bi-fgroup">
                 <span class="text-muted" style="font-size:var(--fs-xs);">등급</span>
                 <div class="bi-chips">
@@ -121,7 +118,11 @@
             <button type="button" class="bi-chip" id="bi-saved-only" title="이 키워드로 저장한 블로거만 표시">★ 저장됨만</button>
             <span class="bi-div"></span>
             <button type="button" id="bi-reset" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);text-decoration:underline;">초기화</button>
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);margin-left:auto;white-space:nowrap;"><b id="bi-count">{{ count($kw['bloggers']) }}</b>개 표시</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);white-space:nowrap;"><b id="bi-count">{{ count($kw['bloggers']) }}</b>개 표시</span>
+                <input type="text" id="bi-search" placeholder="블로그명·ID·제목·주제어 검색" autocomplete="off"
+                       class="input" style="width:240px;font-size:var(--fs-xs);">
+            </div>
         </div>
     </div>
 
@@ -266,7 +267,9 @@
         });
     }
 
-    search.addEventListener('input', apply);
+    var searchBtn = document.getElementById('bi-search-btn');
+    if (searchBtn) searchBtn.addEventListener('click', apply);
+    search.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
     toolbar.querySelectorAll('.bi-chip').forEach(function (chip) {
         chip.addEventListener('click', function () {
             chip.classList.toggle('on');

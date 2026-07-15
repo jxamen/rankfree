@@ -10,8 +10,22 @@
         return $u && ($u->isOperator() || ($item->author_type === 'user' && $item->user_id === $u->id));
     };
 @endphp
-<section class="container-page py-10 lg:py-14" style="max-width:820px;">
-    <a href="{{ route('community', ['cat' => $post->category->slug]) }}" class="text-muted hover:text-ink inline-flex items-center gap-1 mb-4" style="font-size:var(--fs-xs);">← {{ $post->category->icon }} {{ $post->category->name }}</a>
+{{-- 리치 텍스트 본문 프로즈 스타일 (에디터 산출물 렌더) --}}
+<style>
+    .rf-post-body h3 { font-size:var(--fs-lg); font-weight:700; margin:18px 0 8px; color:var(--color-ink); }
+    .rf-post-body h4 { font-size:var(--fs-md); font-weight:700; margin:14px 0 6px; color:var(--color-ink); }
+    .rf-post-body p { margin:8px 0; }
+    .rf-post-body ul, .rf-post-body ol { margin:8px 0; padding-left:24px; }
+    .rf-post-body ul { list-style:disc; }
+    .rf-post-body ol { list-style:decimal; }
+    .rf-post-body li { margin:3px 0; }
+    .rf-post-body a { color:var(--color-accent); text-decoration:underline; }
+    .rf-post-body img { max-width:100%; height:auto; border-radius:10px; margin:10px 0; }
+    .rf-post-body hr { border:0; border-top:1px solid var(--color-hairline); margin:18px 0; }
+    .rf-post-body blockquote { margin:10px 0; padding:6px 14px; border-left:3px solid var(--color-hairline); color:var(--color-muted); }
+</style>
+<section class="py-10 lg:py-14 {{ auth()->check() ? '' : 'container-page' }}" style="padding-left:0;padding-right:0;">
+    <a href="{{ route('community', ['cat' => $post->category->slug]) }}" class="text-muted hover:text-ink inline-flex items-center gap-1 mb-4" style="font-size:var(--fs-xs);">← {{ trim($post->category->icon.' '.$post->category->name) }}</a>
 
     {{-- 본문 --}}
     <article class="card p-6 lg:p-8 mb-5">
@@ -25,17 +39,17 @@
             @if ($canManage($post))
                 <div class="ml-auto flex items-center gap-3">
                     <a href="{{ route('community.edit', $post) }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);">수정</a>
-                    <form method="POST" action="{{ route('community.destroy', $post) }}" onsubmit="return confirm('삭제할까요?');">
+                    <form method="POST" action="{{ route('community.destroy', $post) }}" data-confirm="이 글을 삭제할까요?" data-confirm-text="삭제하면 되돌릴 수 없습니다.">
                         @csrf @method('DELETE')
                         <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
                     </form>
                 </div>
             @endif
         </div>
-        <div class="text-body mt-5" style="font-size:var(--fs-base);line-height:1.8;white-space:pre-wrap;">{{ $post->body }}</div>
+        <div class="text-body mt-5 rf-post-body" style="font-size:var(--fs-base);line-height:1.8;">{!! $post->bodyHtml() !!}</div>
 
-        {{-- 좋아요 --}}
-        <div class="mt-6 flex justify-center">
+        {{-- 좋아요 · 공유 --}}
+        <div class="mt-6 flex justify-center gap-2">
             @auth
                 <button type="button" id="rf-like-btn" data-liked="{{ $liked ? '1' : '0' }}"
                         class="btn {{ $liked ? 'btn-primary' : 'btn-secondary' }}" style="min-width:120px;">
@@ -44,6 +58,7 @@
             @else
                 <div class="btn btn-secondary" style="min-width:120px;pointer-events:none;">♡ 좋아요 {{ number_format($post->likes_count) }}</div>
             @endauth
+            <button type="button" id="rf-share-btn" class="btn btn-secondary" style="min-width:110px;">🔗 공유</button>
         </div>
     </article>
 
@@ -79,7 +94,7 @@
                             @if ($canManage($comment))
                                 <div class="flex items-center gap-3 mt-1.5">
                                     <button type="button" data-cedit="{{ $comment->id }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">수정</button>
-                                    <form method="POST" action="{{ route('community.comment.destroy', $comment) }}" onsubmit="return confirm('댓글을 삭제할까요?');">
+                                    <form method="POST" action="{{ route('community.comment.destroy', $comment) }}" data-confirm="댓글을 삭제할까요?">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
                                     </form>
@@ -105,7 +120,7 @@
                                         @if ($canManage($reply))
                                             <div class="flex items-center gap-3 mt-1.5">
                                                 <button type="button" data-cedit="{{ $reply->id }}" class="text-muted-soft hover:text-ink" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">수정</button>
-                                                <form method="POST" action="{{ route('community.comment.destroy', $reply) }}" onsubmit="return confirm('댓글을 삭제할까요?');">
+                                                <form method="POST" action="{{ route('community.comment.destroy', $reply) }}" data-confirm="댓글을 삭제할까요?">
                                                     @csrf @method('DELETE')
                                                     <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
                                                 </form>
@@ -162,3 +177,25 @@
 })();
 </script>
 @endauth
+
+{{-- 공유 — 비로그인 포함 모두. Web Share API(모바일) → 실패 시 링크 클립보드 복사 --}}
+<script>
+(function () {
+    var sb = document.getElementById('rf-share-btn');
+    if (!sb) return;
+    sb.addEventListener('click', function () {
+        var url = window.location.href, title = document.title;
+        function toast() {
+            if (window.Swal) Swal.fire({ icon: 'success', title: '링크를 복사했어요', timer: 1500, showConfirmButton: false });
+            else alert('링크를 복사했습니다');
+        }
+        if (navigator.share) {
+            navigator.share({ title: title, url: url }).catch(function () {});
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(toast).catch(function () { window.prompt('아래 링크를 복사하세요', url); });
+        } else {
+            window.prompt('아래 링크를 복사하세요', url);
+        }
+    });
+})();
+</script>

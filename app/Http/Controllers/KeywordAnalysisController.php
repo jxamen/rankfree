@@ -222,4 +222,13 @@ class KeywordAnalysisController extends Controller
             'autocomplete' => $autocomplete,
         ];
     }
+
+    /** 키워드 검색 내역 삭제(본인 것만). */
+    public function destroy(Request $request, KeywordSearch $search)
+    {
+        abort_unless($search->user_id === $request->user()->id, 403);
+        $search->delete();
+
+        return back()->with('status', '검색 기록을 삭제했습니다.');
+    }
 }

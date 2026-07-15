@@ -12,7 +12,7 @@
     foreach ($recommendations as $r) { $maxScore = max($maxScore, (int) $r['score']); }
 @endphp
 
-{{-- 검색 --}}
+{{-- 분석(추천) 입력 --}}
 <form method="GET" action="{{ route('console.keyword-recommend') }}" class="flex items-center gap-2 mb-4" id="kr-form">
     <input type="text" name="keyword" value="{{ $keyword }}" placeholder="시드 키워드를 입력하세요 (예: 강남 맛집)"
            class="input" style="flex:1;height:44px;font-size:var(--fs-sm);" autofocus autocomplete="off">

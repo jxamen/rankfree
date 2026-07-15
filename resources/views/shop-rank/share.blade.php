@@ -1,5 +1,6 @@
 @extends('layouts.site')
 @section('follow-theme', '1')
+@section('robots', 'noindex, nofollow') {{-- 토큰 공유 리포트 — 색인 제외(OG 미리보기는 유지) --}}
 
 @section('title', $slot->keyword.' 쇼핑 순위 리포트 · 랭크프리')
 @section('description', ($slot->product_title ?: $slot->mall_name).' — '.$slot->keyword.' 쇼핑 검색 순위 추적 리포트')

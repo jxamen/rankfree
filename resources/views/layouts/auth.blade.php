@@ -1,8 +1,9 @@
 @php
     // 로그인/가입 SEO — 페이지 @section('title') 우선, 없으면 메뉴('사이트 SEO')의 타이틀 사용.
     $__seo = \App\Models\Menu::seo(\Illuminate\Support\Facades\Route::currentRouteName());
-    $__t = trim($__env->yieldContent('title'));
-    $__title = $__t !== '' ? $__t.' · 랭크프리' : ($__seo['title'] ?: '로그인 · 랭크프리');
+    $__t = html_entity_decode(trim($__env->yieldContent('title')), ENT_QUOTES);
+    $__title = $__t !== '' ? $__t.' · 랭크프리' : (($__seo['title'] ?? '') ?: '랭크프리');
+    $__desc = (string) ($__seo['description'] ?? '') ?: '랭크프리 — 네이버 플레이스·쇼핑 순위 무료 분석. 로그인하고 순위 추적을 이어가세요.';
 @endphp
 <!DOCTYPE html>
 <html lang="ko">
@@ -11,9 +12,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $__title }}</title>
-    @if ($__seo['description'])<meta name="description" content="{{ $__seo['description'] }}">@endif
+    <meta name="description" content="{{ $__desc }}">
     @if ($__seo['keywords'])<meta name="keywords" content="{{ $__seo['keywords'] }}">@endif
+    @include('partials.seo', ['title' => $__title, 'description' => $__desc])
     @vite(['resources/css/app.css'])
+    @stack('head')
 </head>
 <body class="bg-surface-page min-h-screen flex items-center justify-center font-sans antialiased text-body" style="padding:24px;">
     <div class="w-full" style="max-width:400px;">

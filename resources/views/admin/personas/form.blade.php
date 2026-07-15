@@ -126,7 +126,7 @@
             <div class="flex flex-wrap gap-3">
                 @foreach ($categories as $cat)
                     <label class="flex items-center gap-1.5" style="font-size:var(--fs-xs);">
-                        <input type="checkbox" name="preferred_categories[]" value="{{ $cat->id }}" @checked(in_array($cat->id, $prefCats, true)) style="accent-color:var(--color-primary);"> {{ $cat->icon }} {{ $cat->name }}
+                        <input type="checkbox" name="preferred_categories[]" value="{{ $cat->id }}" @checked(in_array($cat->id, $prefCats, true)) style="accent-color:var(--color-primary);"> {{ trim($cat->icon.' '.$cat->name) }}
                     </label>
                 @endforeach
             </div>

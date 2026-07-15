@@ -10,8 +10,13 @@ class ProductAnalysisController extends Controller
 {
     public function index(Request $request)
     {
+        $q = trim((string) $request->query('q', ''));
+
         return view('console.product', [
-            'analyses' => $request->user()->productAnalyses()->latest()->paginate(20),
+            'analyses' => $request->user()->productAnalyses()
+                ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('name', 'like', "%{$q}%")->orWhere('store', 'like', "%{$q}%")))
+                ->latest()->paginate(20)->withQueryString(),
+            'q' => $q,
         ]);
     }
 

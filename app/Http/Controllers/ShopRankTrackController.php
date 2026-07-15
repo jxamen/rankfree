@@ -6,6 +6,8 @@ use App\Domain\Shopping\ShopRankSlotService;
 use App\Models\ShopRankSlot;
 use DomainException;
 use Illuminate\Http\Request;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /** 쇼핑 순위추적 — 콘솔. Place\RankTrackController 미러. */
 class ShopRankTrackController extends Controller
@@ -33,6 +35,59 @@ class ShopRankTrackController extends Controller
             'from' => $from,
             'to' => $to,
         ]);
+    }
+
+    /** 추적 데이터 엑셀(XLSX) 다운로드 — 키워드별 시트, 열: 날짜·순위·가격·노출수. Place\RankTrackController::export 미러. */
+    public function export(Request $request)
+    {
+        $slots = $request->user()->shopRankSlots()->with('records')->latest()->get();
+
+        $wb = new Spreadsheet();
+        $wb->removeSheetByIndex(0);
+        $titles = [];
+
+        foreach ($slots as $slot) {
+            // 시트명 = 키워드 (Excel 금지문자 제거·31자 제한·중복 시 번호)
+            $base = mb_substr(trim(preg_replace('#[\\\\/*?:\[\]]#u', ' ', $slot->keyword)) ?: '키워드', 0, 28);
+            $title = $base;
+            for ($n = 2; in_array($title, $titles, true); $n++) {
+                $title = $base.' ('.$n.')';
+            }
+            $titles[] = $title;
+
+            $sheet = $wb->createSheet();
+            $sheet->setTitle($title);
+
+            $header = ['날짜', '순위', '가격', '노출 총개수'];
+            $lastCol = chr(ord('A') + count($header) - 1);
+            $sheet->fromArray($header, null, 'A1');
+            $sheet->getStyle('A1:'.$lastCol.'1')->getFont()->setBold(true);
+
+            $row = 2;
+            foreach ($slot->records->sortByDesc('checked_date') as $rec) {
+                $rank = $rec->rank > 0 ? $rec->rank : ($rec->rank < 0 ? '차단' : '순위권 밖');
+                $sheet->fromArray([
+                    $rec->checked_date->format('Y-m-d'),
+                    $rank,
+                    $rec->price ?: '',
+                    $rec->list_total ?: '',
+                ], null, 'A'.$row++);
+            }
+            foreach (range('A', $lastCol) as $col) {
+                $sheet->getColumnDimension($col)->setAutoSize(true);
+            }
+        }
+
+        if ($wb->getSheetCount() === 0) {
+            $wb->createSheet()->setTitle('데이터 없음');
+        }
+        $wb->setActiveSheetIndex(0);
+
+        $filename = 'rankfree_shoprank_'.now()->format('Ymd_His').'.xlsx';
+
+        return response()->streamDownload(function () use ($wb) {
+            (new Xlsx($wb))->save('php://output');
+        }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
     /** 대상 미리보기(AJAX) — 상품 URL/업체명 파싱. */

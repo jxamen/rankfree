@@ -1,2 +1,6 @@
 User-agent: *
-Disallow:
+Disallow: /console
+Disallow: /admin
+Allow: /
+
+Sitemap: https://rankfree.kr/sitemap.xml

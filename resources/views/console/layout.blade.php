@@ -31,10 +31,14 @@
     @if ($__menu?->meta_keywords)<meta name="keywords" content="{{ $__menu->meta_keywords }}">@endif
     {{-- 다크모드 선적용(FOUC 방지) — 토글은 헤더 버튼, 저장은 localStorage --}}
     <script>if (localStorage.getItem('rf-theme') === 'dark') document.documentElement.classList.add('theme-dark');</script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     @include('partials.custom-head')
+    @stack('head')
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
 <div class="flex min-h-screen console-shell">
@@ -99,7 +103,7 @@
         @if ($__leading->count())
         <div id="rf-nav-top" class="px-3 pt-1 flex flex-col gap-0.5 flex-none">
             @foreach ($__leading as $node)
-                @php $on = $__isOn($node->route); @endphp
+                @php $on = $__isOn($node->resolvedRouteName()); @endphp
                 <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                    class="sb-link px-3 {{ $on ? 'on' : '' }}" data-item data-label="{{ $node->name }}">
                     <span class="ic">@if (trim((string) $node->icon) !== '')<x-icon :name="$node->icon" />@endif</span>{{ $node->name }}
@@ -122,14 +126,14 @@
                         <div class="sb-group-items">
                             @foreach ($node->menuItems as $item)
                                 {{-- 상세(show 등) 하위 라우트도 부모 메뉴를 활성으로 유지. 활성=블루 틴트(.on) --}}
-                                @php $on = $__isOn($item->route); @endphp
+                                @php $on = $__isOn($item->resolvedRouteName()); @endphp
                                 <a href="{{ $item->resolvedUrl() ?? '#' }}" @if ($item->target === '_blank') target="_blank" @endif
                                    class="sb-sublink {{ $on ? 'on' : '' }}" data-item data-label="{{ $item->name }}">{{ $item->name }}</a>
                             @endforeach
                         </div>
                     </div>
                 @else
-                    @php $on = $__isOn($node->route); @endphp
+                    @php $on = $__isOn($node->resolvedRouteName()); @endphp
                     <a href="{{ $node->resolvedUrl() ?? '#' }}" @if ($node->target === '_blank') target="_blank" @endif
                        class="sb-link px-3 {{ $on ? 'on' : '' }}" data-item data-label="{{ $node->name }}">
                         <span class="ic">@if (trim((string) $node->icon) !== '')<x-icon :name="$node->icon" />@endif</span>{{ $node->name }}
@@ -431,5 +435,6 @@
     });
 })();
 </script>
+@stack('scripts')
 </body>
 </html>

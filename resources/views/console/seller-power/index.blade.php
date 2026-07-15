@@ -13,6 +13,16 @@
     크롬 확장에서 <b>내 상품 페이지</b>를 열고 셀러력을 분석하면, 같은 키워드 <b>검색 상위 10개 경쟁 상품</b>과 비교한 결과가 저장됩니다. 점수·등급은 관측 신호 기반 <b>자체 추정치</b>(네이버 공식 아님)입니다.
 </div>
 
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center gap-2">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            @if ($q)<a href="{{ route('console.seller-power') }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>@endif
+            <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);" placeholder="키워드 · 상품명 검색">
+            <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">검색</button>
+        </div>
+    </div>
+</form>
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:920px;">

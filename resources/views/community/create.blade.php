@@ -1,9 +1,10 @@
 @extends('console.layout')
-@section('title', '글쓰기 · 커뮤니티 · 랭크프리')
-@section('page-title', '글쓰기')
+@php $__board = optional(($categories ?? collect())->firstWhere('slug', $selected))->name ?: '커뮤니티'; @endphp
+@section('title', $__board.' 글쓰기 · 랭크프리')
+@section('page-title', $__board)
 
 @section('console-content')
-<section class="container-page py-10 lg:py-14" style="max-width:720px;padding-left:0;padding-right:0;">
+<section class="py-10 lg:py-14" style="padding-left:0;padding-right:0;">
     <h1 class="font-display text-ink mb-5" style="font-size:clamp(22px,2.6vw,28px);">글쓰기</h1>
 
     @if ($errors->any())
@@ -16,7 +17,7 @@
             <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">카테고리</label>
             <select name="category_id" class="input" required>
                 @foreach ($categories as $cat)
-                    <option value="{{ $cat->id }}" @selected(old('category_id', $selected ? optional($categories->firstWhere('slug', $selected))->id : null) == $cat->id)>{{ $cat->icon }} {{ $cat->name }}</option>
+                    <option value="{{ $cat->id }}" @selected(old('category_id', $selected ? optional($categories->firstWhere('slug', $selected))->id : null) == $cat->id)>{{ trim($cat->icon.' '.$cat->name) }}</option>
                 @endforeach
             </select>
         </div>
@@ -26,7 +27,7 @@
         </div>
         <div class="mb-5">
             <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">내용</label>
-            <textarea name="body" class="input" style="height:220px;padding:12px 14px;line-height:1.7;" maxlength="20000" placeholder="내용을 입력하세요" required>{{ old('body') }}</textarea>
+            @include('admin.partials.editor', ['name' => 'body', 'value' => \App\Support\HtmlSanitizer::clean(old('body')), 'height' => 360, 'placeholder' => '내용을 입력하세요…', 'uploadUrl' => route('upload.image')])
         </div>
         <div class="flex items-center gap-2">
             <button type="submit" class="btn btn-primary">등록</button>

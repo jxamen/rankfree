@@ -10,6 +10,22 @@
     <div class="card-soft px-4 py-3 mb-4 text-muted" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
 @endif
 
+{{-- 검색 — 유형별 + 상품명 --}}
+<form method="GET" class="card p-3 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+        <select name="type" class="input" style="width:160px;font-size:var(--fs-xs);">
+            <option value="">전체 유형</option>
+            @foreach ($types as $code => $t)
+                <option value="{{ $code }}" @selected($type === $code)>{{ $t->name }}</option>
+            @endforeach
+        </select>
+        @if ($q || $type)
+            <a href="{{ route('admin.products') }}" class="btn btn-ghost btn-sm">초기화</a>
+        @endif
+        <input name="q" value="{{ $q }}" class="input" style="width:260px;font-size:var(--fs-xs);margin-left:auto;" placeholder="상품명 검색">
+    </div>
+</form>
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:820px;">

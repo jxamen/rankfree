@@ -10,8 +10,13 @@ class SellerPowerController extends Controller
 {
     public function index(Request $request)
     {
+        $q = trim((string) $request->query('q', ''));
+
         return view('console.seller-power.index', [
-            'analyses' => $request->user()->sellerPowerAnalyses()->latest('updated_at')->paginate(24),
+            'analyses' => $request->user()->sellerPowerAnalyses()
+                ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('keyword', 'like', "%{$q}%")->orWhere('product_name', 'like', "%{$q}%")))
+                ->latest('updated_at')->paginate(24)->withQueryString(),
+            'q' => $q,
         ]);
     }
 

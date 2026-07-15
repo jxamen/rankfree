@@ -17,8 +17,13 @@ class SmartplaceController extends Controller
 {
     public function index(Request $request)
     {
+        $q = trim((string) $request->query('q', ''));
+
         return view('console.smartplace.index', [
-            'accounts' => $request->user()->smartplaceAccounts()->latest()->get(),
+            'accounts' => $request->user()->smartplaceAccounts()
+                ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('label', 'like', "%{$q}%")->orWhere('sp_name', 'like', "%{$q}%")))
+                ->latest()->get(),
+            'q' => $q,
         ]);
     }
 
