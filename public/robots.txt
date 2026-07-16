@@ -1,7 +1,8 @@
+# rankfree.kr robots.txt
 User-agent: *
 Allow: /
 
-# 로그인/개인 영역 — 색인 불필요
+# Private / auth areas - not for indexing
 Disallow: /console
 Disallow: /admin
 Disallow: /order/
@@ -12,10 +13,10 @@ Disallow: /reset-password
 Disallow: /find-email
 Disallow: /auth/
 
-# 크롤 예의
+# Crawl politeness
 Crawl-delay: 1
 
-# AI 검색·답변·생성 엔진 — 공개 콘텐츠 크롤링·인용 허용(개인 영역 제외). 정책 전문: /ai.txt
+# AI search / answer / generative engines - public content allowed to crawl & cite (private areas excluded). Policy: /ai.txt
 User-agent: GPTBot
 User-agent: OAI-SearchBot
 User-agent: ChatGPT-User
@@ -40,6 +41,6 @@ Disallow: /reset-password
 Disallow: /find-email
 Disallow: /auth/
 
-# AI 정책: https://rankfree.kr/ai.txt
-# LLM 사이트 개요: https://rankfree.kr/llms.txt
+# AI policy: https://rankfree.kr/ai.txt
+# LLM site overview: https://rankfree.kr/llms.txt
 Sitemap: https://rankfree.kr/sitemap.xml

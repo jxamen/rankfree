@@ -68,15 +68,16 @@ class RelatedDocsService
         $sections = [];
         $seen = []; // 페이지 전체(섹션 간) 제목 중복 방지
 
-        // 같은 카테고리 인기 키워드(허브 문서) — 아고다식 "주변" 추천을 맨 앞에(22 Phase 2)
-        if ($doc instanceof KeywordSearch && $doc->category_id) {
+        // 같은 카테고리 인기 키워드(허브 문서) — 아고다식 "주변" 추천을 맨 앞에(22 Phase 2·3)
+        // 키워드 문서는 자기 카테고리로, 시장/셀러력/매장 문서는 같은 키워드의 허브 문서를 찾아 그 카테고리로 연결.
+        [$catId, $catName, $excludeId] = $this->resolveCategory($doc);
+        if ($catId) {
             $catDocs = KeywordSearch::where('origin', 'hub')
-                ->where('category_id', $doc->category_id)
-                ->where($doc->getKeyName(), '!=', $doc->getKey())
+                ->where('category_id', $catId)
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->orderByDesc('monthly_total')->limit(12)->get();
             $items = $this->uniqueItems($catDocs, 'keyword', self::SELF_LIMIT, $seen);
             if ($items) {
-                $catName = $doc->category?->name;
                 $sections[] = ['title' => ($catName ? "'{$catName}' 카테고리" : '같은 카테고리').' 인기 키워드', 'items' => $items];
             }
         }
@@ -123,6 +124,28 @@ class RelatedDocsService
         }
 
         return $sections;
+    }
+
+    /**
+     * 문서의 허브 카테고리 결정 — [category_id, 카테고리명, 제외할 허브 문서 id].
+     * 허브 키워드 문서는 자기 카테고리(자신 제외), 그 외 keyword 를 가진 문서(시장/셀러력/매장)는
+     * 같은 키워드의 허브 문서를 찾아 그 카테고리를 쓴다(허브 문서 자신은 추천에 포함).
+     */
+    private function resolveCategory(Model $doc): array
+    {
+        if ($doc instanceof KeywordSearch) {
+            return $doc->category_id
+                ? [$doc->category_id, $doc->category?->name, $doc->getKey()]
+                : [null, null, null];
+        }
+
+        $kw = trim((string) ($doc->keyword ?? ''));
+        if ($kw === '') {
+            return [null, null, null];
+        }
+        $hub = KeywordSearch::with('category')->where('origin', 'hub')->where('keyword', $kw)->first();
+
+        return $hub && $hub->category_id ? [$hub->category_id, $hub->category?->name, null] : [null, null, null];
     }
 
     /** 제목 기준 유일한 추천 아이템 목록 — $seen 은 페이지 전체(섹션 간) 중복 방지 누적분. */

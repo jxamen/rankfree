@@ -57,6 +57,18 @@
         </p>
     </div>
 
+    {{-- AI 인사이트(선택 보강) — 발행 시점 실측 데이터 근거로 생성·저장된 해석(AI 생성 표기) --}}
+    @if (! empty($aiInsight['text']))
+        <div class="card p-5" style="margin-top:12px;" data-ai-insight>
+            <div class="flex items-center gap-2">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);font-weight:600;">AI 인사이트</span>
+                <span class="badge border border-hairline" style="font-size:var(--fs-xs);">AI 생성</span>
+            </div>
+            <p class="text-ink" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.75;">{{ $aiInsight['text'] }}</p>
+            <p class="text-muted-soft" style="margin-top:8px;font-size:var(--fs-xs);">위 실측 데이터를 근거로 AI가 작성한 해석이며 참고용입니다{{ ! empty($aiInsight['generated_at']) ? ' · '.\Illuminate\Support\Carbon::parse($aiInsight['generated_at'])->format('Y-m-d').' 생성' : '' }}.</p>
+        </div>
+    @endif
+
     @include('partials._keyword_body', [
         'vm' => $vm,
         'saturation' => $saturation,

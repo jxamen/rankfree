@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class KeywordCategory extends Model
 {
     protected $fillable = [
-        'type', 'parent_id', 'name', 'slug', 'description', 'seed_keywords', 'sort', 'is_active', 'collected_at',
+        'type', 'parent_id', 'name', 'slug', 'naver_cid', 'description', 'seed_keywords', 'sort', 'is_active', 'collected_at',
     ];
 
     protected $casts = [

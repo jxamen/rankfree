@@ -117,6 +117,9 @@ return [
         'refresh_after_days' => (int) env('HUB_REFRESH_AFTER_DAYS', 30),
         // 후보 제외 패턴(정규식 조각, u 플래그) — 업체명·개인정보성 키워드 등
         'banned_patterns' => [],
+        // GSC 발굴(hub:discover) — 유입 쿼리를 후보로 적재할 카테고리 슬러그(빈값=발굴 끔)·최소 노출수
+        'discover_category' => env('HUB_DISCOVER_CATEGORY', ''),
+        'discover_min_impressions' => (int) env('HUB_DISCOVER_MIN_IMPRESSIONS', 30),
     ],
 
     /*

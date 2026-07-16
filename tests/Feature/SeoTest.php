@@ -205,29 +205,29 @@ class SeoTest extends TestCase
 
     public function test_robots_and_llms_txt_files(): void
     {
+        // robots.txt·ai.txt 는 ASCII 정적 파일(한글 없음 → 서버 charset 설정 무관, 모지바케 불가)
         $robots = file_get_contents(public_path('robots.txt'));
+        $this->assertTrue(mb_check_encoding($robots, 'ASCII'), 'robots.txt 는 ASCII 여야 함(모지바케 방지)');
         $this->assertStringContainsString('Disallow: /console', $robots);
         $this->assertStringContainsString('Disallow: /admin', $robots);
         $this->assertStringContainsString('Sitemap: https://rankfree.kr/sitemap.xml', $robots);
-        // AI 크롤러 허용 그룹 + 정책 참조
         $this->assertStringContainsString('User-agent: GPTBot', $robots);
         $this->assertStringContainsString('User-agent: ClaudeBot', $robots);
         $this->assertStringContainsString('/ai.txt', $robots);
 
-        // ai.txt — AI 크롤러 정책(개인 영역 제외 + 인용 안내)
         $ai = file_get_contents(public_path('ai.txt'));
+        $this->assertTrue(mb_check_encoding($ai, 'ASCII'), 'ai.txt 는 ASCII 여야 함(모지바케 방지)');
         $this->assertStringContainsString('Disallow: /console', $ai);
         $this->assertStringContainsString('rankfree.kr/llms.txt', $ai);
         $this->assertStringContainsString('rankfree.kr/sitemap.xml', $ai);
 
-        // /llm.txt 는 llms.txt 별칭(같은 내용)
-        $this->get('/llm.txt')->assertOk()->assertSee('# 랭크프리');
-
-        $llms = file_get_contents(public_path('llms.txt'));
-        $this->assertStringContainsString('# 랭크프리', $llms);
-        $this->assertStringContainsString('자체 수집·분석 기반 추정치', $llms);
-        $this->assertStringContainsString('/keyword/', $llms);          // 공개 리포트 URL 패턴 안내
-        $this->assertStringContainsString('rankfree.kr/ai.txt', $llms); // AI 정책 링크
+        // llms.txt(한글 콘텐츠) 는 라우트로 charset=utf-8 보장 서빙 — /llms.txt, /llm.txt 동일
+        foreach (['/llms.txt', '/llm.txt'] as $u) {
+            $res = $this->get($u)->assertOk();
+            $this->assertStringContainsString('charset=UTF-8', (string) $res->headers->get('content-type'));
+            $res->assertSee('# 랭크프리')->assertSee('자체 수집·분석 기반 추정치')
+                ->assertSee('/keyword/')->assertSee('rankfree.kr/ai.txt');
+        }
 
         // 파비콘·OG 이미지 실파일 존재
         foreach (['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'og-image.png'] as $f) {

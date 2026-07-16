@@ -83,6 +83,6 @@
 | [19_CAFE_SEED_CRAWLER.md](./19_CAFE_SEED_CRAWLER.md) | 카페 글감 수집 — 인기글·댓글 크롤 → DB → 글밥 전환 → AI(Gemini) 재작성·사용 이력 |
 | [20_SEARCH_CONSOLE.md](./20_SEARCH_CONSOLE.md) | 검색 유입 분석 — 구글 서치 콘솔 연동(서비스 계정·일별 수집 크론·관리자 대시보드) |
 | [21_SEO_SLUG_SITEMAP.md](./21_SEO_SLUG_SITEMAP.md) | SEO 공유 슬러그(/keyword/여름브라)·robots·사이트맵(인덱스+섹션, 추적 슬롯 제외) |
-| [22_KEYWORD_CONTENT_HUB.md](./22_KEYWORD_CONTENT_HUB.md) | 키워드 콘텐츠 허브 — 카테고리→키워드 수집·승인·발행→허브 페이지(/keywords)·AEO 문서·상호 추천(Phase 0·1·2 구현) |
+| [22_KEYWORD_CONTENT_HUB.md](./22_KEYWORD_CONTENT_HUB.md) | 키워드 콘텐츠 허브 — 카테고리→키워드 수집(시드·지역조합·데이터랩·GSC)·승인·발행→허브 페이지(/keywords)·AEO 문서·AI 인사이트·상호 추천(Phase 0~3 + 대량 시드 구현) |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

@@ -1,6 +1,6 @@
 # 22. 키워드 콘텐츠 허브 — 카테고리 → 키워드 → 분석 문서 → 상호 추천
 
-> 카테고리별로 키워드를 모으고, 키워드마다 SEO/AEO/GEO 최적화 분석 문서를 발행하며, 문서끼리 **아고다식으로 서로 추천**해 문서 하나하나가 살아있는 검색 랜딩이 되게 한다. (2026-07-16 설계 · **Phase 0·1·2 구현 완료**)
+> 카테고리별로 키워드를 모으고, 키워드마다 SEO/AEO/GEO 최적화 분석 문서를 발행하며, 문서끼리 **아고다식으로 서로 추천**해 문서 하나하나가 살아있는 검색 랜딩이 되게 한다. (2026-07-16 설계 · **Phase 0~3 구현 완료**)
 
 ## 컨셉
 
@@ -47,6 +47,12 @@
 - 카테고리 시드(운영 입력 가이드): 플레이스 = pcmap 6종 × 지역 변형(강남 맛집…) / 쇼핑 = 네이버 1depth + `shop_rank_slots.category` 실측값 활용
 - `buildAnalysis()` 는 [KeywordReportBuilder](../app/Domain/Keyword/KeywordReportBuilder.php) 로 추출 — 콘솔(index)·공유(shared)·허브 발행 3곳 공용(동작 동일)
 
+### 대량 시드 생성기 2종 (✅ 2026-07-16 추가)
+
+- **hub:place-seed** ([HubPlaceSeed](../app/Console/Commands/HubPlaceSeed.php)) — 플레이스 지역×업종 조합 생성기. pcmap 업종 6종별 카테고리(맛집·음식점/병원·의원/헤어샵/네일·뷰티/숙박·여행/생활·플레이스)를 만들고, [database/data/place_keyword_matrix.php](../database/data/place_keyword_matrix.php)(지역 ~380개: 핫플레이스·구·시·주요 동·여행지 큐레이션 × 업종 패턴 ~60개)를 조합해 "{지역} {패턴}"(강남 치과, 성수동 맛집, 제주도 호텔 …) 후보(source=combo)를 만든다. 조합 가능 총량 ~1.5만, `--limit`(기본 2,000)씩 증분 실행. **검색량 미상(pending) → 발행 시 분석이 볼륨 판정(없으면 자동 보류)** 이라 저품질 대량 발행이 안 된다. 전체 행정동 확장은 매트릭스 파일에 공공데이터 CSV 변환분을 붙이면 됨
+- **hub:shopping-collect** ([HubShoppingCollect](../app/Console/Commands/HubShoppingCollect.php) · [NaverDataLabShoppingService](../app/Domain/Keyword/NaverDataLabShoppingService.php)) — **데이터랩 쇼핑인사이트**(비공식·무로그인, referer+XHR+전체 UA 필수) 분야별 인기검색어 수집. 1·2분류를 KeywordCategory 로 동기화(`naver_cid` 매핑, 2026_07_16_000020 마이그레이션), 2분류+3분류 인기검색어(최근 30일, 분야당 20×pages)를 **소속 2분류 카테고리** 후보(source=datalab)로 적재(트리는 2계층 유지). 카테고리 24h·랭킹 12h 캐시, 요청 간 딜레이. 스케줄: 주 1회(월 06:50, hub 활성 시). 실측: 패션잡화 1분류에서 신규 2,461건
+- 검증: [tests/Feature/KeywordHubSeedTest.php](../tests/Feature/KeywordHubSeedTest.php) 4건 + 실 API 실행(데이터랩 2,461건·조합 1,000건) + 관리자 큐 Playwright(데이터랩/지역조합 배지·카테고리 트리 필터)
+
 ### 파이프라인 (크론 3종 + 서비스)
 
 1. **hub:collect** ([HubCollect](../app/Console/Commands/HubCollect.php) · [KeywordHubCollector](../app/Domain/Keyword/KeywordHubCollector.php)) — 카테고리를 `collected_at` 오래된 순으로 N개 로테이션(기본 3): 시드 → keywordstool 연관 + 자동완성 → candidates upsert(pending). **자동 필터**: 길이 2~60자 · `min_volume`(기본 월 1,000) 미만 제외(시드는 면제 — 운영자 의도 존중, 자동완성 등 볼륨 미상은 pending 통과) · `banned_patterns` 정규식 · 기발행(origin=hub) 제외. 재수집 시 승인/거부 **상태는 보존**하고 지표만 갱신
@@ -73,11 +79,15 @@
 - **추천 고도화** — [RelatedDocsService](../app/Domain/Seo/RelatedDocsService.php): 허브 키워드 문서는 **"'{카테고리}' 카테고리 인기 키워드" 섹션을 맨 앞에**(검색량순) + **페이지 전체(섹션 간) 제목 중복 제거**. 지역 변형(강남→서초) 추천은 Phase 3 과제로 이월
 - 검증: [tests/Feature/KeywordInsightTest.php](../tests/Feature/KeywordInsightTest.php) 6건 + [tests/Unit/KeywordAeoTest.php](../tests/Unit/KeywordAeoTest.php) 2건 + **Playwright**(실 API, 로컬): /keywords·/keywords/캠핑용품·/keyword/캠핑의자(AEO 요약·FAQ·브레드크럼·카테고리 추천·CTA)·사이트맵 섹션 전부 확인
 
-## Phase 3 — 자동화·확장 (설계)
+## Phase 3 — 자동화·확장 (✅ 2026-07-16 구현·검증 완료)
 
-- LLM 인사이트(선택): Gemini(19 크론 자산 재사용)로 검색의도·콘텐츠 방향 1문단 — **사실은 데이터, 문장만 생성**. 과장 금지
-- market/store 문서에도 category_id 부여 → 카테고리 기반 크로스 추천 정밀화
-- GSC(20) 피드백 루프: 노출·클릭 실적 → 갱신 우선순위·신규 키워드 발굴
+- **AI 인사이트(선택 보강)** — [KeywordAiInsight](../app/Domain/Keyword/KeywordAiInsight.php): 발행/갱신 시점에 aeo() 사실 목록을 근거로 Gemini(→Claude 폴백, `services.gemini/anthropic` 키 재사용) 호출 → `snapshot.ai_insight` 저장. **열람 시 LLM 재호출 없음**(shared 는 저장분만 표시). 프롬프트로 새 수치·과장 금지 강제, 화면엔 "AI 생성" 배지 + 참고용 고지. 키 없으면 조용히 생략(문서는 AI 없이도 완결)
+- **크로스 카테고리 추천 정밀화** — [RelatedDocsService::resolveCategory()](../app/Domain/Seo/RelatedDocsService.php): 시장/셀러력/매장 문서도 **같은 키워드의 허브 문서를 찾아 그 카테고리의 인기 키워드 섹션**을 맨 앞에 표시(스키마 변경 없이 읽기 시점 해석·6h 캐시). market/store 에 category_id 컬럼을 직접 두는 설계는 보류(불필요해짐)
+- **GSC(20) 피드백 루프**:
+  - [hub:discover](../app/Console/Commands/HubDiscover.php) — 최근 28일 GSC 쿼리 중 노출 ≥ `discover_min_impressions`(기본 30)이고 허브 문서/후보에 없는 검색어 → `.env HUB_DISCOVER_CATEGORY`(카테고리 슬러그) 카테고리에 **source=gsc pending 후보**로 적재(미설정 시 건너뜀). 스케줄 06:20(gsc:collect 04:00 이후)
+  - [hub:refresh](../app/Console/Commands/HubRefresh.php) 우선순위 — 갱신 주기 지난 문서 중 **GSC 페이지 클릭(최근 28일) 많은 순 → 오래된 순**(한글 슬러그 URL 인코딩/원문 모두 매칭). 실제 유입 있는 문서가 먼저 신선해진다
+- 검증: [tests/Feature/KeywordHubPhase3Test.php](../tests/Feature/KeywordHubPhase3Test.php) 6건(Gemini Http::fake·키 없음 생략·스냅샷 저장·문서 표시·크로스 카테고리·discover 필터·refresh 우선순위) + **Playwright**: '선풍기' 후보 실발행(슬러그 충돌 시 `-2` 자동 처리 확인) → `/keyword/선풍기-2` AI 카드 렌더 + `/market/선풍기` 에 "'생활가전' 카테고리 인기 키워드" 크로스 섹션 확인
+- **남은 과제(후속)**: 지역 키워드 인근 지역 변형(강남→서초·역삼) 추천 — 지역 인접 매핑 필요, 별도 설계 후 진행
 
 ## 품질 가드레일 (중요)
 

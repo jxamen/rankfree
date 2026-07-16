@@ -125,12 +125,16 @@ Route::get('/sitemap-{section}.xml', [\App\Http\Controllers\SitemapController::c
 // 커뮤니티 RSS (네이버 서치어드바이저 제출용 — 최신 글 50건)
 Route::get('/community/feed', [\App\Http\Controllers\SitemapController::class, 'communityFeed'])->name('community.feed');
 
-// llm.txt — 표준 llms.txt 의 별칭(단일 소스). ai.txt·llms.txt 는 public/ 정적 파일.
-Route::get('/llm.txt', function () {
-    abort_unless(is_file(public_path('llms.txt')), 404);
+// llms.txt / llm.txt — 한글 콘텐츠라 charset=utf-8 을 보장하려고 라우트로 서빙(정적 파일 미사용, 서버 charset 설정 무관).
+//   소스: resources/seo/llms.txt (단일 소스). robots.txt·ai.txt 는 ASCII 라 public/ 정적 파일로 둔다.
+$__llms = function () {
+    $path = resource_path('seo/llms.txt');
+    abort_unless(is_file($path), 404);
 
-    return response(file_get_contents(public_path('llms.txt')), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
-})->name('llm.txt');
+    return response(file_get_contents($path), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+};
+Route::get('/llms.txt', $__llms)->name('llms.txt');
+Route::get('/llm.txt', $__llms)->name('llm.txt');
 
 // 셀프마케팅 (공개 카탈로그 — 마케팅 상품 카드, 주문은 로그인)
 Route::get('/self-marketing', [SelfMarketingController::class, 'index'])->name('self-marketing');

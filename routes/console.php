@@ -58,6 +58,9 @@ Schedule::command('sitemap:refresh')->timezone('Asia/Seoul')->dailyAt('05:40')->
 // 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호. 상한은 config rankfree.hub.*
 if (config('rankfree.hub.schedule_enabled', false)) {
     Schedule::command('hub:collect')->timezone('Asia/Seoul')->dailyAt('06:10')->withoutOverlapping()->runInBackground();
+    Schedule::command('hub:discover')->timezone('Asia/Seoul')->dailyAt('06:20')->withoutOverlapping()->runInBackground(); // GSC 유입 쿼리 발굴(gsc:collect 04:00 이후)
     Schedule::command('hub:publish')->hourly()->withoutOverlapping()->runInBackground();
     Schedule::command('hub:refresh')->timezone('Asia/Seoul')->dailyAt('06:40')->withoutOverlapping()->runInBackground();
+    // 데이터랩 쇼핑인사이트 인기검색어 — 순위 변동이 느려 주 1회면 충분(월요일 새벽)
+    Schedule::command('hub:shopping-collect')->timezone('Asia/Seoul')->weeklyOn(1, '06:50')->withoutOverlapping()->runInBackground();
 }

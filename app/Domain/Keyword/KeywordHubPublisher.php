@@ -12,7 +12,10 @@ use App\Models\KeywordSearch;
  */
 class KeywordHubPublisher
 {
-    public function __construct(private KeywordReportBuilder $builder) {}
+    public function __construct(
+        private KeywordReportBuilder $builder,
+        private KeywordAiInsight $ai,
+    ) {}
 
     /** 발행 — 성공 시 허브 문서 반환, 데이터 부족이면 null(후보는 rejected + 사유). */
     public function publish(KeywordCandidate $c): ?KeywordSearch
@@ -23,6 +26,11 @@ class KeywordHubPublisher
             $c->update(['status' => 'rejected', 'note' => '데이터 부족 — 발행 보류 ('.now()->format('Y-m-d').')']);
 
             return null;
+        }
+
+        // AI 인사이트(선택 보강) — 발행 시점 1회 생성해 스냅샷에 저장, 열람 시 재호출 없음
+        if ($insight = $this->ai->write($vm)) {
+            $result['ai_insight'] = $insight;
         }
 
         $doc = KeywordSearch::updateOrCreate(
@@ -53,6 +61,10 @@ class KeywordHubPublisher
             $doc->forceFill(['refreshed_at' => now()])->save();
 
             return false;
+        }
+
+        if ($insight = $this->ai->write($vm)) {
+            $result['ai_insight'] = $insight;
         }
 
         $doc->forceFill([

@@ -93,11 +93,18 @@ class KeywordHubCollector
     /** 자동 필터 — 볼륨 미상(null)은 통과시켜 pending 으로 두고 운영자/발행 시점에 판정한다. */
     private function passes(string $kw, ?int $volume, bool $isSeed): bool
     {
-        $len = mb_strlen($kw, 'UTF-8');
-        if ($len < 2 || $len > 60) {
+        if (! self::acceptableKeyword($kw)) {
             return false;
         }
-        if (! $isSeed && $volume !== null && $volume < (int) config('rankfree.hub.min_volume', 1000)) {
+
+        return $isSeed || $volume === null || $volume >= (int) config('rankfree.hub.min_volume', 1000);
+    }
+
+    /** 키워드 형태 필터(길이 2~60자 + 금지 패턴) — hub:discover 등 다른 유입 경로도 공용. */
+    public static function acceptableKeyword(string $kw): bool
+    {
+        $len = mb_strlen($kw, 'UTF-8');
+        if ($len < 2 || $len > 60) {
             return false;
         }
         foreach ((array) config('rankfree.hub.banned_patterns', []) as $p) {

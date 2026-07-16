@@ -142,6 +142,8 @@ class KeywordAnalysisController extends Controller
             ->sectionsFor($record, array_column((array) ($result['vm']['related'] ?? []), 'keyword'));
         // 브레드크럼(카테고리)·기준일(AEO/GEO) 렌더용
         $result['record'] = $record->loadMissing('category');
+        // AI 인사이트 — 발행/갱신 시 저장된 스냅샷분만 표시(열람 시 LLM 호출 없음)
+        $result['aiInsight'] = is_array($record->snapshot) ? ($record->snapshot['ai_insight'] ?? null) : null;
 
         return view('keyword.share', $result);
     }
