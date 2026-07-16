@@ -16,7 +16,7 @@ class KeywordSearch extends Model
     use HasShareSlug;
 
     protected $fillable = [
-        'slug', 'user_id', 'category_id', 'origin', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile',
+        'slug', 'user_id', 'category_id', 'region', 'region_type', 'origin', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile',
         'comp_idx', 'grade', 'share_token', 'snapshot', 'refreshed_at',
     ];
 

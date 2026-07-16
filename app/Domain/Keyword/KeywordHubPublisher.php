@@ -38,6 +38,8 @@ class KeywordHubPublisher
             [
                 'user_id' => null,
                 'category_id' => $c->category_id,
+                'region' => $c->region,           // 플레이스 지역 축(쇼핑은 null)
+                'region_type' => $c->region_type,
                 'monthly_total' => $vm['total'],
                 'monthly_pc' => $vm['pc'],
                 'monthly_mobile' => $vm['mobile'],

@@ -11,7 +11,7 @@ class KeywordCandidate extends Model
     public const STATUSES = ['pending', 'approved', 'rejected', 'published'];
 
     protected $fillable = [
-        'category_id', 'keyword', 'source', 'monthly_total', 'comp_idx', 'status', 'note',
+        'category_id', 'region', 'region_type', 'keyword', 'source', 'monthly_total', 'comp_idx', 'status', 'note',
     ];
 
     protected $casts = [
