@@ -15,4 +15,31 @@ Disallow: /auth/
 # 크롤 예의
 Crawl-delay: 1
 
+# AI 검색·답변·생성 엔진 — 공개 콘텐츠 크롤링·인용 허용(개인 영역 제외). 정책 전문: /ai.txt
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: anthropic-ai
+User-agent: Claude-Web
+User-agent: PerplexityBot
+User-agent: PerplexityBot-User
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: CCBot
+User-agent: cohere-ai
+User-agent: Bytespider
+Allow: /
+Disallow: /console
+Disallow: /admin
+Disallow: /order/
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /find-email
+Disallow: /auth/
+
+# AI 정책: https://rankfree.kr/ai.txt
+# LLM 사이트 개요: https://rankfree.kr/llms.txt
 Sitemap: https://rankfree.kr/sitemap.xml

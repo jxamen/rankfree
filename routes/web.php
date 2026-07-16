@@ -29,6 +29,7 @@ use App\Http\Controllers\CommunityController;
 use App\Http\Controllers\CompeteController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\KeywordAnalysisController;
+use App\Http\Controllers\KeywordInsightController;
 use App\Http\Controllers\MarketAnalysisController;
 use App\Http\Controllers\MarketingLeadController;
 use App\Http\Controllers\OrderController;
@@ -53,6 +54,10 @@ Route::post('/shop-check', [RankCheckController::class, 'shopCheck'])->name('sho
 Route::get('/rank-check', fn () => redirect('/#hero-form')); // 구 GET 링크 안전 처리
 // 홈 폼 자동입력(공개) — 플레이스 URL → m.place 변환·업체명
 Route::post('/rank-resolve/place', [RankCheckController::class, 'resolvePlace'])->middleware('throttle:30,1')->name('rank.resolve.place');
+
+// 키워드 인사이트 허브(22 Phase 2) — 카테고리 인덱스·카테고리별 발행 문서 목록(공개 색인)
+Route::get('/keywords', [KeywordInsightController::class, 'index'])->name('keywords.index');
+Route::get('/keywords/{slug}', [KeywordInsightController::class, 'category'])->name('keywords.category');
 
 // ── 분석 공개 공유 리포트 (SEO 한글/영문 슬러그, 비로그인 열람) ─────────────────
 //    예) /keyword/여름브라 · /place/강남맛집 · /shopping/여름원피스
@@ -119,6 +124,13 @@ Route::get('/sitemap-{section}.xml', [\App\Http\Controllers\SitemapController::c
 
 // 커뮤니티 RSS (네이버 서치어드바이저 제출용 — 최신 글 50건)
 Route::get('/community/feed', [\App\Http\Controllers\SitemapController::class, 'communityFeed'])->name('community.feed');
+
+// llm.txt — 표준 llms.txt 의 별칭(단일 소스). ai.txt·llms.txt 는 public/ 정적 파일.
+Route::get('/llm.txt', function () {
+    abort_unless(is_file(public_path('llms.txt')), 404);
+
+    return response(file_get_contents(public_path('llms.txt')), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+})->name('llm.txt');
 
 // 셀프마케팅 (공개 카탈로그 — 마케팅 상품 카드, 주문은 로그인)
 Route::get('/self-marketing', [SelfMarketingController::class, 'index'])->name('self-marketing');
@@ -311,6 +323,16 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/google-connect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'redirect'])->name('google-connect');
     Route::get('/google-connect/callback', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'callback'])->name('google-connect.callback');
     Route::post('/google-connect/disconnect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'disconnect'])->name('google-connect.disconnect');
+
+    // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
+    Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
+    Route::post('/keyword-hub/categories', [\App\Http\Controllers\Admin\KeywordHubController::class, 'storeCategory'])->name('keyword-hub.categories.store');
+    Route::put('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'updateCategory'])->name('keyword-hub.categories.update');
+    Route::post('/keyword-hub/categories/{category}/toggle', [\App\Http\Controllers\Admin\KeywordHubController::class, 'toggleCategory'])->name('keyword-hub.categories.toggle');
+    Route::delete('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'destroyCategory'])->name('keyword-hub.categories.destroy');
+    Route::post('/keyword-hub/candidates/bulk', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkCandidates'])->name('keyword-hub.candidates.bulk');
+    Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
+    Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
 
     // 검색 유입 분석 (구글 서치 콘솔)
     Route::get('/search-stats', [\App\Http\Controllers\Admin\SearchStatsController::class, 'index'])->name('search-stats');

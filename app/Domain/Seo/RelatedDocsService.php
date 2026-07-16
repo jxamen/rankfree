@@ -66,6 +66,21 @@ class RelatedDocsService
         $order = array_values(array_unique(array_merge([$self], array_keys(self::TYPES))));
 
         $sections = [];
+        $seen = []; // 페이지 전체(섹션 간) 제목 중복 방지
+
+        // 같은 카테고리 인기 키워드(허브 문서) — 아고다식 "주변" 추천을 맨 앞에(22 Phase 2)
+        if ($doc instanceof KeywordSearch && $doc->category_id) {
+            $catDocs = KeywordSearch::where('origin', 'hub')
+                ->where('category_id', $doc->category_id)
+                ->where($doc->getKeyName(), '!=', $doc->getKey())
+                ->orderByDesc('monthly_total')->limit(12)->get();
+            $items = $this->uniqueItems($catDocs, 'keyword', self::SELF_LIMIT, $seen);
+            if ($items) {
+                $catName = $doc->category?->name;
+                $sections[] = ['title' => ($catName ? "'{$catName}' 카테고리" : '같은 카테고리').' 인기 키워드', 'items' => $items];
+            }
+        }
+
         foreach ($order as $prefix) {
             if (! isset(self::TYPES[$prefix])) {
                 continue;
@@ -101,7 +116,7 @@ class RelatedDocsService
                 }
             }
 
-            $items = $this->uniqueItems($matched, $prefix, $isSelf ? self::SELF_LIMIT : self::CROSS_LIMIT);
+            $items = $this->uniqueItems($matched, $prefix, $isSelf ? self::SELF_LIMIT : self::CROSS_LIMIT, $seen);
             if ($items) {
                 $sections[] = ['title' => $sectionTitle, 'items' => $items];
             }
@@ -110,11 +125,10 @@ class RelatedDocsService
         return $sections;
     }
 
-    /** 소재 텍스트(중복 제거) 기준으로 유일한 추천 아이템 목록을 만든다. */
-    private function uniqueItems(Collection $models, string $prefix, int $limit): array
+    /** 제목 기준 유일한 추천 아이템 목록 — $seen 은 페이지 전체(섹션 간) 중복 방지 누적분. */
+    private function uniqueItems(Collection $models, string $prefix, int $limit, array &$seen): array
     {
         $items = [];
-        $seen = [];
         foreach ($models as $m) {
             $it = $this->item($m, $prefix);
             if (! $it) {

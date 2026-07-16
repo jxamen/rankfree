@@ -6,6 +6,7 @@
        $seoSection 분석 유형 라벨(예: '키워드 분석')
        $seoDate    Carbon|null (분석일 — datePublished/Modified)
        $seoFaq     [['q'=>질문, 'a'=>답변], …] — AEO/GEO 답변 추출용(비면 FAQ 생략)
+       $seoCrumbs  [['name'=>이름, 'url'=>주소], …]|null — 홈과 제목 사이 중간 경로(비면 $seoSection 1단)
      JSON_HEX_* 필수: 소재 텍스트가 </script> 로 스크립트 블록을 탈출하지 못하게 막는다. --}}
 @php
     $__f = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
@@ -13,16 +14,22 @@
     $__iso = ($seoDate ?? null)?->toIso8601String();
     $__faq = collect($seoFaq ?? [])->filter(fn ($x) => ! empty($x['q']) && ! empty($x['a']))->values();
     $__section = $seoSection ?? '분석 리포트';
+    $__crumbs = [['name' => '홈', 'item' => url('/')]];
+    foreach (collect($seoCrumbs ?? [])->filter(fn ($c) => ! empty($c['name'])) as $c) {
+        $__crumbs[] = ['name' => $c['name'], 'item' => $c['url'] ?? $__url];
+    }
+    if (empty($seoCrumbs)) {
+        $__crumbs[] = ['name' => $__section, 'item' => $__url];
+    }
+    $__crumbs[] = ['name' => $seoTitle, 'item' => $__url];
 @endphp
 @push('head')
 <script type="application/ld+json">{!! json_encode([
     '@context' => 'https://schema.org',
     '@type' => 'BreadcrumbList',
-    'itemListElement' => [
-        ['@type' => 'ListItem', 'position' => 1, 'name' => '홈', 'item' => url('/')],
-        ['@type' => 'ListItem', 'position' => 2, 'name' => $__section, 'item' => $__url],
-        ['@type' => 'ListItem', 'position' => 3, 'name' => $seoTitle, 'item' => $__url],
-    ],
+    'itemListElement' => collect($__crumbs)->values()->map(fn ($c, $i) => [
+        '@type' => 'ListItem', 'position' => $i + 1, 'name' => $c['name'], 'item' => $c['item'],
+    ])->all(),
 ], $__f) !!}</script>
 <script type="application/ld+json">{!! json_encode(array_filter([
     '@context' => 'https://schema.org',

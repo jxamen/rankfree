@@ -3,20 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Access\MenuAccess;
-use App\Domain\Blog\BlogIndexAnalyzer;
 use App\Domain\Keyword\KeywordAnalysisPresenter;
+use App\Domain\Keyword\KeywordReportBuilder;
 use App\Domain\Keyword\NaverAutocompleteService;
-use App\Domain\Keyword\NaverContentVolumeService;
-use App\Domain\Keyword\NaverDataLabService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Domain\Keyword\NaverSerpService;
-use App\Domain\SearchAdWeb\SearchAdWebClient;
 use App\Domain\Seo\RelatedDocsService;
 use App\Models\KeywordSearch;
 use App\Models\Menu;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * 마케팅 키워드 분석 — 콘솔 페이지(console.keyword) + 공개 공유 리포트(/k/{token}).
@@ -65,7 +61,7 @@ class KeywordAnalysisController extends Controller
         ]);
     }
 
-    public function index(Request $request, NaverKeywordService $light, SearchAdWebClient $web, NaverContentVolumeService $content, NaverDataLabService $datalab, NaverAutocompleteService $ac, BlogIndexAnalyzer $blog)
+    public function index(Request $request, KeywordReportBuilder $builder)
     {
         $user = $request->user();
         $keyword = trim((string) $request->query('keyword', ''));
@@ -104,7 +100,7 @@ class KeywordAnalysisController extends Controller
                     return redirect()->route('console.dashboard')
                         ->with('status', "'키워드 분석' 이번 달 이용 횟수를 모두 사용했습니다. 요금제를 업그레이드하면 더 이용할 수 있습니다.");
                 }
-                $result = $this->buildAnalysis($keyword, $light, $web, $content, $datalab, $ac, $blog);
+                $result = $builder->build($keyword);
 
                 // 검색 내역 + 스냅샷 저장(같은 키워드는 갱신) + 공개 공유 링크 — 볼륨 있을 때만
                 if ($result['vm'] && ($result['vm']['has_volume'] ?? false)) {
@@ -135,15 +131,17 @@ class KeywordAnalysisController extends Controller
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람(실시간 재조회, 캐시 활용). */
-    public function shared(string $slug, NaverKeywordService $light, SearchAdWebClient $web, NaverContentVolumeService $content, NaverDataLabService $datalab, NaverAutocompleteService $ac, BlogIndexAnalyzer $blog)
+    public function shared(string $slug, KeywordReportBuilder $builder)
     {
         $record = KeywordSearch::findByShareKey($slug);
         abort_if(! $record, 404);
-        $result = $this->buildAnalysis($record->keyword, $light, $web, $content, $datalab, $ac, $blog);
+        $result = $builder->build($record->keyword);
         abort_if($result['vm'] === null || ! ($result['vm']['has_data'] ?? false), 404);
         // 관련 문서 추천 — 연관 키워드(vm.related)도 정확 일치 후보로 넘긴다
         $result['related'] = app(RelatedDocsService::class)
             ->sectionsFor($record, array_column((array) ($result['vm']['related'] ?? []), 'keyword'));
+        // 브레드크럼(카테고리)·기준일(AEO/GEO) 렌더용
+        $result['record'] = $record->loadMissing('category');
 
         return view('keyword.share', $result);
     }
@@ -161,71 +159,6 @@ class KeywordAnalysisController extends Controller
         $limit = MenuAccess::menuLimitFor($user, $menu);
 
         return $limit < 0 ? true : $user->tryConsumeUsage('menu:'.$menu->id, $limit);
-    }
-
-    /**
-     * 키워드 분석 실행 — 검색량·상세(성별/연령/트렌드)·포화·인기글·요일별·자동완성.
-     * 콘솔(index)과 공개 공유(shared) 양쪽에서 재사용. 상세는 6h·요일별은 24h 캐시.
-     *
-     * @return array{vm:?array,saturation:?array,popular:array,weekday:?array,autocomplete:array}
-     */
-    private function buildAnalysis(string $keyword, NaverKeywordService $light, SearchAdWebClient $web, NaverContentVolumeService $content, NaverDataLabService $datalab, NaverAutocompleteService $ac, BlogIndexAnalyzer $blog): array
-    {
-        $autocomplete = $ac->suggest($keyword);
-        $base = $light->analyze($keyword);
-
-        // 상세(성별·연령·트렌드)는 성공만 6시간 캐시 — 오류는 캐시하지 않음
-        $cacheKey = 'kw:detail:'.md5(mb_strtoupper(str_replace(' ', '', $keyword)));
-        $detail = Cache::get($cacheKey);
-        if ($detail === null) {
-            $d = $web->keywordDetail($keyword);
-            $detail = isset($d['error']) ? null : $d;
-            if ($detail !== null) {
-                Cache::put($cacheKey, $detail, now()->addHours(6));
-            }
-        }
-
-        // 쇼핑 상품 수(구매 의도) — 상업성 판정 보강. 볼륨 있을 때만 조회.
-        $shopTotal = $base !== null ? $content->shopTotal($keyword) : null;
-        $vm = KeywordAnalysisPresenter::build($keyword, $base, $detail, $shopTotal);
-
-        // 콘텐츠 포화 지수 — 블로그·카페 통합 발행량(누적) ÷ 월검색량 (openapi 2요청, 가벼움)
-        $saturation = null;
-        if (($vm['has_volume'] ?? false) && ($vm['total'] ?? 0) > 0) {
-            $saturation = KeywordAnalysisPresenter::saturation($content->counts($keyword), (int) $vm['total']);
-        }
-
-        // 인기글 TOP + 요일별 검색 비율(세션 불필요)
-        $popular = [];
-        $weekday = null;
-        if (($vm['has_volume'] ?? false)) {
-            $popular = $content->popular($keyword);
-            $weekday = $datalab->weekdayRatio($keyword);
-
-            // 인기글 블로그 항목에 경량 블로그 등급(프로필 기반) 부여
-            $blogUrls = array_values(array_filter(array_map(
-                fn ($p) => ($p['source'] ?? '') === '블로그' ? $p['link'] : null,
-                $popular,
-            )));
-            if ($blogUrls) {
-                $grades = $blog->quickGrades($blogUrls);
-                foreach ($popular as $i => $p) {
-                    if (($p['source'] ?? '') === '블로그') {
-                        $bid = $blog->blogIdFrom($p['link']);
-                        $popular[$i]['blog_id'] = $bid;
-                        $popular[$i]['grade'] = $grades[$bid] ?? null;
-                    }
-                }
-            }
-        }
-
-        return [
-            'vm' => $vm,
-            'saturation' => $saturation,
-            'popular' => $popular,
-            'weekday' => $weekday,
-            'autocomplete' => $autocomplete,
-        ];
     }
 
     /** 키워드 검색 내역 삭제(본인 것만). */

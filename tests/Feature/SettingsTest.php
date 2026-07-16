@@ -37,6 +37,30 @@ class SettingsTest extends TestCase
             ->assertSee('AKSHOW')->assertSee('SECSHOW'); // 시크릿도 value 로 노출(가림은 프런트 type=password)
     }
 
+    /** 회귀: 구글 연동 시 '연동 해제' 폼이 메인 저장 폼 안에 중첩되면 </form> 이 메인 폼을 조기 종료해
+     *  저장 버튼·이후 필드가 폼 밖으로 빠진다 → 저장이 한 번에 안 됨. 해제 폼은 메인 폼 밖에 있어야 한다. */
+    public function test_google_disconnect_form_not_nested_in_settings_form(): void
+    {
+        AppSetting::write(\App\Support\GoogleToken::KEY_REFRESH, 'dummy-refresh-token'); // googleConnected = true
+        AppSetting::write(\App\Support\GoogleToken::KEY_EMAIL, 'owner@rf.kr');
+
+        $html = $this->actingAs($this->super())->get('/admin/settings')->assertOk()->getContent();
+
+        // '연동 해제' 버튼은 외부 폼을 form 속성으로 참조(중첩 아님)
+        $this->assertStringContainsString('form="rf-gdisconnect"', $html);
+
+        $mainOpen = strpos($html, 'id="rf-settings-form"');
+        $mainClose = strpos($html, '</form>', $mainOpen); // 중첩이 없으면 이게 메인 폼의 닫힘
+        $saveBtn = strpos($html, '>저장</button>');
+        $disconnectForm = strpos($html, 'id="rf-gdisconnect"');
+
+        $this->assertNotFalse($mainOpen);
+        $this->assertNotFalse($disconnectForm);
+        // 저장 버튼은 메인 폼 안(닫힘보다 앞), 해제 폼은 메인 폼 밖(닫힘보다 뒤)
+        $this->assertLessThan($mainClose, $saveBtn, '저장 버튼이 메인 폼 밖으로 빠졌습니다(폼 중첩 회귀).');
+        $this->assertGreaterThan($mainClose, $disconnectForm, '연동 해제 폼이 메인 폼 안에 중첩됐습니다.');
+    }
+
     public function test_non_operator_forbidden(): void
     {
         $user = User::create(['name' => 'u', 'email' => 'u@rf.kr', 'password' => 'x1234567']);

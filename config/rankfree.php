@@ -98,6 +98,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | 키워드 콘텐츠 허브 (22_KEYWORD_CONTENT_HUB) — 카테고리별 키워드 수집·발행
+    |--------------------------------------------------------------------------
+    | hub:collect(시드→연관·자동완성 후보 수집) → 관리자 승인 → hub:publish(분석 발행)
+    | → hub:refresh(주기 갱신). 스케줄은 기본 off — 운영에서 명시적으로 켠다(쿼터 보호).
+    */
+    'hub' => [
+        'schedule_enabled' => (bool) env('HUB_SCHEDULE_ENABLED', false),
+        // 후보 자동 필터: 이 미만 월간 검색량은 후보에서 제외(자동완성 등 볼륨 미상은 pending 유지)
+        'min_volume' => (int) env('HUB_MIN_VOLUME', 1000),
+        // hub:collect 1회에 처리할 카테고리 수(collected_at 오래된 순 로테이션)
+        'collect_categories' => (int) env('HUB_COLLECT_CATEGORIES', 3),
+        // hub:publish 1회 발행 상한(검색광고 쿼터 보호 — 도어웨이 대량 발행 방지)
+        'publish_per_run' => (int) env('HUB_PUBLISH_PER_RUN', 10),
+        // hub:refresh 1회 재수집 상한(refreshed_at 오래된 순)
+        'refresh_per_run' => (int) env('HUB_REFRESH_PER_RUN', 20),
+        // 발행 문서 재수집 주기(일) — 이보다 어린 문서는 갱신하지 않음
+        'refresh_after_days' => (int) env('HUB_REFRESH_AFTER_DAYS', 30),
+        // 후보 제외 패턴(정규식 조각, u 플래그) — 업체명·개인정보성 키워드 등
+        'banned_patterns' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | 커뮤니티 페르소나 자동 활동
     |--------------------------------------------------------------------------
     | 스케줄러(schedule:run)가 주기적으로 community:simulate 를 실행하고,

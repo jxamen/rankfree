@@ -302,6 +302,78 @@ class KeywordAnalysisPresenter
         return ['cards' => $cards, 'summary' => $summary];
     }
 
+    /**
+     * AEO 요약 답변 + FAQ — 문서 상단 "요약 답변" 블록과 FAQPage(JSON-LD·화면 동일 문항)용.
+     * 데이터 기반 결정적 템플릿(LLM 아님) — 있는 데이터만 문장·문항으로 만든다(22 Phase 2).
+     * 답변엔진(AEO)·생성엔진(GEO)이 인용하기 좋은 완결형 수치 문장으로 구성한다.
+     *
+     * @param  array<string,mixed>  $vm  build() 결과 뷰모델
+     * @return array{summary:string,faq:list<array{q:string,a:string}>}
+     */
+    public static function aeo(array $vm): array
+    {
+        $kw = (string) ($vm['keyword'] ?? '');
+        $total = (int) ($vm['total'] ?? 0);
+        $hasVolume = ! empty($vm['has_volume']) && $total > 0;
+        $comp = isset($vm['comp_idx']) ? (string) $vm['comp_idx'] : null;
+        $grade = isset($vm['grade']) ? (string) $vm['grade'] : null;
+        $volLine = '네이버 기준 월 약 '.number_format($total).'회입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).';
+
+        // 요약 — ① 검색량 ② 경쟁·등급 ③ 타겟·시즌(insights 요약 문장 재사용)
+        $s1 = $hasVolume
+            ? "'{$kw}'는 네이버에서 월 약 ".number_format($total).'회 검색되는 키워드입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).'
+            : "'{$kw}' 키워드의 검색량 데이터를 집계 중입니다.";
+        $p = [];
+        if ($comp !== null && $comp !== '') {
+            $p[] = "광고 경쟁강도는 '{$comp}'";
+        }
+        if ($grade) {
+            $p[] = "검색량 등급은 {$grade}(자체 추정 S~F)";
+        }
+        $s2 = $p ? implode(', ', $p).'입니다.' : '';
+        $ins = $vm['insights'] ?? null;
+        $summary = trim($s1.' '.$s2.' '.(is_array($ins) ? trim((string) ($ins['summary'] ?? '')) : ''));
+
+        // FAQ — 검색량(항상) + 시기·타겟·경쟁(데이터 있을 때만)
+        $faq = [[
+            'q' => "'{$kw}' 월간 검색량은 얼마인가요?",
+            'a' => $hasVolume ? $volLine : '검색량 데이터를 집계 중입니다.',
+        ]];
+
+        $season = $vm['season'] ?? null;
+        if (is_array($season) && ! empty($season['peak_months'])) {
+            $peak = implode('·', array_map(fn ($m) => $m.'월', $season['peak_months']));
+            $low = implode('·', array_map(fn ($m) => $m.'월', (array) ($season['low_months'] ?? [])));
+            $faq[] = [
+                'q' => "'{$kw}'는 언제 가장 많이 검색되나요?",
+                'a' => "최근 12개월 기준 검색이 가장 많은 달은 {$peak}"
+                    .($low !== '' ? ", 가장 적은 달은 {$low}입니다" : '입니다')
+                    .' (네이버 월별 검색 추이 기반 자체 집계).',
+            ];
+        }
+
+        $g = (array) ($vm['gender'] ?? []);
+        if (! empty($vm['has_demo']) && ((float) ($g['female_pct'] ?? 0) + (float) ($g['male_pct'] ?? 0)) > 0) {
+            $a = '여성 '.($g['female_pct'] ?? 0).'% · 남성 '.($g['male_pct'] ?? 0).'%';
+            $ages = (array) ($vm['age'] ?? []);
+            if ($ages) {
+                usort($ages, fn ($x, $y) => ($y['pct'] ?? 0) <=> ($x['pct'] ?? 0));
+                $a .= '이며, '.($ages[0]['label'] ?? '').'('.($ages[0]['pct'] ?? 0).'%)가 가장 많이 검색합니다';
+            }
+            $faq[] = ['q' => "'{$kw}'는 누가 많이 검색하나요?", 'a' => $a.'.'];
+        }
+
+        if (($comp !== null && $comp !== '') || $grade) {
+            $faq[] = [
+                'q' => "'{$kw}' 경쟁강도는 어느 정도인가요?",
+                'a' => trim(($comp !== null && $comp !== '' ? "네이버 검색광고 경쟁강도는 '{$comp}'입니다. " : '')
+                    .($grade ? "월간 검색량 등급은 {$grade}입니다(검색량 기반 자체 추정, 네이버 공식 등급 아님)." : '')),
+            ];
+        }
+
+        return ['summary' => $summary, 'faq' => $faq];
+    }
+
     /** 검색량 기반 자체 추정 등급(S~F). "네이버 공식 등급" 아님. */
     public static function grade(int $total): string
     {

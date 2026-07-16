@@ -51,6 +51,12 @@
 - **가시 최적화**: 각 공개 share 뷰에 `<h1>`(리포트 제목) + 한 줄 요약(수치 포함) 추가 → 온페이지 SEO·GEO 가시 텍스트. 메타 description 도 수치로 보강.
 - canonical 은 seo 파셜 기본값(`url()->current()` = 슬러그 URL)으로 자동. 구 토큰 URL 은 301 → 슬러그(정규화).
 
+## AI 크롤러 파일 (llms.txt · ai.txt)
+
+- **[public/llms.txt](../public/llms.txt)** — LLM용 사이트 개요. 공개 분석 리포트 URL 패턴(`/keyword/{키워드}` 등)·사이트맵·인용/출처 표기 안내 포함. `/llm.txt`(라우트 별칭)로도 접근.
+- **[public/ai.txt](../public/ai.txt)** — AI 크롤러·생성엔진 정책(robots 유사 문법). 공개 콘텐츠 크롤·인용 허용 + 개인 영역(`/console·/admin·/order` 등) 제외 + 출처 표기 요청.
+- **[public/robots.txt](../public/robots.txt)** — AI 봇 그룹(GPTBot·ClaudeBot·PerplexityBot·Google-Extended 등) 명시 허용 + `/ai.txt`·`/llms.txt` 참조. GEO/AEO 전략상 AI 인용을 **허용**하는 방향.
+
 ## 주의
 
 - `include_analyses`(config) off 로 분석 슬러그 전체를 사이트맵에서 뺄 수 있음.

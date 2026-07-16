@@ -53,3 +53,11 @@ if (config('rankfree.cafe_crawl.schedule_enabled', true)) {
 
 // 사이트맵 갱신 — 매일 새벽 5:40(KST). 분석 공유 슬러그 백필 + 사이트맵 캐시 무효화.
 Schedule::command('sitemap:refresh')->timezone('Asia/Seoul')->dailyAt('05:40')->withoutOverlapping()->runInBackground();
+
+// 키워드 콘텐츠 허브(22) — 후보 수집 → 승인분 발행 → 발행 문서 주기 갱신.
+// 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호. 상한은 config rankfree.hub.*
+if (config('rankfree.hub.schedule_enabled', false)) {
+    Schedule::command('hub:collect')->timezone('Asia/Seoul')->dailyAt('06:10')->withoutOverlapping()->runInBackground();
+    Schedule::command('hub:publish')->hourly()->withoutOverlapping()->runInBackground();
+    Schedule::command('hub:refresh')->timezone('Asia/Seoul')->dailyAt('06:40')->withoutOverlapping()->runInBackground();
+}

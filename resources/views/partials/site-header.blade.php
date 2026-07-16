@@ -55,6 +55,7 @@
                             <div class="text-muted-soft mb-1" style="font-size:var(--fs-sm);font-weight:700;">키워드 · 블로그</div>
                             <a href="/#keyword" class="nav-mega-link">키워드 분석 <span class="badge-update">New</span></a>
                             <a href="/#keyword" class="nav-mega-link">키워드 추천 · 대량 분석</a>
+                            <a href="{{ route('keywords.index') }}" class="nav-mega-link">키워드 인사이트</a>
                             <a href="/#blog" class="nav-mega-link">블로그 지수 분석</a>
                             @if ($menuOn('developers'))<a href="/developers" class="nav-mega-link">순위 API</a>@endif
                         </div>

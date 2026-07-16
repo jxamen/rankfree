@@ -31,6 +31,8 @@ class SitemapController extends Controller
             $this->pushPaged($children, 'pages', 1);
             $this->pushPaged($children, 'community', CommunityPost::count());
             $this->pushPaged($children, 'products', 1);
+            // 키워드 인사이트 허브(22) — 발행 문서가 있을 때만 노출
+            $this->pushPaged($children, 'keywords', $this->keywordHubCategories()->count() > 0 ? 1 : 0);
             if (config('sitemap.include_analyses')) {
                 foreach ($this->analysisSections() as $name => $def) {
                     $this->pushPaged($children, $name, ($def['query'])()->count());
@@ -76,6 +78,9 @@ class SitemapController extends Controller
         }
         if ($section === 'products') {
             return $this->productEntries();
+        }
+        if ($section === 'keywords') {
+            return $this->keywordHubEntries();
         }
 
         // 분석 슬러그 섹션
@@ -139,6 +144,35 @@ class SitemapController extends Controller
         return $e;
     }
 
+    /** 키워드 인사이트 허브(22) — /keywords + 발행 문서가 있는 활성 카테고리. */
+    private function keywordHubEntries(): array
+    {
+        $cats = $this->keywordHubCategories();
+        if ($cats->isEmpty()) {
+            return [];
+        }
+
+        $e = [['loc' => route('keywords.index'), 'lastmod' => null, 'freq' => 'daily', 'priority' => '0.7']];
+        foreach ($cats as $c) {
+            $last = \App\Models\KeywordSearch::where('origin', 'hub')->where('category_id', $c->id)->max('refreshed_at');
+            $e[] = [
+                'loc' => route('keywords.category', $c->slug),
+                'lastmod' => $last ? \Illuminate\Support\Carbon::parse($last)->toDateString() : null,
+                'freq' => 'weekly',
+                'priority' => '0.6',
+            ];
+        }
+
+        return $e;
+    }
+
+    private function keywordHubCategories()
+    {
+        return \App\Models\KeywordCategory::where('is_active', true)
+            ->whereHas('searches', fn ($q) => $q->where('origin', 'hub'))
+            ->orderBy('sort')->orderBy('id')->get(['id', 'slug']);
+    }
+
     // ── 분석 섹션 정의 ─────────────────────────────────────────────────
 
     /**
@@ -163,7 +197,7 @@ class SitemapController extends Controller
 
     private function isKnownSection(string $section): bool
     {
-        return in_array($section, ['pages', 'community', 'products'], true)
+        return in_array($section, ['pages', 'community', 'products', 'keywords'], true)
             || array_key_exists($section, $this->analysisSections());
     }
 

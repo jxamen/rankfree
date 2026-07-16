@@ -1,6 +1,6 @@
 # 22. 키워드 콘텐츠 허브 — 카테고리 → 키워드 → 분석 문서 → 상호 추천
 
-> 카테고리별로 키워드를 모으고, 키워드마다 SEO/AEO/GEO 최적화 분석 문서를 발행하며, 문서끼리 **아고다식으로 서로 추천**해 문서 하나하나가 살아있는 검색 랜딩이 되게 한다. (2026-07-16 설계 · Phase 0 구현)
+> 카테고리별로 키워드를 모으고, 키워드마다 SEO/AEO/GEO 최적화 분석 문서를 발행하며, 문서끼리 **아고다식으로 서로 추천**해 문서 하나하나가 살아있는 검색 랜딩이 되게 한다. (2026-07-16 설계 · **Phase 0·1·2 구현 완료**)
 
 ## 컨셉
 
@@ -33,34 +33,45 @@
 - 검증: [tests/Feature/RelatedDocsTest.php](../tests/Feature/RelatedDocsTest.php) 4건(크로스 추천·추적슬롯 제외·폴백·중복 제거) + Playwright 실화면 4종(store/market/product/seller) 확인
 - **한계(후속에서 해소)**: LIKE 토큰 매칭이라 동의어·붙여쓰기 변형 인식 한계, 패딩 문서가 "관련" 제목 아래 섞일 수 있음 → Phase 2 카테고리 도입 시 "같은 카테고리 인기 문서"로 대체
 
-## Phase 1 — 카테고리 분류 + 키워드 수집 파이프라인 (설계)
+## Phase 1 — 카테고리 분류 + 키워드 수집 파이프라인 (✅ 2026-07-16 구현·검증 완료)
 
 ### 데이터 모델
 
 | 테이블 | 컬럼 | 비고 |
 |---|---|---|
-| `keyword_categories` | type(place\|shopping) · parent_id · name · slug(unique) · description · seed_keywords(json) · sort · is_active | 2계층(대분류>소분류)로 시작 |
-| `keyword_candidates` | category_id · keyword · source(seed\|related\|autocomplete\|user) · monthly_total · comp_idx · status(pending\|approved\|rejected\|published) · note | (category_id, keyword) unique |
-| `keyword_searches` 확장 | +category_id(nullable) · +origin('user'\|'hub') · +refreshed_at · user_id nullable화 | **허브 문서 = KeywordSearch 재사용**(아래 결정) |
+| `keyword_categories` | type(place\|shopping) · parent_id · name · slug(unique) · description · seed_keywords(json) · sort · is_active · **collected_at**(수집 로테이션 커서) | 2계층(대분류>소분류) |
+| `keyword_candidates` | category_id · keyword · source(seed\|related\|autocomplete\|user) · monthly_total(자동완성은 null=미상) · comp_idx · status(pending\|approved\|rejected\|published) · note | (category_id, keyword) unique |
+| `keyword_searches` 확장 | +category_id(nullable) · +origin('user'\|'hub') · +refreshed_at · user_id nullable화 | **허브 문서 = KeywordSearch 재사용**. 유일성은 코드에서 (origin=hub, keyword) `updateOrCreate` |
 
-- 카테고리 시드: 플레이스 = pcmap 6종(`NaverPlacePayloads::categories()`) × 지역 변형(강남 맛집…) / 쇼핑 = 네이버 1depth + `shop_rank_slots.category` 실측값 활용
-- 시드 키워드 입력·카테고리 관리는 `/admin/keyword-hub`(메뉴는 admin에서 수동 추가)
+- 마이그레이션: `2026_07_16_000010~000012`. 모델 [KeywordCategory](../app/Models/KeywordCategory.php) · [KeywordCandidate](../app/Models/KeywordCandidate.php)
+- 카테고리 시드(운영 입력 가이드): 플레이스 = pcmap 6종 × 지역 변형(강남 맛집…) / 쇼핑 = 네이버 1depth + `shop_rank_slots.category` 실측값 활용
+- `buildAnalysis()` 는 [KeywordReportBuilder](../app/Domain/Keyword/KeywordReportBuilder.php) 로 추출 — 콘솔(index)·공유(shared)·허브 발행 3곳 공용(동작 동일)
 
-### 크론 3종
+### 파이프라인 (크론 3종 + 서비스)
 
-1. **hub:collect** — 하루 N개 카테고리 로테이션: 시드 → `NaverKeywordService`(keywordstool 연관) + `NaverAutocompleteService` → candidates upsert. 자동 필터: 검색량 임계(기본 월 1,000+)·금칙어·브랜드/업체명 패턴·기발행 제외
-2. **hub:publish** — 승인분(자동승인 규칙 옵션) → `buildAnalysis()` 재사용 → `KeywordSearch(origin=hub, category_id, snapshot)` 저장. **시간당 N건 제한**(검색광고 쿼터 보호), 핵심 데이터 없으면 발행 보류(thin content 방지)
-3. **hub:refresh** — `refreshed_at` 오래된 순 하루 N건 재수집 → 사이트맵 lastmod 갱신 효과
+1. **hub:collect** ([HubCollect](../app/Console/Commands/HubCollect.php) · [KeywordHubCollector](../app/Domain/Keyword/KeywordHubCollector.php)) — 카테고리를 `collected_at` 오래된 순으로 N개 로테이션(기본 3): 시드 → keywordstool 연관 + 자동완성 → candidates upsert(pending). **자동 필터**: 길이 2~60자 · `min_volume`(기본 월 1,000) 미만 제외(시드는 면제 — 운영자 의도 존중, 자동완성 등 볼륨 미상은 pending 통과) · `banned_patterns` 정규식 · 기발행(origin=hub) 제외. 재수집 시 승인/거부 **상태는 보존**하고 지표만 갱신
+2. **hub:publish** ([HubPublish](../app/Console/Commands/HubPublish.php) · [KeywordHubPublisher](../app/Domain/Keyword/KeywordHubPublisher.php)) — 승인 후보를 검색량 큰 순으로 상한(기본 10)만큼 발행: `KeywordReportBuilder::build()` → `KeywordSearch(origin=hub, user_id=NULL, category_id, snapshot, refreshed_at)`. **thin content 방지**: has_volume 없으면 발행하지 않고 rejected + '데이터 부족' 사유
+3. **hub:refresh** ([HubRefresh](../app/Console/Commands/HubRefresh.php)) — `refresh_after_days`(기본 30일) 지난 문서를 오래된 순 상한(기본 20)만큼 재수집 → 사이트맵 lastmod 갱신 효과. 볼륨이 안 나오면 기존 스냅샷 유지·커서만 전진
 
-## Phase 2 — 카테고리 허브 페이지 + 문서 강화 (설계)
+- **스케줄**: [routes/console.php](../routes/console.php) — 수집 06:10 · 발행 매시 · 갱신 06:40(KST). **기본 off** — `.env HUB_SCHEDULE_ENABLED=true` 로 활성(검색광고 쿼터 보호). 상한·임계값은 `config('rankfree.hub.*')`
+- **관리자** `/admin/keyword-hub` ([KeywordHubController](../app/Http/Controllers/Admin/KeywordHubController.php) · [index.blade.php](../resources/views/admin/keyword-hub/index.blade.php)) — 카테고리·시드 인라인 CRUD, 후보 큐(상태 탭·카테고리 필터·대량 승인/거부/삭제), 지금 수집(동기 1카테고리)·지금 발행(≤10건), 최근 발행 문서. **메뉴는 /admin/menus 에서 수동 등록**(시더 금지 규칙)
+- 검증: [tests/Feature/KeywordHubTest.php](../tests/Feature/KeywordHubTest.php) 8건(수집 필터·상태 보존·발행/보류·볼륨순 상한·권한·승인 큐) + **Playwright E2E**(실 API): 시드 '캠핑의자' 1개 → 후보 207건 수집(필터 729건) → 승인 2건 → 발행 2건(`/keyword/캠핑의자` 월 52,700) → 문서 렌더 + Phase 0 추천 블록 확인
 
-- **URL**: `/keywords`(카테고리 인덱스) · `/keywords/{category-slug}`(허브: 설명 + 집계(총 검색량·평균 경쟁) + 키워드 문서 목록(검색량순) + 하위/형제 카테고리 링크). 사이트맵에 `keyword-categories` 섹션 추가([config/sitemap.php](../config/sitemap.php))
-- **문서(keyword.share) SEO/AEO/GEO 강화**:
-  - AEO: 상단 "요약 답변" 2~3문장(검색량·경쟁·피크 시기·주 사용층) — **데이터 기반 결정적 템플릿**(LLM 아님)
-  - FAQ 확장(검색량/많이 찾는 시기/성별·연령/경쟁) — `report-seo` FAQPage와 화면 FAQ 동일 문항 유지
-  - GEO: 기준일·출처 명시("네이버 검색광고 기준 · 2026-07 자체 집계"), 인용하기 좋은 수치 문장, "자체 추정" 고지 유지
-  - 브레드크럼: 홈 > 키워드 > {카테고리} > {키워드} (BreadcrumbList 연동)
-- **추천 고도화(아고다식 "주변")**: 같은 카테고리 인기 문서로 패딩 대체, 지역 키워드는 인근 지역 변형(강남→서초·역삼) 추천, 문서 하단 CTA(이 키워드 순위추적·시장분석 무료 실행 — 퍼널)
+## Phase 2 — 카테고리 허브 페이지 + 문서 강화 (✅ 2026-07-16 구현·검증 완료)
+
+- **공개 허브** ([KeywordInsightController](../app/Http/Controllers/KeywordInsightController.php)):
+  - `/keywords` ([keywords/index.blade.php](../resources/views/keywords/index.blade.php)) — 대분류>소분류 카드(문서 수 합산) + 인기 리포트 12 + CollectionPage JSON-LD
+  - `/keywords/{slug}` ([keywords/category.blade.php](../resources/views/keywords/category.blade.php)) — 집계(리포트 수·검색량 합계) + 문서 목록(검색량순, 24 페이징) + 하위/형제 카테고리 + CTA + BreadcrumbList·CollectionPage(ItemList) JSON-LD. **대분류는 하위 카테고리 문서 합산**. 비활성/미존재 404
+  - 헤더 내비 '분석 도구 > 키워드 인사이트' 링크([site-header](../resources/views/partials/site-header.blade.php))
+- **사이트맵 `keywords` 섹션** ([SitemapController](../app/Http/Controllers/SitemapController.php)) — `/keywords` + 발행 문서 있는 활성 카테고리(lastmod=문서 최신 refreshed_at). 발행 문서 0이면 섹션 미노출. ⚠️ 인덱스 캐시는 버전 키 — 신규 섹션은 `sitemap:refresh`(매일 05:40) 후 반영
+- **문서(keyword.share) SEO/AEO/GEO 강화** ([share.blade.php](../resources/views/keyword/share.blade.php)):
+  - AEO "요약 답변" 카드 — [KeywordAnalysisPresenter::aeo()](../app/Domain/Keyword/KeywordAnalysisPresenter.php) **데이터 기반 결정적 템플릿**(LLM 아님): 검색량·경쟁·등급 + insights 요약(주 타겟·시즌) 문장 재사용
+  - FAQ 확장 — 검색량(항상)·많이 찾는 시기(season)·성별연령(demo)·경쟁강도, **데이터 있는 문항만** 생성. 화면 FAQ = FAQPage JSON-LD 동일 문항(aeo() 단일 소스)
+  - GEO — 출처("네이버 검색광고·데이터랩 기반 자체 집계")·기준일(refreshed_at)·자체 추정 고지
+  - 브레드크럼 — 홈 > 키워드 인사이트 > {카테고리} > {키워드}: 가시 링크 + BreadcrumbList([report-seo](../resources/views/partials/report-seo.blade.php) `seoCrumbs` 파라미터 신설, 타 문서 5종은 기존 동작 유지)
+  - 퍼널 CTA — '무료로 시작'(로그인 시 콘솔) 1개(pill, 희소성 유지)
+- **추천 고도화** — [RelatedDocsService](../app/Domain/Seo/RelatedDocsService.php): 허브 키워드 문서는 **"'{카테고리}' 카테고리 인기 키워드" 섹션을 맨 앞에**(검색량순) + **페이지 전체(섹션 간) 제목 중복 제거**. 지역 변형(강남→서초) 추천은 Phase 3 과제로 이월
+- 검증: [tests/Feature/KeywordInsightTest.php](../tests/Feature/KeywordInsightTest.php) 6건 + [tests/Unit/KeywordAeoTest.php](../tests/Unit/KeywordAeoTest.php) 2건 + **Playwright**(실 API, 로컬): /keywords·/keywords/캠핑용품·/keyword/캠핑의자(AEO 요약·FAQ·브레드크럼·카테고리 추천·CTA)·사이트맵 섹션 전부 확인
 
 ## Phase 3 — 자동화·확장 (설계)
 

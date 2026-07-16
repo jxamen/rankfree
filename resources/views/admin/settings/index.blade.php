@@ -18,7 +18,7 @@
     $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
 @endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
-<form method="POST" action="{{ route('admin.settings.update') }}">
+<form id="rf-settings-form" method="POST" action="{{ route('admin.settings.update') }}">
     @csrf @method('PUT')
     <input type="hidden" name="tab" id="rf-active-tab" value="{{ $__active }}">
 
@@ -157,10 +157,9 @@
                     <b class="text-ink">{{ $googleEmail ?: '(이메일 미확인)' }}</b>
                     <span class="text-muted-soft">— 이 계정의 서치 콘솔·GA4 접근 권한으로 데이터를 수집합니다.</span>
                 </p>
-                <form method="POST" action="{{ route('admin.google-connect.disconnect') }}" class="inline" data-confirm="구글 연동을 해제할까요?" data-confirm-text="검색 유입·방문 분석 수집이 중단됩니다." data-confirm-ok="해제">
-                    @csrf
-                    <button type="submit" class="btn btn-secondary btn-sm">연동 해제</button>
-                </form>
+                {{-- 중첩 form 금지 — 메인 저장 폼(#rf-settings-form) 안에 form 을 두면 </form> 이 메인 폼을 조기 종료시킴.
+                     실제 해제 form 은 메인 폼 밖(하단 #rf-gdisconnect)에 두고, 버튼만 form 속성으로 연결한다. --}}
+                <button type="submit" form="rf-gdisconnect" class="btn btn-secondary btn-sm">연동 해제</button>
             @else
                 <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
                     워드프레스 Site Kit 처럼 <b class="text-muted">구글 계정 클릭 한 번으로 연동</b>합니다(위 소셜 로그인 클라이언트 재사용).
@@ -241,6 +240,14 @@
         <a href="{{ route('admin.home') }}" class="btn btn-secondary">취소</a>
     </div>
 </form>
+
+{{-- 구글 연동 해제 — 메인 설정 폼과 중첩되면 안 되므로 폼 밖에 둔다(위 '연동 해제' 버튼이 form 속성으로 참조). --}}
+@if ($googleConnected)
+<form id="rf-gdisconnect" method="POST" action="{{ route('admin.google-connect.disconnect') }}" hidden
+      data-confirm="구글 연동을 해제할까요?" data-confirm-text="검색 유입·방문 분석 수집이 중단됩니다." data-confirm-ok="해제">
+    @csrf
+</form>
+@endif
 
 <script>
 (function () {

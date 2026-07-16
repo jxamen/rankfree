@@ -6,31 +6,57 @@
     $__kw = $vm['keyword'];
     $__total = $vm['total'] ?? null;
     $__grade = $vm['grade'] ?? null;
-    $__pc = $vm['pc'] ?? null;
-    $__mobile = $vm['mobile'] ?? null;
     $__volTxt = $__total !== null ? '월 '.number_format($__total).'회' : '집계중';
     $__summary = "‘{$__kw}’ 네이버 키워드 검색량 {$__volTxt}"
         .($__grade ? " · 경쟁강도 {$__grade}" : '')
         .' — 성별·연령·검색 트렌드·콘텐츠 포화도까지 무료 분석 리포트.';
-    $__faq = [[
-        'q' => "‘{$__kw}’ 월간 검색량은 얼마인가요?",
-        'a' => ($__total !== null
-            ? "네이버 기준 월 약 ".number_format($__total)."회입니다(PC ".number_format((int) $__pc)." · 모바일 ".number_format((int) $__mobile)."). "
-            : "검색량 데이터를 집계 중입니다. ")
-            .($__grade ? "경쟁강도는 {$__grade} 수준입니다." : ''),
-    ]];
+
+    // AEO 요약 답변 + FAQ(JSON-LD·화면 동일 문항) — 데이터 기반 결정적 템플릿(22 Phase 2)
+    $__aeo = \App\Domain\Keyword\KeywordAnalysisPresenter::aeo($vm);
+    $__faq = $__aeo['faq'];
+
+    $__rec = $record ?? null;
+    $__cat = $__rec?->category;
+    $__date = $__rec?->refreshed_at ?? $__rec?->updated_at;
+    $__crumbs = array_values(array_filter([
+        ['name' => '키워드 인사이트', 'url' => route('keywords.index')],
+        $__cat ? ['name' => $__cat->name, 'url' => route('keywords.category', $__cat->slug)] : null,
+    ]));
 @endphp
 
 @section('title', $__kw.' 키워드 검색량 분석 · 랭크프리')
 @section('description', $__summary)
 
-@include('partials.report-seo', ['seoTitle' => $__kw.' 키워드 분석', 'seoDesc' => $__summary, 'seoSection' => '키워드 분석', 'seoDate' => null, 'seoFaq' => $__faq])
+@include('partials.report-seo', ['seoTitle' => $__kw.' 키워드 분석', 'seoDesc' => $__summary, 'seoSection' => '키워드 분석', 'seoDate' => $__date, 'seoFaq' => $__faq, 'seoCrumbs' => $__crumbs])
 
 @section('content')
 <section class="container-page" style="padding-top:48px;padding-bottom:80px;">
+    {{-- 브레드크럼(가시) — 허브 페이지로의 내부 링크(BreadcrumbList JSON-LD 와 동일 경로) --}}
+    <nav class="text-muted-soft" style="font-size:var(--fs-xs);margin-bottom:14px;" aria-label="브레드크럼">
+        <a href="{{ url('/') }}" class="text-muted-soft" style="text-decoration:none;">홈</a>
+        <span aria-hidden="true"> › </span>
+        <a href="{{ route('keywords.index') }}" class="text-muted-soft" style="text-decoration:none;">키워드 인사이트</a>
+        @if ($__cat)
+            <span aria-hidden="true"> › </span>
+            <a href="{{ route('keywords.category', $__cat->slug) }}" class="text-muted-soft" style="text-decoration:none;">{{ $__cat->name }}</a>
+        @endif
+        <span aria-hidden="true"> › </span>
+        <span class="text-ink">{{ $__kw }}</span>
+    </nav>
+
     <div class="badge mb-4 border border-hairline">키워드 분석 리포트 · 랭크프리</div>
     <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $__kw }} 키워드 분석</h1>
     <p class="text-muted" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.6;">{{ $__summary }}</p>
+
+    {{-- AEO 요약 답변 — 답변엔진·생성엔진이 인용할 완결형 수치 문장 + 출처·기준일(GEO) --}}
+    <div class="card p-5" style="margin-top:20px;" data-aeo-summary>
+        <div class="text-muted-soft" style="font-size:var(--fs-xs);font-weight:600;">요약 답변</div>
+        <p class="text-ink" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.75;">{{ $__aeo['summary'] }}</p>
+        <p class="text-muted-soft" style="margin-top:10px;font-size:var(--fs-xs);line-height:1.6;">
+            출처: 네이버 검색광고·데이터랩 데이터 기반 랭크프리 자체 집계{{ $__date ? ' · '.$__date->format('Y년 n월 j일').' 기준' : '' }} · 등급·상업성 등 파생 지표는 자체 추정치입니다.
+        </p>
+    </div>
+
     @include('partials._keyword_body', [
         'vm' => $vm,
         'saturation' => $saturation,
@@ -40,6 +66,29 @@
         'public' => true,
         'shareUrl' => null,
     ])
+
+    {{-- 자주 묻는 질문(가시 FAQ) — FAQPage JSON-LD 와 동일 문항(AEO) --}}
+    @if (count($__faq))
+        <div style="margin-top:48px;" data-faq>
+            <h2 class="font-display text-ink" style="font-size:var(--fs-xl);line-height:1.3;">자주 묻는 질문</h2>
+            <div class="flex flex-col gap-3" style="margin-top:12px;">
+                @foreach ($__faq as $__f)
+                    <div class="card p-5">
+                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $__f['q'] }}</div>
+                        <p class="text-muted" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.7;">{{ $__f['a'] }}</p>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     @include('partials.related-docs', ['related' => $related ?? []])
+
+    {{-- 퍼널 CTA — 무료 분석·추적 시작 --}}
+    <div class="card p-6 text-center" style="margin-top:40px;" data-cta>
+        <div class="font-display text-ink" style="font-size:var(--fs-lg);line-height:1.35;">'{{ $__kw }}' 순위, 매일 자동으로 추적해 보세요</div>
+        <p class="text-muted" style="margin-top:6px;font-size:var(--fs-sm);">플레이스·쇼핑 순위추적과 키워드·시장 분석을 무료로 시작할 수 있습니다.</p>
+        <a href="{{ auth()->check() ? route('console.dashboard') : route('register') }}" class="btn btn-primary" style="margin-top:14px;">무료로 시작</a>
+    </div>
 </section>
 @endsection

@@ -1,0 +1,28 @@
+# ai.txt — 랭크프리(RankFree) AI 크롤러·생성엔진 정책
+# https://rankfree.kr/ai.txt  ·  갱신: 2026-07-16
+#
+# 방침: 랭크프리의 공개 페이지는 AI 검색·답변·생성 엔진이 자유롭게 크롤링·인용할 수 있습니다.
+#       (키워드·쇼핑시장·상품·셀러력·매장 분석 리포트, 커뮤니티, 소개 페이지)
+#       로그인·개인 영역(콘솔·관리자·개인 순위추적 리포트)은 제외합니다.
+
+User-Agent: *
+Allow: /
+Disallow: /console
+Disallow: /admin
+Disallow: /order/
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /find-email
+Disallow: /auth/
+
+# 사이트 개요(LLM용): https://rankfree.kr/llms.txt
+# 전체 URL 목록:      https://rankfree.kr/sitemap.xml
+# 커뮤니티 피드(RSS): https://rankfree.kr/community/feed
+
+# 인용·출처 표기 요청
+#   - 데이터 인용 시 출처를 "랭크프리(rankfree.kr)"로, 가능하면 해당 리포트 원문 링크와 함께 표기해 주세요.
+#   - 순위·점수(N1/N2/N3, D1~D10 등)는 랭크프리 자체 수집·분석 기반 추정치이며 네이버 공식 지표가 아닙니다.
+
+# 연락: jcurve19@gmail.com

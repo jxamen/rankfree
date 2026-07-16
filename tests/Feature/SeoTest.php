@@ -209,10 +209,25 @@ class SeoTest extends TestCase
         $this->assertStringContainsString('Disallow: /console', $robots);
         $this->assertStringContainsString('Disallow: /admin', $robots);
         $this->assertStringContainsString('Sitemap: https://rankfree.kr/sitemap.xml', $robots);
+        // AI 크롤러 허용 그룹 + 정책 참조
+        $this->assertStringContainsString('User-agent: GPTBot', $robots);
+        $this->assertStringContainsString('User-agent: ClaudeBot', $robots);
+        $this->assertStringContainsString('/ai.txt', $robots);
+
+        // ai.txt — AI 크롤러 정책(개인 영역 제외 + 인용 안내)
+        $ai = file_get_contents(public_path('ai.txt'));
+        $this->assertStringContainsString('Disallow: /console', $ai);
+        $this->assertStringContainsString('rankfree.kr/llms.txt', $ai);
+        $this->assertStringContainsString('rankfree.kr/sitemap.xml', $ai);
+
+        // /llm.txt 는 llms.txt 별칭(같은 내용)
+        $this->get('/llm.txt')->assertOk()->assertSee('# 랭크프리');
 
         $llms = file_get_contents(public_path('llms.txt'));
         $this->assertStringContainsString('# 랭크프리', $llms);
         $this->assertStringContainsString('자체 수집·분석 기반 추정치', $llms);
+        $this->assertStringContainsString('/keyword/', $llms);          // 공개 리포트 URL 패턴 안내
+        $this->assertStringContainsString('rankfree.kr/ai.txt', $llms); // AI 정책 링크
 
         // 파비콘·OG 이미지 실파일 존재
         foreach (['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'og-image.png'] as $f) {
