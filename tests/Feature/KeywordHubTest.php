@@ -191,6 +191,26 @@ class KeywordHubTest extends TestCase
             ->assertOk()->assertSee('캠핑의자')->assertSee('후보 큐');
     }
 
+    public function test_admin_page_shows_source_counts_and_filters_by_source(): void
+    {
+        $admin = $this->admin();
+        // seed_keywords는 비워 카테고리 시드 표시와 후보를 분리(혼란 방지)
+        $cat = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집', 'seed_keywords' => []]);
+        // 시딩(지역조합=combo)과 다른 출처(autocomplete)를 섞어 둔다
+        KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '강남 맛집', 'source' => 'combo', 'status' => 'pending', 'monthly_total' => 8000]);
+        KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '성수동 맛집', 'source' => 'combo', 'status' => 'pending', 'monthly_total' => null]);
+        KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '자동완성후보어', 'source' => 'autocomplete', 'status' => 'pending', 'monthly_total' => 5000]);
+
+        // 후보 현황에 출처별 카운트(지역조합)가 보이고, 후보 큐에 combo 결과가 표시된다
+        $this->actingAs($admin)->get('/admin/keyword-hub')
+            ->assertOk()->assertSee('전체 출처')->assertSee('지역조합')
+            ->assertSee('강남 맛집')->assertSee('성수동 맛집')->assertSee('자동완성후보어');
+
+        // source=combo 필터 — 지역조합만 남고 다른 출처(autocomplete)는 후보 큐에서 빠진다
+        $this->actingAs($admin)->get('/admin/keyword-hub?source=combo')
+            ->assertOk()->assertSee('강남 맛집')->assertDontSee('자동완성후보어');
+    }
+
     public function test_admin_collect_and_publish_actions(): void
     {
         $admin = $this->admin();
