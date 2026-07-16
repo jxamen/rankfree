@@ -215,10 +215,12 @@ class ShopRankTrackController extends Controller
         return redirect()->route('console.shop-rank')->with('status', '추적을 삭제했습니다.');
     }
 
-    /** 공개 공유 리포트(비로그인). */
-    public function shared(string $token)
+    /** 공개 공유 리포트(비로그인) — SEO 슬러그 또는 구 토큰. */
+    public function shared(string $slug)
     {
-        $slot = ShopRankSlot::where('share_token', $token)->with('records')->firstOrFail();
+        $slot = ShopRankSlot::findByShareKey($slug);
+        abort_if(! $slot, 404);
+        $slot->load('records');
 
         return view('shop-rank.share', ['slot' => $slot]);
     }

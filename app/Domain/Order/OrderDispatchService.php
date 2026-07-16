@@ -192,7 +192,7 @@ class OrderDispatchService
 
             return false;
         }
-        $token = $this->googleToken();
+        $token = \App\Support\GoogleServiceAccount::token('https://www.googleapis.com/auth/spreadsheets');
         if (! $token) {
             $d->response = '구글 서비스 계정 인증 실패 — .env GOOGLE_SERVICE_ACCOUNT_JSON(키 파일 경로)을 확인하세요.';
 
@@ -211,36 +211,4 @@ class OrderDispatchService
         return $res->successful();
     }
 
-    /** 서비스 계정 JWT(RS256) → access token. 실패 시 null. */
-    private function googleToken(): ?string
-    {
-        $path = (string) config('services.google_sheets.credentials', env('GOOGLE_SERVICE_ACCOUNT_JSON', ''));
-        if ($path === '' || ! is_file($path)) {
-            return null;
-        }
-        $sa = json_decode((string) file_get_contents($path), true);
-        if (! is_array($sa) || empty($sa['client_email']) || empty($sa['private_key'])) {
-            return null;
-        }
-
-        $b64 = fn (array $a) => rtrim(strtr(base64_encode(json_encode($a)), '+/', '-_'), '=');
-        $now = time();
-        $jwtBody = $b64(['alg' => 'RS256', 'typ' => 'JWT']).'.'.$b64([
-            'iss' => $sa['client_email'],
-            'scope' => 'https://www.googleapis.com/auth/spreadsheets',
-            'aud' => 'https://oauth2.googleapis.com/token',
-            'iat' => $now, 'exp' => $now + 3600,
-        ]);
-        if (! openssl_sign($jwtBody, $sig, $sa['private_key'], OPENSSL_ALGO_SHA256)) {
-            return null;
-        }
-        $jwt = $jwtBody.'.'.rtrim(strtr(base64_encode($sig), '+/', '-_'), '=');
-
-        $res = Http::asForm()->post('https://oauth2.googleapis.com/token', [
-            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-            'assertion' => $jwt,
-        ]);
-
-        return $res->successful() ? ($res->json('access_token') ?: null) : null;
-    }
 }

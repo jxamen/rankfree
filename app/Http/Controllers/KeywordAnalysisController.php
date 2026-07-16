@@ -11,6 +11,7 @@ use App\Domain\Keyword\NaverDataLabService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Domain\Keyword\NaverSerpService;
 use App\Domain\SearchAdWeb\SearchAdWebClient;
+use App\Domain\Seo\RelatedDocsService;
 use App\Models\KeywordSearch;
 use App\Models\Menu;
 use App\Models\User;
@@ -95,7 +96,7 @@ class KeywordAnalysisController extends Controller
                         isset($snap['shop_total']) ? (int) $snap['shop_total'] : null,
                     );
                 }
-                $shareUrl = route('keyword.shared', $record->shareToken());
+                $shareUrl = $record->shareUrl();
                 $fromCache = true;
             } else {
                 // 신규 검색·재분석 — 이번 달 이용 횟수 계량(초과 시 차단). "재검색만 카운팅".
@@ -118,7 +119,7 @@ class KeywordAnalysisController extends Controller
                             'snapshot' => $result,
                         ],
                     );
-                    $shareUrl = route('keyword.shared', $record->shareToken());
+                    $shareUrl = $record->shareUrl();
                 }
             }
         }
@@ -134,11 +135,15 @@ class KeywordAnalysisController extends Controller
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람(실시간 재조회, 캐시 활용). */
-    public function shared(string $token, NaverKeywordService $light, SearchAdWebClient $web, NaverContentVolumeService $content, NaverDataLabService $datalab, NaverAutocompleteService $ac, BlogIndexAnalyzer $blog)
+    public function shared(string $slug, NaverKeywordService $light, SearchAdWebClient $web, NaverContentVolumeService $content, NaverDataLabService $datalab, NaverAutocompleteService $ac, BlogIndexAnalyzer $blog)
     {
-        $record = KeywordSearch::where('share_token', $token)->firstOrFail();
+        $record = KeywordSearch::findByShareKey($slug);
+        abort_if(! $record, 404);
         $result = $this->buildAnalysis($record->keyword, $light, $web, $content, $datalab, $ac, $blog);
         abort_if($result['vm'] === null || ! ($result['vm']['has_data'] ?? false), 404);
+        // 관련 문서 추천 — 연관 키워드(vm.related)도 정확 일치 후보로 넘긴다
+        $result['related'] = app(RelatedDocsService::class)
+            ->sectionsFor($record, array_column((array) ($result['vm']['related'] ?? []), 'keyword'));
 
         return view('keyword.share', $result);
     }

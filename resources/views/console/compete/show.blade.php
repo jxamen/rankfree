@@ -30,8 +30,8 @@
             <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $slot->place_name ?: ('ID '.$slot->place_id) }} @if ($ymd)· 분석일 {{ \Illuminate\Support\Carbon::parse($ymd)->format('Y.m.d') }}@endif</div>
         </div>
         <div class="flex items-center gap-2">
-            @if ($ymd && $slot->share_token)
-                <button type="button" class="rf-share-btn btn btn-secondary btn-sm" data-url="{{ route('compete.shared', $slot->share_token) }}" title="공유 링크 복사 (로그인 없이 열람)">공유</button>
+            @if ($ymd && $slot->slug)
+                <button type="button" class="rf-share-btn btn btn-secondary btn-sm" data-url="{{ $slot->competeUrl() }}" title="공유 링크 복사 (로그인 없이 열람)">공유</button>
             @endif
             <form method="POST" action="{{ route('console.compete.analyze', $slot) }}" class="rf-analyze-form" data-keyword="{{ $slot->keyword }}">
                 @csrf

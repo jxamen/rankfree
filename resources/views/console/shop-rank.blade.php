@@ -68,9 +68,9 @@
             {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 상품명 옆) --}}
             <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
                 <form method="POST" action="{{ route('console.shop-rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
-                @if ($slot->share_token)
+                @if ($slot->slug)
                     <button type="button" class="btn btn-ghost btn-sm" title="공유 링크 복사 (로그인 없이 열람)"
-                            onclick="rfCopyShare(this, @js(route('shop-rank.shared', $slot->share_token)))">공유</button>
+                            onclick="rfCopyShare(this, @js($slot->shareUrl()))">공유</button>
                 @endif
                 <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-쇼핑순위-'.$slot->keyword.'.png'), this)" title="이 키워드 쇼핑 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"

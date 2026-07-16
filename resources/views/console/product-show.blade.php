@@ -9,7 +9,7 @@
 @section('console-content')
     @include('console._product_body', [
         'a' => $a,
-        'shareUrl' => route('product.shared', $a->shareToken()),
+        'shareUrl' => $a->shareUrl(),
         'public' => false,
     ])
 @endsection

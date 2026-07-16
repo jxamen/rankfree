@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasShareSlug;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -9,10 +10,22 @@ use Illuminate\Support\Str;
 /** 셀러력 분석 결과 스냅샷 — 확장 수집분을 서버가 계산해 저장. */
 class SellerPowerAnalysis extends Model
 {
+    use HasShareSlug;
+
     protected $fillable = [
-        'user_id', 'keyword', 'product_url', 'product_name', 'store_id',
+        'slug', 'user_id', 'keyword', 'product_url', 'product_name', 'store_id',
         'score', 'grade', 'market_percentile', 'rank_in_top', 'competitor_count', 'snapshot', 'share_token',
     ];
+
+    public function shareSlugBasis(): string
+    {
+        return (string) ($this->product_name ?: $this->keyword);
+    }
+
+    public function shareSlugPrefix(): string
+    {
+        return 'seller';
+    }
 
     protected $casts = [
         'snapshot' => 'array',

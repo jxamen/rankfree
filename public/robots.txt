@@ -1,6 +1,18 @@
 User-agent: *
+Allow: /
+
+# 로그인/개인 영역 — 색인 불필요
 Disallow: /console
 Disallow: /admin
-Allow: /
+Disallow: /order/
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /find-email
+Disallow: /auth/
+
+# 크롤 예의
+Crawl-delay: 1
 
 Sitemap: https://rankfree.kr/sitemap.xml

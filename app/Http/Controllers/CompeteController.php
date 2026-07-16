@@ -264,10 +264,11 @@ class CompeteController extends Controller
         return response()->json(['ok' => true, 'html' => view('compete._explain', ['x' => $x])->render()]);
     }
 
-    /** 공개 공유 리포트(로그인 불필요) — share_token 으로 열람. */
-    public function shared(string $token)
+    /** 공개 공유 리포트(로그인 불필요) — SEO 슬러그 또는 구 토큰. */
+    public function shared(string $slug)
     {
-        $slot = PlaceRankSlot::where('share_token', $token)->firstOrFail();
+        $slot = PlaceRankSlot::findByShareKey($slug);
+        abort_if(! $slot, 404);
         $ymd = PlaceSeoScore::where('slot_id', $slot->id)->max('ymd');
         $ymd = $ymd instanceof \Illuminate\Support\Carbon ? $ymd->toDateString() : $ymd;
         $data = $ymd ? $this->buildComparison($slot, $ymd) : ['rows' => collect(), 'mine' => null, 'explain' => null, 'dates' => collect()];

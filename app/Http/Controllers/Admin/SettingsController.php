@@ -61,6 +61,14 @@ class SettingsController extends Controller
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
+            // 구글 서치 콘솔 — 속성 + 서비스 계정 안내
+            'gscProperty' => AppSetting::read('gsc.property') ?: 'sc-domain:rankfree.kr',
+            'gscServiceEmail' => \App\Support\GoogleServiceAccount::clientEmail(),
+            // GA4 — 속성 ID(숫자)
+            'gaPropertyId' => AppSetting::read('ga.property_id'),
+            // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
+            'googleConnected' => \App\Support\GoogleToken::oauthConnected(),
+            'googleEmail' => \App\Support\GoogleToken::connectedEmail(),
         ]);
     }
 
@@ -75,6 +83,8 @@ class SettingsController extends Controller
         'aligo.user_id' => 'aligo_user_id',
         'aligo.api_key' => 'aligo_api_key',
         'aligo.sender' => 'aligo_sender',
+        'gsc.property' => 'gsc_property',
+        'ga.property_id' => 'ga_property_id',
     ];
 
     public function update(Request $request)
@@ -104,7 +114,10 @@ class SettingsController extends Controller
         AppSetting::write('referral.bonus_per', (string) max(0, (int) $request->input('referral_bonus_per', 20)));
         AppSetting::write('referral.bonus_max', (string) max(0, (int) $request->input('referral_bonus_max', 200)));
 
-        return redirect()->route('admin.settings')->with('status', '환경 설정을 저장했습니다.');
+        // 저장 후에도 보던 탭 유지
+        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'custom'], true) ? $request->input('tab') : null;
+
+        return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
     }
 
     /** AI 키 저장 — 공급자 선택 + 키. 폼 필드: ai_provider[] · ai_key[]. */

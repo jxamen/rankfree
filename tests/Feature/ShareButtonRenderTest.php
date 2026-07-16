@@ -36,21 +36,22 @@ class ShareButtonRenderTest extends TestCase
 
         $res = $this->actingAs($user)->get('/console/market/'.$m->id);
         $res->assertOk()->assertSee('🔗 공유', false);
-        // 공유 버튼이 공개 링크(/m/{token})를 복사하도록 렌더.
-        // @js()가 URL 슬래시를 \/ 로 이스케이프하므로 토큰 자체(영숫자)의 노출로 검증한다.
-        $m->refresh();
-        $this->assertNotNull($m->share_token);
-        $res->assertSee($m->share_token, false);
+        // 공유 버튼이 SEO 슬러그 공개 링크(/market/{slug})를 복사하도록 렌더.
+        // @js()가 슬래시를 \/ 로, 한글을 \uXXXX 로 이스케이프하므로 경로 접두로 검증한다.
+        $res->assertSee('\/market\/', false);
+        $this->assertNotNull($m->fresh()->slug);
     }
 
     public function test_market_public_page_opens_without_login(): void
     {
         $user = User::create(['name' => 'u', 'email' => 'u@rf.kr', 'password' => 'x1234567']);
         $m = $this->market($user);
-        $token = $m->shareToken();
 
-        // 로그인 없이 접근 가능 + 키워드 표시 + 콘솔 사이드바 없음
-        $res = $this->get('/m/'.$token);
+        // 구 토큰 URL → 슬러그로 301
+        $this->get('/m/'.$m->shareToken())->assertStatus(301)->assertRedirect($m->shareUrl());
+
+        // 로그인 없이 접근 가능(슬러그) + 키워드 표시 + 콘솔 사이드바 없음
+        $res = $this->get($m->shareUrl());
         $res->assertOk()->assertSee('게이밍 헤드셋')->assertSee('시장 분석 리포트');
         $res->assertDontSee('id="rf-sidebar"', false);
     }
@@ -59,9 +60,10 @@ class ShareButtonRenderTest extends TestCase
     {
         $user = User::create(['name' => 'u', 'email' => 'u@rf.kr', 'password' => 'x1234567']);
         $p = $this->product($user);
-        $token = $p->shareToken();
 
-        $res = $this->get('/p/'.$token);
+        $this->get('/p/'.$p->shareToken())->assertStatus(301)->assertRedirect($p->shareUrl());
+
+        $res = $this->get($p->shareUrl());
         $res->assertOk()->assertSee('테스트 상품')->assertSee('상품 리뷰 분석 리포트');
         $res->assertDontSee('id="rf-sidebar"', false);
     }
@@ -70,5 +72,34 @@ class ShareButtonRenderTest extends TestCase
     {
         $this->get('/m/nope')->assertNotFound();
         $this->get('/p/nope')->assertNotFound();
+        $this->get('/market/no-such-slug')->assertNotFound();
+        $this->get('/product/no-such-slug')->assertNotFound();
+    }
+
+    /** 공개 1회성 분석 리포트 — 색인 허용(noindex 없음) + SEO/AEO/GEO 구조화 데이터. */
+    public function test_public_analysis_report_is_indexable_with_structured_data(): void
+    {
+        $user = User::create(['name' => 'u', 'email' => 'idx@rf.kr', 'password' => 'x1234567']);
+        $m = $this->market($user);
+
+        $html = $this->get($m->shareUrl())->assertOk()->getContent();
+
+        // 색인 허용 + og article + 페이지 h1
+        $this->assertStringNotContainsString('noindex', $html);
+        $this->assertStringContainsString('og:type" content="article"', $html);
+        $this->assertStringContainsString('<h1', $html);
+
+        // 구조화 데이터: BreadcrumbList + Article + FAQPage(모두 유효 JSON · 스크립트 탈출 없음)
+        preg_match_all('#<script type="application/ld\+json">(.*?)</script>#s', $html, $mm);
+        $types = [];
+        foreach ($mm[1] as $block) {
+            $this->assertStringNotContainsString('</script', $block, 'JSON-LD 스크립트 탈출');
+            $j = json_decode($block, true);
+            $this->assertNotNull($j, 'JSON-LD 파손');
+            $types[] = $j['@type'] ?? '';
+        }
+        foreach (['BreadcrumbList', 'Article', 'FAQPage'] as $t) {
+            $this->assertContains($t, $types, "$t 구조화 데이터 누락");
+        }
     }
 }

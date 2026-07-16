@@ -54,17 +54,19 @@ class SellerPowerShareTest extends TestCase
             ->assertOk()
             ->assertSee('🔗 공유')
             ->assertSee('rfCopyShare', false)
-            // @js() 가 URL 슬래시를 이스케이프하므로 토큰만 확인
-            ->assertSee($a->fresh()->share_token, false);
+            // @js() 가 슬래시를 이스케이프하므로 SEO 슬러그 경로 접두(\/seller\/)로 확인
+            ->assertSee('\/seller\/', false);
     }
 
     public function test_public_share_opens_without_login(): void
     {
         $user = User::create(['name' => 'u', 'email' => 'u@rf.kr', 'password' => 'x1234567']);
         $a = $this->analysis($user);
-        $token = $a->shareToken();
 
-        $res = $this->get('/sp/'.$token);
+        // 구 토큰 URL → 슬러그로 301
+        $this->get('/sp/'.$a->shareToken())->assertStatus(301)->assertRedirect($a->shareUrl());
+
+        $res = $this->get($a->shareUrl());
         $res->assertOk()
             ->assertSee('테스트 헤드셋')
             ->assertSee('셀러력 진단 리포트')

@@ -6,6 +6,7 @@ use App\Models\Concerns\HasCommunityAuthor;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 /** 커뮤니티 게시글. */
 class CommunityPost extends Model
@@ -37,7 +38,7 @@ class CommunityPost extends Model
     /** 본문 미리보기(목록·검색용) — HTML 태그 제거한 평문. */
     public function excerpt(int $len = 120): string
     {
-        return \Illuminate\Support\Str::limit(trim(preg_replace('/\s+/u', ' ', strip_tags((string) $this->body))), $len);
+        return Str::limit(trim(preg_replace('/\s+/u', ' ', strip_tags((string) $this->body))), $len);
     }
 
     /**

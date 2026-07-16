@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasShareSlug;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,10 +10,22 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** 쇼핑 순위추적 슬롯 = (키워드 × 대상 상품/업체). place_rank_slots 미러. */
 class ShopRankSlot extends Model
 {
+    use HasShareSlug;
+
     protected $fillable = [
-        'user_id', 'keyword', 'category', 'monthly_views', 'target_type', 'product_id', 'mall_name', 'product_url',
+        'slug', 'user_id', 'keyword', 'category', 'monthly_views', 'target_type', 'product_id', 'mall_name', 'product_url',
         'product_title', 'label', 'share_token', 'is_active', 'last_rank', 'last_price', 'last_checked_at',
     ];
+
+    public function shareSlugBasis(): string
+    {
+        return (string) $this->keyword;
+    }
+
+    public function shareSlugPrefix(): string
+    {
+        return 'shopping';
+    }
 
     protected $casts = [
         'is_active' => 'boolean',

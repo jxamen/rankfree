@@ -10,7 +10,7 @@
     @include('console._market_body', [
         'a' => $a,
         'weekday' => $weekday ?? null,
-        'shareUrl' => route('market.shared', $a->shareToken()),
+        'shareUrl' => $a->shareUrl(),
         'public' => false,
     ])
 @endsection

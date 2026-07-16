@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Seo\RelatedDocsService;
 use App\Models\ProductAnalysis;
 use Illuminate\Http\Request;
 
@@ -28,11 +29,12 @@ class ProductAnalysisController extends Controller
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람. */
-    public function shared(string $token)
+    public function shared(string $slug, RelatedDocsService $related)
     {
-        $a = ProductAnalysis::where('share_token', $token)->firstOrFail();
+        $a = ProductAnalysis::findByShareKey($slug);
+        abort_if(! $a, 404);
 
-        return view('product.share', ['a' => $a]);
+        return view('product.share', ['a' => $a, 'related' => $related->sectionsFor($a)]);
     }
 
     public function destroy(Request $request, ProductAnalysis $analysis)

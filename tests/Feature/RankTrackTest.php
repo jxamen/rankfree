@@ -122,13 +122,17 @@ class RankTrackTest extends TestCase
             'save_count' => null, 'list_total' => 300, 'checked_date' => '2026-07-10', 'created_at' => now(),
         ]);
 
-        // 비로그인 열람
-        $this->get('/r/test-share-token-1234567890abcdef')
+        // 구 토큰 URL → SEO 슬러그로 301
+        $this->get('/r/test-share-token-1234567890abcdef')->assertStatus(301)->assertRedirect($slot->shareUrl());
+
+        // 비로그인 열람(슬러그 URL /place/라온헤어)
+        $this->get($slot->shareUrl())
             ->assertOk()
             ->assertSee('강남 미용실')
             ->assertSee('7위');
 
-        // 잘못된 토큰은 404
+        // 잘못된 슬러그·토큰은 404
+        $this->get('/place/no-such-slug')->assertNotFound();
         $this->get('/r/no-such-token')->assertNotFound();
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Keyword\NaverDataLabService;
+use App\Domain\Seo\RelatedDocsService;
 use App\Models\MarketAnalysis;
 use Illuminate\Http\Request;
 
@@ -32,14 +33,15 @@ class MarketAnalysisController extends Controller
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람. */
-    public function shared(string $token, NaverDataLabService $datalab)
+    public function shared(string $slug, NaverDataLabService $datalab, RelatedDocsService $related)
     {
-        $a = MarketAnalysis::where('share_token', $token)->firstOrFail();
+        $a = MarketAnalysis::findByShareKey($slug);
+        abort_if(! $a, 404);
 
         // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
         $weekday = $a->keyword ? $datalab->weekdayRatio($a->keyword) : null;
 
-        return view('market.share', ['a' => $a, 'weekday' => $weekday]);
+        return view('market.share', ['a' => $a, 'weekday' => $weekday, 'related' => $related->sectionsFor($a)]);
     }
 
     public function destroy(Request $request, MarketAnalysis $analysis)

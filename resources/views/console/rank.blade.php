@@ -73,9 +73,9 @@
             <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
                 <form method="POST" action="{{ route('console.rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
                 <button type="button" class="btn btn-ghost btn-sm rf-metrics-toggle" title="리뷰·저장 접기/펼치기">접기</button>
-                @if ($slot->share_token)
+                @if ($slot->slug)
                     <button type="button" class="btn btn-ghost btn-sm" title="공유 링크 복사 (로그인 없이 열람 가능)"
-                            onclick="rfCopyShare(this, @js(route('rank.shared', $slot->share_token)))">공유</button>
+                            onclick="rfCopyShare(this, @js($slot->shareUrl()))">공유</button>
                 @endif
                 <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-순위-'.$slot->keyword.'.png'), this)" title="이 키워드 순위를 PNG 이미지로 저장">🖼 이미지</button>
                 <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"

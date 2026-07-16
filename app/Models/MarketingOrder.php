@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /** 마케팅 상품 주문 — 동적 필드 입력값 + 수량·금액. */
@@ -47,7 +48,7 @@ class MarketingOrder extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function dispatches(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function dispatches(): HasMany
     {
         return $this->hasMany(OrderDispatch::class, 'order_id');
     }

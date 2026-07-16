@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasShareSlug;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -9,9 +10,21 @@ use Illuminate\Support\Str;
 /** 키워드 분석 검색 내역 — 사용자별 최근 검색(재조회용). 같은 키워드는 갱신. */
 class KeywordSearch extends Model
 {
+    use HasShareSlug;
+
     protected $fillable = [
-        'user_id', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile', 'comp_idx', 'grade', 'share_token', 'snapshot',
+        'slug', 'user_id', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile', 'comp_idx', 'grade', 'share_token', 'snapshot',
     ];
+
+    public function shareSlugBasis(): string
+    {
+        return (string) $this->keyword;
+    }
+
+    public function shareSlugPrefix(): string
+    {
+        return 'keyword';
+    }
 
     protected $casts = [
         'monthly_total' => 'integer',

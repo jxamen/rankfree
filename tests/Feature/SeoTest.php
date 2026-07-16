@@ -62,7 +62,11 @@ class SeoTest extends TestCase
             'is_active' => true, 'share_token' => 'seotesttoken123',
         ]);
 
-        $html = $this->get('/r/seotesttoken123')->assertOk()->getContent();
+        // 구 토큰 URL 은 SEO 슬러그로 301
+        $this->get('/r/seotesttoken123')->assertStatus(301)->assertRedirect($slot->shareUrl());
+
+        // 정규 슬러그 URL(/place/테스트매장)은 noindex 리포트로 열림
+        $html = $this->get($slot->shareUrl())->assertOk()->getContent();
         $this->assertStringContainsString('noindex, nofollow', $html);
         $this->assertStringContainsString('property="og:title"', $html);   // 카톡 미리보기 유지
         $this->assertStringContainsString('og-image.png', $html);
@@ -113,14 +117,20 @@ class SeoTest extends TestCase
     {
         CommunityCategory::create(['slug' => 'tips', 'name' => '꿀팁', 'is_active' => true, 'sort_order' => 1]);
 
+        // /sitemap.xml = 사이트맵 인덱스(자식 사이트맵 목록)
         $res = $this->get('/sitemap.xml')->assertOk();
         $this->assertStringContainsString('application/xml', $res->headers->get('content-type'));
-        $xml = $res->getContent();
-        $this->assertStringContainsString('<urlset', $xml);
-        $this->assertStringContainsString(route('home'), $xml);
-        $this->assertStringContainsString(route('community', ['cat' => 'tips']), $xml);
-        // 유효한 XML 인지
-        $this->assertNotFalse(simplexml_load_string($xml));
+        $index = $res->getContent();
+        $this->assertStringContainsString('<sitemapindex', $index);
+        $this->assertStringContainsString(url('/sitemap-pages.xml'), $index);
+        $this->assertNotFalse(simplexml_load_string($index));
+
+        // 정적/카테고리 URL 은 pages 섹션에
+        $pages = $this->get('/sitemap-pages.xml')->assertOk()->getContent();
+        $this->assertStringContainsString('<urlset', $pages);
+        $this->assertStringContainsString(route('home'), $pages);
+        $this->assertStringContainsString(route('community', ['cat' => 'tips']), $pages);
+        $this->assertNotFalse(simplexml_load_string($pages));
     }
 
     public function test_post_title_with_script_tag_cannot_break_jsonld(): void
@@ -174,9 +184,23 @@ class SeoTest extends TestCase
 
     public function test_sitemap_excludes_redirects_includes_support(): void
     {
-        $xml = $this->get('/sitemap.xml')->assertOk()->getContent();
-        $this->assertStringNotContainsString('/rank-check', $xml); // 302 리다이렉트 — 제외
-        $this->assertStringContainsString(route('support'), $xml);
+        $pages = $this->get('/sitemap-pages.xml')->assertOk()->getContent();
+        $this->assertStringNotContainsString('/rank-check', $pages); // 302 리다이렉트 — 제외
+        $this->assertStringContainsString(route('support'), $pages);
+    }
+
+    public function test_sitemap_excludes_tracking_slots(): void
+    {
+        $user = User::create(['name' => 'u', 'email' => 'track@rf.kr', 'password' => 'x1234567']);
+        PlaceRankSlot::create(['user_id' => $user->id, 'keyword' => '강남 맛집', 'place_id' => '1', 'place_name' => '추적매장', 'is_active' => true]);
+
+        // 순위 추적 슬롯(/place·/shopping)·경쟁분석(/compete)은 사이트맵에 노출 금지
+        $index = $this->get('/sitemap.xml')->assertOk()->getContent();
+        $this->assertStringNotContainsString('/sitemap-place.xml', $index);
+        $this->assertStringNotContainsString('/sitemap-shopping.xml', $index);
+        $this->assertStringNotContainsString('/sitemap-compete.xml', $index);
+        $this->get('/sitemap-place.xml')->assertNotFound();
+        $this->get('/sitemap-compete.xml')->assertNotFound();
     }
 
     public function test_robots_and_llms_txt_files(): void

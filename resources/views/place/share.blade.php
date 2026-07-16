@@ -1,9 +1,24 @@
 @extends('layouts.site')
 @section('follow-theme', '1')
-@section('robots', 'noindex, nofollow') {{-- 토큰 공유 리포트 — 색인 제외(OG 미리보기는 유지) --}}
+@section('og-type', 'article') {{-- 공개 색인 대상(1회성 매장 분석) — noindex 없음 --}}
 
-@section('title', $a->name.' 매장 분석 리포트 · 랭크프리')
-@section('description', $a->name.' — 플레이스 순위·리뷰·정보충실 등 매장 SEO 분석 리포트')
+@php
+    $__rankTxt = (! $a->rank || $a->rank >= 300) ? '상위권 밖' : '순위 '.$a->rank.'위';
+    $__summary = "‘{$a->name}’ 네이버 플레이스 매장 분석 — 키워드 ‘{$a->keyword}’ {$__rankTxt}"
+        .($a->n2 !== null ? ', N2 관련성 '.round((float) $a->n2).'점' : '')
+        .'. 순위·리뷰·저장수·정보충실도 등 매장 SEO를 무료로 진단합니다.';
+    $__faq = [[
+        'q' => "‘{$a->name}’의 ‘{$a->keyword}’ 플레이스 순위는 몇 위인가요?",
+        'a' => "‘{$a->keyword}’ 검색 기준 {$__rankTxt}입니다."
+            .($a->n2 !== null ? " N2 관련성 ".round((float) $a->n2)."점" : '')
+            .($a->visitor_cnt !== null ? ", 영수증 리뷰 ".number_format((int) $a->visitor_cnt)."개" : '')."로 분석됐습니다.",
+    ]];
+@endphp
+
+@section('title', $a->name.' 플레이스 매장 분석 · 랭크프리')
+@section('description', $__summary)
+
+@include('partials.report-seo', ['seoTitle' => $a->name.' 매장 분석', 'seoDesc' => $__summary, 'seoSection' => '플레이스 매장 분석', 'seoDate' => $a->created_at, 'seoFaq' => $__faq])
 
 @section('content')
 @php
@@ -101,5 +116,6 @@
     <p class="text-muted-soft text-center mt-6" style="font-size:var(--fs-xs);line-height:1.6;">
         N1 유사도·N2 관련성·N3 랭킹 및 세부 지표는 관측 신호 기반 <b>자체 추정치</b>이며 네이버 공식 점수가 아닙니다.
     </p>
+    @include('partials.related-docs', ['related' => $related ?? []])
 </section>
 @endsection

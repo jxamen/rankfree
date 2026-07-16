@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /** 마케팅 상품 — 폼 빌더로 정의한 판매 상품(가격·수량·스케줄 + 동적 주문 필드). */
@@ -75,9 +76,9 @@ class MarketingProduct extends Model
      * 예) 주말진행X·지연2영업일: 일요일 주문 → 월(접수)·화(진행 시작). 금 15:01(마감15) → 월(접수)·화(진행).
      * 공휴일 캘린더 미보유 — 현재는 주말 기준까지 반영.
      */
-    public function earliestStartDate(?\DateTimeInterface $now = null): \Illuminate\Support\Carbon
+    public function earliestStartDate(?\DateTimeInterface $now = null): Carbon
     {
-        $now = $now ? \Illuminate\Support\Carbon::instance($now) : now();
+        $now = $now ? Carbon::instance($now) : now();
         $day = $now->copy()->startOfDay();
 
         // 1) 오늘이 진행일인데 접수 마감 시각이 지났으면 익일부터(주말·공휴일엔 마감 개념 없음)
@@ -103,7 +104,7 @@ class MarketingProduct extends Model
     }
 
     /** 해당 날짜가 진행(처리) 가능한 날인지(주말·공휴일 진행 여부 기준). */
-    public function isProcessingDay(\Illuminate\Support\Carbon $d): bool
+    public function isProcessingDay(Carbon $d): bool
     {
         if (! $this->process_weekends && $d->isWeekend()) {
             return false;

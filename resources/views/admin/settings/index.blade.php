@@ -12,20 +12,24 @@
 @endpush
 
 @section('admin-content')
+@php
+    // 저장/리디렉션 후에도 보던 탭 유지 — ?tab= 파라미터로 초기 활성 탭 결정
+    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'custom' => '커스텀 코드'];
+    $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
+@endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
 <form method="POST" action="{{ route('admin.settings.update') }}">
     @csrf @method('PUT')
+    <input type="hidden" name="tab" id="rf-active-tab" value="{{ $__active }}">
 
     <div class="rf-tabs" role="tablist">
-        <button type="button" class="rf-tab on" data-tab="basic" role="tab">광고·데이터 API</button>
-        <button type="button" class="rf-tab" data-tab="api" role="tab">AI API</button>
-        <button type="button" class="rf-tab" data-tab="integ" role="tab">외부 연동</button>
-        <button type="button" class="rf-tab" data-tab="member" role="tab">회원</button>
-        <button type="button" class="rf-tab" data-tab="custom" role="tab">커스텀 코드</button>
+        @foreach ($__tabs as $__k => $__label)
+            <button type="button" class="rf-tab {{ $__active === $__k ? 'on' : '' }}" data-tab="{{ $__k }}" role="tab">{{ $__label }}</button>
+        @endforeach
     </div>
 
     {{-- ── 기본: 네이버 데이터 수집 자격증명 ───────────────────────────── --}}
-    <div class="rf-tabpane" data-tab="basic">
+    <div class="rf-tabpane" data-tab="basic" @if ($__active !== 'basic') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             네이버 데이터 수집에 필요한 자격증명입니다. 각 항목은 <b>여러 개 등록</b>할 수 있고(조회 실패 시 자동 로테이션),
             값은 <b>암호화 저장</b>되며 <code>.env</code>보다 우선 적용됩니다.
@@ -68,7 +72,7 @@
     </div>
 
     {{-- ── API 설정: AI 모델 키 ─────────────────────────────────────── --}}
-    <div class="rf-tabpane" data-tab="api" hidden>
+    <div class="rf-tabpane" data-tab="api" @if ($__active !== 'api') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             AI 모델(LLM) API 키를 관리합니다. 커뮤니티 글·댓글 자동 생성 등에 사용되며, 값은 <b>암호화 저장</b>됩니다.
             비밀 키는 기본적으로 가려져 있고 <i class="fa-regular fa-eye"></i>(보기)·<i class="fa-regular fa-copy"></i>(복사)할 수 있습니다.
@@ -105,7 +109,7 @@
     </div>
 
     {{-- ── 외부 연동: Cloudflare · 소셜 로그인 · 알리고 SMS ──────────────── --}}
-    <div class="rf-tabpane" data-tab="integ" hidden>
+    <div class="rf-tabpane" data-tab="integ" @if ($__active !== 'integ') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             봇 차단(Cloudflare)·소셜 로그인(구글·카카오)·알리고 SMS 키를 관리합니다. 값은 <b>암호화 저장</b>되며 <code>.env</code>보다 우선 적용됩니다.
             저장하면 해당 기능(순위조회 봇검증·소셜 로그인·문자 발송)에 <b>즉시 반영</b>됩니다. 비밀 키는 <i class="fa-regular fa-eye"></i>(보기)·<i class="fa-regular fa-copy"></i>(복사)할 수 있습니다.
@@ -143,10 +147,55 @@
             @include('admin.settings._simplefield', ['name' => 'aligo_api_key', 'label' => 'API 키', 'value' => $aligoApiKey, 'secret' => true])
             @include('admin.settings._simplefield', ['name' => 'aligo_sender', 'label' => '발신번호', 'value' => $aligoSender, 'secret' => false, 'placeholder' => '1668-3721'])
         </div>
+
+        {{-- 구글 데이터 연동 (서치 콘솔·GA4 공용) --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">구글 데이터 연동 <span class="text-muted-soft" style="font-weight:400;">서치 콘솔 · GA4 공용</span></div>
+            @if ($googleConnected)
+                <p class="mb-3" style="font-size:var(--fs-xs);">
+                    <span style="color:var(--color-success);">✓ 연동됨</span>
+                    <b class="text-ink">{{ $googleEmail ?: '(이메일 미확인)' }}</b>
+                    <span class="text-muted-soft">— 이 계정의 서치 콘솔·GA4 접근 권한으로 데이터를 수집합니다.</span>
+                </p>
+                <form method="POST" action="{{ route('admin.google-connect.disconnect') }}" class="inline" data-confirm="구글 연동을 해제할까요?" data-confirm-text="검색 유입·방문 분석 수집이 중단됩니다." data-confirm-ok="해제">
+                    @csrf
+                    <button type="submit" class="btn btn-secondary btn-sm">연동 해제</button>
+                </form>
+            @else
+                <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+                    워드프레스 Site Kit 처럼 <b class="text-muted">구글 계정 클릭 한 번으로 연동</b>합니다(위 소셜 로그인 클라이언트 재사용).
+                    사전 준비(최초 1회): GCP 해당 프로젝트에서 <b class="text-muted">Search Console API · Google Analytics Data API</b> 활성화 +
+                    OAuth 클라이언트의 승인된 리디렉션 URI에 <code>{{ route('admin.google-connect.callback') }}</code> 추가.
+                    연동 계정은 서치 콘솔 속성·GA4 속성에 접근 권한이 있어야 합니다(소유 계정이면 됩니다).
+                    @if ($gscServiceEmail)<br>대안: 서비스 계정({{ $gscServiceEmail }}) 키가 설정돼 있어 폴백으로 사용됩니다.@endif
+                </p>
+                <a href="{{ route('admin.google-connect') }}" class="btn btn-primary btn-sm">구글 계정으로 연동</a>
+            @endif
+        </div>
+
+        {{-- 구글 서치 콘솔 --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">구글 서치 콘솔 <span class="text-muted-soft" style="font-weight:400;">검색 유입 분석</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+                위 구글 연동(또는 서비스 계정 폴백)으로 Search Analytics API를 조회합니다.
+                수집: 매일 04:00 자동 · 수동 <code>php artisan gsc:collect --days=480</code>(최초 적재).
+            </p>
+            @include('admin.settings._simplefield', ['name' => 'gsc_property', 'label' => '속성 (도메인: sc-domain:rankfree.kr · URL 접두어: https://rankfree.kr/)', 'value' => $gscProperty, 'secret' => false, 'placeholder' => 'sc-domain:rankfree.kr'])
+        </div>
+
+        {{-- 구글 애널리틱스(GA4) --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">구글 애널리틱스 (GA4) <span class="text-muted-soft" style="font-weight:400;">방문 분석</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+                위 구글 연동(또는 서비스 계정 폴백)으로 Analytics Data API를 조회합니다.
+                속성 ID는 GA4 관리 → 속성 설정에 있는 <b>숫자 ID</b>입니다. 수집: 매일 04:10 자동 · 수동 <code>php artisan ga:collect --days=400</code>.
+            </p>
+            @include('admin.settings._simplefield', ['name' => 'ga_property_id', 'label' => 'GA4 속성 ID (숫자)', 'value' => $gaPropertyId, 'secret' => false, 'placeholder' => '123456789'])
+        </div>
     </div>
 
     {{-- ── 회원: 추천인 보상 ──────────────────────────────────────────── --}}
-    <div class="rf-tabpane" data-tab="member" hidden>
+    <div class="rf-tabpane" data-tab="member" @if ($__active !== 'member') hidden @endif>
         <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">추천인 보상 — 순위체크 슬롯</div>
         <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
             회원의 <b class="text-muted">마이페이지 추천 링크</b>로 가입이 완료되면 추천인의 순위 추적 가능 개수(플레이스+쇼핑 합산 한도)가 자동으로 늘어납니다.
@@ -168,7 +217,7 @@
     </div>
 
     {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}
-    <div class="rf-tabpane" data-tab="custom" hidden>
+    <div class="rf-tabpane" data-tab="custom" @if ($__active !== 'custom') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             아래 코드가 모든 공개 페이지(홈·콘솔)의 <code>&lt;head&gt;</code>에 삽입됩니다. 웹폰트·분석 스크립트(GA·GTM·메타 픽셀)·커스텀 CSS 등에 사용하세요.
             <b class="text-error">주의</b>: 잘못된 코드는 화면을 깨뜨릴 수 있습니다. 스크립트/외부 링크는 신뢰할 수 있는 것만 넣으세요(어드민 화면에는 적용되지 않습니다).
@@ -202,6 +251,7 @@
         t.addEventListener('click', function () {
             tabs.forEach(function (x) { x.classList.toggle('on', x === t); });
             panes.forEach(function (p) { p.hidden = (p.dataset.tab !== t.dataset.tab); });
+            document.getElementById('rf-active-tab').value = t.dataset.tab;   // 저장 후 탭 유지
         });
     });
 

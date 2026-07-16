@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Seo\RelatedDocsService;
 use App\Models\SellerPowerAnalysis;
 use Illuminate\Http\Request;
 
@@ -27,19 +28,21 @@ class SellerPowerController extends Controller
         return view('console.seller-power.show', [
             'a' => $analysis,
             'r' => $this->remapRx((array) $analysis->snapshot),
-            'shareUrl' => route('seller-power.shared', $analysis->shareToken()),
+            'shareUrl' => $analysis->shareUrl(),
             'public' => false,
         ]);
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람. */
-    public function shared(string $token)
+    public function shared(string $slug, RelatedDocsService $related)
     {
-        $a = SellerPowerAnalysis::where('share_token', $token)->firstOrFail();
+        $a = SellerPowerAnalysis::findByShareKey($slug);
+        abort_if(! $a, 404);
 
         return view('seller-power.share', [
             'a' => $a,
             'r' => $this->remapRx((array) $a->snapshot),
+            'related' => $related->sectionsFor($a, array_filter([$a->keyword])),
         ]);
     }
 

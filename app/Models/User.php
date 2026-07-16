@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 #[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'provider', 'provider_id', 'password', 'role', 'grade_id', 'operator_role_id', 'subscription_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -203,7 +204,7 @@ class User extends Authenticatable
     {
         if (! $this->referral_code) {
             do {
-                $code = strtoupper(\Illuminate\Support\Str::random(8));
+                $code = strtoupper(Str::random(8));
             } while (static::where('referral_code', $code)->exists());
             $this->forceFill(['referral_code' => $code])->save();
         }

@@ -236,10 +236,12 @@ class RankTrackController extends Controller
         return back()->with('status', $msg);
     }
 
-    /** 공개 리포트 — 공유 토큰으로 비로그인 열람(읽기 전용). */
-    public function shared(string $token)
+    /** 공개 리포트 — SEO 슬러그(또는 구 토큰)로 비로그인 열람(읽기 전용). */
+    public function shared(string $slug)
     {
-        $slot = PlaceRankSlot::where('share_token', $token)->with('records')->firstOrFail();
+        $slot = PlaceRankSlot::findByShareKey($slug);
+        abort_if(! $slot, 404);
+        $slot->load('records');
 
         return view('rank.share', ['slot' => $slot]);
     }
