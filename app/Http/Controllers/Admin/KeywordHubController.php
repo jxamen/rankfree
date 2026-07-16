@@ -20,6 +20,7 @@ class KeywordHubController extends Controller
     {
         $status = in_array($request->query('status'), KeywordCandidate::STATUSES, true) ? $request->query('status') : 'pending';
         $catId = (int) $request->query('category', 0);
+        $source = (string) $request->query('source', ''); // 출처 필터(combo=지역조합/seed/related/autocomplete/gsc/datalab)
 
         return view('admin.keyword-hub.index', [
             'categories' => KeywordCategory::with('parent')->withCount([
@@ -30,11 +31,17 @@ class KeywordHubController extends Controller
             'candidates' => KeywordCandidate::with('category')
                 ->where('status', $status)
                 ->when($catId, fn ($q) => $q->where('category_id', $catId))
+                ->when($source !== '', fn ($q) => $q->where('source', $source))
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
                 ->paginate(50)->withQueryString(),
             'status' => $status,
             'catId' => $catId,
+            'source' => $source,
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
+            // 출처별 후보 수(현 status 기준) — 시딩(지역조합) 결과를 화면에서 바로 확인
+            'sourceCounts' => KeywordCandidate::where('status', $status)
+                ->when($catId, fn ($q) => $q->where('category_id', $catId))
+                ->selectRaw('source, count(*) as c')->groupBy('source')->pluck('c', 'source'),
             'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
             'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
         ]);

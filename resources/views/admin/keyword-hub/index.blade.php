@@ -25,6 +25,20 @@
                 </a>
             @endforeach
         </div>
+        {{-- 출처별 후보 수(현재 상태 기준) — 시딩(지역조합) 결과를 바로 확인. 클릭 시 해당 출처로 필터 --}}
+        @if (!empty($sourceCounts) && count($sourceCounts))
+            <div class="flex flex-wrap gap-1.5 mt-3 pt-3" style="border-top:1px solid var(--color-hairline-soft);">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">출처</span>
+                @foreach ($srcLabel as $k => $label)
+                    @isset($sourceCounts[$k])
+                        <a href="{{ route('admin.keyword-hub', ['status' => $status, 'source' => $k, 'category' => $catId ?: null]) }}"
+                           class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($source ?? '') === $k ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">
+                            {{ $label }} <b class="font-mono">{{ number_format($sourceCounts[$k]) }}</b>
+                        </a>
+                    @endisset
+                @endforeach
+            </div>
+        @endif
         <div class="text-muted mt-3" style="font-size:var(--fs-xs);">발행 문서 <b class="font-mono text-ink">{{ number_format($hubDocCount) }}</b>개 — 사이트맵 keyword 섹션에 자동 포함</div>
     </div>
 
@@ -138,6 +152,12 @@
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">후보 큐 — {{ $stLabel[$status] }} <span class="font-mono text-muted">{{ number_format($candidates->total()) }}</span></div>
         <form method="GET" action="{{ route('admin.keyword-hub') }}" class="flex items-center gap-2">
             <input type="hidden" name="status" value="{{ $status }}">
+            <select name="source" class="input" style="height:36px;" onchange="this.form.submit()" title="출처 필터">
+                <option value="">전체 출처</option>
+                @foreach ($srcLabel as $k => $label)
+                    <option value="{{ $k }}" @selected(($source ?? '') === $k)>{{ $label }}@isset($sourceCounts[$k]) ({{ number_format($sourceCounts[$k]) }})@endisset</option>
+                @endforeach
+            </select>
             <select name="category" class="input" style="height:36px;" onchange="this.form.submit()">
                 <option value="">전체 카테고리</option>
                 @foreach ($categories as $c)
