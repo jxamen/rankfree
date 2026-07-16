@@ -46,12 +46,26 @@
       || card.querySelector('a[title][href]');
     return a ? (a.getAttribute('title') || a.textContent || '').trim() : '';
   }
-  // 광고 카드 — 광고 전용 클래스(adProduct)·슈퍼적립(superSaving) 또는 카드 내 '광고' 배지
+  // 광고 카드 — 광고 전용 클래스(adProduct)·슈퍼적립·카드 내 '광고'/'슈퍼적립' 표시.
+  // 슈퍼적립은 카드 클래스가 일반 상품(product_item)과 동일해 클래스로 구분되지 않는다 →
+  // 썸네일 배지(.blind '슈퍼적립')와 로그 데이터(prom_tag=슈퍼적립 / SUPER_POINT_…)로 판정한다.
   function isAd(card) {
     if (/adProduct|superSaving|_ad_|__ad/i.test(card.className)) return true;
-    // 슈퍼적립·광고 표시가 바깥 컨테이너에만 있는 경우(안쪽 아이템 클래스엔 없음) → 조상까지 확인
     if (card.closest('[class*="superSavingProduct"], [class*="adProduct"]')) return true;
-    return [...card.querySelectorAll('span,em,i')].some((e) => (e.textContent || '').trim() === '광고');
+    if ([...card.querySelectorAll('span,em,i')].some((e) => {
+      const t = (e.textContent || '').trim();
+      return t === '광고' || t === '슈퍼적립';
+    })) return true;
+    return [...card.querySelectorAll('[data-shp-contents-dtl]')].some((e) =>
+      /슈퍼적립|SUPER_POINT/i.test(e.getAttribute('data-shp-contents-dtl') || ''));
+  }
+  /** 오가닉 노출 순서 — 네이버가 로그 데이터로 주는 organic_expose_order(광고 제외 실제 순위). 없으면 0. */
+  function organicOrderOf(card) {
+    for (const el of card.querySelectorAll('[data-shp-contents-dtl]')) {
+      const m = (el.getAttribute('data-shp-contents-dtl') || '').match(/organic_expose_order"[^}]*?"value"\s*:\s*"?(\d+)/);
+      if (m) return parseInt(m[1], 10);
+    }
+    return 0;
   }
   // 랭킹 — data-shp-contents-rank 우선, 없으면 카드 순서
   function rankOf(card, idx) {
@@ -94,7 +108,7 @@
       const scoreCls = seo.score >= 80 ? ' hi' : (seo.score >= 60 ? '' : ' lo');
       const kws = (seo.used_keywords && seo.used_keywords.length) ? seo.used_keywords : [];
       box.innerHTML =
-        (ad ? '<span class="rf-ss-ad">광고</span>' : '<span class="rf-ss-rank">랭킹 ' + organicRank + '</span>') +
+        (ad ? '<span class="rf-ss-ad">광고</span>' : '<span class="rf-ss-rank">랭킹 ' + (organicOrderOf(card) || organicRank) + '</span>') +
         '<span class="rf-ss-score' + scoreCls + '">제목 점수 ' + seo.score + '</span>' +
         (kws.length
           ? '<span class="rf-ss-kw">제목 키워드 ' + kws.map((k) => '<b>' + esc(k) + '</b>').join(' · ') +
