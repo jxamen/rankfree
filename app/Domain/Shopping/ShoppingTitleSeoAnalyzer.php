@@ -4,6 +4,9 @@ namespace App\Domain\Shopping;
 
 use App\Domain\Blog\BlogIndexAnalyzer;
 use App\Domain\Keyword\NaverKeywordService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Throwable;
 
 /**
  * 쇼핑 상품명 SEO 분석 — 검색 리스트 상위(광고 제외) 상품명 기반.
@@ -59,14 +62,19 @@ class ShoppingTitleSeoAnalyzer
      */
     public function analyze(string $keyword, array $products): array
     {
-        // 광고 제외 상위 상품명(공통단어·추천의 근거)
-        $titles = [];
-        foreach ($products as $p) {
-            if (empty($p['is_ad']) && ! empty($p['title'])) {
-                $titles[] = (string) $p['title'];
+        // 공통단어 기준 제목 — 키워드 기준으로 서버가 고정(shop.json 상위).
+        // 호출 경로(네이버 페이지 배지·확장 패널·웹 시장분석)마다 보내는 상품이 달라도 같은 제목이 같은 점수가 되도록 한다.
+        $topTitles = $this->baseTitles($keyword);
+        if (! $topTitles) {
+            // 수집 실패 시에만 입력 상품(광고 제외 상위 40)으로 폴백
+            $titles = [];
+            foreach ($products as $p) {
+                if (empty($p['is_ad']) && ! empty($p['title'])) {
+                    $titles[] = (string) $p['title'];
+                }
             }
+            $topTitles = array_slice($titles, 0, 40);
         }
-        $topTitles = array_slice($titles, 0, 40);
 
         // ② 공통단어 — 상위 제목 명사 빈도(BlogIndexAnalyzer::topWords 재사용)
         $common = (new BlogIndexAnalyzer)->topWords(implode(' ', $topTitles), 25, 2); // [{word, count}]
@@ -82,6 +90,54 @@ class ShoppingTitleSeoAnalyzer
                 ];
             }, $products),
         ];
+    }
+
+    /**
+     * 공통단어 산출 기준 제목 — 키워드의 네이버 쇼핑 상위 40(openapi shop.json, sort=sim). 성공만 6시간 캐시.
+     * 점수 기준을 키워드에 고정해, 호출 경로(배지·패널·웹)별 입력 상품 차이로 같은 상품 점수가 갈리지 않게 한다.
+     * 실패 시 빈 배열 → 호출부에서 입력 상품으로 폴백.
+     */
+    private function baseTitles(string $keyword): array
+    {
+        $kw = trim($keyword);
+        if ($kw === '') {
+            return [];
+        }
+        $ck = 'shop_seo_base:'.md5(mb_strtolower($kw));
+        $hit = Cache::get($ck);
+        if (is_array($hit)) {
+            return $hit;
+        }
+
+        $titles = [];
+        foreach ((array) (config('rankfree.shopping')['api_keys'] ?? []) as $key) {
+            try {
+                $resp = Http::withHeaders([
+                    'X-Naver-Client-Id' => (string) ($key['id'] ?? ''),
+                    'X-Naver-Client-Secret' => (string) ($key['secret'] ?? ''),
+                ])->timeout(10)->get('https://openapi.naver.com/v1/search/shop.json', [
+                    'query' => $kw, 'display' => 40, 'start' => 1, 'sort' => 'sim',
+                ]);
+            } catch (Throwable $e) {
+                continue;
+            }
+            if ($resp->status() === 429) {
+                continue; // 한도 초과 — 다음 키로
+            }
+            if ($resp->status() !== 200) {
+                break;
+            }
+            $titles = array_values(array_filter(array_map(
+                fn ($it) => trim(strip_tags((string) ($it['title'] ?? ''))), // shop.json title 은 <b> 강조 포함
+                (array) ($resp->json()['items'] ?? [])
+            )));
+            break;
+        }
+        if ($titles) {
+            Cache::put($ck, $titles, 6 * 3600); // 성공만 캐시(실패는 다음 호출에 재시도)
+        }
+
+        return $titles;
     }
 
     /** 개별 제목 SEO 점수 + 제목에 사용된 키워드(표기용). */
@@ -107,11 +163,22 @@ class ShoppingTitleSeoAnalyzer
         // 종합: 키워드 적합 40% + 상위 공통단어 반영 30% + 길이 최적화 30%
         $score = (int) round($kwScore * 0.4 + $commonScore * 0.3 + $this->lenScore($len) * 0.3);
 
+        // 표기용 — 공통단어 매칭이 없으면 제목에 실제 든 검색 키워드 단어라도 보여준다(점수엔 미반영)
+        $shown = $used;
+        if (! $shown) {
+            foreach ($kwWords as $w) {
+                $wn = $this->norm((string) $w);
+                if ($wn !== '' && mb_strpos($t, $wn) !== false) {
+                    $shown[] = (string) $w;
+                }
+            }
+        }
+
         return [
             'score' => $score,
             'len' => $len,
             'kw_hit' => $kwHit,
-            'used_keywords' => array_slice($used, 0, 8),
+            'used_keywords' => array_slice($shown, 0, 8),
         ];
     }
 

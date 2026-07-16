@@ -49,6 +49,8 @@
   // 광고 카드 — 광고 전용 클래스(adProduct)·슈퍼적립(superSaving) 또는 카드 내 '광고' 배지
   function isAd(card) {
     if (/adProduct|superSaving|_ad_|__ad/i.test(card.className)) return true;
+    // 슈퍼적립·광고 표시가 바깥 컨테이너에만 있는 경우(안쪽 아이템 클래스엔 없음) → 조상까지 확인
+    if (card.closest('[class*="superSavingProduct"], [class*="adProduct"]')) return true;
     return [...card.querySelectorAll('span,em,i')].some((e) => (e.textContent || '').trim() === '광고');
   }
   // 랭킹 — data-shp-contents-rank 우선, 없으면 카드 순서
