@@ -93,6 +93,26 @@
         </div>
     @endif
 
+    {{-- 검색 + (플레이스) 지역 필터 --}}
+    <form method="GET" class="flex items-center gap-2 flex-wrap" style="margin-top:24px;">
+        <input type="search" name="q" value="{{ $q }}" placeholder="{{ $cat->name }} 키워드 검색" class="input" style="max-width:280px;height:40px;">
+        @if ($region !== '')<input type="hidden" name="region" value="{{ $region }}">@endif
+        <button type="submit" class="btn btn-secondary btn-sm" style="height:40px;">검색</button>
+        @if ($q !== '' || $region !== '')
+            <a href="{{ route('keywords.category', $cat->slug) }}" class="btn btn-ghost btn-sm" style="height:40px;">초기화</a>
+        @endif
+    </form>
+
+    @if ($regions->isNotEmpty())
+        <div class="flex flex-wrap items-center gap-2" style="margin-top:14px;">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">지역</span>
+            <a href="{{ route('keywords.category', ['slug' => $cat->slug, 'q' => $q ?: null]) }}" class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;{{ $region === '' ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">전체</a>
+            @foreach ($regions as $rg => $cnt)
+                <a href="{{ route('keywords.category', ['slug' => $cat->slug, 'region' => $rg, 'q' => $q ?: null]) }}" class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;{{ $region === $rg ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">{{ $rg }} <span class="font-mono">{{ number_format($cnt) }}</span></a>
+            @endforeach
+        </div>
+    @endif
+
     {{-- 키워드 문서 목록 (검색량순) --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style="margin-top:28px;">
         @forelse ($docs as $d)
