@@ -4,6 +4,7 @@
 @php
     $srcLabel = ['seed' => '시드', 'related' => '연관', 'autocomplete' => '자동완성', 'user' => '사용자', 'gsc' => '검색유입', 'datalab' => '데이터랩', 'combo' => '지역조합'];
     $stLabel = ['pending' => '대기', 'approved' => '승인', 'rejected' => '거부', 'published' => '발행됨'];
+    $rtLabel = ['hotplace' => '핫플', 'district' => '구', 'city' => '시', 'dong' => '동', 'travel' => '여행지'];
 @endphp
 
 @section('admin-content')
@@ -164,6 +165,8 @@
                     <option value="{{ $c->id }}" @selected($catId === $c->id)>{{ $c->parent ? $c->parent->name.' › ' : '' }}{{ $c->name }}</option>
                 @endforeach
             </select>
+            <input type="search" name="q" class="input" style="height:36px;width:160px;" placeholder="키워드 검색" value="{{ $q ?? '' }}">
+            <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
         </form>
     </div>
 
@@ -176,6 +179,7 @@
                         <th style="padding:8px 6px;width:34px;"><input type="checkbox" id="kh-all" title="전체 선택"></th>
                         <th style="padding:8px 6px;">키워드</th>
                         <th style="padding:8px 6px;">카테고리</th>
+                        <th style="padding:8px 6px;">지역</th>
                         <th style="padding:8px 6px;">출처</th>
                         <th style="padding:8px 6px;text-align:right;">월 검색량</th>
                         <th style="padding:8px 6px;">경쟁</th>
@@ -188,13 +192,14 @@
                             <td style="padding:7px 6px;"><input type="checkbox" name="ids[]" value="{{ $c->id }}" class="kh-ck"></td>
                             <td style="padding:7px 6px;" class="text-ink font-semibold">{{ $c->keyword }}</td>
                             <td style="padding:7px 6px;" class="text-muted">{{ $c->category?->name ?? '—' }}</td>
+                            <td style="padding:7px 6px;" class="text-muted">{{ $c->region ? $c->region.($c->region_type ? ' · '.($rtLabel[$c->region_type] ?? $c->region_type) : '') : '—' }}</td>
                             <td style="padding:7px 6px;"><span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ $srcLabel[$c->source] ?? $c->source }}</span></td>
                             <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $c->monthly_total === null ? '미상' : number_format($c->monthly_total) }}</td>
                             <td style="padding:7px 6px;" class="text-muted">{{ $c->comp_idx ?? '—' }}</td>
                             <td style="padding:7px 6px;" class="text-muted-soft">{{ $c->note }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="text-muted-soft text-center" style="padding:28px;">'{{ $stLabel[$status] }}' 상태의 후보가 없습니다.</td></tr>
+                        <tr><td colspan="8" class="text-muted-soft text-center" style="padding:28px;">'{{ $stLabel[$status] }}' 상태의 후보가 없습니다.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -210,6 +215,21 @@
             </div>
         @endif
     </form>
+
+    {{-- 필터 전체 일괄 처리 — 페이지 선택이 아니라 현재 필터(상태·카테고리·출처·검색어) 전체에 적용(대량 시딩 운영용) --}}
+    @if ($candidates->total() > 0)
+        <form method="POST" action="{{ route('admin.keyword-hub.candidates.bulk-all') }}" class="flex items-center gap-2 mt-3 pt-3 flex-wrap" style="border-top:1px solid var(--color-hairline-soft);">
+            @csrf
+            <input type="hidden" name="status" value="{{ $status }}">
+            <input type="hidden" name="category" value="{{ $catId ?: '' }}">
+            <input type="hidden" name="source" value="{{ $source ?? '' }}">
+            <input type="hidden" name="q" value="{{ $q ?? '' }}">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">필터 전체 <b class="font-mono">{{ number_format($candidates->total()) }}</b>건 일괄:</span>
+            <button type="submit" name="action" value="approve" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 승인할까요?" data-confirm-text="승인된 후보는 hub:publish 크론이 검색량 큰 순으로 발행합니다.">전체 승인</button>
+            <button type="submit" name="action" value="reject" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 거부할까요?">전체 거부</button>
+            <button type="submit" name="action" value="delete" class="btn btn-ghost btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 삭제할까요?" data-confirm-text="삭제는 되돌릴 수 없습니다.">전체 삭제</button>
+        </form>
+    @endif
 
     <div class="mt-3">{{ $candidates->links() }}</div>
 </div>
