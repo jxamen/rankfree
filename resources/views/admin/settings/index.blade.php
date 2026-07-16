@@ -12,6 +12,7 @@
 @endpush
 
 @section('admin-content')
+<x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
 <form method="POST" action="{{ route('admin.settings.update') }}">
     @csrf @method('PUT')
 
@@ -19,6 +20,7 @@
         <button type="button" class="rf-tab on" data-tab="basic" role="tab">광고·데이터 API</button>
         <button type="button" class="rf-tab" data-tab="api" role="tab">AI API</button>
         <button type="button" class="rf-tab" data-tab="integ" role="tab">외부 연동</button>
+        <button type="button" class="rf-tab" data-tab="member" role="tab">회원</button>
         <button type="button" class="rf-tab" data-tab="custom" role="tab">커스텀 코드</button>
     </div>
 
@@ -77,6 +79,29 @@
             'providers' => $aiProviders,
             'live' => $liveAi,
         ])
+
+        {{-- 커뮤니티 글 재작성(글밥 → AI 재작성) 설정 --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">커뮤니티 글 재작성 <span class="text-muted-soft" style="font-weight:400;">수집 글밥 → 페르소나 글·댓글</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+                수집한 글밥(카페 인기글·댓글)을 어떤 AI 로 재작성할지 정합니다. 키는 위 <b>AI 모델 API 키</b>에 등록하세요.
+                <b>자동</b>은 Gemini(무료 티어) 우선, 실패 시 Claude 순으로 시도합니다.
+            </p>
+            <div class="mb-3" style="max-width:560px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">재작성 AI 공급자</label>
+                <select name="community_rewrite_provider" class="input" style="width:100%;font-size:var(--fs-xs);">
+                    <option value="auto" @selected($rewriteProvider === 'auto')>자동 — Gemini 우선, 실패 시 Claude</option>
+                    <option value="gemini" @selected($rewriteProvider === 'gemini')>Gemini (Google)</option>
+                    <option value="anthropic" @selected($rewriteProvider === 'anthropic')>Claude (Anthropic)</option>
+                    <option value="off" @selected($rewriteProvider === 'off')>사용 안 함 — AI 재작성 끄기</option>
+                </select>
+            </div>
+            @include('admin.settings._simplefield', ['name' => 'community_rewrite_model', 'label' => '모델 (비우면 공급자 기본 — Gemini: gemini-2.5-flash · Claude: claude-opus-4-8)', 'value' => $rewriteModel, 'secret' => false, 'placeholder' => 'gemini-2.5-flash'])
+            <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);color:var(--color-muted);cursor:pointer;">
+                <input type="checkbox" name="community_rewrite_fallback" value="1" @checked($rewriteFallback)>
+                AI 호출 실패 시 글밥 원문을 가볍게 변형해 사용 <span class="text-muted-soft">(끄면 재작성 실패 시 글밥을 쓰지 않고 일반 문장 생성)</span>
+            </label>
+        </div>
     </div>
 
     {{-- ── 외부 연동: Cloudflare · 소셜 로그인 · 알리고 SMS ──────────────── --}}
@@ -120,6 +145,28 @@
         </div>
     </div>
 
+    {{-- ── 회원: 추천인 보상 ──────────────────────────────────────────── --}}
+    <div class="rf-tabpane" data-tab="member" hidden>
+        <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">추천인 보상 — 순위체크 슬롯</div>
+        <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
+            회원의 <b class="text-muted">마이페이지 추천 링크</b>로 가입이 완료되면 추천인의 순위 추적 가능 개수(플레이스+쇼핑 합산 한도)가 자동으로 늘어납니다.
+            가입 화면에는 추천인 입력칸이 없고, 링크로 진입하면 백엔드에서 자동 처리됩니다.
+        </p>
+        <div class="flex gap-4 flex-wrap">
+            <div style="width:220px;">
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">추천 1회당 증가 개수</label>
+                <input type="number" name="referral_bonus_per" min="0" value="{{ old('referral_bonus_per', $referralPer) }}" class="input text-right" style="width:100%;">
+            </div>
+            <div style="width:220px;">
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">추천으로 늘릴 수 있는 최대 개수</label>
+                <input type="number" name="referral_bonus_max" min="0" value="{{ old('referral_bonus_max', $referralMax) }}" class="input text-right" style="width:100%;">
+            </div>
+        </div>
+        <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
+            예) 1회당 20 · 최대 200 → 추천 가입 10명까지 슬롯 +200개. 이미 최대치에 도달한 추천인은 추천 관계만 기록되고 더 늘지 않습니다.
+        </p>
+    </div>
+
     {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}
     <div class="rf-tabpane" data-tab="custom" hidden>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
@@ -130,13 +177,13 @@
         <div class="mb-5">
             <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 CSS</label>
             <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><code>&lt;style&gt;</code>로 자동 감싸 삽입됩니다. CSS만 입력하세요.</div>
-            <textarea name="custom_head_css" spellcheck="false" placeholder=".btn-primary { border-radius: 8px; }" class="input" style="width:100%;height:500px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_css', $customCss) }}</textarea>
+            <textarea name="custom_head_css" spellcheck="false" placeholder=".btn-primary { border-radius: 8px; }" class="input" style="width:100%;height:300px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_css', $customCss) }}</textarea>
         </div>
 
         <div class="mb-2">
             <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 스크립트 · head HTML</label>
             <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><b>원문 그대로</b> 삽입됩니다. <code>&lt;script&gt;</code>·<code>&lt;meta&gt;</code>·<code>&lt;link&gt;</code> 태그를 직접 포함하세요.</div>
-            <textarea name="custom_head_html" spellcheck="false" placeholder="&lt;meta name=&quot;...&quot; content=&quot;...&quot;&gt;&#10;&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;height:500px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
+            <textarea name="custom_head_html" spellcheck="false" placeholder="&lt;meta name=&quot;...&quot; content=&quot;...&quot;&gt;&#10;&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;height:300px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
         </div>
     </div>
 

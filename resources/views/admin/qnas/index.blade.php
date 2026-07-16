@@ -2,6 +2,8 @@
 @section('page-title', '1:1 문의 관리')
 
 @section('admin-content')
+<x-console.page-head title="1:1 문의" desc="사용자 1:1 문의 답변·상태 관리 · 미답변 문의를 우선 확인하세요" />
+
 <div class="flex items-center gap-2 mb-4">
     @foreach ([['' => '전체'], ['pending' => '미답변'], ['answered' => '답변완료']] as $opt)
         @foreach ($opt as $val => $label)

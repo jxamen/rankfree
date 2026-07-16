@@ -249,6 +249,7 @@
                             <div class="text-ink font-semibold truncate" style="font-size:var(--fs-sm);">{{ $__nm }}</div>
                             <div class="text-muted-soft truncate" style="font-size:var(--fs-xs);">{{ $__u?->email }}</div>
                         </div>
+                        <a href="{{ route('console.me') }}" class="btn btn-secondary btn-sm w-full mb-2" style="display:flex;">마이페이지</a>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="btn btn-secondary btn-sm w-full">로그아웃</button>

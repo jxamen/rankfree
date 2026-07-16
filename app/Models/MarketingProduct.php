@@ -50,6 +50,12 @@ class MarketingProduct extends Model
         return $this->hasMany(MarketingOrder::class, 'product_id');
     }
 
+    /** 외부 발주 업체 배분 설정. */
+    public function vendorAllocations(): HasMany
+    {
+        return $this->hasMany(ProductVendor::class, 'product_id')->orderBy('sort_order');
+    }
+
     public function type()
     {
         return ProductType::where('code', $this->product_type)->first();

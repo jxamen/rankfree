@@ -6,7 +6,9 @@
 @endsection
 
 @section('admin-content')
-<form method="POST" action="{{ $popup->exists ? route('admin.popups.update', $popup) : route('admin.popups.store') }}" style="max-width:820px;">
+<x-console.page-head :title="$popup->exists ? '팝업 수정' : '새 팝업'" desc="대시보드 진입 팝업 구성 · 위치·크기·노출 기간을 지정합니다" />
+
+<form method="POST" action="{{ $popup->exists ? route('admin.popups.update', $popup) : route('admin.popups.store') }}">
     @csrf
     @if ($popup->exists) @method('PUT') @endif
 

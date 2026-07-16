@@ -6,7 +6,9 @@
 @endsection
 
 @section('admin-content')
-<form method="POST" action="{{ $faq->exists ? route('admin.faqs.update', $faq) : route('admin.faqs.store') }}" style="max-width:820px;">
+<x-console.page-head :title="$faq->exists ? 'FAQ 수정' : '새 FAQ'" desc="자주 묻는 질문 작성 · 카테고리·게시 여부를 설정합니다" />
+
+<form method="POST" action="{{ $faq->exists ? route('admin.faqs.update', $faq) : route('admin.faqs.store') }}">
     @csrf
     @if ($faq->exists) @method('PUT') @endif
 

@@ -46,4 +46,9 @@ class MarketingOrder extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function dispatches(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OrderDispatch::class, 'order_id');
+    }
 }

@@ -8,7 +8,9 @@
     $prefCats = array_map('intval', (array) old('preferred_categories', $persona->preferred_categories ?? []));
 @endphp
 
-<form method="POST" action="{{ $persona->exists ? route('admin.personas.update', $persona) : route('admin.personas.store') }}" class="max-w-3xl">
+<x-console.page-head :title="$persona->exists ? '페르소나 수정' : '새 페르소나'" desc="커뮤니티 자동 활동용 가상 페르소나 프로필·활동 시간·관심사를 설정합니다" />
+
+<form method="POST" action="{{ $persona->exists ? route('admin.personas.update', $persona) : route('admin.personas.store') }}">
     @csrf
     @if ($persona->exists) @method('PUT') @endif
 

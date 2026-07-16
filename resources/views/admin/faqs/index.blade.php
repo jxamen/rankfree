@@ -6,6 +6,8 @@
 @endsection
 
 @section('admin-content')
+<x-console.page-head title="FAQ" desc="자주 묻는 질문 작성·게시 관리 · 카테고리·정렬 순서를 지정합니다" />
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:820px;">

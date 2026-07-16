@@ -36,10 +36,7 @@
             <input name="name" type="text" class="input" value="{{ old('name') }}" required>
         </div>
         @include('auth._phone-verify')
-        <div>
-            <label class="block text-muted mb-1.5" style="font-size:var(--fs-xs);font-weight:600;">추천인 코드 <span class="text-muted-soft">(선택 · +20개)</span></label>
-            <input name="referral" type="text" class="input" value="{{ old('referral') }}" placeholder="추천인 코드가 있다면 입력">
-        </div>
+        {{-- 추천인: 입력칸 없음 — 추천 링크(/register?ref=CODE)로 진입하면 백엔드에서 자동 처리 --}}
         <button type="submit" class="btn btn-primary btn-lg mt-1">무료로 시작</button>
     </form>
 @endsection

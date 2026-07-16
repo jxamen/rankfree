@@ -110,5 +110,32 @@ return [
         'schedule_enabled' => (bool) env('COMMUNITY_SCHEDULE_ENABLED', true),
         // 한 번의 활동에서 글:댓글:좋아요 기본 비율(페르소나 가중치와 곱해짐)
         'mix' => ['post' => 1, 'comment' => 3, 'like' => 5],
+        // 글밥 재작성(AI) — 어드민 환경 설정에서 오버라이드(SettingsServiceProvider)
+        'rewrite' => [
+            'provider' => env('COMMUNITY_REWRITE_PROVIDER', 'auto'), // auto(Gemini 우선)|gemini|anthropic|off
+            'model' => env('COMMUNITY_REWRITE_MODEL', ''),           // 빈값 = 공급자 기본 모델
+            'fallback' => (bool) env('COMMUNITY_REWRITE_FALLBACK', true), // AI 실패 시 원문 가벼운 변형 사용 허용
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | 카페 글감 수집 (cafe:crawl) — scripts/naver-cafe-crawler.cjs 연동
+    |--------------------------------------------------------------------------
+    | 네이버 카페 인기글(제목·본문·작성일·댓글)을 수집해 cafe_crawl_* 에 저장하고,
+    | --seed 옵션으로 커뮤니티 글밥(community_seeds)으로 전환한다.
+    | 로그인 세션은 scripts/.naver-cafe-profile — 카페 멤버 계정으로
+    | `node scripts/naver-cafe-crawler.cjs --reset --headful` 1회 로그인 필요.
+    */
+    'cafe_crawl' => [
+        'node' => env('RANKFREE_NODE_BIN', 'node'),
+        // 어드민 '지금 수집' 버튼의 백그라운드 artisan 실행용 php 경로(빈값=자동 감지)
+        'php_bin' => env('RANKFREE_PHP_BIN', ''),
+        // 수집 대상 카페 ID (기본: 아프니까사장이다)
+        'cafe_id' => (int) env('CAFE_CRAWL_CAFE_ID', 23611966),
+        // 스케줄 자동 수집 on/off
+        'schedule_enabled' => (bool) env('CAFE_CRAWL_SCHEDULE_ENABLED', true),
+        // 글밥 전환 시 댓글 최소 길이(이보다 짧은 댓글은 글밥으로 안 씀)
+        'seed_min_comment_length' => (int) env('CAFE_CRAWL_SEED_MIN_COMMENT', 8),
     ],
 ];

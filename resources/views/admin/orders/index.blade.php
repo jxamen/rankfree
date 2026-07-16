@@ -6,6 +6,7 @@
     $statusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
     $total = $counts->sum();
 @endphp
+<x-console.page-head title="주문 관리" desc="셀프마케팅 상품 주문 접수·진행 상태 관리 · 상태별로 필터링할 수 있습니다" />
 
 @if (session('status'))
     <div class="card-soft px-4 py-3 mb-4 text-muted" style="font-size:var(--fs-xs);">{{ session('status') }}</div>

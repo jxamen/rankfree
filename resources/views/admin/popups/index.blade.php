@@ -6,7 +6,7 @@
 @endsection
 
 @section('admin-content')
-<p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">대시보드 진입 시 표시되는 팝업입니다. 위치·크기·노출 기간을 지정할 수 있습니다.</p>
+<x-console.page-head title="팝업 관리" desc="대시보드 진입 시 표시되는 팝업 · 위치·크기·노출 기간을 지정할 수 있습니다" />
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:820px;">

@@ -54,6 +54,13 @@ class SettingsController extends Controller
             'aligoUserId' => AppSetting::read('aligo.user_id'),
             'aligoApiKey' => AppSetting::read('aligo.api_key'),
             'aligoSender' => AppSetting::read('aligo.sender') ?: '1668-3721',
+            // 커뮤니티 글 재작성(AI) — SettingsServiceProvider 가 이미 config 에 반영한 값
+            'rewriteProvider' => (string) config('rankfree.community.rewrite.provider', 'auto'),
+            'rewriteModel' => (string) config('rankfree.community.rewrite.model', ''),
+            'rewriteFallback' => (bool) config('rankfree.community.rewrite.fallback', true),
+            // 회원 — 추천인 보상(순위체크 보너스 슬롯)
+            'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
+            'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
         ]);
     }
 
@@ -86,6 +93,16 @@ class SettingsController extends Controller
         foreach (self::SIMPLE as $key => $field) {
             AppSetting::write($key, trim((string) $request->input($field, '')));
         }
+
+        // 커뮤니티 글 재작성(AI) 설정
+        $provider = (string) $request->input('community_rewrite_provider', 'auto');
+        AppSetting::write('community.rewrite_provider', in_array($provider, ['auto', 'gemini', 'anthropic', 'off'], true) ? $provider : 'auto');
+        AppSetting::write('community.rewrite_model', trim((string) $request->input('community_rewrite_model', '')));
+        AppSetting::write('community.rewrite_fallback', $request->boolean('community_rewrite_fallback') ? '1' : '0');
+
+        // 회원 — 추천인 보상 설정 (1회당 증가량 · 최대 증가량)
+        AppSetting::write('referral.bonus_per', (string) max(0, (int) $request->input('referral_bonus_per', 20)));
+        AppSetting::write('referral.bonus_max', (string) max(0, (int) $request->input('referral_bonus_max', 200)));
 
         return redirect()->route('admin.settings')->with('status', '환경 설정을 저장했습니다.');
     }

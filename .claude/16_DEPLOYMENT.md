@@ -21,7 +21,7 @@
 ### 확정 파라미터 / 진행 상태 (2026-07-13)
 - **배포 완료(0~6단계) — rankfree.kr 공개 라이브** 🎉. 외부에서 `HTTP 200 OK`, `X-Powered-By: PHP/8.3.32`(php83-fpm), HTTP/2, Laravel 세션 정상. crm·실사용 도메인 전부 무영향. DNS `rankfree.kr`·`www` → 서버 IP `49.247.13.187`. 프로덕션 캐시(config/route/view) 적용.
 - 서버 IP: `49.247.13.187`. **서버에서 `curl https://rankfree.kr`가 빈 응답인 건 NAT 헤어핀(자기 공인IP 루프백 미지원)일 뿐 정상** — 외부/로컬 `--resolve 127.0.0.1` 테스트는 200. `.env` 변경 시 `php83 artisan config:cache` 재실행 필요.
-- 스케줄러/큐: 앱에 예약작업·`ShouldQueue` 잡 없음 → 크론/워커 불필요. 확장 기본 서버 = `https://rankfree.kr`(코드 기본값, 로그인 폼에 프리필).
+- 스케줄러: **jcurve crontab에 `* * * * * cd /www/jcurve/rankfree && php83 artisan schedule:run` 등록·가동 중**(2026-07-15 실행 확인). 스케줄 목록은 routes/console.php — 플레이스 순위 일 2회(11:30·16:30 KST)·쇼핑 매시간·스마트플레이스 03:00·searchadweb 세션 매시간. 큐 워커는 미사용. 확장 기본 서버 = `https://rankfree.kr`(코드 기본값, 로그인 폼에 프리필).
 
 ### 기능 활성화 — 운영 .env·Playwright·세션 (필수)
 > `.env`는 시크릿이라 git으로 안 옮김. 아래를 운영 `.env`에 채워야 각 기능이 동작. **`.env` 변경 시 반드시 `php83 artisan config:cache`**(config 캐시 상태라 안 하면 반영 안 됨).

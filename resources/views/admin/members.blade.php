@@ -3,6 +3,7 @@
 
 @section('admin-content')
 @php $isSuper = auth()->user()?->isSuperAdmin(); @endphp
+<x-console.page-head title="회원 관리" desc="회원 조회·등급/역할 변경 · 구독 상태와 이용 현황을 관리합니다" />
 
 @if ($errors->any())
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>

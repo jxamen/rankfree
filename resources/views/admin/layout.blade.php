@@ -1,10 +1,45 @@
+@php
+    // 페이지 제목·브레드크럼 — 콘솔 레이아웃과 동일 규칙(area 만 admin).
+    // 메뉴 페이지: [그룹] › [메뉴명]. 상세 페이지: 라우트명 축약(admin.orders.show → admin.orders)으로
+    // 부모 메뉴를 찾고(@section('crumb-parent','라우트명')로 지정 가능), 마지막 조각은 @section('crumb-title'), 없으면 페이지 제목.
+    $__rn = \Illuminate\Support\Facades\Route::currentRouteName();
+    $__menu = $__rn ? \App\Models\Menu::where('area', 'admin')->where('route', $__rn)->first() : null;
+    $__pageTitle = $__menu?->name ?: (trim($__env->yieldContent('page-title')) ?: '관리자');
+
+    $__crumbs = [];
+    if ($__menu) {
+        if ($__menu->parent?->is_group) {
+            $__crumbs[] = [$__menu->parent->name, null];
+        }
+        $__crumbs[] = [$__pageTitle, null];
+    } else {
+        $__parentMenu = null;
+        $__crumbParent = trim($__env->yieldContent('crumb-parent'));
+        if ($__crumbParent !== '') {
+            $__parentMenu = \App\Models\Menu::where('area', 'admin')->where('route', $__crumbParent)->first();
+        } else {
+            $__cand = (string) $__rn;
+            while (! $__parentMenu && ($__pos = strrpos($__cand, '.')) !== false) {
+                $__cand = substr($__cand, 0, $__pos);
+                $__parentMenu = \App\Models\Menu::where('area', 'admin')->where('route', $__cand)->first();
+            }
+        }
+        if ($__parentMenu) {
+            if ($__parentMenu->parent?->is_group) {
+                $__crumbs[] = [$__parentMenu->parent->name, null];
+            }
+            $__crumbs[] = [$__parentMenu->name, $__parentMenu->resolvedUrl()];
+        }
+        $__crumbs[] = [trim($__env->yieldContent('crumb-title')) ?: $__pageTitle, null];
+    }
+@endphp
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>@yield('page-title', '관리자') · 랭크프리</title>
+    <title>{{ $__pageTitle }} · 랭크프리 관리자</title>
     {{-- 다크모드 선적용(FOUC 방지) — 콘솔과 동일 --}}
     <script>if (localStorage.getItem('rf-theme') === 'dark') document.documentElement.classList.add('theme-dark');</script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -154,7 +189,10 @@
                 <button type="button" id="rf-sb-toggle" class="lg:hidden btn btn-ghost btn-sm" title="메뉴" style="padding:0 10px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
                 </button>
-                <h1 class="font-display text-ink" style="font-size:var(--fs-lg);">@yield('page-title', '관리자')</h1>
+                {{-- 브레드크럼 — 그룹 › 메뉴(링크) › 현재. 데스크톱은 헤더 한 줄, 모바일은 콘텐츠 타이틀 위 --}}
+                <div class="hidden lg:block min-w-0">
+                    @include('console.partials.crumbs', ['crumbs' => $__crumbs])
+                </div>
             </div>
             <div class="flex items-center gap-2">
                 @yield('page-actions')
@@ -188,6 +226,10 @@
         </header>
         <main class="p-4 sm:p-8 flex-1">
             <div style="max-width:1440px;margin:0 auto;">
+                {{-- 모바일: 헤더 줄이 좁아 브레드크럼을 콘텐츠 타이틀 위에 표시 --}}
+                <div class="lg:hidden mb-5">
+                    @include('console.partials.crumbs', ['crumbs' => $__crumbs, 'currentTag' => 'span'])
+                </div>
                 @if (session('status'))
                     <div class="card-soft mb-6 px-4 py-3 text-ink" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
                 @endif

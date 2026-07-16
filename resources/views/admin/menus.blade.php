@@ -3,6 +3,8 @@
 
 @section('admin-content')
 <div>
+    <x-console.page-head title="메뉴 관리" desc="콘솔·관리자 메뉴 트리와 사이트 SEO 관리 · 이름 변경은 사이드바·헤더·브레드크럼에 즉시 반영됩니다" />
+
     {{-- area 탭 --}}
     <div class="flex gap-2 mb-5 items-center flex-wrap">
         @foreach (['console' => '콘솔 메뉴', 'admin' => '관리 메뉴', 'site' => '사이트 SEO'] as $a => $l)

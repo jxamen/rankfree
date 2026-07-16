@@ -36,16 +36,6 @@
         </div>
     @endif
 
-    {{-- 상품 헤더 --}}
-    <div class="mb-5">
-        <div class="badge mb-2 border border-hairline" style="font-size:var(--fs-xs);">{{ $product->type()->name ?? $product->product_type }}</div>
-        <h1 class="text-ink font-display" style="font-size:var(--fs-xl);line-height:1.25;">{{ $product->title }}</h1>
-        @if ($product->description)
-            <p class="text-muted mt-2" style="font-size:var(--fs-sm);line-height:1.7;white-space:pre-line;">{{ $product->description }}</p>
-        @endif
-        <div class="text-ink font-display mt-3" style="font-size:var(--fs-lg);">{{ number_format($product->min_price) }}<span class="text-muted-soft" style="font-size:var(--fs-xs);">원 / 단가</span></div>
-    </div>
-
     @if ($errors->any())
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
@@ -55,8 +45,17 @@
           data-unit="{{ $product->min_price }}" data-qty="{{ $qtyName }}" data-start="{{ $startName }}" data-end="{{ $endName }}" data-days="{{ $daysName }}">
         @csrf
 
-        {{-- 스텝 1: 수량 · 기간 --}}
+        {{-- 스텝 1: 상품 정보 + 수량 · 기간 (같은 카드) --}}
         <div class="card p-5 mb-4 {{ $stepClass }}" data-step="0">
+            {{-- 상품 헤더 — 유형 · 상품명 · 설명 · 단가 --}}
+            <div class="pb-4 mb-4 border-b border-hairline-soft">
+                <div class="badge mb-2 border border-hairline" style="font-size:var(--fs-xs);">{{ $product->type()->name ?? $product->product_type }}</div>
+                <h1 class="text-ink font-display" style="font-size:var(--fs-xl);line-height:1.25;">{{ $product->title }}</h1>
+                @if ($product->description)
+                    <p class="text-muted mt-2" style="font-size:var(--fs-sm);line-height:1.7;white-space:pre-line;">{{ $product->description }}</p>
+                @endif
+                <div class="text-ink font-display mt-3" style="font-size:var(--fs-lg);">{{ number_format($product->min_price) }}<span class="text-muted-soft" style="font-size:var(--fs-xs);">원 / 단가</span></div>
+            </div>
             <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">수량 · 기간</div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div data-required="1">
@@ -87,9 +86,36 @@
             @if ($startField || $endField)
                 <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">가장 빠른 시작일: {{ $minDate }} · 금액은 일수량 × 진행일수로 계산됩니다.</div>
             @endif
+
+            {{-- 비스텝 모드: 입력 정보 · 주문자 · 예상 금액 · 주문까지 같은 카드에.
+                 단계(그룹)가 설정돼 있으면 인라인에서도 그룹 제목으로 구분해 표시 --}}
+            @unless ($stepMode)
+                @foreach ($infoGroups as $g)
+                    <div class="pt-4 mt-4 border-t border-hairline-soft flex flex-col gap-4">
+                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $infoGroups->count() > 1 ? $g['name'] : ($g['name'] !== '주문 정보' ? $g['name'] : '주문 입력 정보') }}</div>
+                        @foreach ($g['fields'] as $f)
+                            @include('order._field', ['f' => $f, 'minDate' => $minDate])
+                        @endforeach
+                    </div>
+                @endforeach
+                <div class="pt-4 mt-4 border-t border-hairline-soft">
+                    <div class="flex items-center gap-2 text-muted mb-3" style="font-size:var(--fs-xs);">
+                        <span>주문자</span>
+                        <span class="text-ink font-medium">{{ auth()->user()->name }}</span>
+                        <span class="text-muted-soft">{{ auth()->user()->email }}</span>
+                    </div>
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                            <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
+                            <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="height:46px;padding:0 30px;">주문하기</button>
+                    </div>
+                </div>
+            @endunless
         </div>
 
-        {{-- 주문 입력 정보 --}}
+        {{-- 주문 입력 정보 (스텝 모드) --}}
         @if ($stepMode)
             @foreach ($infoGroups as $i => $g)
                 <div class="card p-5 mb-4 order-step" data-step="{{ $i + 1 }}">
@@ -101,39 +127,30 @@
                     </div>
                 </div>
             @endforeach
-        @elseif ($infoFields->count())
-            <div class="card p-5 mb-4 flex flex-col gap-4">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 입력 정보</div>
-                @foreach ($infoFields as $f)
-                    @include('order._field', ['f' => $f, 'minDate' => $minDate])
-                @endforeach
-            </div>
         @endif
 
-        {{-- 주문자 (로그인 회원 자동 연결) --}}
-        <div class="card-soft px-4 py-3 mb-4 flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);">
-            <span>주문자</span>
-            <span class="text-ink font-medium">{{ auth()->user()->name }}</span>
-            <span class="text-muted-soft">{{ auth()->user()->email }}</span>
-        </div>
-
-        {{-- 합계 + 네비/제출 --}}
-        <div class="card p-5 flex items-center justify-between flex-wrap gap-3">
-            <div>
-                <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
-                <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
+        @if ($stepMode)
+            {{-- 주문자 (로그인 회원 자동 연결) --}}
+            <div class="card-soft px-4 py-3 mb-4 flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);">
+                <span>주문자</span>
+                <span class="text-ink font-medium">{{ auth()->user()->name }}</span>
+                <span class="text-muted-soft">{{ auth()->user()->email }}</span>
             </div>
-            @if ($stepMode)
+
+            {{-- 합계 + 스텝 네비/제출 — 모든 스텝에서 보여야 하므로 별도 카드 유지 --}}
+            <div class="card p-5 flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
+                    <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
+                </div>
                 <div class="flex items-center gap-2">
                     <span id="o-stepind" class="text-muted-soft" style="font-size:var(--fs-xs);margin-right:4px;"></span>
                     <button type="button" id="o-prev" class="btn btn-secondary" style="display:none;">이전</button>
                     <button type="button" id="o-next" class="btn btn-primary">다음</button>
                     <button type="submit" id="o-submit" class="btn btn-primary" style="display:none;height:46px;padding:0 30px;">주문하기</button>
                 </div>
-            @else
-                <button type="submit" class="btn btn-primary" style="height:46px;padding:0 30px;">주문하기</button>
-            @endif
-        </div>
+            </div>
+        @endif
     </form>
 </section>
 

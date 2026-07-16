@@ -37,12 +37,43 @@ class MarketingOrderController extends Controller
         ]);
     }
 
-    public function show(MarketingOrder $order)
+    public function show(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        $order->load('product.fields', 'product.vendorAllocations.vendor', 'user', 'dispatches');
+
+        // 승인 전 배분 미리보기 — 활성 업체 배분에 이 주문 수량을 적용한 결과
+        $allocRows = $order->product
+            ? $order->product->vendorAllocations->where('is_active', true)->filter(fn ($pv) => $pv->vendor && $pv->vendor->is_active)->values()
+            : collect();
+        $allocPreview = $allocRows->isNotEmpty() ? $dispatcher->allocate($order->quantity, $allocRows) : [];
+
         return view('admin.orders.show', [
-            'order' => $order->load('product.fields', 'user'),
+            'order' => $order,
             'statuses' => MarketingOrder::STATUSES,
+            'allocPreview' => $allocPreview,
         ]);
+    }
+
+    /** 승인 — 상품의 업체 배분 설정대로 외부 발주(API/구글시트) 후 진행중으로 전환. */
+    public function approve(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
+    {
+        $result = $dispatcher->dispatch($order);
+        if (! $result['ok']) {
+            return back()->withErrors(['approve' => $result['message']]);
+        }
+        if ($order->status === 'pending') {
+            $order->update(['status' => 'processing']);
+        }
+
+        return back()->with('status', "주문 {$order->order_no} 승인 — ".$result['message']);
+    }
+
+    /** 실패한 업체 전송 건 재전송. */
+    public function retryDispatch(\App\Models\OrderDispatch $dispatch, \App\Domain\Order\OrderDispatchService $dispatcher)
+    {
+        $d = $dispatcher->retry($dispatch);
+
+        return back()->with('status', "'{$d->vendor_name}' 재전송 — ".\App\Models\OrderDispatch::STATUSES[$d->status]);
     }
 
     public function updateStatus(Request $request, MarketingOrder $order)

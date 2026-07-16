@@ -6,6 +6,8 @@ use App\Models\CommunityCategory;
 use App\Models\CommunityComment;
 use App\Models\CommunityLike;
 use App\Models\CommunityPost;
+use App\Models\CommunitySeed;
+use App\Models\CommunitySeedUsage;
 use App\Models\Persona;
 use Illuminate\Support\Carbon;
 
@@ -109,7 +111,7 @@ class CommunityActivitySimulator
             return false;
         }
         $at = $this->naturalTimestamp();
-        CommunityPost::create([
+        $post = CommunityPost::create([
             'category_id' => $category->id,
             'author_type' => 'persona',
             'persona_id' => $persona->id,
@@ -121,6 +123,7 @@ class CommunityActivitySimulator
         ]);
         $persona->increment('posts_count');
         $persona->update(['last_acted_at' => now()]);
+        $this->recordSeedUsage($content, $persona, 'post', $post->id, null);
 
         return true;
     }
@@ -134,24 +137,42 @@ class CommunityActivitySimulator
         if (! $post) {
             return false;
         }
-        $text = $this->generator->generateComment($persona, $post);
-        if (! $text) {
+        $gen = $this->generator->generateComment($persona, $post);
+        if (! $gen || trim($gen['text']) === '') {
             return false;
         }
         $at = $this->naturalTimestamp($post->created_at);
-        CommunityComment::create([
+        $comment = CommunityComment::create([
             'post_id' => $post->id,
             'author_type' => 'persona',
             'persona_id' => $persona->id,
-            'body' => $text,
+            'body' => $gen['text'],
             'created_at' => $at,
             'updated_at' => $at,
         ]);
         $post->increment('comments_count');
         $persona->increment('comments_count');
         $persona->update(['last_acted_at' => now()]);
+        $this->recordSeedUsage($gen, $persona, 'comment', null, $comment->id);
 
         return true;
+    }
+
+    /** 글밥 사용 이력 기록 — 어떤 글밥이 언제·어떤 AI 로 재작성돼 어떤 결과물이 됐는지. */
+    private function recordSeedUsage(array $gen, Persona $persona, string $usedFor, ?int $postId, ?int $commentId): void
+    {
+        if (empty($gen['seed_id'])) {
+            return;
+        }
+        CommunitySeedUsage::create([
+            'seed_id' => $gen['seed_id'],
+            'persona_id' => $persona->id,
+            'used_for' => $usedFor,
+            'post_id' => $postId,
+            'comment_id' => $commentId,
+            'provider' => $gen['provider'] ?? null,
+        ]);
+        CommunitySeed::whereKey($gen['seed_id'])->update(['last_used_at' => now()]);
     }
 
     private function doLike(Persona $persona): bool

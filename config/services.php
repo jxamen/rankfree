@@ -42,9 +42,10 @@ return [
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'), // 대량 활동 시 'claude-haiku-4-5' 로 비용 절감 가능
     ],
 
-    // Google Gemini · OpenAI — 환경 설정에서 등록. 현재는 저장·표시용(향후 AI 기능 확장 대비).
+    // Google Gemini — 커뮤니티 글 재작성 기본 공급자(무료 티어). OpenAI 는 저장·표시용.
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
     ],
     'openai' => [
         'key' => env('OPENAI_API_KEY'),

@@ -49,6 +49,7 @@ class MarketingProductController extends Controller
         $data = $this->validated($request);
         $product = MarketingProduct::create($data + ['created_by' => $request->user()->id]);
         $this->syncFields($product, $request);
+        $this->syncVendors($product, $request);
 
         return redirect()->route('admin.products.edit', $product)->with('status', '상품이 생성되었습니다. 주문 URL이 발급되었습니다.');
     }
@@ -57,6 +58,7 @@ class MarketingProductController extends Controller
     {
         $product->update($this->validated($request));
         $this->syncFields($product, $request);
+        $this->syncVendors($product, $request);
 
         return redirect()->route('admin.products.edit', $product)->with('status', '상품이 저장되었습니다.');
     }
@@ -92,8 +94,19 @@ class MarketingProductController extends Controller
                     'field_key' => $f->field_key, 'field_type' => $f->field_type, 'label' => $f->label,
                     'placeholder' => $f->placeholder, 'help_text' => $f->help_text, 'is_required' => (bool) $f->is_required,
                     'options' => $f->options_json ?? [], 'group' => $groupNames->get($f->group_id, ''), 'sort_order' => $f->sort_order,
+                    'contains' => $f->validation_json['contains'] ?? '',
+                    'contains_message' => $f->validation_json['contains_message'] ?? '',
                 ])->values()->toArray();
         }
+
+        // 외부 발주 — 업체 배분 설정(빌더 초기값)
+        $vendorsJson = $product->exists
+            ? $product->vendorAllocations()->orderBy('sort_order')->get()
+                ->map(fn ($pv) => [
+                    'vendor_id' => $pv->vendor_id, 'alloc_type' => $pv->alloc_type, 'alloc_value' => $pv->alloc_value,
+                    'is_active' => (bool) $pv->is_active, 'map' => (array) $pv->field_map,
+                ])->values()->toArray()
+            : [];
 
         return view('admin.products.form', [
             'product' => $product,
@@ -102,6 +115,8 @@ class MarketingProductController extends Controller
             'subTypes' => ProductSubType::where('is_active', true)->orderBy('sort_order')->get()->groupBy('product_type'),
             'fieldTypes' => ProductField::TYPES,
             'fieldsJson' => $fieldsJson,
+            'vendors' => \App\Models\Vendor::orderBy('name')->get(['id', 'name', 'channel']),
+            'vendorsJson' => $vendorsJson,
         ]);
     }
 
@@ -186,6 +201,9 @@ class MarketingProductController extends Controller
                     'help_text' => $f['help_text'] ?? null,
                     'is_required' => (bool) ($f['is_required'] ?? true),
                     'options_json' => in_array($type, ['SELECT', 'MULTI_SELECT'], true) ? $this->normOptions($opts) : null,
+                    'validation_json' => trim((string) ($f['contains'] ?? '')) !== ''
+                        ? ['contains' => trim((string) $f['contains']), 'contains_message' => trim((string) ($f['contains_message'] ?? ''))]
+                        : null,
                     'sort_order' => $i,
                     'is_active' => true,
                 ],
@@ -195,6 +213,47 @@ class MarketingProductController extends Controller
         // 폼에서 사라진 필드·그룹 제거
         $product->fields()->whereNotIn('field_key', $keys ?: ['__none__'])->delete();
         $product->fieldGroups()->whereNotIn('name', array_keys($groupIds) ?: ['__none__'])->delete();
+    }
+
+    /** 업체 배분(JSON) → product_vendors 동기화. */
+    private function syncVendors(MarketingProduct $product, Request $request): void
+    {
+        $rows = json_decode((string) $request->input('vendors_json', '[]'), true);
+        if (! is_array($rows)) {
+            $rows = [];
+        }
+
+        $validVendorIds = \App\Models\Vendor::pluck('id')->all();
+        $kept = [];
+        foreach (array_values($rows) as $i => $r) {
+            $vid = (int) ($r['vendor_id'] ?? 0);
+            if (! in_array($vid, $validVendorIds, true) || in_array($vid, $kept, true)) {
+                continue;   // 미존재/중복 업체는 무시
+            }
+            $kept[] = $vid;
+
+            $map = collect((array) ($r['map'] ?? []))
+                ->map(fn ($m) => [
+                    'key' => trim((string) ($m['key'] ?? '')),
+                    'src' => (string) ($m['src'] ?? 'static'),
+                    'value' => (string) ($m['value'] ?? ''),
+                ])
+                ->filter(fn ($m) => $m['key'] !== '')
+                ->values()->all();
+
+            \App\Models\ProductVendor::updateOrCreate(
+                ['product_id' => $product->id, 'vendor_id' => $vid],
+                [
+                    'alloc_type' => in_array($r['alloc_type'] ?? '', ['ratio', 'fixed'], true) ? $r['alloc_type'] : 'ratio',
+                    'alloc_value' => max(0, (int) ($r['alloc_value'] ?? 0)),
+                    'field_map' => $map ?: null,
+                    'sort_order' => $i,
+                    'is_active' => (bool) ($r['is_active'] ?? true),
+                ],
+            );
+        }
+
+        $product->vendorAllocations()->whereNotIn('vendor_id', $kept ?: [0])->delete();
     }
 
     /** 옵션 정규화 → [{value,label}]. */

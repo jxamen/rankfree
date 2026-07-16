@@ -32,7 +32,7 @@
             <label class="inline-flex items-center gap-2 mt-2" style="font-size:var(--fs-xs);"><input type="checkbox" name="{{ $name }}" value="1" {{ $old ? 'checked' : '' }}> 예</label>
             @break
         @case('TAGS')
-            <input name="{{ $name }}" value="{{ $old }}" placeholder="쉼표로 구분" class="input mt-1" style="width:100%;">
+            <input name="{{ $name }}" value="{{ $old }}" placeholder="{{ $f->placeholder ?: '쉼표로 구분' }}" class="input mt-1" style="width:100%;">
             @break
         @case('FILE')
         @case('IMAGE')

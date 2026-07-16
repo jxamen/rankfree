@@ -2,6 +2,8 @@
 @section('page-title', '구독 관리')
 
 @section('admin-content')
+<x-console.page-head title="구독 관리" desc="유료 구독 현황·기간 관리 · 활성/만료 예정 구독과 매출을 확인합니다" />
+
 @if ($errors->any())
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,#fff);color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif

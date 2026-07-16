@@ -79,5 +79,7 @@
 | [15_SELLER_POWER.md](./15_SELLER_POWER.md) | 셀러력 — 쇼핑 상품 SEO·지수 경쟁 비교(5축·확장 수집·서버 계산·패널/웹 UI) |
 | [16_DEPLOYMENT.md](./16_DEPLOYMENT.md) | 배포 — jcurve2(crm) 서버에 PHP 8.3 공존(apxs mod_proxy_fcgi + php83-fpm)·MariaDB·vhost·런북 |
 | [17_GIT_WORKFLOW.md](./17_GIT_WORKFLOW.md) | Git 워크플로 — 여러 CLI 동시작업(worktree)·선택 커밋·master 배포전용·롤백 |
+| [18_VENDOR_DISPATCH.md](./18_VENDOR_DISPATCH.md) | 외부 발주 — 업체 관리(API/구글시트)·상품별 배분(비율/수량)·매핑·승인 시 자동 전송 |
+| [19_CAFE_SEED_CRAWLER.md](./19_CAFE_SEED_CRAWLER.md) | 카페 글감 수집 — 인기글·댓글 크롤 → DB → 글밥 전환 → AI(Gemini) 재작성·사용 이력 |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

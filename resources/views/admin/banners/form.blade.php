@@ -6,7 +6,9 @@
 @endsection
 
 @section('admin-content')
-<form method="POST" action="{{ $banner->exists ? route('admin.banners.update', $banner) : route('admin.banners.store') }}" enctype="multipart/form-data" style="max-width:820px;">
+<x-console.page-head :title="$banner->exists ? '배너 수정' : '새 배너'" desc="대시보드 상단 홍보 배너 구성 · 노출 순서·기간을 지정합니다" />
+
+<form method="POST" action="{{ $banner->exists ? route('admin.banners.update', $banner) : route('admin.banners.store') }}" enctype="multipart/form-data">
     @csrf
     @if ($banner->exists) @method('PUT') @endif
 

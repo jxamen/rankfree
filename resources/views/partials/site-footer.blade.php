@@ -1,4 +1,14 @@
 {{-- 다크 푸터 — 페이지를 닫는 다크 서피스. 링크는 실제 기능 카테고리에 맞춤 --}}
+@php
+    // 메뉴관리(사이트 SEO)에서 상태를 끈 라우트는 푸터 링크에서도 숨긴다(사이트 헤더와 동일 규칙).
+    try {
+        $__siteOff = \App\Models\Menu::where('area', 'site')->where('is_active', false)
+            ->pluck('route')->map(fn ($r) => explode('?', trim((string) $r), 2)[0])->filter()->all();
+    } catch (\Throwable $e) {
+        $__siteOff = [];
+    }
+    $menuOn = fn (string $route) => ! in_array($route, $__siteOff, true);
+@endphp
 <footer class="bg-surface-dark text-on-dark-soft mt-auto">
     <div class="container-page" style="padding-top:64px;padding-bottom:48px;">
         <div class="grid gap-10 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
@@ -18,7 +28,7 @@
                     <li><a href="/#place" class="hover:text-on-dark transition">순위 추적</a></li>
                     <li><a href="/#place" class="hover:text-on-dark transition">경쟁 분석</a></li>
                     <li><a href="/#place" class="hover:text-on-dark transition">스마트플레이스 리포트</a></li>
-                    <li><a href="/rank-check" class="hover:text-on-dark transition">무료 순위체크</a></li>
+                    @if ($menuOn('rank.check'))<li><a href="/rank-check" class="hover:text-on-dark transition">무료 순위체크</a></li>@endif
                 </ul>
             </div>
 
@@ -40,7 +50,7 @@
                     <li><a href="/#keyword" class="hover:text-on-dark transition">키워드 분석</a></li>
                     <li><a href="/#keyword" class="hover:text-on-dark transition">키워드 추천 · 대량</a></li>
                     <li><a href="/#blog" class="hover:text-on-dark transition">블로그 지수 분석</a></li>
-                    <li><a href="/developers" class="hover:text-on-dark transition">순위 API</a></li>
+                    @if ($menuOn('developers'))<li><a href="/developers" class="hover:text-on-dark transition">순위 API</a></li>@endif
                 </ul>
             </div>
 

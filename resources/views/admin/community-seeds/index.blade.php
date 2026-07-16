@@ -2,14 +2,14 @@
 @section('page-title', '글밥 (수집 소재)')
 
 @section('page-actions')
+    <a href="{{ route('admin.cafe-seeds') }}" class="btn btn-secondary btn-sm">카페 수집 글감</a>
     <a href="{{ route('admin.personas') }}" class="btn btn-secondary btn-sm">← 페르소나 관리</a>
 @endsection
 
+@section('crumb-parent', 'admin.personas')
+
 @section('admin-content')
-<p class="text-muted mb-4" style="font-size:var(--fs-xs);">
-    다른 커뮤니티에서 수집한 글감을 등록해 두면, 페르소나가 이걸 <b>소재로 삼아 말투를 변형</b>해 글·댓글을 작성합니다.
-    (Claude API 연결 시 자연스럽게 재작성, 미연결 시 소재를 가볍게 변형해 사용)
-</p>
+<x-console.page-head title="글밥 (수집 소재)" desc="수집한 글감을 등록하면 페르소나가 <b>소재로 삼아 말투를 변형</b>해 글·댓글을 작성합니다 (Claude API 연결 시 자연스럽게 재작성)" />
 
 {{-- 탭 --}}
 <div class="flex items-center gap-2 mb-4">

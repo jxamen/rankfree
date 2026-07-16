@@ -7,10 +7,7 @@
 @endsection
 
 @section('admin-content')
-<p class="text-muted mb-4" style="font-size:var(--fs-xs);">
-    커뮤니티 게시판의 카테고리를 추가·수정·정렬합니다. 사용을 끄면 목록·글쓰기에서 숨겨집니다.
-    <b>slug</b>는 주소(<code>?cat=slug</code>)에 쓰이며 비우면 자동 생성됩니다.
-</p>
+<x-console.page-head title="게시판 관리" desc="커뮤니티 게시판 카테고리 추가·수정·정렬 · 사용을 끄면 목록·글쓰기에서 숨겨지고, <b>slug</b>는 주소(?cat=slug)에 쓰입니다" />
 
 @if ($errors->any())
     <div class="card-soft px-4 py-3 mb-4" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>

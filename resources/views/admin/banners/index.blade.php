@@ -6,7 +6,7 @@
 @endsection
 
 @section('admin-content')
-<p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">대시보드 상단에 노출되는 홍보 배너입니다. 노출 순서·기간을 지정할 수 있습니다.</p>
+<x-console.page-head title="배너 관리" desc="대시보드 상단에 노출되는 홍보 배너 · 노출 순서·기간을 지정할 수 있습니다" />
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:1200px;">

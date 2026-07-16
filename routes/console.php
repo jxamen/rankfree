@@ -38,3 +38,9 @@ Schedule::command('shop:track-run')->hourly()->withoutOverlapping()->runInBackgr
 
 // 스마트플레이스 리포트 수집 + 세션 유지 — 매일 새벽 3시(KST). (crm cron/smartplace_collect.php 이식)
 Schedule::command('smartplace:collect')->timezone('Asia/Seoul')->dailyAt('03:00')->withoutOverlapping()->runInBackground();
+
+// 카페 글감 수집 — 매일 새벽 5:10(KST) 인기글·본문·댓글 수집 → 커뮤니티 글밥 전환.
+// ⚠️ 수집 세션은 scripts/.naver-cafe-profile — 카페 멤버 계정으로 `node scripts/naver-cafe-crawler.cjs --reset --headful` 1회 로그인 필요.
+if (config('rankfree.cafe_crawl.schedule_enabled', true)) {
+    Schedule::command('cafe:crawl --seed')->timezone('Asia/Seoul')->dailyAt('05:10')->withoutOverlapping()->runInBackground();
+}

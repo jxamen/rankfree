@@ -6,7 +6,9 @@
 @endsection
 
 @section('admin-content')
-<div style="max-width:820px;">
+<x-console.page-head title="문의 답변" desc="사용자 문의 내용 확인·답변 등록 · 답변 시 답변완료로 표시됩니다" />
+
+<div>
     {{-- 문의 --}}
     <div class="card p-6 mb-4">
         <div class="flex items-center gap-2 flex-wrap mb-3">

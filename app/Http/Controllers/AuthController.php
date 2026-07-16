@@ -40,8 +40,13 @@ class AuthController extends Controller
             ->onlyInput('email');
     }
 
-    public function showRegister()
+    public function showRegister(Request $request)
     {
+        // 추천 링크(?ref=CODE) — 세션에 담아 가입 완료 시 백엔드에서 자동 처리(폼 노출 없음)
+        if (($ref = trim((string) $request->query('ref', ''))) !== '') {
+            session([\App\Domain\Member\ReferralService::SESSION_KEY => $ref]);
+        }
+
         return view('auth.register');
     }
 
@@ -52,7 +57,6 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'phone' => ['required', 'string', 'max:20'],
             'password' => ['required', Password::min(8)],
-            'referral' => ['nullable', 'string', 'max:32'],
         ]);
 
         // 전화번호 SMS 인증 필수 — 세션의 인증완료 번호와 대조
@@ -66,7 +70,6 @@ class AuthController extends Controller
 
         // 최상위 이메일이면 super, 그 외는 일반 회원 + 무료 등급 자동 배정
         // (등급이 없으면 콘솔 메뉴 권한이 비어 사이드바가 비어 보이므로 free 기본 배정)
-        // NOTE: 추천인(referral) 리워드(+20, 최대200)는 별도 단계에서 반영.
         $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
         $role = in_array(strtolower($data['email']), $superAdmins, true) ? 'super' : 'user';
 
@@ -81,6 +84,7 @@ class AuthController extends Controller
         ]);
 
         PhoneVerification::clear();
+        app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리
         Auth::login($user);
 
         return redirect()->route('console.dashboard');

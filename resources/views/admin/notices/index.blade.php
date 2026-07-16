@@ -6,6 +6,8 @@
 @endsection
 
 @section('admin-content')
+<x-console.page-head title="공지사항" desc="사용자 콘솔에 노출되는 공지사항 작성·게시 관리 · 고정(📌)·카테고리를 지정합니다" />
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:820px;">

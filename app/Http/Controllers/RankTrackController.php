@@ -205,6 +205,18 @@ class RankTrackController extends Controller
     public function run(Request $request, PlaceRankSlot $slot, RankSlotService $service)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);
+
+        // 동일 키워드 1시간 이내 재체크 제한 — 수동 실행 남용 방지(자동 수집 크론은 커맨드 경유라 영향 없음)
+        if ($slot->last_checked_at && $slot->last_checked_at->gt(now()->subHour())) {
+            $msg = '같은 키워드는 1시간에 한 번만 확인할 수 있습니다. 다음 가능 시각 '
+                .$slot->last_checked_at->copy()->addHour()->timezone('Asia/Seoul')->format('H:i');
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'found' => false, 'blocked' => false, 'rank' => 0, 'message' => $msg]);
+            }
+
+            return back()->withErrors(['run' => $msg]);
+        }
+
         $r = $service->run($slot);
 
         $msg = $r['blocked']

@@ -20,6 +20,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\FindEmailController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\BulkKeywordController;
+use App\Http\Controllers\Admin\CafeSeedController;
 use App\Http\Controllers\Admin\CommunityCategoryController;
 use App\Http\Controllers\Admin\CommunitySeedController;
 use App\Http\Controllers\Admin\PersonaController;
@@ -154,6 +155,9 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middl
 Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name('console.')->group(function () {
     Route::get('/', [ConsoleController::class, 'dashboard'])->name('dashboard');
 
+    // 마이페이지 — 계정 정보 · 추천 링크(추천 보너스 슬롯)
+    Route::get('/me', [ConsoleController::class, 'me'])->name('me');
+
     // 순위 추적 슬롯
     Route::get('/rank', [RankTrackController::class, 'index'])->name('rank');
     Route::get('/rank/resolve', [RankTrackController::class, 'resolve'])->name('rank.resolve');
@@ -276,11 +280,20 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/products/{product}/toggle', [MarketingProductController::class, 'toggle'])->name('products.toggle');
     Route::delete('/products/{product}', [MarketingProductController::class, 'destroy'])->name('products.destroy');
 
-    // 주문 관리 (목록·상세·상태 변경)
+    // 주문 관리 (목록·상세·상태 변경 · 승인=외부 발주)
     Route::get('/orders', [MarketingOrderController::class, 'index'])->name('orders');
     Route::get('/orders/{order}', [MarketingOrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{order}/status', [MarketingOrderController::class, 'updateStatus'])->name('orders.status');
+    Route::post('/orders/{order}/approve', [MarketingOrderController::class, 'approve'])->name('orders.approve');
+    Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
+
+    // 외부 발주 업체 관리 (API/구글시트)
+    Route::get('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'index'])->name('vendors');
+    Route::post('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'store'])->name('vendors.store');
+    Route::put('/vendors/{vendor}', [\App\Http\Controllers\Admin\VendorController::class, 'update'])->name('vendors.update');
+    Route::post('/vendors/{vendor}/toggle', [\App\Http\Controllers\Admin\VendorController::class, 'toggle'])->name('vendors.toggle');
+    Route::delete('/vendors/{vendor}', [\App\Http\Controllers\Admin\VendorController::class, 'destroy'])->name('vendors.destroy');
 
     // 회원 관리
     Route::get('/members', [MemberController::class, 'index'])->name('members');
@@ -373,6 +386,12 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/community-seeds', [CommunitySeedController::class, 'store'])->name('community-seeds.store');
     Route::post('/community-seeds/{seed}/toggle', [CommunitySeedController::class, 'toggle'])->name('community-seeds.toggle');
     Route::delete('/community-seeds/{seed}', [CommunitySeedController::class, 'destroy'])->name('community-seeds.destroy');
+
+    // 카페 수집 글감 — 크롤 원본(글·댓글) 조회 + 수동 수집
+    Route::get('/cafe-seeds', [CafeSeedController::class, 'index'])->name('cafe-seeds');
+    Route::post('/cafe-seeds/crawl', [CafeSeedController::class, 'crawl'])->name('cafe-seeds.crawl');
+    Route::post('/cafe-seeds/{article}/toggle-seed', [CafeSeedController::class, 'toggleSeed'])->name('cafe-seeds.toggle-seed');
+    Route::get('/cafe-seeds/{article}', [CafeSeedController::class, 'show'])->name('cafe-seeds.show');
 
     Route::view('/permissions', 'admin.stub', ['title' => '권한 설정'])->name('permissions');
 });

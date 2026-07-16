@@ -89,6 +89,14 @@ class OrderController extends Controller
                     // 조회 실패 시 원본 유지
                 }
             }
+            // 필수 포함 값 — 관리자가 설정한 문자열이 입력에 없으면 지정한 안내 메시지로 반려 (URL 정규화 후 검사)
+            $contains = trim((string) ($f->validation_json['contains'] ?? ''));
+            if ($contains !== '' && is_string($val) && trim($val) !== '' && ! str_contains($val, $contains)) {
+                $msg = trim((string) ($f->validation_json['contains_message'] ?? ''))
+                    ?: "'{$f->label}' 항목에는 '{$contains}' 이(가) 포함되어야 합니다.";
+
+                return back()->withInput()->withErrors([$key => $msg]);
+            }
             $values[$f->field_key] = $val;
         }
 

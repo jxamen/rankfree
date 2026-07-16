@@ -56,6 +56,26 @@ class CommunityTest extends TestCase
         }
     }
 
+    public function test_simulator_records_seed_usage(): void
+    {
+        config(['services.anthropic.key' => null, 'services.gemini.key' => null]);
+        config(['rankfree.community.mix' => ['post' => 1, 'comment' => 0, 'like' => 0]]); // 글만 생성
+        $cat = $this->category();
+        $this->persona();
+        $seed = CommunitySeed::create(['kind' => 'post', 'category_id' => $cat->id, 'title' => '글감', 'body' => '글감 본문입니다', 'is_active' => true]);
+
+        $r = app(CommunityActivitySimulator::class)->run(3);
+
+        $this->assertGreaterThan(0, $r['posts']);
+        // 사용 이력: 글밥 → 어떤 글이 됐는지 + 사용 시각 기록
+        $usage = \App\Models\CommunitySeedUsage::where('seed_id', $seed->id)->first();
+        $this->assertNotNull($usage);
+        $this->assertSame('post', $usage->used_for);
+        $this->assertNotNull($usage->post_id);
+        $this->assertSame('fallback', $usage->provider);
+        $this->assertNotNull($seed->fresh()->last_used_at);
+    }
+
     public function test_public_index_lists_posts_without_login(): void
     {
         $cat = $this->category();
@@ -111,7 +131,7 @@ class CommunityTest extends TestCase
 
     public function test_generator_uses_seed_material_when_present(): void
     {
-        config(['services.anthropic.key' => null]); // 폴백 경로 — 글밥을 소재로 변형
+        config(['services.anthropic.key' => null, 'services.gemini.key' => null]); // 폴백 경로 — 글밥을 소재로 변형
         $cat = $this->category();
         $persona = $this->persona(['post_length' => 'mid']);
         $seed = CommunitySeed::create([
@@ -122,14 +142,16 @@ class CommunityTest extends TestCase
         $post = app(PersonaContentGenerator::class)->generatePost($persona, $cat);
 
         $this->assertNotNull($post);
-        // 폴백은 소재 본문을 재료로 사용 → 본문이 글감에서 파생됨
+        // 폴백은 소재 본문을 재료로 사용 → 본문이 글감에서 파생됨 + 사용 정보(seed_id/provider) 반환
         $this->assertStringContainsString('리뷰 관리', $post['body']);
+        $this->assertSame($seed->id, $post['seed_id']);
+        $this->assertSame('fallback', $post['provider']);
         $this->assertSame(1, $seed->fresh()->used_count); // 소진 카운트 증가
     }
 
     public function test_comment_seed_used_in_fallback(): void
     {
-        config(['services.anthropic.key' => null]);
+        config(['services.anthropic.key' => null, 'services.gemini.key' => null]);
         $cat = $this->category();
         $persona = $this->persona(['emoji_level' => 0]);
         $post = CommunityPost::create(['category_id' => $cat->id, 'author_type' => 'user', 'user_id' => $this->user()->id, 'title' => 't', 'body' => 'b']);
@@ -137,7 +159,8 @@ class CommunityTest extends TestCase
 
         $comment = app(PersonaContentGenerator::class)->generateComment($persona, $post);
 
-        $this->assertSame('완전 공감되는 글이에요', $comment);
+        $this->assertSame('완전 공감되는 글이에요', $comment['text']);
+        $this->assertSame($seed->id, $comment['seed_id']);
         $this->assertSame(1, $seed->fresh()->used_count);
     }
 

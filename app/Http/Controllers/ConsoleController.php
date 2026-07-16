@@ -11,6 +11,21 @@ use Illuminate\Http\Request;
 
 class ConsoleController extends Controller
 {
+    /** 마이페이지 — 계정 정보 · 순위체크 슬롯 현황 · 추천 링크(백엔드 자동 처리). */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return view('console.me', [
+            'user' => $user,
+            'referralUrl' => route('register').'?ref='.$user->referralCode(),
+            'referredCount' => \App\Models\User::where('referred_by', $user->id)->count(),
+            'bonusSlots' => (int) $user->referral_bonus_slots,
+            'bonusPer' => \App\Domain\Member\ReferralService::bonusPer(),
+            'bonusMax' => \App\Domain\Member\ReferralService::bonusMax(),
+        ]);
+    }
+
     public function dashboard(Request $request)
     {
         $user = $request->user();

@@ -85,7 +85,21 @@ class SettingsServiceProvider extends ServiceProvider
             config([$providerConfig[$p] => trim((string) $row['api_key'])]);
         }
 
-        // 5) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
+        // 5) 커뮤니티 글 재작성(AI) 설정 — 어드민 환경 설정 > AI API 탭
+        $v = trim((string) ($m['community.rewrite_provider'] ?? ''));
+        if ($v !== '') {
+            config(['rankfree.community.rewrite.provider' => $v]);
+        }
+        $v = trim((string) ($m['community.rewrite_model'] ?? ''));
+        if ($v !== '') {
+            config(['rankfree.community.rewrite.model' => $v]);
+        }
+        $v = (string) ($m['community.rewrite_fallback'] ?? '');
+        if ($v !== '') {
+            config(['rankfree.community.rewrite.fallback' => $v === '1']);
+        }
+
+        // 6) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
         //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS
         foreach ([
             'turnstile.site_key' => 'services.turnstile.key',

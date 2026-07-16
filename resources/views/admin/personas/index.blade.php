@@ -18,6 +18,7 @@
 @endsection
 
 @section('admin-content')
+<x-console.page-head title="페르소나 관리" desc="커뮤니티 자동 활동용 가상 페르소나 관리 · 글밥(수집 소재)을 바탕으로 글·댓글을 생성합니다" />
 @php
     $toneLabels = App\Models\Persona::TONES;
     $levelLabels = App\Models\Persona::ACTIVITY_LEVELS;

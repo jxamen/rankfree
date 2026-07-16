@@ -1,10 +1,11 @@
-{{-- 콘솔 페이지 공통 헤더 — 메뉴명 + 설명 (저장 블로거 패턴).
-     제목은 현재 라우트의 콘솔 메뉴명 우선(메뉴관리에서 이름 변경 시 자동 반영), 없으면 title 프롭.
+{{-- 콘솔·어드민 페이지 공통 헤더 — 메뉴명 + 설명 (저장 블로거 패턴).
+     제목은 현재 라우트의 메뉴명 우선(메뉴관리에서 이름 변경 시 자동 반영, admin.* 라우트는 admin 메뉴), 없으면 title 프롭.
      desc는 프롭(HTML 허용) 또는 <x-slot:desc>, 기본 슬롯은 우측 액션 버튼 영역. --}}
 @props(['title' => null, 'desc' => null])
 @php
     $__rn = \Illuminate\Support\Facades\Route::currentRouteName();
-    $__heading = ($__rn ? \App\Models\Menu::where('area', 'console')->where('route', $__rn)->value('name') : null) ?: $title;
+    $__area = str_starts_with((string) $__rn, 'admin.') ? 'admin' : 'console';
+    $__heading = ($__rn ? \App\Models\Menu::where('area', $__area)->where('route', $__rn)->value('name') : null) ?: $title;
 @endphp
 <div class="rf-page-head flex items-end justify-between flex-wrap gap-2 mb-4">
     <div>

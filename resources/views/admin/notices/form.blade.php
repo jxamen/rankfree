@@ -6,7 +6,9 @@
 @endsection
 
 @section('admin-content')
-<form method="POST" action="{{ $notice->exists ? route('admin.notices.update', $notice) : route('admin.notices.store') }}" style="max-width:820px;">
+<x-console.page-head :title="$notice->exists ? '공지사항 수정' : '새 공지사항'" desc="사용자 콘솔 공지사항 작성 · 게시/고정·카테고리를 설정합니다" />
+
+<form method="POST" action="{{ $notice->exists ? route('admin.notices.update', $notice) : route('admin.notices.store') }}">
     @csrf
     @if ($notice->exists) @method('PUT') @endif
 

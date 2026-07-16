@@ -192,8 +192,23 @@ class User extends Authenticatable
     public function rankSlotLimit(): int
     {
         $lim = $this->grade?->rank_slot_limit;
+        $base = $lim === null ? 100 : (int) $lim;
 
-        return $lim === null ? 100 : (int) $lim;
+        // 추천 보너스 가산 (무제한 -1 은 그대로)
+        return $base < 0 ? $base : $base + max(0, (int) $this->referral_bonus_slots);
+    }
+
+    /** 내 추천 코드 — 없으면 생성해 저장(추천 링크 /register?ref=CODE 용). */
+    public function referralCode(): string
+    {
+        if (! $this->referral_code) {
+            do {
+                $code = strtoupper(\Illuminate\Support\Str::random(8));
+            } while (static::where('referral_code', $code)->exists());
+            $this->forceFill(['referral_code' => $code])->save();
+        }
+
+        return $this->referral_code;
     }
 
     public function rankSlotsUsed(): int

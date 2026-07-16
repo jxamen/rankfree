@@ -16,7 +16,10 @@
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
         {{-- 액션 버튼 (좌) --}}
-        <button type="button" id="rf-run-all" class="btn btn-secondary btn-sm" style="height:36px;" @disabled($slots->isEmpty())>전체 순위체크</button>
+        @if (auth()->user()->isOperator())
+            {{-- 전체 순위체크 — 운영자/슈퍼어드민 전용 --}}
+            <button type="button" id="rf-run-all" class="btn btn-secondary btn-sm" style="height:36px;" @disabled($slots->isEmpty())>전체 순위체크</button>
+        @endif
         <a href="{{ route('console.rank.export') }}" class="btn btn-secondary btn-sm" style="height:36px;">엑셀 다운로드</a>
         <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm" style="height:36px;" @disabled($maxSlots >= 0 && $usedSlots >= $maxSlots)>＋ 추적 추가</button>
         {{-- 기간 + 검색 (우) --}}
@@ -48,13 +51,22 @@
     <div class="card overflow-hidden rf-slot" data-slot="{{ $slot->id }}">
         {{-- 헤더: 키워드 · 플레이스 · URL · 액션 --}}
         <div class="flex items-center gap-3 px-5 py-3 border-b border-hairline-soft flex-wrap" style="background:var(--color-surface-soft);">
-            <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $slot->keyword }}</span>
-            <span class="text-muted" style="font-size:var(--fs-xs);">{{ $slot->label ? $slot->label.' · ' : '' }}{{ $slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : '') }}</span>
+            <a href="https://m.place.naver.com/place/list?query={{ urlencode($slot->keyword) }}" target="_blank"
+               class="text-ink font-semibold hover:underline" style="font-size:var(--fs-sm);" title="네이버 플레이스에서 이 키워드 검색">{{ $slot->keyword }}</a>
+            @php
+                $__pname = ($slot->label ? $slot->label.' · ' : '').($slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : ''));
+                $__purl = $slot->place_url ?: ($slot->place_id ? 'https://m.place.naver.com/'.($slot->category ?: 'place').'/'.$slot->place_id : null);
+            @endphp
+            @if ($__purl)
+                <a href="{{ $__purl }}" target="_blank" class="text-muted hover:text-ink truncate" style="font-size:var(--fs-xs);max-width:420px;" title="플레이스 페이지 열기">{{ $__pname }}</a>
+            @else
+                <span class="text-muted truncate" style="font-size:var(--fs-xs);max-width:420px;">{{ $__pname }}</span>
+            @endif
             {{-- 모바일 전용 순위체크 — 업체명 우측. 실제 실행은 아래 rf-run-form 제출(전체 순위체크 중복 방지) --}}
             <button type="button" class="btn btn-secondary btn-sm sm:hidden rf-cap-hide"
                     onclick="this.closest('.rf-slot').querySelector('.rf-run-form').requestSubmit()">순위체크</button>
-            @if ($slot->place_url)
-                <a href="{{ $slot->place_url }}" target="_blank" class="text-accent truncate" style="font-size:var(--fs-xs);max-width:340px;">{{ $slot->place_url }}</a>
+            @if ($slot->last_checked_at)
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);" title="마지막 순위 수집 시각">최종 수집 {{ $slot->last_checked_at->timezone('Asia/Seoul')->format('m-d H:i') }}</span>
             @endif
             <div class="flex-1"></div>
             {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 업체명 옆) --}}

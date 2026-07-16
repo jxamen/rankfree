@@ -135,6 +135,7 @@ class SocialAuthController extends Controller
 
         session()->forget('social_signup');
         PhoneVerification::clear();
+        app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리(소셜 가입 포함)
         Auth::login($user, true);
 
         return redirect()->route('console.dashboard');

@@ -18,7 +18,7 @@ class PersonaController extends Controller
             'personas' => Persona::orderByDesc('is_active')->orderBy('nickname')->paginate(30),
             'total' => Persona::count(),
             'activeCount' => Persona::where('is_active', true)->where('auto_active', true)->count(),
-            'apiEnabled' => ! empty(config('services.anthropic.key')),
+            'apiEnabled' => app(\App\Domain\Community\PersonaContentGenerator::class)->apiEnabled(),
         ]);
     }
 
