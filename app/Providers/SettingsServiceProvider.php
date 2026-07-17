@@ -71,7 +71,7 @@ class SettingsServiceProvider extends ServiceProvider
         }
 
         // 4) AI 모델 API 키 (Claude/Gemini/OpenAI 등) → services.{provider}.key (공급자별 첫 키가 대표)
-        $providerConfig = ['anthropic' => 'services.anthropic.key', 'google' => 'services.gemini.key', 'openai' => 'services.openai.key'];
+        $providerConfig = ['anthropic' => 'services.anthropic.key', 'google' => 'services.gemini.key', 'openai' => 'services.openai.key', 'xai' => 'services.xai.key'];
         $seen = [];
         foreach ($rows('ai.keys') as $row) {
             if (! is_array($row) || empty($row['provider']) || empty($row['api_key'])) {
@@ -112,6 +112,7 @@ class SettingsServiceProvider extends ServiceProvider
             'aligo.api_key' => 'services.aligo.key',
             'aligo.sender' => 'services.aligo.sender',
             'seoul.openapi_key' => 'rankfree.newbiz.seoul_key',   // 24 — 신규 개업(인허가) 수집
+            'quiz.model' => 'services.gemini.quiz_model',         // 캡차(퀴즈) 이미지 분석 모델
         ] as $mk => $cfg) {
             $v = trim((string) ($m[$mk] ?? ''));
             if ($v !== '') {

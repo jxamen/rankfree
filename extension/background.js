@@ -1098,6 +1098,25 @@ const handlers = {
     };
   },
 
+  /** 캡차 통과 후 판매자정보 팝업에서 파싱한 사업자 정보를 업체(채널) 기준으로 저장. */
+  async saveSellerInfo(payload) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, apiBase, message: 'RankFree extension login is required.' };
+    const { ok, status, json } = await apiFetch('/api/ext/seller-infos', {
+      method: 'POST',
+      body: payload,
+      token,
+      apiBase,
+    });
+    return {
+      ok,
+      status,
+      apiBase,
+      data: json && json.data,
+      message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to save seller info.'),
+    };
+  },
+
   /** 확장 설정 조회 (API 키 등) */
   async getSettings() {
     const { apiKey, apiBase } = await getStore();

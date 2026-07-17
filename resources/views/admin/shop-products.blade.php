@@ -72,10 +72,8 @@
                 <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
                     <th style="padding:8px 6px;text-align:right;width:56px;">No</th>
                     <th style="padding:8px 6px;">상품명</th>
-                    <th style="padding:8px 6px;">판매처</th>
-                    <th style="padding:8px 6px;width:130px;">스토어ID</th>
+                    <th style="padding:8px 6px;width:150px;">판매처 <span class="text-muted-soft" style="font-weight:400;">/ 스토어ID</span></th>
                     <th style="padding:8px 6px;">노출 키워드</th>
-                    <th style="padding:8px 6px;text-align:right;width:64px;">최고순위</th>
                     <th style="padding:8px 6px;text-align:right;width:90px;">가격</th>
                     <th style="padding:8px 6px;width:90px;">톡톡</th>
                     <th style="padding:8px 6px;width:84px;">수집일</th>
@@ -106,17 +104,17 @@
                                 <span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>
                             @endif
                         </td>
-                        <td style="padding:7px 6px;" class="text-muted">{{ $p->mall_name ?: '—' }}</td>
                         <td style="padding:7px 6px;">
+                            <div class="text-muted">{{ $p->mall_name ?: '—' }}</div>
                             @if ($storeId !== '')
                                 @if ($home)
                                     <a href="{{ $home }}" target="_blank" rel="noopener" class="font-mono"
-                                       style="color:var(--color-primary);text-decoration:none;" title="{{ $home }}">{{ $storeId }}</a>
+                                       style="color:var(--color-primary);text-decoration:none;font-size:var(--fs-xs);" title="{{ $home }}">{{ $storeId }}</a>
                                 @else
-                                    <span class="font-mono text-muted">{{ $storeId }}</span>
+                                    <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $storeId }}</span>
                                 @endif
                             @else
-                                <span class="text-muted-soft">—</span>
+                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">—</span>
                             @endif
                         </td>
                         <td style="padding:7px 6px;">
@@ -132,7 +130,6 @@
                                 <span class="text-muted-soft" title="{{ collect($kws)->pluck('keyword')->implode(', ') }}">+{{ count($kws) - 3 }}</span>
                             @endif
                         </td>
-                        <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $p->best_rnk ?: '—' }}</td>
                         <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $p->price ? number_format($p->price) : '—' }}</td>
                         <td style="padding:7px 6px;">
                             @if (!empty($p->talk_id))
@@ -160,7 +157,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="10" class="text-muted-soft text-center" style="padding:40px;">
+                    <tr><td colspan="8" class="text-muted-soft text-center" style="padding:40px;">
                         수집된 상품이 없습니다. 키워드 상세에서 상품을 먼저 수집해 주세요.
                     </td></tr>
                 @endforelse

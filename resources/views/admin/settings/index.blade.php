@@ -94,17 +94,72 @@
             <div class="mb-3" style="max-width:560px;">
                 <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">재작성 AI 공급자</label>
                 <select name="community_rewrite_provider" class="input" style="width:100%;font-size:var(--fs-xs);">
-                    <option value="auto" @selected($rewriteProvider === 'auto')>자동 — Gemini 우선, 실패 시 Claude</option>
+                    <option value="auto" @selected($rewriteProvider === 'auto')>자동 — Gemini → Claude → OpenAI → Grok 순 시도</option>
                     <option value="gemini" @selected($rewriteProvider === 'gemini')>Gemini (Google)</option>
                     <option value="anthropic" @selected($rewriteProvider === 'anthropic')>Claude (Anthropic)</option>
+                    <option value="openai" @selected($rewriteProvider === 'openai')>OpenAI (GPT)</option>
+                    <option value="xai" @selected($rewriteProvider === 'xai')>Grok (xAI)</option>
                     <option value="off" @selected($rewriteProvider === 'off')>사용 안 함 — AI 재작성 끄기</option>
                 </select>
             </div>
-            @include('admin.settings._simplefield', ['name' => 'community_rewrite_model', 'label' => '모델 (비우면 공급자 기본 — Gemini: gemini-2.5-flash · Claude: claude-opus-4-8)', 'value' => $rewriteModel, 'secret' => false, 'placeholder' => 'gemini-2.5-flash'])
+            @php
+                // 공급자별 최근 모델 2개(위가 최신 상위). 값은 직접 수정 가능(사용자 지정 옵션 유지).
+                $rewriteModelGroups = [
+                    'Gemini' => ['gemini-2.5-pro', 'gemini-2.5-flash'],
+                    'Claude' => ['claude-opus-4-8', 'claude-sonnet-5'],
+                    'OpenAI' => ['gpt-5', 'gpt-4.1'],
+                    'Grok' => ['grok-4', 'grok-3'],
+                ];
+                $rewriteModelKnown = collect($rewriteModelGroups)->flatten()->all();
+            @endphp
+            <div class="mb-3" style="max-width:560px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">재작성 모델 <span class="text-muted-soft" style="font-weight:400;">비우면 공급자 기본 — Gemini: gemini-2.5-flash · Claude: claude-opus-4-8</span></label>
+                <select name="community_rewrite_model" class="input" style="width:100%;font-size:var(--fs-xs);">
+                    <option value="" @selected($rewriteModel === '')>공급자 기본값 사용</option>
+                    @if ($rewriteModel !== '' && ! in_array($rewriteModel, $rewriteModelKnown, true))
+                        <option value="{{ $rewriteModel }}" selected>{{ $rewriteModel }} (사용자 지정)</option>
+                    @endif
+                    @foreach ($rewriteModelGroups as $grp => $models)
+                        <optgroup label="{{ $grp }}">
+                            @foreach ($models as $mo)
+                                <option value="{{ $mo }}" @selected($rewriteModel === $mo)>{{ $mo }}</option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+            </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);color:var(--color-muted);cursor:pointer;">
                 <input type="checkbox" name="community_rewrite_fallback" value="1" @checked($rewriteFallback)>
                 AI 호출 실패 시 글밥 원문을 가볍게 변형해 사용 <span class="text-muted-soft">(끄면 재작성 실패 시 글밥을 쓰지 않고 일반 문장 생성)</span>
             </label>
+        </div>
+
+        {{-- 캡차(퀴즈) 이미지 분석 모델 — 판매자정보 영수증 퀴즈 풀이(Gemini 비전) --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">캡차(퀴즈) 이미지 분석 <span class="text-muted-soft" style="font-weight:400;">판매자정보 영수증 퀴즈 풀이</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+                판매자정보 캡차(영수증)를 어떤 <b>Gemini 비전 모델</b>로 풀지 정합니다.
+                <b>Pro</b>는 숫자·표 판독 정확도가 높고, <b>Flash</b>는 빠릅니다. Gemini 키는 위 <b>AI 모델 API 키</b>에 등록하세요.
+            </p>
+            @php
+                $quizModelOptions = [
+                    'gemini-2.5-pro' => 'gemini-2.5-pro — 정확도 우선(기본)',
+                    'gemini-2.5-flash' => 'gemini-2.5-flash — 빠름',
+                    'gemini-2.5-flash-lite' => 'gemini-2.5-flash-lite — 가장 빠름·저비용',
+                ];
+                $quizCurrent = $quizModel !== '' ? $quizModel : $quizModelLive;
+            @endphp
+            <div style="max-width:560px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">분석 모델</label>
+                <select name="quiz_model" class="input" style="width:100%;font-size:var(--fs-xs);">
+                    @if ($quizCurrent !== '' && ! array_key_exists($quizCurrent, $quizModelOptions))
+                        <option value="{{ $quizCurrent }}" selected>{{ $quizCurrent }} (사용자 지정)</option>
+                    @endif
+                    @foreach ($quizModelOptions as $mo => $label)
+                        <option value="{{ $mo }}" @selected($quizCurrent === $mo)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </div>
         </div>
     </div>
 

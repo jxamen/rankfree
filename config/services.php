@@ -46,9 +46,19 @@ return [
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        // 캡차 이미지(영수증) 분석 전용 — 정확도 위해 더 강한 비전 모델 사용.
+        // 글 재작성 등 일반 용도(model)와 분리. .env GEMINI_QUIZ_MODEL 로 재정의 가능.
+        'quiz_model' => env('GEMINI_QUIZ_MODEL', 'gemini-2.5-pro'),
     ],
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-5'),   // 커뮤니티 글 재작성용 기본(모델은 환경 설정 드롭다운에서 선택)
+    ],
+
+    // xAI Grok — 커뮤니티 글 재작성 공급자(OpenAI Chat Completions 호환). 키는 환경 설정 > AI 모델 API 키.
+    'xai' => [
+        'key' => env('XAI_API_KEY'),
+        'model' => env('XAI_MODEL', 'grok-4'),
     ],
 
     // Cloudflare Turnstile — 비회원 무료 순위조회 봇 차단. 키 미설정 시 검증 생략(로컬/미배포).

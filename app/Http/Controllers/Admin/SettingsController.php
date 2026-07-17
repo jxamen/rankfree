@@ -25,6 +25,7 @@ class SettingsController extends Controller
         'anthropic' => 'Claude (Anthropic)',
         'google' => 'Gemini (Google)',
         'openai' => 'OpenAI (GPT)',
+        'xai' => 'Grok (xAI)',
     ];
 
     public function index(\App\Domain\Keyword\PlaceKeywordPatterns $patterns)
@@ -41,7 +42,7 @@ class SettingsController extends Controller
             'liveSearchad' => count((array) config('rankfree.searchad.accounts', [])) ?: (! empty(config('rankfree.searchad.api_key')) ? 1 : 0),
             'liveAds' => count((array) config('searchadweb.logins', [])) ?: (! empty(config('searchadweb.login.id')) ? 1 : 0),
             'liveOpenapi' => count((array) config('rankfree.shopping.api_keys', [])),
-            'liveAi' => collect(['services.anthropic.key', 'services.gemini.key', 'services.openai.key'])
+            'liveAi' => collect(['services.anthropic.key', 'services.gemini.key', 'services.openai.key', 'services.xai.key'])
                 ->filter(fn ($k) => ! empty(config($k)))->count(),
             // 커스텀 head 코드(모든 페이지 <head> 주입)
             'customCss' => AppSetting::read('custom.head_css'),
@@ -60,6 +61,9 @@ class SettingsController extends Controller
             'rewriteProvider' => (string) config('rankfree.community.rewrite.provider', 'auto'),
             'rewriteModel' => (string) config('rankfree.community.rewrite.model', ''),
             'rewriteFallback' => (bool) config('rankfree.community.rewrite.fallback', true),
+            // 캡차(퀴즈) 이미지 분석 모델 — Gemini 전용. 비우면 config 기본(gemini-2.5-pro)
+            'quizModel' => (string) AppSetting::read('quiz.model'),
+            'quizModelLive' => (string) config('services.gemini.quiz_model', ''),
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
@@ -91,6 +95,7 @@ class SettingsController extends Controller
         'gsc.property' => 'gsc_property',
         'ga.property_id' => 'ga_property_id',
         'seoul.openapi_key' => 'seoul_openapi_key',
+        'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
     ];
 
     public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)
@@ -118,7 +123,7 @@ class SettingsController extends Controller
 
         // 커뮤니티 글 재작성(AI) 설정
         $provider = (string) $request->input('community_rewrite_provider', 'auto');
-        AppSetting::write('community.rewrite_provider', in_array($provider, ['auto', 'gemini', 'anthropic', 'off'], true) ? $provider : 'auto');
+        AppSetting::write('community.rewrite_provider', in_array($provider, ['auto', 'gemini', 'anthropic', 'openai', 'xai', 'off'], true) ? $provider : 'auto');
         AppSetting::write('community.rewrite_model', trim((string) $request->input('community_rewrite_model', '')));
         AppSetting::write('community.rewrite_fallback', $request->boolean('community_rewrite_fallback') ? '1' : '0');
 
@@ -132,19 +137,16 @@ class SettingsController extends Controller
         return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
     }
 
-    /** AI 키 저장 — 공급자 선택 + 키. 폼 필드: ai_provider[] · ai_key[]. */
+    /** AI 키 저장 — 공급자별 고정칸. 폼 필드: ai_key[{provider}]. 저장 포맷은 ai.keys=[{provider,api_key}] 유지. */
     private function saveAiKeys(Request $r): void
     {
-        $providers = (array) $r->input('ai_provider', []);
-        $keys = (array) $r->input('ai_key', []);
-        $rows = max(count($providers), count($keys));
+        $keys = (array) $r->input('ai_key', []);   // ['anthropic'=>키, 'google'=>키, 'openai'=>키]
 
         $out = [];
-        for ($i = 0; $i < $rows; $i++) {
-            $p = trim((string) ($providers[$i] ?? ''));
-            $k = trim((string) ($keys[$i] ?? ''));
-            if ($p !== '' && $k !== '' && isset(self::AI_PROVIDERS[$p])) {
-                $out[] = ['provider' => $p, 'api_key' => $k];
+        foreach (array_keys(self::AI_PROVIDERS) as $code) {
+            $k = trim((string) ($keys[$code] ?? ''));
+            if ($k !== '') {
+                $out[] = ['provider' => $code, 'api_key' => $k];
             }
         }
 

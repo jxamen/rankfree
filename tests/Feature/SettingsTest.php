@@ -160,13 +160,13 @@ class SettingsTest extends TestCase
 
     public function test_ai_keys_save_and_override_services_config(): void
     {
+        // 공급자별 고정칸 — ai_key[{provider}]. 알 수 없는 공급자·빈 값은 저장 안 됨.
         $this->actingAs($this->super())->put('/admin/settings', [
-            'ai_provider' => ['anthropic', 'google', 'bogus'],
-            'ai_key' => ['sk-ant-123', 'gm-456', 'ignored'], // bogus 공급자는 무시
+            'ai_key' => ['anthropic' => 'sk-ant-123', 'google' => 'gm-456', 'openai' => '', 'bogus' => 'ignored'],
         ])->assertRedirect(route('admin.settings'));
 
         $saved = AppSetting::readJson('ai.keys');
-        $this->assertCount(2, $saved); // bogus 제외
+        $this->assertCount(2, $saved); // openai 빈값·bogus 미지정 제외
         $this->assertSame('anthropic', $saved[0]['provider']);
 
         $this->reboot();

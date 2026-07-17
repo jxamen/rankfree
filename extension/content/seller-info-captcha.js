@@ -436,9 +436,164 @@
     });
   }
 
+  // ── 판매자(사업자) 정보 파싱·저장 — 캡차 통과 후 표시되는 정보를 업체별 저장 ──
+  var sentSellerInfoSignatures = new Set();
+
+  // 요소의 '직접' 텍스트(자식 요소 제외).
+  function directText(el) {
+    if (!el) return '';
+    var s = '';
+    for (var i = 0; i < el.childNodes.length; i++) {
+      if (el.childNodes[i].nodeType === 3) s += el.childNodes[i].nodeValue;
+    }
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  // 값에 섞이는 버튼/부가 텍스트 제거.
+  function sellerNoise(v) {
+    return String(v || '')
+      .replace(/인증완료|인증|잘못된 번호 신고|번호 신고|신고하기|복사하기|복사|자세히 보기|자세히/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function pickPhone(v) {
+    var m = String(v || '').match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+    return m ? m[0].replace(/[.\s]/g, '-') : '';
+  }
+  function pickEmail(v) {
+    // \w 로 밑줄 포함(bennyong_store 같은 로컬파트)
+    var m = String(v || '').match(/[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}/);
+    return m ? m[0] : '';
+  }
+  function pickBizNo(v) {
+    // 하이픈 표기(546-07-01862)·무하이픈 모두 10자리 숫자로 정규화
+    var digits = String(v || '').replace(/\D/g, '');
+    return digits.length >= 10 ? digits.slice(0, 10) : '';
+  }
+
+  function readValueNode(node, labelEl) {
+    if (!node || node === labelEl) return '';
+    return sellerNoise(textOf(node));
+  }
+
+  // 라벨 텍스트에 해당하는 값 추출: 형제 → 부모형제 → 같은 행 → 부모텍스트 순.
+  function valueForLabel(label) {
+    var candidates = document.querySelectorAll('th, dt, td, dd, span, div, strong, b, li, p');
+    for (var i = 0; i < candidates.length; i++) {
+      var el = candidates[i];
+      if (directText(el) !== label && textOf(el) !== label) continue;
+
+      var v = readValueNode(el.nextElementSibling, el);
+      if (v) return v;
+
+      if (el.parentElement) {
+        v = readValueNode(el.parentElement.nextElementSibling, el);
+        if (v) return v;
+      }
+
+      var row = el.closest('tr, li, div');
+      if (row) {
+        var cells = row.querySelectorAll('td, dd, span, div, p');
+        for (var j = 0; j < cells.length; j++) {
+          if (cells[j] === el || cells[j].contains(el) || el.contains(cells[j])) continue;
+          v = readValueNode(cells[j], el);
+          if (v) return v;
+        }
+      }
+
+      if (el.parentElement) {
+        var rest = sellerNoise(textOf(el.parentElement).replace(label, ''));
+        if (rest) return rest;
+      }
+    }
+    return '';
+  }
+
+  function firstValue(labels) {
+    for (var i = 0; i < labels.length; i++) {
+      var v = valueForLabel(labels[i]);
+      if (v) return v;
+    }
+    return '';
+  }
+
+  function collectSellerRaw() {
+    var labels = ['상호명', '상호', '대표자', '대표자명', '고객센터', '전화번호', '연락처',
+      '사업자등록번호', '사업장 소재지', '사업장소재지', '영업소재지', '통신판매업번호',
+      '통신판매업신고번호', 'e-mail', 'E-mail', '이메일'];
+    var out = {};
+    for (var i = 0; i < labels.length; i++) {
+      var v = valueForLabel(labels[i]);
+      if (v && !out[labels[i]]) out[labels[i]] = v.slice(0, 300);
+    }
+    return out;
+  }
+
+  function setSellerInfoStatus(message, ok) {
+    var box = statusBox(true);
+    var line = document.getElementById('rankfree-seller-info');
+    if (!line) {
+      line = document.createElement('div');
+      line.id = 'rankfree-seller-info';
+      line.style.marginTop = '6px';
+      line.style.fontWeight = '700';
+      box.appendChild(line);
+    }
+    line.style.color = ok === false ? '#9f1239' : '#047857';
+    line.textContent = message;
+  }
+
+  function scanSellerInfo() {
+    var info = popupInfo();
+    if (!info.channelUid) return;
+
+    var pageText = textOf(document.body);
+    if (!/사업자등록번호|통신판매업번호|상호명/.test(pageText)) return; // 판매자정보 렌더 전이면 대기
+
+    var fields = {
+      biz_name: sellerNoise(firstValue(['상호명', '상호'])),
+      representative: sellerNoise(firstValue(['대표자', '대표자명'])),
+      customer_phone: pickPhone(firstValue(['고객센터', '전화번호', '연락처'])),
+      biz_reg_no: pickBizNo(firstValue(['사업자등록번호'])),
+      address: sellerNoise(firstValue(['사업장 소재지', '사업장소재지', '영업소재지'])),
+      mail_order_no: sellerNoise(firstValue(['통신판매업번호', '통신판매업신고번호'])),
+      email: pickEmail(firstValue(['e-mail', 'E-mail', '이메일'])),
+    };
+
+    if (!fields.biz_name && !fields.biz_reg_no && !fields.representative) return;
+
+    var sig = [info.channelUid, fields.biz_reg_no, fields.biz_name].join('|');
+    if (sentSellerInfoSignatures.has(sig)) return;
+    sentSellerInfoSignatures.add(sig);
+
+    var payload = Object.assign({
+      store_id: info.storeId,
+      channel_uid: info.channelUid,
+      channel_id: (latestMeta && latestMeta.channelId) || '',
+      seller_info_url: location.href,
+      raw: collectSellerRaw(),
+    }, fields);
+
+    setSellerInfoStatus('판매자정보 저장 중...', true);
+    chrome.runtime.sendMessage({ type: 'saveSellerInfo', payload: payload }, function (res) {
+      if (chrome.runtime.lastError) {
+        setSellerInfoStatus('판매자정보 저장 실패: ' + chrome.runtime.lastError.message, false);
+        sentSellerInfoSignatures.delete(sig);
+        return;
+      }
+      if (res && res.ok) {
+        setSellerInfoStatus('판매자정보 저장됨: ' + (fields.biz_name || fields.biz_reg_no || '완료'), true);
+      } else {
+        setSellerInfoStatus('판매자정보 저장 실패: ' + ((res && res.message) || 'unknown error'), false);
+        sentSellerInfoSignatures.delete(sig); // 실패 시 재시도 허용
+      }
+    });
+  }
+
   function scheduleScan(reason) {
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(function () { scanAndUpload(reason); }, 250);
+    scanTimer = setTimeout(function () { scanAndUpload(reason); scanSellerInfo(); }, 250);
   }
 
   scheduleScan('load');
