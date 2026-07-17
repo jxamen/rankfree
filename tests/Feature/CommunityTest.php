@@ -12,6 +12,7 @@ use App\Models\CommunitySeed;
 use App\Models\Persona;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /** 커뮤니티 — 페르소나 자동 활동(폴백) + 공개 열람 + 실사용자 글/댓글/좋아요. */
@@ -162,6 +163,52 @@ class CommunityTest extends TestCase
         $this->assertSame('완전 공감되는 글이에요', $comment['text']);
         $this->assertSame($seed->id, $comment['seed_id']);
         $this->assertSame(1, $seed->fresh()->used_count);
+    }
+
+    public function test_rewrite_dispatches_to_openai(): void
+    {
+        config([
+            'rankfree.community.rewrite.provider' => 'openai',
+            'rankfree.community.rewrite.model' => 'gpt-5',
+            'rankfree.community.rewrite.fallback' => false,
+            'services.openai.key' => 'sk-test-openai',
+        ]);
+        Http::fake(['api.openai.com/*' => Http::response([
+            'choices' => [['message' => ['content' => '{"title":"오픈AI 제목","body":"오픈AI가 재작성한 본문입니다."}']]],
+        ], 200)]);
+
+        $post = app(PersonaContentGenerator::class)->generatePost($this->persona(), $this->category());
+
+        $this->assertNotNull($post);
+        $this->assertSame('openai', $post['provider']);
+        $this->assertSame('오픈AI 제목', $post['title']);
+        Http::assertSent(fn ($req) => str_contains($req->url(), 'api.openai.com')
+            && $req['model'] === 'gpt-5'
+            && str_contains($req->header('Authorization')[0] ?? '', 'sk-test-openai')
+            && isset($req['max_completion_tokens']));   // OpenAI 토큰 파라미터
+    }
+
+    public function test_rewrite_dispatches_to_grok_with_model_routing(): void
+    {
+        // auto + grok 모델 선택 → 앞선 공급자엔 grok 모델을 넘기지 않고, xai 만 그 모델로 xAI 엔드포인트 호출
+        config([
+            'rankfree.community.rewrite.provider' => 'auto',
+            'rankfree.community.rewrite.model' => 'grok-4',
+            'rankfree.community.rewrite.fallback' => false,
+            'services.gemini.key' => null, 'services.anthropic.key' => null, 'services.openai.key' => null,
+            'services.xai.key' => 'xai-test-key',
+        ]);
+        Http::fake(['api.x.ai/*' => Http::response([
+            'choices' => [['message' => ['content' => '{"title":"그록 제목","body":"그록이 재작성한 본문 텍스트"}']]],
+        ], 200)]);
+
+        $post = app(PersonaContentGenerator::class)->generatePost($this->persona(), $this->category());
+
+        $this->assertNotNull($post);
+        $this->assertSame('xai', $post['provider']);
+        Http::assertSent(fn ($req) => str_contains($req->url(), 'api.x.ai')
+            && $req['model'] === 'grok-4'
+            && isset($req['max_tokens']));   // xAI 토큰 파라미터
     }
 
     public function test_admin_bulk_add_seeds(): void

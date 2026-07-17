@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 /**
  * 페르소나 콘텐츠 생성 — 글밥(수집 소재)을 AI 로 재작성해 글/댓글 텍스트를 만든다.
- * 공급자: Gemini(기본, 무료 티어) / Claude — 어드민 환경 설정 > AI API 에서 선택·모델 지정.
+ * 공급자: Gemini(기본, 무료 티어) / Claude / OpenAI / Grok(xAI) — 어드민 환경 설정 > AI API 에서 선택·모델 지정.
  * API 키가 없거나 호출 실패 시: 폴백 허용 설정이면 원문 가벼운 변형, 아니면 문장풀 생성.
  * 반환에 seed_id·provider 가 포함되어 호출측(시뮬레이터)이 사용 이력을 기록한다.
  */
@@ -22,6 +22,10 @@ class PersonaContentGenerator
     private const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
     private const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+    private const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+
+    private const XAI_ENDPOINT = 'https://api.x.ai/v1/chat/completions';   // Grok — OpenAI Chat Completions 호환
 
     public function apiEnabled(): bool
     {
@@ -39,22 +43,35 @@ class PersonaContentGenerator
             return [];
         }
         $customModel = trim((string) config('rankfree.community.rewrite.model', ''));
+        // 선택한 모델이 어느 공급자용인지 접두로 판별 — 다른 공급자엔 그 공급자 기본 모델을 쓴다.
+        // (예: auto + grok-4 선택 시 Gemini/Claude/OpenAI 엔 grok-4 를 넘기지 않는다). 알 수 없으면 모두에 적용(자유 입력).
+        $modelVendor = match (true) {
+            $customModel === '' => '',
+            str_starts_with($customModel, 'gemini') => 'gemini',
+            str_starts_with($customModel, 'claude') => 'anthropic',
+            str_starts_with($customModel, 'gpt') || preg_match('/^o[134]/', $customModel) === 1 => 'openai',
+            str_starts_with($customModel, 'grok') => 'xai',
+            default => '',
+        };
 
         $defs = [
             'gemini' => ['key' => GeminiCredentials::apiKey(), 'model' => GeminiCredentials::model()],
             'anthropic' => ['key' => (string) config('services.anthropic.key', ''), 'model' => (string) config('services.anthropic.model', 'claude-opus-4-8')],
+            'openai' => ['key' => (string) config('services.openai.key', ''), 'model' => (string) config('services.openai.model', 'gpt-5')],
+            'xai' => ['key' => (string) config('services.xai.key', ''), 'model' => (string) config('services.xai.model', 'grok-4')],
         ];
 
-        $order = $setting === 'auto' ? ['gemini', 'anthropic'] : [$setting];
+        $order = $setting === 'auto' ? ['gemini', 'anthropic', 'openai', 'xai'] : [$setting];
         $out = [];
         foreach ($order as $name) {
             if (! isset($defs[$name]) || $defs[$name]['key'] === '') {
                 continue;
             }
+            $useCustom = $customModel !== '' && ($modelVendor === '' || $modelVendor === $name);
             $out[] = [
                 'name' => $name,
                 'key' => $defs[$name]['key'],
-                'model' => $customModel !== '' ? $customModel : $defs[$name]['model'],
+                'model' => $useCustom ? $customModel : $defs[$name]['model'],
             ];
         }
 
@@ -172,14 +189,18 @@ class PersonaContentGenerator
 
     /**
      * AI 재작성 호출 — 설정된 공급자 순서로 시도, 첫 성공을 반환.
-     * 반환: ['text'=>string, 'provider'=>'gemini'|'anthropic'] | null.
+     * 반환: ['text'=>string, 'provider'=>'gemini'|'anthropic'|'openai'|'xai'] | null.
      */
     private function call(Persona $persona, string $userPrompt, int $maxTokens, ?array $schema): ?array
     {
         foreach ($this->providers() as $p) {
-            $text = $p['name'] === 'gemini'
-                ? $this->callGemini($p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema !== null)
-                : $this->callAnthropic($p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema);
+            $text = match ($p['name']) {
+                'gemini' => $this->callGemini($p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema !== null),
+                'anthropic' => $this->callAnthropic($p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema),
+                'openai' => $this->callOpenAiCompatible(self::OPENAI_ENDPOINT, 'openai', $p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema !== null),
+                'xai' => $this->callOpenAiCompatible(self::XAI_ENDPOINT, 'xai', $p['key'], $p['model'], $persona, $userPrompt, $maxTokens, $schema !== null),
+                default => null,
+            };
             if ($text !== null) {
                 return ['text' => $text, 'provider' => $p['name']];
             }
@@ -265,6 +286,47 @@ class PersonaContentGenerator
             }
         } catch (\Throwable $e) {
             Log::warning('community: anthropic call failed', ['msg' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    /**
+     * OpenAI / xAI(Grok) Chat Completions 호출 — 두 API 는 스펙이 호환된다. 실패 시 null.
+     * 토큰 상한 파라미터만 다르다: OpenAI 최신 모델은 max_completion_tokens, xAI 는 max_tokens.
+     */
+    private function callOpenAiCompatible(string $endpoint, string $vendor, string $key, string $model, Persona $persona, string $userPrompt, int $maxTokens, bool $json): ?string
+    {
+        if ($key === '') {
+            return null;
+        }
+        $body = [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => $this->systemPrompt($persona)],
+                ['role' => 'user', 'content' => $userPrompt],
+            ],
+        ];
+        $body[$vendor === 'openai' ? 'max_completion_tokens' : 'max_tokens'] = max(256, $maxTokens);
+        if ($json) {
+            // 프롬프트에 JSON 이 명시돼 있어야 함(generatePost 는 명시). 댓글($schema=null)엔 붙이지 않는다.
+            $body['response_format'] = ['type' => 'json_object'];
+        }
+
+        try {
+            $resp = Http::withHeaders(['Authorization' => 'Bearer '.$key, 'content-type' => 'application/json'])
+                ->timeout(60)->post($endpoint, $body);
+
+            if (! $resp->successful()) {
+                Log::warning("community: {$vendor} api error", ['status' => $resp->status(), 'body' => mb_substr($resp->body(), 0, 300)]);
+
+                return null;
+            }
+            $text = $resp->json('choices.0.message.content');
+
+            return is_string($text) && trim($text) !== '' ? $text : null;
+        } catch (\Throwable $e) {
+            Log::warning("community: {$vendor} call failed", ['msg' => $e->getMessage()]);
         }
 
         return null;
