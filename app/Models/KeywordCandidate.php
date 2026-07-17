@@ -11,11 +11,12 @@ class KeywordCandidate extends Model
     public const STATUSES = ['pending', 'approved', 'rejected', 'published'];
 
     protected $fillable = [
-        'category_id', 'region', 'region_type', 'keyword', 'source', 'monthly_total', 'comp_idx', 'status', 'note',
+        'category_id', 'region', 'region_type', 'keyword', 'source', 'monthly_total', 'comp_idx', 'volume_checked_at', 'status', 'note',
     ];
 
     protected $casts = [
         'monthly_total' => 'integer',
+        'volume_checked_at' => 'datetime',
     ];
 
     public function category(): BelongsTo

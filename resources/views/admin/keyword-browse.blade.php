@@ -15,6 +15,9 @@
         <a href="{{ route('admin.keyword-browse', ['type' => $t]) }}" class="btn {{ $type === $t ? 'btn-primary' : 'btn-secondary' }} btn-sm">{{ $label }}</a>
     @endforeach
     <span class="text-muted ml-auto" style="font-size:var(--fs-xs);">
+        @if (($refreshed ?? 0) > 0)
+            <span class="badge border border-hairline" title="검색량은 {{ $volumeTtlDays ?? 7 }}일마다 자동 갱신됩니다">검색량 {{ $refreshed }}건 갱신됨</span>
+        @endif
         <b class="font-mono text-ink">{{ number_format($total) }}</b>개
         @foreach ($stLabel as $k => $label)
             @isset($statusCounts[$k])<span class="text-muted-soft"> · {{ $label }} <b class="font-mono">{{ number_format($statusCounts[$k]) }}</b></span>@endisset
@@ -98,6 +101,7 @@
                     @if ($type === 'place')<th style="padding:8px 6px;">지역</th>@endif
                     <th style="padding:8px 6px;">출처</th>
                     <th style="padding:8px 6px;text-align:right;">월 검색량</th>
+                    <th style="padding:8px 6px;">최종 업데이트</th>
                     <th style="padding:8px 6px;">상태</th>
                 </tr>
             </thead>
@@ -111,10 +115,13 @@
                         @endif
                         <td style="padding:7px 6px;"><span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ $srcLabel[$it->source] ?? $it->source }}</span></td>
                         <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $it->monthly_total === null ? '미상' : number_format($it->monthly_total) }}</td>
+                        <td style="padding:7px 6px;" class="text-muted-soft" title="{{ $it->volume_checked_at?->format('Y-m-d H:i') ?? '조회 전' }}">
+                            {{ $it->volume_checked_at ? $it->volume_checked_at->diffForHumans() : '—' }}
+                        </td>
                         <td style="padding:7px 6px;" class="text-muted">{{ $stLabel[$it->status] ?? $it->status }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ $type === 'place' ? 6 : 5 }}" class="text-muted-soft text-center" style="padding:40px;">키워드가 없습니다.</td></tr>
+                    <tr><td colspan="{{ $type === 'place' ? 7 : 6 }}" class="text-muted-soft text-center" style="padding:40px;">키워드가 없습니다.</td></tr>
                 @endforelse
             </tbody>
         </table>

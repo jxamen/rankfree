@@ -78,6 +78,88 @@ class NaverKeywordService
         return $accounts;
     }
 
+    /**
+     * 여러 키워드의 월간 검색량을 한 번에 조회 — keywordstool 은 hintKeywords 에 최대 5개까지 받는다(실측: 10개면 빈 응답).
+     * 1건씩 부르는 analyze() 대비 5배 효율. 대량 갱신(hub:refresh-volumes·관리자 탐색)에 쓴다.
+     *
+     * @param  list<string>  $keywords
+     * @return array<string, array{monthly_total:int, monthly_pc:int, monthly_mobile:int, comp_idx:?string}>  원본 키워드 => 지표
+     */
+    public function volumes(array $keywords): array
+    {
+        $accounts = $this->accounts();
+        if (! $accounts) {
+            return [];
+        }
+
+        // 정규화 키(공백 제거·대문자) → 원본 키워드. keywordstool 응답은 정규화 형태로 온다.
+        $map = [];
+        foreach ($keywords as $kw) {
+            $n = $this->normalize((string) $kw);
+            if ($n !== '') {
+                $map[$n] = (string) $kw;
+            }
+        }
+        if (! $map) {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_chunk(array_keys($map), 5) as $chunk) {   // ★ 5개 상한
+            $rows = null;
+            foreach ($accounts as $acc) {                        // 실패 시 다음 계정으로 로테이션
+                $rows = $this->fetchRaw(implode(',', $chunk), $acc);
+                if ($rows !== null) {
+                    break;
+                }
+            }
+            foreach ((array) $rows as $row) {
+                $rel = $this->normalize((string) ($row['relKeyword'] ?? ''));
+                if ($rel === '' || ! isset($map[$rel]) || isset($out[$map[$rel]])) {
+                    continue;   // 요청한 키워드만 취한다(응답엔 연관어가 대량으로 섞여 온다)
+                }
+                $pc = $this->count($row['monthlyPcQcCnt'] ?? 0);
+                $mo = $this->count($row['monthlyMobileQcCnt'] ?? 0);
+                $out[$map[$rel]] = [
+                    'monthly_pc' => $pc,
+                    'monthly_mobile' => $mo,
+                    'monthly_total' => $pc + $mo,
+                    'comp_idx' => $row['compIdx'] ?? null,
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /** keywordstool 원본 행 — volumes() 전용(parse 는 단건 analyze 형식이라 재사용 불가). */
+    private function fetchRaw(string $hints, array $config): ?array
+    {
+        try {
+            $timestamp = (string) round(microtime(true) * 1000);
+            $signature = base64_encode(hash_hmac('sha256', $timestamp.'.GET./keywordstool', (string) $config['secret_key'], true));
+            $response = Http::withHeaders([
+                'X-Timestamp' => $timestamp,
+                'X-API-KEY' => (string) $config['api_key'],
+                'X-Customer' => (string) $config['customer_id'],
+                'X-Signature' => $signature,
+            ])->timeout((int) ($config['timeout'] ?? 10))
+                ->get(rtrim((string) $config['base'], '/').'/keywordstool', ['hintKeywords' => $hints, 'showDetail' => 1]);
+
+            if ($response->failed()) {
+                Log::warning('searchad keywordstool(다건) 실패', ['status' => $response->status()]);
+
+                return null;
+            }
+
+            return (array) $response->json('keywordList', []);
+        } catch (Throwable $e) {
+            Log::warning('searchad keywordstool(다건) 예외', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
     private function fetch(string $hint, array $config): ?array
     {
         try {

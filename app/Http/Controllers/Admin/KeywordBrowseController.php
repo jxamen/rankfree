@@ -17,7 +17,7 @@ use Illuminate\Http\Request;
  */
 class KeywordBrowseController extends Controller
 {
-    public function index(Request $request, PlaceRegionTree $tree)
+    public function index(Request $request, PlaceRegionTree $tree, \App\Domain\Keyword\KeywordVolumeRefresher $refresher)
     {
         $type = in_array($request->query('type'), ['place', 'shopping'], true) ? $request->query('type') : 'shopping';
         $q = trim((string) $request->query('q', ''));
@@ -70,17 +70,23 @@ class KeywordBrowseController extends Controller
             ->when($inRegions !== [], fn ($x) => $x->whereIn('region', $inRegions))
             ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'));
 
+        // 화면에 뜬 키워드의 검색량 자동 갱신 — 주 1회(TTL) 대상만, 화면당 최대 50건(5개씩 묶어 조회)
+        $items = $base()->with('category')
+            ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
+            ->paginate(100)->withQueryString();
+        $refreshed = $refresher->refresh(collect($items->items()));
+
         return view('admin.keyword-browse', [
             'type' => $type, 'q' => $q,
+            'refreshed' => $refreshed,
+            'volumeTtlDays' => \App\Domain\Keyword\KeywordVolumeRefresher::TTL_DAYS,
             'c1' => $c1, 'c2' => $c2, 'c3' => $c3,
             'lv1' => $lv1, 'lv2' => $lv2, 'lv3' => $lv3,
             'sido' => $sido, 'sgg' => $sgg, 'rg' => $rg,
             'sidos' => $grouped['sido'],
             'sggs' => $sido !== '' ? ($grouped['sgg'][$sido] ?? []) : [],
             'regions' => ($sido !== '' && $sgg !== '') ? ($grouped['leaf'][$sido][$sgg] ?? []) : [],
-            'items' => $base()->with('category')
-                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
-                ->paginate(100)->withQueryString(),
+            'items' => $items,
             'total' => $base()->count(),
             'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
         ]);
