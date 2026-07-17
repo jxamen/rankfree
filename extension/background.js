@@ -44,6 +44,37 @@ async function apiFetch(path, { method = 'GET', body = null, token = null, apiBa
   return { ok: res.ok, status: res.status, json };
 }
 
+function storeIdFromProductUrl(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    const match = parsed.pathname.match(/^\/([^/]+)\/products\/\d+/);
+    if (!match || !/(^|\.)((smartstore|brand)\.naver\.com)$/i.test(parsed.hostname)) return '';
+    return decodeURIComponent(match[1]);
+  } catch (e) {
+    return '';
+  }
+}
+
+function sellerInfoPopupUrl({ channelUid, storeId, productUrl }) {
+  const uid = encodeURIComponent(String(channelUid || ''));
+  const store = encodeURIComponent(String(storeId || ''));
+  let from = 'smartstore';
+  let prevUrl = store ? 'https://smartstore.naver.com/' + store + '/profile' : String(productUrl || '');
+  try {
+    const parsed = new URL(String(productUrl || ''));
+    if (/brand\.naver\.com$/i.test(parsed.hostname)) {
+      from = 'brandstore';
+      prevUrl = store ? 'https://brand.naver.com/' + store + '/profile' : parsed.origin + parsed.pathname;
+    }
+  } catch (e) { /* noop */ }
+  return 'https://shopping.naver.com/popup/seller-info/' + uid + '/profile?from=' +
+    encodeURIComponent(from) + '&prevUrl=' + encodeURIComponent(prevUrl);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // 서비스워커가 새로 뜨면(확장 리로드·브라우저 재시작) 이전 수집 루프는 이미 죽어 있다.
 // running 플래그만 남아 "이미 수집이 진행 중입니다"로 영구히 막히는 것을 막는다.
 (async () => {
@@ -383,6 +414,144 @@ const handlers = {
    * 리포트 HTML 회수, 탭 자동 닫음. 결과는 검색 패널에 in-panel 표시.
    * (로그인 리다이렉트는 'main' 제네릭 URL 때문이었고, 실제 스토어 URL은 백그라운드에서도 정상 로드)
    */
+  async openSellerInfoCaptcha({ channelUid, channelId, storeId, productUrl, active }) {
+    return new Promise((resolve) => {
+      let tabId = null;
+      let done = false;
+      const url = sellerInfoPopupUrl({ channelUid, storeId, productUrl });
+      const to = setTimeout(() => finish({
+        ok: false,
+        timeout: true,
+        channelUid,
+        channelId,
+        storeId,
+        sellerInfoUrl: url,
+        message: 'seller-info captcha capture timeout',
+      }), 18000);
+
+      function finish(res) {
+        if (done) return;
+        done = true;
+        clearTimeout(to);
+        chrome.runtime.onMessage.removeListener(onMsg);
+        if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        resolve(res);
+      }
+
+      function onMsg(msg, sender) {
+        if (!(sender && sender.tab && sender.tab.id === tabId && msg && msg.type === '__sellerCaptchaCaptured')) return;
+        finish({
+          ok: !!msg.ok,
+          channelUid: msg.channelUid || channelUid,
+          channelId,
+          storeId,
+          sellerInfoUrl: url,
+          data: msg.data || null,
+          apiBase: msg.apiBase || '',
+          message: msg.message || '',
+        });
+      }
+
+      chrome.runtime.onMessage.addListener(onMsg);
+      try {
+        chrome.tabs.create({ url, active: !!active }, (tab) => {
+          if (chrome.runtime.lastError || !tab) {
+            finish({ ok: false, message: 'seller_info_tab_create_failed', channelUid, channelId, storeId, sellerInfoUrl: url });
+            return;
+          }
+          tabId = tab.id;
+        });
+      } catch (e) {
+        finish({ ok: false, message: String(e && e.message || e), channelUid, channelId, storeId, sellerInfoUrl: url });
+      }
+    });
+  },
+
+  async sellerCaptchaStart({ products, active, force }) {
+    const { token } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, message: 'RankFree extension login is required.' };
+
+    const list = (Array.isArray(products) ? products : [])
+      .map((p) => ({
+        url: String((p && p.url) || '').split('#')[0],
+        title: String((p && p.title) || ''),
+        storeId: String((p && p.storeId) || ''),
+      }))
+      .filter((p) => p.url);
+    if (!list.length) return { ok: false, message: 'No product URLs.' };
+
+    const prev = (await chrome.storage.local.get(['rfSellerCaptcha'])).rfSellerCaptcha;
+    if (prev && prev.running && prev.heartbeat && Date.now() - prev.heartbeat < 60000 && !force) {
+      return { ok: false, message: 'Seller captcha collection is already running.' };
+    }
+
+    const init = {
+      running: true, stop: false, total: list.length, done: 0, saved: 0, failed: 0,
+      current: '', lastError: '', results: [], startedAt: Date.now(), heartbeat: Date.now(),
+    };
+    await chrome.storage.local.set({ rfSellerCaptcha: init });
+
+    (async () => {
+      const patch = async (data) => {
+        const cur = (await chrome.storage.local.get(['rfSellerCaptcha'])).rfSellerCaptcha || {};
+        await chrome.storage.local.set({ rfSellerCaptcha: Object.assign({}, cur, data, { heartbeat: Date.now() }) });
+      };
+      const isStopped = async () => !!(((await chrome.storage.local.get(['rfSellerCaptcha'])).rfSellerCaptcha || {}).stop);
+      let done = 0, saved = 0, failed = 0;
+      const results = [];
+
+      for (const item of list) {
+        if (await isStopped()) break;
+        const storeId = item.storeId || storeIdFromProductUrl(item.url);
+        await patch({ current: item.title || item.url });
+
+        let result = { ok: false, url: item.url, title: item.title, storeId, message: '' };
+        try {
+          if (!storeId) throw new Error('store_id_not_found');
+
+          const detail = await handlers.sellerCollectDetail({ url: item.url });
+          const channel = detail && detail.data && detail.data.smartStoreV2 && detail.data.smartStoreV2.channel
+            ? detail.data.smartStoreV2.channel
+            : {};
+          const channelUid = String(channel.channelUid || '');
+          const channelId = String(channel.channelId || '');
+          const channelNo = channel.id || null;
+          if (!detail || !detail.ok || !channelUid) throw new Error((detail && detail.message) || 'channel_uid_not_found');
+
+          const cap = await handlers.openSellerInfoCaptcha({
+            channelUid, channelId, storeId, productUrl: item.url, active: !!active,
+          });
+          result = Object.assign({
+            url: item.url, title: item.title, storeId, channelUid, channelId, channelNo,
+          }, cap || { ok: false, message: 'unknown_error' });
+        } catch (e) {
+          result.message = String((e && e.message) || e);
+        }
+
+        done++;
+        if (result.ok) saved++; else failed++;
+        results.push(result);
+        await patch({ done, saved, failed, results, lastError: result.ok ? '' : (result.message || 'failed') });
+        await sleep(500);
+      }
+
+      await patch({ running: false, stop: false, current: '', finishedAt: Date.now() });
+    })();
+
+    return { ok: true, started: true, total: list.length };
+  },
+
+  async sellerCaptchaStatus() {
+    const s = await chrome.storage.local.get(['rfSellerCaptcha']);
+    return { ok: true, job: s.rfSellerCaptcha || { running: false, done: 0, saved: 0, failed: 0, total: 0, current: '' } };
+  },
+
+  async sellerCaptchaStop() {
+    const s = await chrome.storage.local.get(['rfSellerCaptcha']);
+    if (s.rfSellerCaptcha) await chrome.storage.local.set({ rfSellerCaptcha: Object.assign({}, s.rfSellerCaptcha, { stop: true }) });
+    return { ok: true };
+  },
+
   async reviewCollectDetail({ url, title }, origin) {
     const originTabId = origin && origin.tab && origin.tab.id;
     const MAX_ATTEMPTS = 2;       // 최초 1회 + 재시도 1회
@@ -482,8 +651,8 @@ const handlers = {
     const max = Number(limit) > 0 ? Math.min(100000, Number(limit)) : Infinity;
     // 너무 빨리 열면 네이버가 일시 차단한다 — 건당 최소 4초, 기본 6초.
     const baseGap = Math.max(1000, Number(delayMs) || 6000);   // 하한 1초 — 차단되면 아래에서 1초씩 자동으로 늘린다
-    // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~6).
-    const conc = Math.min(6, Math.max(1, Number(concurrency) || 2));
+    // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~10).
+    const conc = Math.min(10, Math.max(1, Number(concurrency) || 2));
     await chrome.storage.local.set({ rfBulk: {
       running: true, done: 0, failed: 0, total: (max === Infinity ? 0 : max), current: '', category: '',
       conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
@@ -530,7 +699,9 @@ const handlers = {
           let got = false;
           refill = refill.then(async () => {
             if (queue.length) { got = true; return; }        // 다른 워커가 이미 채웠다
-            const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=20', { token, apiBase });
+            // 동시 수가 많으면 20개는 금방 비어 리필이 잦아진다 — 동시 수에 맞춰 넉넉히 받는다(서버 상한 50)
+            const qLimit = Math.min(50, Math.max(20, conc * 4));
+            const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=' + qLimit, { token, apiBase });
             const d = (ok && json && json.data) || {};
             queue = (d.keywords || []).filter((k) => !taken.has(k));   // 서버가 또 준 것(수집 반영 전)은 제외
             got = queue.length > 0;
@@ -735,7 +906,7 @@ const handlers = {
 
   async saveSellerCaptcha(payload) {
     const { token, apiBase } = await getStore();
-    if (!token) return { ok: false, loggedIn: false, message: 'RankFree extension login is required.' };
+    if (!token) return { ok: false, loggedIn: false, apiBase, message: 'RankFree extension login is required.' };
     const { ok, status, json } = await apiFetch('/api/ext/seller-captchas', {
       method: 'POST',
       body: payload,
@@ -745,6 +916,7 @@ const handlers = {
     return {
       ok,
       status,
+      apiBase,
       data: json && json.data,
       message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to save seller captcha.'),
     };

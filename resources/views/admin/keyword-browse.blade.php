@@ -133,7 +133,9 @@
             <option value="2" selected>동시 2개</option>
             <option value="3">동시 3개</option>
             <option value="4">동시 4개</option>
-            <option value="6">동시 6개 (차단 위험)</option>
+            <option value="6">동시 6개</option>
+            <option value="8">동시 8개 (차단 위험)</option>
+            <option value="10">동시 10개 (차단 위험)</option>
         </select>
         <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
         <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
