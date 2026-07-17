@@ -6,6 +6,7 @@ use App\Models\CommunityCategory;
 use App\Models\CommunityPost;
 use App\Models\CommunitySeed;
 use App\Models\Persona;
+use App\Support\GeminiCredentials;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -40,7 +41,7 @@ class PersonaContentGenerator
         $customModel = trim((string) config('rankfree.community.rewrite.model', ''));
 
         $defs = [
-            'gemini' => ['key' => (string) config('services.gemini.key', ''), 'model' => (string) config('services.gemini.model', 'gemini-2.5-flash')],
+            'gemini' => ['key' => GeminiCredentials::apiKey(), 'model' => GeminiCredentials::model()],
             'anthropic' => ['key' => (string) config('services.anthropic.key', ''), 'model' => (string) config('services.anthropic.model', 'claude-opus-4-8')],
         ];
 

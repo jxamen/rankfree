@@ -2,6 +2,7 @@
 
 namespace App\Domain\Keyword;
 
+use App\Support\GeminiCredentials;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -66,7 +67,7 @@ class KeywordAiInsight
     private function providers(): array
     {
         $defs = [
-            'gemini' => ['key' => (string) config('services.gemini.key', ''), 'model' => (string) config('services.gemini.model', 'gemini-2.5-flash')],
+            'gemini' => ['key' => GeminiCredentials::apiKey(), 'model' => GeminiCredentials::model()],
             'anthropic' => ['key' => (string) config('services.anthropic.key', ''), 'model' => (string) config('services.anthropic.model', 'claude-opus-4-8')],
         ];
 

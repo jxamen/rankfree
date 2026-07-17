@@ -172,6 +172,9 @@ class SettingsTest extends TestCase
         $this->reboot();
         $this->assertSame('sk-ant-123', config('services.anthropic.key'));
         $this->assertSame('gm-456', config('services.gemini.key'));
+        $this->assertSame('gm-456', \App\Support\GeminiCredentials::apiKey());
+        $this->assertSame('gemini-2.5-flash', \App\Support\GeminiCredentials::model());
+        $this->assertSame(['key' => 'gm-456', 'model' => 'gemini-2.5-flash'], \App\Support\GeminiCredentials::credentials());
     }
 
     public function test_ai_first_key_per_provider_is_primary(): void
