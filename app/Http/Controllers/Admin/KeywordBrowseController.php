@@ -123,7 +123,7 @@ class KeywordBrowseController extends Controller
             'collected' => $collected,
             // distinct count 가 운영에서 1.58초라 캐시(필터 조합별 5분) — 총계는 실시간일 필요가 없다
             'total' => \Illuminate\Support\Facades\Cache::remember(
-                'kb:total:'.md5($type.$c1.$c2.$c3.$rt.$rg.$q.$collected), 300,
+                'kb:total:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,
                 fn () => $base()->distinct()->count('keyword')
             ),
             'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
