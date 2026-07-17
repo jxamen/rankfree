@@ -191,6 +191,24 @@
             </p>
             @include('admin.settings._simplefield', ['name' => 'ga_property_id', 'label' => 'GA4 속성 ID (숫자)', 'value' => $gaPropertyId, 'secret' => false, 'placeholder' => '123456789'])
         </div>
+
+        {{-- 서울 열린데이터광장 — 신규 개업(인허가) 수집(24) --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">
+                서울 열린데이터광장 <span class="text-muted-soft" style="font-weight:400;">신규 개업(인허가) 수집</span>
+                @if ($seoulKeyLive === 'sample' || $seoulKeyLive === '')
+                    <span class="badge" style="font-size:var(--fs-xs);margin-left:6px;background:color-mix(in srgb,var(--color-warning) 14%,var(--color-canvas));color:var(--color-warning);">sample · 일자당 5건 제한</span>
+                @else
+                    <span class="badge" style="font-size:var(--fs-xs);margin-left:6px;background:color-mix(in srgb,var(--color-success) 14%,var(--color-canvas));color:var(--color-success);">적용중</span>
+                @endif
+            </div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);line-height:1.6;">
+                <a href="https://data.seoul.go.kr/together/mypage/actkeyMain.do" target="_blank" rel="noopener" class="text-ink">data.seoul.go.kr → 마이페이지 → 인증키 신청</a>
+                에서 <b>일반 인증키</b>를 발급받아 넣으세요(로그인 필요·즉시 발급). 비우면 sample 키로 동작해 <b>일자당 5건</b>만 수집됩니다.
+                수집: <code>php artisan newbiz:collect</code> · 확인: <a href="{{ route('admin.new-businesses') }}" class="text-ink">신규 개업</a>
+            </p>
+            @include('admin.settings._simplefield', ['name' => 'seoul_openapi_key', 'label' => '일반 인증키', 'value' => $seoulOpenapiKey, 'secret' => true, 'placeholder' => '발급받은 32자 인증키'])
+        </div>
     </div>
 
     {{-- ── 회원: 추천인 보상 ──────────────────────────────────────────── --}}

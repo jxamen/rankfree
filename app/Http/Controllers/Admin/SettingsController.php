@@ -68,6 +68,9 @@ class SettingsController extends Controller
             'gscServiceEmail' => \App\Support\GoogleServiceAccount::clientEmail(),
             // GA4 — 속성 ID(숫자)
             'gaPropertyId' => AppSetting::read('ga.property_id'),
+            // 서울 열린데이터광장 — 신규 개업(인허가) 수집 인증키(24)
+            'seoulOpenapiKey' => AppSetting::read('seoul.openapi_key'),
+            'seoulKeyLive' => (string) config('rankfree.newbiz.seoul_key', 'sample'),
             // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
             'googleConnected' => \App\Support\GoogleToken::oauthConnected(),
             'googleEmail' => \App\Support\GoogleToken::connectedEmail(),
@@ -87,6 +90,7 @@ class SettingsController extends Controller
         'aligo.sender' => 'aligo_sender',
         'gsc.property' => 'gsc_property',
         'ga.property_id' => 'ga_property_id',
+        'seoul.openapi_key' => 'seoul_openapi_key',
     ];
 
     public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)

@@ -82,6 +82,12 @@
         @endif
 
         <span class="mx-1"></span>
+        {{-- 분류당 수천 개라(실측 패션잡화 9,588) 수집 상태로 좁혀 본다 --}}
+        <select name="collected" class="input" style="height:36px;width:120px;" onchange="kbGo(this, [])" title="수집 상태">
+            <option value="">수집 전체</option>
+            <option value="n" @selected(($collected ?? '') === 'n')>미수집만</option>
+            <option value="y" @selected(($collected ?? '') === 'y')>수집됨만</option>
+        </select>
         <input type="search" name="q" class="input" style="height:36px;width:200px;" placeholder="키워드 검색" value="{{ $q }}">
         <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
         @if ($c1 || $c2 || $c3 || $sido !== '' || $sgg !== '' || $rg !== '' || $q !== '')
@@ -105,6 +111,12 @@
             <option value="6000" selected>간격 6초 (권장)</option>
             <option value="10000">간격 10초 (안전)</option>
             <option value="4000">간격 4초 (빠름·차단 위험)</option>
+        </select>
+        <select id="rf-bulk-conc" class="input" style="height:32px;width:140px;font-size:var(--fs-xs);" title="동시에 여는 탭 수 — 많을수록 빠르지만 차단 위험이 커집니다">
+            <option value="2" selected>병렬 2개</option>
+            <option value="3">병렬 3개</option>
+            <option value="4">병렬 4개 (차단 위험)</option>
+            <option value="1">병렬 없음(1개)</option>
         </select>
         <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
         <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
@@ -148,7 +160,11 @@
     start.addEventListener('click', function () {
         if (!hasExt()) { msg.style.color = 'var(--color-error)'; msg.textContent = '확장이 설치돼 있지 않습니다(v0.1.8 이상, 로그인 필요).'; return; }
         start.disabled = true; msg.style.color = ''; msg.textContent = '시작하는 중…';
-        send('bulkStart', { limit: Number(document.getElementById('rf-bulk-limit').value), delayMs: Number(document.getElementById('rf-bulk-gap').value) });
+        send('bulkStart', {
+            limit: Number(document.getElementById('rf-bulk-limit').value),
+            delayMs: Number(document.getElementById('rf-bulk-gap').value),
+            concurrency: Number(document.getElementById('rf-bulk-conc').value),
+        });
     });
     stop.addEventListener('click', function () { send('bulkStop'); });
     if (hasExt()) send('bulkStatus');   // 진행 중이면 이어서 표시
@@ -179,7 +195,13 @@
                             <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $it->keyword]) }}"
                                class="text-ink font-semibold" style="text-decoration:none;" title="이 키워드로 노출되는 업체 보기">{{ $it->keyword }}</a>
                         </td>
-                        <td style="padding:7px 6px;" class="text-muted">{{ $it->category?->name ?? '—' }}</td>
+                        {{-- 같은 키워드가 여러 분류에 있으면 대표 1개 + 나머지 개수 --}}
+                        <td style="padding:7px 6px;" class="text-muted">
+                            {{ $it->category?->name ?? '—' }}
+                            @if (($it->cat_cnt ?? 1) > 1)
+                                <span class="text-muted-soft" title="이 키워드는 {{ $it->cat_cnt }}개 분류에 있습니다(수집은 1회만)">+{{ $it->cat_cnt - 1 }}</span>
+                            @endif
+                        </td>
                         @if ($type === 'place')
                             <td style="padding:7px 6px;" class="text-muted">{{ $it->region ?: '—' }}</td>
                         @endif

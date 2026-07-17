@@ -42,18 +42,18 @@
         <a href="https://search.shopping.naver.com/search/all?query={{ urlencode($keyword) }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm ml-auto">네이버 쇼핑에서 보기</a>
     </div>
 
-    @if (! $shop)
+    @if (! $shop || $shopItems->isEmpty())
         <div class="card p-6 text-center text-muted-soft" style="font-size:var(--fs-sm);">
             아직 수집된 상품이 없습니다 — <b class="text-ink">상품 수집</b> 버튼을 눌러주세요.
         </div>
     @else
-        @php $sitems = collect($shop->items ?? []); @endphp
+        @php $sitems = $shopItems; @endphp
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             @foreach ([
                 ['수집 상품', number_format($sitems->count()).'개'],
                 ['전체 노출', number_format((int) $shop->total).'개'],
-                ['광고', number_format($sitems->where('isAd', true)->count()).'개'],
-                ['판매처', number_format($sitems->pluck('mallName')->filter()->unique()->count()).'곳'],
+                ['광고', number_format($sitems->filter(fn ($p) => ! empty($p->is_ad))->count()).'개'],
+                ['판매처', number_format($sitems->pluck('mall_name')->filter()->unique()->count()).'곳'],
             ] as [$l, $v])
                 <div class="card p-3 text-center">
                     <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $l }}</div>
@@ -87,17 +87,17 @@
                     <tbody>
                         @foreach ($sitems as $p)
                             <tr style="border-bottom:1px solid var(--color-hairline-soft);">
-                                <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $p['rank'] ?? '—' }}</td>
+                                <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $p->rnk ?? '—' }}</td>
                                 <td style="padding:7px 6px;">
-                                    @if (!empty($p['link']))
-                                        <a href="{{ $p['link'] }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $p['title'] }}</a>
+                                    @if (!empty($p->link))
+                                        <a href="{{ $p->link }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $p->title }}</a>
                                     @else
-                                        <span class="text-ink font-semibold">{{ $p['title'] }}</span>
+                                        <span class="text-ink font-semibold">{{ $p->title }}</span>
                                     @endif
                                 </td>
-                                <td style="padding:7px 6px;" class="text-muted">{{ $p['mallName'] ?: '—' }}</td>
-                                <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ !empty($p['price']) ? number_format($p['price']) : '—' }}</td>
-                                <td style="padding:7px 6px;">@if (!empty($p['isAd']))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>@else<span class="text-muted-soft">—</span>@endif</td>
+                                <td style="padding:7px 6px;" class="text-muted">{{ $p->mall_name ?: '—' }}</td>
+                                <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ !empty($p->price) ? number_format($p->price) : '—' }}</td>
+                                <td style="padding:7px 6px;">@if (!empty($p->is_ad))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>@else<span class="text-muted-soft">—</span>@endif</td>
                             </tr>
                         @endforeach
                     </tbody>

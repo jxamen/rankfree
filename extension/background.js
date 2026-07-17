@@ -449,72 +449,76 @@ const handlers = {
    * 대량 자동 수집 — 서버 대기열(미수집·오래된 키워드)을 받아 한 건씩 연속 수집한다.
    * 쇼핑 키워드가 수만 개라 사람이 하나씩 클릭할 수 없다. 진행 상황은 rfBulk 로 저장해 화면이 폴링한다.
    */
-  async bulkShopStart({ limit, delayMs }) {
+  async bulkShopStart({ limit, delayMs, concurrency }) {
     const { token, apiBase } = await getStore();
     if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
 
     const state = await chrome.storage.local.get(['rfBulk']);
     if (state.rfBulk && state.rfBulk.running) return { ok: false, message: '이미 수집이 진행 중입니다.' };
 
-    const max = Math.min(500, Math.max(1, Number(limit) || 50));
+    const max = Math.min(2000, Math.max(1, Number(limit) || 50));
     // 너무 빨리 열면 네이버가 일시 차단한다 — 건당 최소 4초, 기본 6초.
     const baseGap = Math.max(4000, Number(delayMs) || 6000);
-    await chrome.storage.local.set({ rfBulk: { running: true, done: 0, failed: 0, total: max, current: '', startedAt: Date.now(), stop: false } });
+    // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~4).
+    const conc = Math.min(4, Math.max(1, Number(concurrency) || 2));
+    await chrome.storage.local.set({ rfBulk: { running: true, done: 0, failed: 0, total: max, current: '', conc, startedAt: Date.now(), stop: false } });
 
     // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
     (async () => {
-      let done = 0, failed = 0;
+      let done = 0, failed = 0, streak = 0;
       let gap = baseGap;        // 실패가 이어지면 늘리고(차단 회피), 성공하면 천천히 되돌린다
-      let streak = 0;           // 연속 실패 수
-      while (done + failed < max) {
-        const st = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-        if (st.stop) break;
+      let queue = [];           // 서버 대기열 버퍼
+      let stopped = false;
 
-        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?limit=10', { token, apiBase });
-        const list = (ok && json && json.data && json.data.keywords) || [];
-        if (!list.length) break;                            // 더 수집할 게 없음
+      const patch = async (o) => {
+        const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+        await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, o) });
+      };
+      const isStopped = async () => stopped || !!((await chrome.storage.local.get(['rfBulk'])).rfBulk || {}).stop;
 
-        for (const kw of list) {
-          const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-          if (cur.stop || done + failed >= max) break;
-          await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, { current: kw }) });
+      // 대기열에서 키워드 하나 꺼내기(비면 서버에서 더 받아온다)
+      const next = async () => {
+        if (queue.length) return queue.shift();
+        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?limit=20', { token, apiBase });
+        queue = (ok && json && json.data && json.data.keywords) || [];
+        return queue.shift() || null;
+      };
+
+      // 워커 — conc 개를 동시에 돌린다. 각 워커는 자기 탭으로 수집하므로 병렬이 된다.
+      const worker = async () => {
+        while (!stopped && done + failed < max) {
+          if (await isStopped()) { stopped = true; break; }
+          const kw = await next();
+          if (!kw) break;                                   // 더 수집할 게 없음
+          await patch({ current: kw });
 
           const r = await handlers.collectShopSerp({ keyword: kw, count: 80 });
-          let lastError = '';
           if (r && r.ok) {
-            done++;
-            streak = 0;
-            gap = Math.max(baseGap, Math.round(gap * 0.8));   // 성공하면 서서히 원래 속도로
+            done++; streak = 0;
+            gap = Math.max(baseGap, Math.round(gap * 0.8));  // 성공하면 서서히 원래 속도로
+            await patch({ done, failed, gap });
           } else {
-            failed++;
-            streak++;
-            lastError = (r && r.message) || '알 수 없는 오류';   // 실패 사유를 남겨야 원인을 안다
-            // 수집 실패 = 차단 가능성 → 간격을 2배로(최대 60초). 차단 상태에서 계속 두드리면 더 오래 막힌다.
-            gap = Math.min(60000, gap * 2);
+            failed++; streak++;
+            const lastError = (r && r.message) || '알 수 없는 오류';
+            gap = Math.min(60000, gap * 2);                  // 실패 = 차단 가능성 → 감속
+            await patch({ done, failed, gap, lastError });
+            // 연속 5건 실패면 전체 중단 — 차단 상태로 계속 두드리지 않는다
+            if (streak >= 5) {
+              stopped = true;
+              await patch({ stop: true, lastError: lastError + ' (연속 5건 실패 — 네이버 차단일 수 있습니다. 잠시 후 다시 시도하세요)' });
+              break;
+            }
           }
-
-          const now = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, {
-            done, failed, gap, lastError: lastError || now.lastError || '',
-          }) });
-
-          // 연속 5건 실패하면 중단 — 차단·로그인 만료 상태로 계속 두드리지 않는다
-          if (streak >= 5) {
-            const st2 = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-            await chrome.storage.local.set({ rfBulk: Object.assign({}, st2, {
-              stop: true,
-              lastError: lastError + ' (연속 5건 실패 — 네이버 차단일 수 있습니다. 잠시 후 다시 시도하세요)',
-            }) });
-            break;
-          }
+          // 워커별로 간격을 두되, 동시 수만큼 전체 속도가 빨라진다
           await new Promise((r2) => setTimeout(r2, gap));
         }
-      }
-      const fin = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-      await chrome.storage.local.set({ rfBulk: Object.assign({}, fin, { running: false, current: '', finishedAt: Date.now() }) });
+      };
+
+      await Promise.all(Array.from({ length: conc }, () => worker()));
+      await patch({ running: false, current: '', finishedAt: Date.now() });
     })();
 
-    return { ok: true, started: true, total: max };
+    return { ok: true, started: true, total: max, concurrency: conc };
   },
 
   /** 대량 수집 진행 상황 */

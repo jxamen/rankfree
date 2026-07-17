@@ -100,7 +100,7 @@ class SettingsServiceProvider extends ServiceProvider
         }
 
         // 6) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
-        //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS
+        //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS · 서울 열린데이터광장(신규 개업 수집)
         foreach ([
             'turnstile.site_key' => 'services.turnstile.key',
             'turnstile.secret' => 'services.turnstile.secret',
@@ -111,6 +111,7 @@ class SettingsServiceProvider extends ServiceProvider
             'aligo.user_id' => 'services.aligo.user_id',
             'aligo.api_key' => 'services.aligo.key',
             'aligo.sender' => 'services.aligo.sender',
+            'seoul.openapi_key' => 'rankfree.newbiz.seoul_key',   // 24 — 신규 개업(인허가) 수집
         ] as $mk => $cfg) {
             $v = trim((string) ($m[$mk] ?? ''));
             if ($v !== '') {

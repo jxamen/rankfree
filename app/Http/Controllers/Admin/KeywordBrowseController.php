@@ -66,17 +66,30 @@ class KeywordBrowseController extends Controller
             ? $tree->regionsIn($grouped, $sido, $sgg ?: null)
             : [];
 
+        // 수집 상태 필터 — 분류당 수천 개라 '미수집만' 보고 골라 수집할 수 있어야 한다
+        $collected = (string) $request->query('collected', '');   // ''=전체 · 'y'=수집됨 · 'n'=미수집
+        $serpTable = $type === 'place' ? 'keyword_place_ranks' : 'keyword_shop_ranks';
+
         $base = fn () => KeywordCandidate::whereIn('category_id', $scopeIds)
             ->when($type === 'place' && $rg !== '', fn ($x) => $x->where('region', $rg))
             ->when($inRegions !== [], fn ($x) => $x->whereIn('region', $inRegions))
-            ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'));
+            ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'))
+            ->when($collected === 'y', fn ($x) => $x->whereIn('keyword', fn ($s) => $s->select('keyword')->from($serpTable)))
+            ->when($collected === 'n', fn ($x) => $x->whereNotIn('keyword', fn ($s) => $s->select('keyword')->from($serpTable)));
 
-        // 화면에 뜬 키워드의 검색량 자동 갱신 — 주 1회(TTL) 대상만, 화면당 최대 50건(5개씩 묶어 조회)
+        // 같은 키워드가 여러 분류에 중복 존재한다(실측 825건·6%, '탑텐'은 7개 분류).
+        // 수집·분석은 키워드 단위라 목록도 키워드로 합친다 — 분류는 대표 1개 + 나머지 개수로 보여준다.
         $items = $base()->with('category')
-            ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
+            ->groupBy('keyword')
+            ->select('keyword')
+            ->selectRaw('MIN(id) as id, MIN(category_id) as category_id, MIN(region) as region, MIN(region_type) as region_type')
+            ->selectRaw('MIN(source) as source, MAX(monthly_total) as monthly_total, MIN(comp_idx) as comp_idx')
+            ->selectRaw('MAX(volume_checked_at) as volume_checked_at, MIN(status) as status, COUNT(*) as cat_cnt')
+            ->orderByRaw('MAX(monthly_total) is null')->orderByRaw('MAX(monthly_total) desc')->orderBy('keyword')
             ->paginate(100)->withQueryString();
         // 검색어를 넣은 조회는 즉답이 중요하다 — 갱신은 목록을 훑을 때만(검색 중 3초 지연 방지, 실측)
         $refreshed = $q === '' ? $refresher->refresh(collect($items->items())) : 0;
+        // 분류별 키워드가 수천 개라(실측: 패션잡화 9,588) 미수집만 보기·수집 상태 필터가 필요하다
 
         // 업체·상품 수집일(키워드별 스냅샷) — 목록에서 어느 키워드를 수집했는지 바로 보이게
         $shown = collect($items->items())->pluck('keyword')->all();
@@ -100,7 +113,8 @@ class KeywordBrowseController extends Controller
             'regions' => ($sido !== '' && $sgg !== '') ? ($grouped['leaf'][$sido][$sgg] ?? []) : [],
             'items' => $items,
             'serpAt' => $serpAt,   // 키워드 => 업체·상품 수집일시
-            'total' => $base()->count(),
+            'collected' => $collected,
+            'total' => $base()->distinct()->count('keyword'),   // 고유 키워드 기준(분류 중복 제외)
             'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
         ]);
     }
@@ -162,10 +176,15 @@ class KeywordBrowseController extends Controller
             }
         }
 
-        // 쇼핑 — 확장이 수집해 저장해 둔 스냅샷(상위 80)
-        $shop = $type === 'shopping'
-            ? \App\Models\KeywordShopSerp::where('keyword', $keyword)->first()
-            : null;
+        // 쇼핑 — 확장이 수집해 저장한 상품(마스터+월별 매핑). 메타(전체 노출·연관태그)는 KeywordShopSerp.
+        $shop = null;
+        $shopItems = collect();
+        if ($type === 'shopping') {
+            $shop = \App\Models\KeywordShopSerp::where('keyword', $keyword)->first();
+            $store = app(\App\Domain\Shopping\ShopSerpStore::class);
+            $months = $store->months($keyword);
+            $shopItems = $store->items($keyword, $month);
+        }
 
         return view('admin.keyword-detail', [
             'keyword' => $keyword,
@@ -175,6 +194,7 @@ class KeywordBrowseController extends Controller
             'top' => $top,
             'serp' => $data,
             'shop' => $shop,
+            'shopItems' => $shopItems,   // 쇼핑 상품(마스터 조인)
             'months' => $months,       // 수집된 월 목록(최신순)
             'month' => $month,         // 지금 보고 있는 월(null = 최신)
         ]);

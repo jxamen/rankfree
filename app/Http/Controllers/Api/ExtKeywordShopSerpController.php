@@ -27,10 +27,15 @@ class ExtKeywordShopSerpController extends Controller
         $shopCatIds = \App\Models\KeywordCategory::where('type', 'shopping')->pluck('id');
         $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
 
+        // ★ distinct — 같은 키워드가 여러 분류에 중복 존재한다(실측 825건·6%, '탑텐'은 7개 분류).
+        //   수집은 키워드 단위라 중복을 제거하지 않으면 같은 키워드를 7번 수집하게 된다.
         $keywords = \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
             ->whereNotIn('keyword', $fresh)
-            ->orderByRaw('monthly_total is null')          // 검색량 있는 것 우선
-            ->orderByDesc('monthly_total')
+            ->select('keyword')
+            ->selectRaw('MAX(monthly_total) as vol')
+            ->groupBy('keyword')
+            ->orderByRaw('MAX(monthly_total) is null')     // 검색량 있는 것 우선
+            ->orderByRaw('MAX(monthly_total) desc')
             ->limit($limit)
             ->pluck('keyword')
             ->values();
@@ -38,7 +43,7 @@ class ExtKeywordShopSerpController extends Controller
         return response()->json(['data' => [
             'keywords' => $keywords,
             'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
-                ->whereNotIn('keyword', $fresh)->count(),
+                ->whereNotIn('keyword', $fresh)->distinct()->count('keyword'),
         ]]);
     }
 
@@ -69,12 +74,18 @@ class ExtKeywordShopSerpController extends Controller
         }
         unset($it);
 
+        $keyword = trim($data['keyword']);
+
+        // 상품 마스터 + 월별 파티션 매핑(중복 상품 제거·용량 최적화)
+        app(\App\Domain\Shopping\ShopSerpStore::class)->save($keyword, $items);
+
+        // 전체 노출 수·연관 태그는 키워드 단위 메타로 보관(items 는 매핑으로 대체돼 비운다)
         $row = KeywordShopSerp::updateOrCreate(
-            ['keyword' => trim($data['keyword'])],
+            ['keyword' => $keyword],
             [
                 'total' => (int) ($data['total'] ?? 0),
                 'item_count' => count($items),
-                'items' => $items,
+                'items' => [],
                 'related_tags' => $data['related_tags'] ?? null,
                 'collected_at' => now(),
             ],
