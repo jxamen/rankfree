@@ -125,7 +125,7 @@
                 window.postMessage({ source: 'rankfree-admin', type: 'collectShop', keyword: btn.dataset.keyword, count: 80 }, '*');
                 var onRes = function (e) {
                     var m = e.data;
-                    if (!m || m.source !== 'rankfree-ext' || m.type !== 'collectShopResult') return;
+                    if (!m || m.source !== 'rankfree-ext' || m.type !== 'collectShopResult') return;   // 브릿지가 {type}Result 로 회신
                     window.removeEventListener('message', onRes);
                     btn.disabled = false;
                     if (m.ok) {

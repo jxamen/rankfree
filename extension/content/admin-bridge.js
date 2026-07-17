@@ -15,26 +15,32 @@
   // 확장이 설치돼 있음을 페이지가 알 수 있게 표식을 남긴다(버튼 활성화 판단용)
   document.documentElement.setAttribute('data-rf-ext', '1');
 
+  // 페이지 요청 타입 → 확장 핸들러
+  const ROUTES = {
+    collectShop: (m) => ['collectShopSerp', { keyword: String(m.keyword || ''), count: Number(m.count) || 80 }],
+    bulkStart: (m) => ['bulkShopStart', { limit: Number(m.limit) || 50, delayMs: Number(m.delayMs) || 2500 }],
+    bulkStatus: () => ['bulkShopStatus', {}],
+    bulkStop: () => ['bulkShopStop', {}],
+  };
+
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
     const m = e.data;
-    if (!m || m.source !== 'rankfree-admin' || m.type !== 'collectShop') return;
+    if (!m || m.source !== 'rankfree-admin' || !ROUTES[m.type]) return;
 
     const reply = (payload) => window.postMessage(
-      Object.assign({ source: 'rankfree-ext', type: 'collectShopResult' }, payload), '*'
+      Object.assign({ source: 'rankfree-ext', type: m.type + 'Result' }, payload), '*'
     );
 
     try {
-      chrome.runtime.sendMessage(
-        { type: 'collectShopSerp', payload: { keyword: String(m.keyword || ''), count: Number(m.count) || 80 } },
-        (res) => {
-          if (chrome.runtime.lastError) {
-            reply({ ok: false, message: '확장과 통신할 수 없습니다. 확장을 새로고침해 주세요.' });
-            return;
-          }
-          reply(res || { ok: false, message: '수집 실패' });
+      const [type, payload] = ROUTES[m.type](m);
+      chrome.runtime.sendMessage({ type, payload }, (res) => {
+        if (chrome.runtime.lastError) {
+          reply({ ok: false, message: '확장과 통신할 수 없습니다. 확장을 새로고침해 주세요.' });
+          return;
         }
-      );
+        reply(res || { ok: false, message: '수집 실패' });
+      });
     } catch (err) {
       reply({ ok: false, message: '확장이 설치돼 있지 않거나 권한이 없습니다.' });
     }

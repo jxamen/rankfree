@@ -28,7 +28,9 @@ Route::prefix('ext')->group(function (): void {
         // '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 확장이 서버에서 받아 표시(DOM scrape 대체)
         Route::get('/keyword-together', [KeywordController::class, 'together'])->middleware('throttle:20,1');
         // 확장이 수집한 쇼핑 노출 상품(상위 80) 저장 — 서버는 search.shopping 418 이라 직접 수집 불가
-        Route::post('/keyword-shop-serp', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/keyword-shop-serp', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1');
+        // 대량 자동 수집 대기열 — 미수집·오래된 키워드를 검색량 순으로(확장이 연속 수집)
+        Route::get('/keyword-shop-serp/queue', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1');
 
         // 플레이스 리스트 순위(map.naver 배지·시장분석) — 키워드 상위 오가닉 순위 + N1/N2/N3
         Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');

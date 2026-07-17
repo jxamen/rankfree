@@ -446,6 +446,65 @@ const handlers = {
 
   /** 통합검색 등 비쇼핑 페이지 위임 수집 — 쇼핑 검색 페이지를 백그라운드 탭으로 열어 상품을 수집해 회신. */
   /**
+   * 대량 자동 수집 — 서버 대기열(미수집·오래된 키워드)을 받아 한 건씩 연속 수집한다.
+   * 쇼핑 키워드가 수만 개라 사람이 하나씩 클릭할 수 없다. 진행 상황은 rfBulk 로 저장해 화면이 폴링한다.
+   */
+  async bulkShopStart({ limit, delayMs }) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
+
+    const state = await chrome.storage.local.get(['rfBulk']);
+    if (state.rfBulk && state.rfBulk.running) return { ok: false, message: '이미 수집이 진행 중입니다.' };
+
+    const max = Math.min(500, Math.max(1, Number(limit) || 50));
+    const gap = Math.max(1000, Number(delayMs) || 2500);   // 네이버 부하를 낮추려 건당 최소 1초
+    await chrome.storage.local.set({ rfBulk: { running: true, done: 0, failed: 0, total: max, current: '', startedAt: Date.now(), stop: false } });
+
+    // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
+    (async () => {
+      let done = 0, failed = 0;
+      while (done + failed < max) {
+        const st = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+        if (st.stop) break;
+
+        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?limit=10', { token, apiBase });
+        const list = (ok && json && json.data && json.data.keywords) || [];
+        if (!list.length) break;                            // 더 수집할 게 없음
+
+        for (const kw of list) {
+          const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+          if (cur.stop || done + failed >= max) break;
+          await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, { current: kw }) });
+
+          const r = await handlers.collectShopSerp({ keyword: kw, count: 80 });
+          if (r && r.ok) done++; else failed++;
+
+          const now = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, { done, failed }) });
+          await new Promise((r2) => setTimeout(r2, gap));
+        }
+      }
+      const fin = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+      await chrome.storage.local.set({ rfBulk: Object.assign({}, fin, { running: false, current: '', finishedAt: Date.now() }) });
+    })();
+
+    return { ok: true, started: true, total: max };
+  },
+
+  /** 대량 수집 진행 상황 */
+  async bulkShopStatus() {
+    const s = await chrome.storage.local.get(['rfBulk']);
+    return { ok: true, bulk: s.rfBulk || { running: false, done: 0, failed: 0, total: 0, current: '' } };
+  },
+
+  /** 대량 수집 중단 */
+  async bulkShopStop() {
+    const s = await chrome.storage.local.get(['rfBulk']);
+    if (s.rfBulk) await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { stop: true }) });
+    return { ok: true };
+  },
+
+  /**
    * 관리자 화면 요청 — 쇼핑 상품(상위 80)을 수집해 서버에 저장한다.
    * 서버는 search.shopping 이 418 이라 직접 수집할 수 없어 확장이 대신한다.
    */

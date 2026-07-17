@@ -12,6 +12,34 @@ use Illuminate\Http\Request;
  */
 class ExtKeywordShopSerpController extends Controller
 {
+    /**
+     * 수집 대기열 — 아직 수집 안 했거나 오래된 쇼핑 키워드를 검색량 큰 순으로 준다.
+     * 확장이 이 목록을 받아 한 건씩 연속 수집한다(수만 개를 사람이 클릭할 수 없으므로).
+     */
+    public function queue(Request $request)
+    {
+        $limit = min(50, max(1, (int) $request->query('limit', 20)));
+        $days = max(1, (int) $request->query('days', 30));   // 이 기간 지난 스냅샷은 다시 수집 대상
+
+        // 쇼핑 카테고리에 속한 후보 중, 스냅샷이 없거나 오래된 것
+        $shopCatIds = \App\Models\KeywordCategory::where('type', 'shopping')->pluck('id');
+        $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
+
+        $keywords = \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
+            ->whereNotIn('keyword', $fresh)
+            ->orderByRaw('monthly_total is null')          // 검색량 있는 것 우선
+            ->orderByDesc('monthly_total')
+            ->limit($limit)
+            ->pluck('keyword')
+            ->values();
+
+        return response()->json(['data' => [
+            'keywords' => $keywords,
+            'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
+                ->whereNotIn('keyword', $fresh)->count(),
+        ]]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([

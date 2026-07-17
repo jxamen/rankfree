@@ -90,6 +90,66 @@
     </form>
 </div>
 
+{{-- 쇼핑 대량 자동 수집 — 서버는 418 이라 확장이 대기열을 받아 연속 수집한다 --}}
+@if ($type === 'shopping')
+<div class="card p-4 mb-4">
+    <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">상품 대량 수집</span>
+        <select id="rf-bulk-limit" class="input" style="height:32px;width:110px;font-size:var(--fs-xs);">
+            <option value="50">50개</option>
+            <option value="100">100개</option>
+            <option value="200">200개</option>
+            <option value="500">500개</option>
+        </select>
+        <select id="rf-bulk-gap" class="input" style="height:32px;width:130px;font-size:var(--fs-xs);" title="키워드 간 간격(부하 조절)">
+            <option value="2500">간격 2.5초</option>
+            <option value="4000">간격 4초</option>
+            <option value="6000">간격 6초</option>
+        </select>
+        <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
+        <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
+        <span id="rf-bulk-msg" class="text-muted" style="font-size:var(--fs-xs);">확장이 미수집 키워드를 검색량 순으로 자동 수집합니다(브라우저를 켜둔 채로).</span>
+    </div>
+</div>
+<script>
+(function () {
+    var start = document.getElementById('rf-bulk-start'), stop = document.getElementById('rf-bulk-stop'), msg = document.getElementById('rf-bulk-msg');
+    if (!start) return;
+    var poll = null;
+    function send(type, extra) { window.postMessage(Object.assign({ source: 'rankfree-admin', type: type }, extra || {}), '*'); }
+    function hasExt() { return document.documentElement.getAttribute('data-rf-ext') === '1'; }
+
+    window.addEventListener('message', function (e) {
+        var m = e.data;
+        if (!m || m.source !== 'rankfree-ext') return;
+        if (m.type === 'bulkStartResult') {
+            if (!m.ok) { msg.style.color = 'var(--color-error)'; msg.textContent = m.message || '시작 실패'; start.disabled = false; return; }
+            msg.style.color = ''; stop.hidden = false; start.disabled = true;
+            poll = setInterval(function () { send('bulkStatus'); }, 1500);
+        }
+        if (m.type === 'bulkStatusResult' && m.bulk) {
+            var b = m.bulk;
+            msg.textContent = (b.running ? '수집 중… ' : '수집 종료 — ') + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+                + (b.running && b.current ? ' · 현재: ' + b.current : '');
+            if (!b.running) {
+                clearInterval(poll); poll = null; stop.hidden = true; start.disabled = false;
+                msg.textContent += ' — 새로고침하면 반영됩니다';
+            }
+        }
+        if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }
+    });
+
+    start.addEventListener('click', function () {
+        if (!hasExt()) { msg.style.color = 'var(--color-error)'; msg.textContent = '확장이 설치돼 있지 않습니다(v0.1.8 이상, 로그인 필요).'; return; }
+        start.disabled = true; msg.style.color = ''; msg.textContent = '시작하는 중…';
+        send('bulkStart', { limit: Number(document.getElementById('rf-bulk-limit').value), delayMs: Number(document.getElementById('rf-bulk-gap').value) });
+    });
+    stop.addEventListener('click', function () { send('bulkStop'); });
+    if (hasExt()) send('bulkStatus');   // 진행 중이면 이어서 표시
+})();
+</script>
+@endif
+
 {{-- 키워드 목록 --}}
 <div class="card p-5">
     <div style="overflow-x:auto;">
