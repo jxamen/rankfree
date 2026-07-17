@@ -878,10 +878,19 @@
    * (fetchCatalogSales 가 쓰는 purchaseCnt·price·mallName 은 운영에서 검증된 경로).
    */
   async function fetchCatalogStoreSellers(catalogId) {
-    const res = await fetch(location.origin + '/catalog/' + encodeURIComponent(catalogId), {
-      credentials: 'include',
-      headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
-    });
+    // 응답이 안 오면 수집 전체가 멈춘다 — 카탈로그 한 건에 6초를 넘기지 않는다(실측: 시간 초과로 전량 실패).
+    const ac = new AbortController();
+    const kill = setTimeout(() => ac.abort(), 6000);
+    let res;
+    try {
+      res = await fetch(location.origin + '/catalog/' + encodeURIComponent(catalogId), {
+        credentials: 'include',
+        headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(kill);
+    }
     if (!res.ok) throw new Error('catalog ' + res.status);
     const html = await res.text();
     const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
@@ -3442,11 +3451,17 @@
     const catalogs = products.filter((p) => p.isCatalog && p.id);
     if (!catalogs.length) return products;
 
+    // ★ 전체 예산 20초 — 한 키워드에 가격비교가 수십 개면 카탈로그를 다 읽다가 수집 자체가
+    //   시간 초과로 통째 실패한다(실측: 4개 탭 모두 '시간이 초과', 차단은 아니었음).
+    //   예산을 넘기면 남은 가격비교는 포기하고 지금까지 읽은 것으로 진행한다.
+    const deadline = Date.now() + 20000;
     const sellersById = new Map();
     const queue = catalogs.slice();
+    let skipped = 0;
     const worker = async () => {
       while (queue.length) {
         const c = queue.shift();
+        if (Date.now() > deadline) { skipped++; continue; }
         try {
           sellersById.set(c.id, await fetchCatalogStoreSellers(c.id));
         } catch (e) {
@@ -3454,7 +3469,8 @@
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, catalogs.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(3, catalogs.length) }, worker));
+    if (skipped) console.warn('[RankFree] 카탈로그 ' + skipped + '건은 시간 예산 초과로 건너뜀');
 
     const out = [];
     for (const p of products) {

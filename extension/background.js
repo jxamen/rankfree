@@ -544,8 +544,10 @@ const handlers = {
         }
       };
 
-      // 차단 판정 — 수집 실패 사유가 데이터 없음/시간초과면 네이버가 막았을 가능성
-      const looksBlocked = (msg) => /차단|시간이 초과|데이터를 찾지 못/.test(String(msg || ''));
+      // 차단 판정 — 네이버가 실제로 막았을 때의 문구만 본다.
+      // '시간이 초과'는 차단이 아니라 우리 쪽이 오래 걸린 것이라 여기서 뺀다
+      // (실측: 가격비교 많은 의류 키워드에서 카탈로그를 다 읽다 초과 → 창엔 차단 메시지가 없었다).
+      const looksBlocked = (msg) => /차단|일시적으로 제한|데이터를 찾지 못/.test(String(msg || ''));
 
       // 탭은 '순서대로' 열되 기다리지 않는다 — 앞 탭이 열리면 바로 다음 탭을 연다.
       // (gap 만큼 직렬 대기시키면 동시 N개가 무의미해져 사실상 순차가 된다)
@@ -669,7 +671,8 @@ const handlers = {
     return new Promise((resolve) => {
       let tabId = null;
       let done = false;
-      const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), 60000);
+      // 상품 5페이지(약 20초) + 가격비교 카탈로그 확장(예산 20초) + 여유
+      const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), 75000);
       function finish(res) {
         if (done) return;
         done = true;

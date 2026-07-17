@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "네이버 쇼핑·플레이스·키워드·상품 리뷰 무료 분석 — 시장 규모·순위·키워드·셀러력·리뷰 감정분석. rankfree.kr 로그인 필요.",
   "icons": {
     "16": "icons/icon16.png",
@@ -45,6 +45,17 @@
         "http://localhost:8000/admin/*"
       ],
       "js": ["content/admin-bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://shopping.naver.com/popup/seller-info/*"],
+      "js": ["content/seller-info-captcha-injected.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://shopping.naver.com/popup/seller-info/*"],
+      "js": ["content/seller-info-captcha.js"],
       "run_at": "document_idle"
     },
     {
