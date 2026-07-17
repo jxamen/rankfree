@@ -12,9 +12,13 @@
   try {
     var h = location.hash;
     var isCollect = h === '#rfreviewcollect' || h === '#rfspcollect';
+    var isReviewCollect = h === '#rfreviewcollect';
     try {
       if (isCollect) sessionStorage.setItem('rfCollectMode', h);         // 해시 유실 대비 모드 백업
-      else if (sessionStorage.getItem('rfCollectMode')) isCollect = true; // 클릭/라우팅으로 해시 유실돼도 유지
+      else if (sessionStorage.getItem('rfCollectMode')) {
+        isCollect = true; // 클릭/라우팅으로 해시 유실돼도 유지
+        isReviewCollect = sessionStorage.getItem('rfCollectMode') === '#rfreviewcollect';
+      }
     } catch (e) { /* noop */ }
     if (isCollect) {
       Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return false; } });
@@ -31,7 +35,7 @@
       var inReview = function (el) {
         try { return !!(el && el.closest && el.closest('#REVIEW,[id*="review" i],[id*="Review"],[class*="review" i],[class*="Review"],[data-shp-area-id*="rev" i]')); } catch (e) { return false; }
       };
-      if (RealIO) {
+      if (RealIO && isReviewCollect) {
         var WrappedIO = function (cb, opts) {
           var io = new RealIO(cb, opts);
           var realObserve = io.observe.bind(io);

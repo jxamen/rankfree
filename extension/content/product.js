@@ -1868,7 +1868,8 @@
    * SPA hydration 후 script 태그가 제거되면 위 방식이 실패한다.
    * → MAIN world(injected-store.js)에 window.__PRELOADED_STATE__를 요청해 받는 폴백.
    */
-  function getMyPreloadedAsync() {
+  function getMyPreloadedAsync(timeoutMs) {
+    timeoutMs = Number(timeoutMs) || 1500;
     const fromScript = getMyPreloaded();
     if (fromScript) return Promise.resolve(fromScript);
     return new Promise((resolve) => {
@@ -1884,7 +1885,7 @@
       };
       document.addEventListener('rankfree:preloaded', onEv);
       try { document.dispatchEvent(new CustomEvent('rankfree:get-preloaded')); } catch (e) { /* noop */ }
-      setTimeout(() => finish(null), 1500);
+      setTimeout(() => finish(null), timeoutMs);
     });
   }
   function spNodeFrom(pre, extra) {
@@ -2114,20 +2115,19 @@
     let data = null;
     try {
       let pre = null;
-      for (let i = 0; i < 12 && !pre; i++) {
-        await new Promise((r) => setTimeout(r, 350));
+      for (let i = 0; i < 10 && !data; i++) {
         pre = getMyPreloaded();
-      }
-      if (!pre) pre = await getMyPreloadedAsync();
-      if (pre) {
-        const A = (pre.simpleProductForDetailPage && pre.simpleProductForDetailPage.A) || (pre.product && pre.product.A) || pre.product || null;
-        if (A && A.name) {
-          data = {
-            product: { A: A },
-            smartStoreV2: pre.smartStoreV2 || (pre.channel ? { channel: pre.channel } : null),
+        if (!pre) pre = await getMyPreloadedAsync(100);
+        if (pre) {
+          const A = (pre.simpleProductForDetailPage && pre.simpleProductForDetailPage.A) || (pre.product && pre.product.A) || pre.product || null;
+          const channel = (pre.smartStoreV2 && pre.smartStoreV2.channel) || pre.channel || (A && A.channel) || null;
+          if (channel && channel.channelUid) data = {
+            product: { A: A || {} },
+            smartStoreV2: { channel: channel },
             mallInfoCache: pre.mallInfoCache || null,
           };
         }
+        if (!data) await new Promise((r) => setTimeout(r, 50));
       }
     } catch (e) { /* noop */ }
     try { chrome.runtime.sendMessage({ type: '__spCollected', ok: !!data, data: data }); } catch (e) { /* noop */ }
