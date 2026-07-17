@@ -25,15 +25,121 @@
 </div>
 
 @if ($type !== 'place')
-    {{-- 쇼핑 — 서버에서 search.shopping 이 418 로 막혀 확장 수집이 필요하다 --}}
-    <div class="card p-6 text-center">
-        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 상품 수집은 확장 프로그램이 필요합니다</div>
-        <p class="text-muted mt-2" style="font-size:var(--fs-xs);line-height:1.7;">
-            네이버 쇼핑 검색 API는 서버 요청을 차단(418)하기 때문에, 상품 목록(상위 80개)은 브라우저에서 확장이 수집해야 합니다.<br>
-            아래 버튼으로 네이버 쇼핑을 열면 확장이 시장 분석으로 수집합니다.
-        </p>
-        <a href="https://search.shopping.naver.com/search/all?query={{ urlencode($keyword) }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm mt-4">네이버 쇼핑에서 열기</a>
+    {{-- 쇼핑 — 서버는 search.shopping 이 418 이라 확장이 수집해 저장한 스냅샷을 보여준다 --}}
+    @php $__sat = $shop?->collected_at; @endphp
+    <div class="card p-4 mb-4 flex items-center gap-3 flex-wrap">
+        <button type="button" id="rf-collect-shop" class="btn btn-primary btn-sm" data-keyword="{{ $keyword }}">
+            {{ $shop ? '다시 수집' : '상품 수집 (상위 80)' }}
+        </button>
+        <span id="rf-collect-msg" class="text-muted" style="font-size:var(--fs-xs);">
+            @if ($__sat)
+                수집 <b class="text-muted" title="{{ $__sat->format('Y-m-d H:i') }}">{{ $__sat->format('Y-m-d H:i') }} ({{ $__sat->diffForHumans() }})</b>
+                @if ($__sat->lt(now()->subDay()))<span style="color:var(--color-error);"> · 순위는 매일 바뀔 수 있습니다</span>@endif
+            @else
+                확장이 브라우저에서 수집합니다(서버는 네이버가 차단). 확장 로그인 상태여야 합니다.
+            @endif
+        </span>
+        <a href="https://search.shopping.naver.com/search/all?query={{ urlencode($keyword) }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm ml-auto">네이버 쇼핑에서 보기</a>
     </div>
+
+    @if (! $shop)
+        <div class="card p-6 text-center text-muted-soft" style="font-size:var(--fs-sm);">
+            아직 수집된 상품이 없습니다 — <b class="text-ink">상품 수집</b> 버튼을 눌러주세요.
+        </div>
+    @else
+        @php $sitems = collect($shop->items ?? []); @endphp
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            @foreach ([
+                ['수집 상품', number_format($sitems->count()).'개'],
+                ['전체 노출', number_format((int) $shop->total).'개'],
+                ['광고', number_format($sitems->where('isAd', true)->count()).'개'],
+                ['판매처', number_format($sitems->pluck('mallName')->filter()->unique()->count()).'곳'],
+            ] as [$l, $v])
+                <div class="card p-3 text-center">
+                    <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $l }}</div>
+                    <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $v }}</div>
+                </div>
+            @endforeach
+        </div>
+
+        @if ($shop->related_tags)
+            <div class="card p-4 mb-4 flex items-center gap-1.5 flex-wrap">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">함께 많이 찾는</span>
+                @foreach (array_slice($shop->related_tags, 0, 20) as $tg)
+                    <span class="badge border border-hairline" style="font-size:var(--fs-xs);">{{ is_array($tg) ? ($tg['keyword'] ?? '') : $tg }}</span>
+                @endforeach
+            </div>
+        @endif
+
+        <div class="card p-5">
+            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">노출 상품 <span class="font-mono text-muted">{{ number_format($sitems->count()) }}</span></div>
+            <div style="overflow-x:auto;">
+                <table class="w-full" style="font-size:var(--fs-xs);border-collapse:collapse;">
+                    <thead>
+                        <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
+                            <th style="padding:8px 6px;width:44px;text-align:right;">순위</th>
+                            <th style="padding:8px 6px;">상품명</th>
+                            <th style="padding:8px 6px;">판매처</th>
+                            <th style="padding:8px 6px;text-align:right;">가격</th>
+                            <th style="padding:8px 6px;">광고</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($sitems as $p)
+                            <tr style="border-bottom:1px solid var(--color-hairline-soft);">
+                                <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $p['rank'] ?? '—' }}</td>
+                                <td style="padding:7px 6px;">
+                                    @if (!empty($p['link']))
+                                        <a href="{{ $p['link'] }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $p['title'] }}</a>
+                                    @else
+                                        <span class="text-ink font-semibold">{{ $p['title'] }}</span>
+                                    @endif
+                                </td>
+                                <td style="padding:7px 6px;" class="text-muted">{{ $p['mallName'] ?: '—' }}</td>
+                                <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ !empty($p['price']) ? number_format($p['price']) : '—' }}</td>
+                                <td style="padding:7px 6px;">@if (!empty($p['isAd']))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>@else<span class="text-muted-soft">—</span>@endif</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
+
+    <script>
+        // 확장 브릿지 — 서버가 418 이라 확장이 백그라운드 탭으로 수집해 서버에 저장한다
+        (function () {
+            var btn = document.getElementById('rf-collect-shop');
+            var msg = document.getElementById('rf-collect-msg');
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                if (document.documentElement.getAttribute('data-rf-ext') !== '1') {
+                    msg.textContent = '확장이 설치돼 있지 않습니다. 랭크프리 확장을 설치하고 로그인해 주세요.';
+                    msg.style.color = 'var(--color-error)';
+                    return;
+                }
+                btn.disabled = true;
+                var t0 = Date.now();
+                msg.style.color = '';
+                msg.textContent = '확장이 수집 중입니다… (최대 1분)';
+                window.postMessage({ source: 'rankfree-admin', type: 'collectShop', keyword: btn.dataset.keyword, count: 80 }, '*');
+                var onRes = function (e) {
+                    var m = e.data;
+                    if (!m || m.source !== 'rankfree-ext' || m.type !== 'collectShopResult') return;
+                    window.removeEventListener('message', onRes);
+                    btn.disabled = false;
+                    if (m.ok) {
+                        msg.textContent = (m.saved || 0) + '개 수집 완료 (' + Math.round((Date.now() - t0) / 1000) + '초) — 새로고침합니다';
+                        setTimeout(function () { location.reload(); }, 700);
+                    } else {
+                        msg.style.color = 'var(--color-error)';
+                        msg.textContent = m.message || '수집에 실패했습니다.';
+                    }
+                };
+                window.addEventListener('message', onRes);
+            });
+        })();
+    </script>
 @elseif ($serp['blocked'])
     <div class="card p-6 text-center">
         <div class="text-error font-semibold" style="font-size:var(--fs-sm);">수집이 차단되었습니다 (405/429)</div>

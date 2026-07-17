@@ -141,6 +141,11 @@ class KeywordBrowseController extends Controller
             }
         }
 
+        // 쇼핑 — 확장이 수집해 저장해 둔 스냅샷(상위 80)
+        $shop = $type === 'shopping'
+            ? \App\Models\KeywordShopSerp::where('keyword', $keyword)->first()
+            : null;
+
         return view('admin.keyword-detail', [
             'keyword' => $keyword,
             'type' => $type,
@@ -148,6 +153,7 @@ class KeywordBrowseController extends Controller
             'candidate' => $candidate,
             'top' => $top,
             'serp' => $data,
+            'shop' => $shop,
         ]);
     }
 

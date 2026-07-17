@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "네이버 쇼핑·플레이스·키워드·상품 리뷰 무료 분석 — 시장 규모·순위·키워드·셀러력·리뷰 감정분석. rankfree.kr 로그인 필요.",
   "icons": {
     "16": "icons/icon16.png",
@@ -33,6 +33,12 @@
       "matches": ["https://search.shopping.naver.com/search/*"],
       "js": ["content/content.js", "content/shop-seo.js"],
       "css": ["content/panel.css", "content/seller-power.css", "content/shop-seo.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단)",
+      "matches": ["https://rankfree.kr/admin/*"],
+      "js": ["content/admin-bridge.js"],
       "run_at": "document_idle"
     },
     {

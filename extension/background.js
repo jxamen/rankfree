@@ -445,6 +445,42 @@ const handlers = {
   },
 
   /** 통합검색 등 비쇼핑 페이지 위임 수집 — 쇼핑 검색 페이지를 백그라운드 탭으로 열어 상품을 수집해 회신. */
+  /**
+   * 관리자 화면 요청 — 쇼핑 상품(상위 80)을 수집해 서버에 저장한다.
+   * 서버는 search.shopping 이 418 이라 직접 수집할 수 없어 확장이 대신한다.
+   */
+  async collectShopSerp({ keyword, count }) {
+    const kw = String(keyword || '').trim();
+    if (!kw) return { ok: false, message: '키워드가 없습니다.' };
+
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
+
+    const col = await handlers.collectShopping({ keyword: kw, count: Number(count) || 80 });
+    if (!col || !col.ok || !Array.isArray(col.products) || !col.products.length) {
+      return { ok: false, message: (col && col.message) || '상품 수집에 실패했습니다.' };
+    }
+
+    const products = col.products.slice(0, Number(count) || 80).map((p, i) => ({
+      title: String(p.title || ''),
+      rank: p.rank || i + 1,
+      price: Number(p.price) || 0,
+      mallName: String(p.mallName || ''),
+      link: String(p.link || ''),
+      isAd: !!p.isAd,
+    })).filter((p) => p.title);
+
+    const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp', {
+      method: 'POST',
+      body: { keyword: kw, total: col.total || 0, products, related_tags: col.relatedTags || [] },
+      token,
+      apiBase,
+    });
+    if (!ok) return { ok: false, message: (json && json.message) || '서버 저장에 실패했습니다.' };
+
+    return { ok: true, saved: (json && json.data && json.data.saved) || products.length, total: col.total || 0 };
+  },
+
   async collectShopping({ keyword, count }) {
     return new Promise((resolve) => {
       let tabId = null;
