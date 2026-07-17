@@ -29,9 +29,11 @@ class ShopSerpStore
         $rows = [];
         $malls = [];
         foreach ($products as $p) {
-            // 스마트스토어(brand 포함) 상품만 저장한다 — 외부몰(현대Hmall 등)은 톡톡·판매자 정보가 없어
-            // 이후 분석에 쓸 수 없다. 순위(rnk)는 네이버 원본 그대로 두므로 번호는 띄엄띄엄해진다.
-            if (! $this->isSmartStore($p)) {
+            // 스마트스토어(brand 포함) 상품만 저장한다 — 외부몰(현대Hmall·쿠팡·자사몰 등)은 톡톡·판매자
+            // 정보가 없어 이후 분석에 쓸 수 없다. 가격비교(카탈로그)는 판매처 묶음이라 그 자체가 분석 대상이
+            // 아니고, 확장이 그 안의 '리뷰 있는 스마트스토어' 판매처로 바꿔서 보낸다.
+            // 순위(rnk)는 네이버 원본 그대로 두므로 번호는 띄엄띄엄해진다.
+            if (! empty($p['isCatalog']) || ! $this->isSmartStore($p)) {
                 continue;
             }
             $key = $this->productKey($p);
@@ -49,6 +51,10 @@ class ShopSerpStore
                 'title' => mb_substr((string) ($p['title'] ?? ''), 0, 300),
                 'price' => (int) ($p['price'] ?? 0) ?: null,
                 'mall_name' => $mall ?: null,
+                'store_id' => mb_substr((string) ($p['storeId'] ?? ''), 0, 100) ?: null,
+                'channel_uid' => mb_substr((string) ($p['channelUid'] ?? ''), 0, 120) ?: null,
+                'channel_id' => mb_substr((string) ($p['channelId'] ?? ''), 0, 120) ?: null,
+                'channel_no' => (int) ($p['channelNo'] ?? 0) ?: null,
                 'talk_id' => mb_substr((string) ($p['talkId'] ?? ''), 0, 60) ?: null,   // 판매처 톡톡
                 'link' => $link ?: null,
                 'is_ad' => ! empty($p['isAd']),
@@ -70,7 +76,10 @@ class ShopSerpStore
         }
 
         foreach (array_chunk(array_values($prod), 200) as $chunk) {
-            DB::table('shop_products')->upsert($chunk, ['product_key'], ['title', 'price', 'mall_name', 'talk_id', 'link', 'is_ad', 'seen_at', 'updated_at']);
+            DB::table('shop_products')->upsert($chunk, ['product_key'], [
+                'title', 'price', 'mall_name', 'store_id', 'channel_uid', 'channel_id', 'channel_no',
+                'talk_id', 'link', 'is_ad', 'seen_at', 'updated_at',
+            ]);
         }
         if ($malls) {
             DB::table('shop_malls')->upsert(array_values($malls), ['mall_name'], ['seen_at', 'updated_at']);
@@ -91,6 +100,9 @@ class ShopSerpStore
     /**
      * 스마트스토어 상품인가 — 상품 URL 이 smartstore/brand.naver.com 인 것만.
      * 확장이 mallPcUrl(실제 스토어 핸들)로 상품 URL 을 재구성하므로 링크 도메인이 곧 스토어 유형이다.
+     *
+     * 제외 대상: 자사몰·쿠팡 등 외부몰, 가격비교 카탈로그,
+     *           shopping.naver.com/window-products/…(백화점·아울렛 윈도) — 스마트스토어가 아니다.
      */
     private function isSmartStore(array $p): bool
     {
@@ -99,8 +111,11 @@ class ShopSerpStore
             return true;
         }
 
-        // 확장이 스토어 핸들을 따로 넘겨주면 그것으로도 인정(링크가 광고 리다이렉트인 경우)
-        return trim((string) ($p['storeId'] ?? '')) !== '';
+        // 링크가 광고 리다이렉트(cr.shopping.naver.com/adcr)라 도메인으로 판별할 수 없을 때만
+        // 확장이 준 스토어 핸들을 믿는다. 윈도·카탈로그처럼 도메인이 분명한 건 여기서 걸러진다.
+        return $link !== ''
+            && preg_match('#https?://cr\.shopping\.naver\.com/#i', $link) === 1
+            && trim((string) ($p['storeId'] ?? '')) !== '';
     }
 
     /** 상품 식별자 — nvMid(링크의 nvMid=…) 우선, 없으면 제목+판매처 해시. */
@@ -133,7 +148,21 @@ class ShopSerpStore
             ->join('shop_products as p', 'p.product_key', '=', 'r.product_key')
             ->where('r.keyword', $keyword)->where('r.collected_month', $month)
             ->orderBy('r.rnk')
-            ->select('r.rnk', 'r.collected_at', 'r.is_ad', 'p.title', 'p.price', 'p.mall_name', 'p.talk_id', 'p.link', 'p.product_key')
+            ->select(
+                'r.rnk',
+                'r.collected_at',
+                'r.is_ad',
+                'p.title',
+                'p.price',
+                'p.mall_name',
+                'p.store_id',
+                'p.channel_uid',
+                'p.channel_id',
+                'p.channel_no',
+                'p.talk_id',
+                'p.link',
+                'p.product_key',
+            )
             ->get();
     }
 

@@ -132,7 +132,12 @@ class ExtKeywordShopSerpController extends Controller
             'products.*.link' => 'nullable|string',
             'products.*.isAd' => 'nullable|boolean',
             'products.*.talkId' => 'nullable|string|max:60',   // 톡톡 코드(talk.naver.com/ct/{code})
-            'products.*.storeId' => 'nullable|string|max:80',  // 스토어 핸들 — 스마트스토어 판별용
+            'products.*.storeId' => 'nullable|string|max:100', // 스토어 핸들 — 스마트스토어 판별용
+            'products.*.channelUid' => 'nullable|string|max:120',
+            'products.*.channelId' => 'nullable|string|max:120',
+            'products.*.channelNo' => 'nullable|integer|min:0',
+            'products.*.reviewCount' => 'nullable|integer|min:0',   // 가격비교 판매처는 리뷰 있는 것만 받는다
+            'products.*.isCatalog' => 'nullable|boolean',           // 가격비교 자체는 저장하지 않는다
             'related_tags' => 'nullable|array|max:50',
         ]);
 

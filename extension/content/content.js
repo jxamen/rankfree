@@ -435,6 +435,9 @@
       : (item.mallProductUrl || item.crUrl || item.productUrl || '');
     // 톡톡 코드(talk.naver.com/ct/{code}) — channelInfoCache/mallInfoCache.talkAccountId(확정 경로)
     const talkId = chnlCache.talkAccountId || mallCache.talkAccountId || '';
+    const channelUid = chnlCache.channelUid || mallCache.channelUid || item.channelUid || (item.channel && item.channel.channelUid) || '';
+    const channelId = chnlCache.channelId || mallCache.channelId || item.channelId || (item.channel && item.channel.channelId) || '';
+    const channelNo = num(chnlCache.id || chnlCache.channelNo || mallCache.channelNo || item.channelNo || (item.channel && item.channel.id));
     const itemType = String(item.type || raw.type || '').toLowerCase();
     return {
       id: item.id || item.nvMid || null,
@@ -864,6 +867,73 @@
     })(root, 0);
 
     return { purchase, revenue, sellers };
+  }
+
+  /**
+   * 가격비교(카탈로그) 안의 판매처 중 **리뷰가 있는 스마트스토어**만 상품으로 돌려준다.
+   * 가격비교는 여러 판매처를 묶은 것이라 그 자체로는 분석 대상이 못 된다 —
+   * 실제로 파는 스마트스토어(리뷰 = 판매 실적)만 남기고, 자사몰·쿠팡 등 외부몰은 버린다.
+   *
+   * 카탈로그 JSON 의 판매처 노드 키는 네이버가 바꿀 수 있어 후보를 모두 훑는다
+   * (fetchCatalogSales 가 쓰는 purchaseCnt·price·mallName 은 운영에서 검증된 경로).
+   */
+  async function fetchCatalogStoreSellers(catalogId) {
+    const res = await fetch(location.origin + '/catalog/' + encodeURIComponent(catalogId), {
+      credentials: 'include',
+      headers: { accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+    });
+    if (!res.ok) throw new Error('catalog ' + res.status);
+    const html = await res.text();
+    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if (!m) throw new Error('catalog 데이터 없음');
+    const root = JSON.parse(m[1]);
+
+    const pick = (n, keys) => {
+      for (const k of keys) if (n[k] != null && n[k] !== '') return n[k];
+      return '';
+    };
+    const out = [];
+    const seen = new Set();
+
+    (function walk(node, depth) {
+      if (depth > 12 || node == null || typeof node !== 'object') return;
+      if (Array.isArray(node)) { for (const it of node) walk(it, depth + 1); return; }
+
+      const mallName = String(pick(node, ['mallName', 'mallNm', 'sellerName']) || '');
+      const url = String(pick(node, ['mallPcUrl', 'mallProductUrl', 'productUrl', 'crUrl', 'mallUrl', 'storeUrl']) || '');
+      if (mallName && url) {
+        const store = url.match(/(?:smartstore|brand)\.naver\.com\/([^/?#]+)/);
+        const review = num(pick(node, ['reviewCount', 'reviewCnt', 'reviewCountSum', 'totalReviewCount']));
+        // 스마트스토어(brand 포함) + 리뷰 있는 판매처만
+        if (store && review > 0) {
+          const mallCache = node.mallInfoCache || {};
+          const chnlCache = node.channelInfoCache || {};
+          const storeId = store[1];
+          const pid = pick(node, ['mallProductId', 'productId', 'id']);
+          const key = storeId + '|' + (pid || mallName);
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({
+              title: stripTags(String(pick(node, ['productTitle', 'productName', 'title']) || '')),
+              price: num(pick(node, ['price', 'lowPrice', 'mobileLowPrice'])),
+              mallName,
+              reviewCount: review,
+              purchase6m: num(pick(node, ['purchaseCnt', 'purchaseCount'])),
+              storeId,
+              // 상품 URL — 스토어 핸들 + 상품 id 로 재구성(가격비교 링크는 분석에 못 쓴다)
+              link: pid ? 'https://' + url.replace(/^https?:\/\//, '').split('/')[0] + '/' + storeId + '/products/' + pid : url,
+              talkId: String(chnlCache.talkAccountId || mallCache.talkAccountId || node.talkAccountId || ''),
+              isAd: false,
+              fromCatalog: true,
+            });
+          }
+        }
+        return;   // 판매처 노드 내부는 더 보지 않는다
+      }
+      for (const k in node) walk(node[k], depth + 1);
+    })(root, 0);
+
+    return out;
   }
 
   async function collectProducts(query, pages) {
@@ -3362,6 +3432,45 @@
     state.user = (res && res.user) || null;
   }
 
+  /**
+   * 가격비교(카탈로그) 상품을 그 안의 '리뷰 있는 스마트스토어' 판매처로 치환한다.
+   * 가격비교는 판매처 묶음이라 그 자체로 저장하지 않는다(리스트에도 안 나온다).
+   * 카탈로그를 못 읽으면 그 상품은 그냥 버린다 — 가격비교를 그대로 남기면 안 되기 때문.
+   * 순위(rank)는 카탈로그가 있던 자리를 물려준다.
+   */
+  async function expandCatalogs(products) {
+    const catalogs = products.filter((p) => p.isCatalog && p.id);
+    if (!catalogs.length) return products;
+
+    const sellersById = new Map();
+    const queue = catalogs.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const c = queue.shift();
+        try {
+          sellersById.set(c.id, await fetchCatalogStoreSellers(c.id));
+        } catch (e) {
+          sellersById.set(c.id, []);   // 못 읽으면 이 가격비교는 버린다
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, catalogs.length) }, worker));
+
+    const out = [];
+    for (const p of products) {
+      if (!p.isCatalog) { out.push(p); continue; }
+      for (const s of (sellersById.get(p.id) || [])) {
+        out.push(Object.assign({}, p, s, {
+          rank: p.rank,               // 가격비교가 있던 순위를 그대로
+          isCatalog: false,
+          mallGrade: '스마트스토어',
+          title: s.title || p.title,  // 판매처 제목이 없으면 카탈로그 제목
+        }));
+      }
+    }
+    return out;
+  }
+
   /** 백그라운드 수집 모드(#rfcollect=COUNT) — 다른 탭(통합검색 등)이 이 쇼핑 페이지를 열어 수집을 위임. 패널 없이 수집만 하고 결과 회신. */
   async function runCollect() {
     const count = num((location.hash.split('=')[1]) || '') || 80;
@@ -3376,7 +3485,7 @@
       }
       if (page && page.products && page.products.length) {
         out.ok = true;
-        out.products = page.products;
+        out.products = await expandCatalogs(page.products);
         out.total = page.total || 0;
         out.relatedTags = page.relatedTags || [];
       } else {

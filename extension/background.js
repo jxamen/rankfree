@@ -650,6 +650,8 @@ const handlers = {
       isAd: !!p.isAd,
       talkId: String(p.talkId || ''),   // 톡톡 코드(talk.naver.com/ct/{code}) — 관리자에서 톡톡 열기용
       storeId: String(p.storeId || ''), // 스토어 핸들(smartstore/brand) — 서버가 스마트스토어만 저장한다
+      reviewCount: Number(p.reviewCount) || 0,
+      isCatalog: !!p.isCatalog,         // 가격비교는 저장하지 않는다(서버에서도 한 번 더 막는다)
     })).filter((p) => p.title);
 
     const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp', {
@@ -726,6 +728,23 @@ const handlers = {
       apiBase,
     });
     return { ok, status, saved: json && json.saved };
+  },
+
+  async saveSellerCaptcha(payload) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, message: 'RankFree extension login is required.' };
+    const { ok, status, json } = await apiFetch('/api/ext/seller-captchas', {
+      method: 'POST',
+      body: payload,
+      token,
+      apiBase,
+    });
+    return {
+      ok,
+      status,
+      data: json && json.data,
+      message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to save seller captcha.'),
+    };
   },
 
   /** 확장 설정 조회 (API 키 등) */
