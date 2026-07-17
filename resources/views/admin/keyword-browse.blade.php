@@ -161,7 +161,8 @@
                     @if ($type === 'place')<th style="padding:8px 6px;">지역</th>@endif
                     <th style="padding:8px 6px;">출처</th>
                     <th style="padding:8px 6px;text-align:right;">월 검색량</th>
-                    <th style="padding:8px 6px;">최종 업데이트</th>
+                    <th style="padding:8px 6px;" title="검색량을 마지막으로 조회한 시각(주 1회 자동)">검색량 갱신</th>
+                    <th style="padding:8px 6px;" title="{{ $type === 'place' ? '업체' : '상품' }} 목록을 마지막으로 수집한 시각">{{ $type === 'place' ? '업체' : '상품' }} 수집일</th>
                     <th style="padding:8px 6px;">상태</th>
                 </tr>
             </thead>
@@ -181,10 +182,22 @@
                         <td style="padding:7px 6px;" class="text-muted-soft" title="{{ $it->volume_checked_at?->format('Y-m-d H:i') ?? '조회 전' }}">
                             {{ $it->volume_checked_at ? $it->volume_checked_at->diffForHumans() : '—' }}
                         </td>
+                        {{-- 업체·상품 수집일 — 수집한 키워드만 값이 있고, 클릭하면 상세로 --}}
+                        @php $__sat = $serpAt[$it->keyword] ?? null; @endphp
+                        <td style="padding:7px 6px;">
+                            @if ($__sat)
+                                @php $__c = \Carbon\Carbon::parse($__sat); @endphp
+                                <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $it->keyword]) }}"
+                                   class="font-mono" style="text-decoration:none;color:{{ $__c->lt(now()->subDays(30)) ? 'var(--color-error)' : 'var(--color-primary)' }};"
+                                   title="{{ $__c->format('Y-m-d H:i') }} 수집{{ $__c->lt(now()->subDays(30)) ? ' · 30일 지남' : '' }}">{{ $__c->format('m-d') }}</a>
+                            @else
+                                <span class="text-muted-soft">미수집</span>
+                            @endif
+                        </td>
                         <td style="padding:7px 6px;" class="text-muted">{{ $stLabel[$it->status] ?? $it->status }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ $type === 'place' ? 7 : 6 }}" class="text-muted-soft text-center" style="padding:40px;">키워드가 없습니다.</td></tr>
+                    <tr><td colspan="{{ $type === 'place' ? 8 : 7 }}" class="text-muted-soft text-center" style="padding:40px;">키워드가 없습니다.</td></tr>
                 @endforelse
             </tbody>
         </table>

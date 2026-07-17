@@ -77,6 +77,14 @@ class KeywordBrowseController extends Controller
             ->paginate(100)->withQueryString();
         $refreshed = $refresher->refresh(collect($items->items()));
 
+        // 업체·상품 수집일(키워드별 스냅샷) — 목록에서 어느 키워드를 수집했는지 바로 보이게
+        $shown = collect($items->items())->pluck('keyword')->all();
+        $serpAt = $type === 'place'
+            ? \App\Models\KeywordPlaceSerp::whereIn('keyword', $shown)
+                ->pluck('collected_at', 'keyword')
+            : \App\Models\KeywordShopSerp::whereIn('keyword', $shown)
+                ->pluck('collected_at', 'keyword');
+
         return view('admin.keyword-browse', [
             'type' => $type, 'q' => $q,
             'refreshed' => $refreshed,
@@ -88,6 +96,7 @@ class KeywordBrowseController extends Controller
             'sggs' => $sido !== '' ? ($grouped['sgg'][$sido] ?? []) : [],
             'regions' => ($sido !== '' && $sgg !== '') ? ($grouped['leaf'][$sido][$sgg] ?? []) : [],
             'items' => $items,
+            'serpAt' => $serpAt,   // 키워드 => 업체·상품 수집일시
             'total' => $base()->count(),
             'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
         ]);
