@@ -44,6 +44,17 @@ async function apiFetch(path, { method = 'GET', body = null, token = null, apiBa
   return { ok: res.ok, status: res.status, json };
 }
 
+// 서비스워커가 새로 뜨면(확장 리로드·브라우저 재시작) 이전 수집 루프는 이미 죽어 있다.
+// running 플래그만 남아 "이미 수집이 진행 중입니다"로 영구히 막히는 것을 막는다.
+(async () => {
+  try {
+    const s = await chrome.storage.local.get(['rfBulk']);
+    if (s.rfBulk && s.rfBulk.running) {
+      await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { running: false, stop: false, current: '' }) });
+    }
+  } catch (e) { /* noop */ }
+})();
+
 const handlers = {
   /** 로그인 → 토큰 저장 */
   async login({ email, password, apiBase }) {
@@ -449,12 +460,23 @@ const handlers = {
    * 대량 자동 수집 — 서버 대기열(미수집·오래된 키워드)을 받아 한 건씩 연속 수집한다.
    * 쇼핑 키워드가 수만 개라 사람이 하나씩 클릭할 수 없다. 진행 상황은 rfBulk 로 저장해 화면이 폴링한다.
    */
-  async bulkShopStart({ limit, delayMs, concurrency }) {
+  async bulkShopStart({ limit, delayMs, concurrency, force }) {
     const { token, apiBase } = await getStore();
     if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
 
+    // running 플래그가 영구히 남지 않게 — 확장 리로드/서비스워커 종료로 루프가 죽어도 플래그만 남는다.
+    // 살아있는 루프는 heartbeat 를 갱신하므로, 60초 넘게 갱신이 없으면 죽은 것으로 보고 새로 시작한다.
     const state = await chrome.storage.local.get(['rfBulk']);
-    if (state.rfBulk && state.rfBulk.running) return { ok: false, message: '이미 수집이 진행 중입니다.' };
+    const prev = state.rfBulk;
+    if (prev && prev.running) {
+      const alive = prev.heartbeat && (Date.now() - prev.heartbeat) < 60000;
+      if (alive && !force) {
+        return { ok: false, message: '이미 수집이 진행 중입니다. (중단하려면 중단 버튼)' };
+      }
+      // 죽은 세션 정리 후 진행
+      await chrome.storage.local.set({ rfBulk: Object.assign({}, prev, { running: false, stop: true }) });
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     // limit=0(또는 미지정) = 무제한 — 카테고리를 순서대로 끝까지. 멈춰도 서버 대기열이 이어할 지점을 알려준다.
     const max = Number(limit) > 0 ? Math.min(100000, Number(limit)) : Infinity;
@@ -465,6 +487,7 @@ const handlers = {
     await chrome.storage.local.set({ rfBulk: {
       running: true, done: 0, failed: 0, total: (max === Infinity ? 0 : max), current: '', category: '',
       conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
+      heartbeat: Date.now(),   // 살아있음 표시 — 끊기면 죽은 세션으로 보고 재시작 허용
     } });
 
     // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
@@ -479,22 +502,46 @@ const handlers = {
 
       const patch = async (o) => {
         const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-        await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, o) });
+        await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, o, { heartbeat: Date.now() }) });
       };
       const isStopped = async () => stopped || !!((await chrome.storage.local.get(['rfBulk'])).rfBulk || {}).stop;
-      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      // 대기 중에도 중단이 즉시 먹히도록 잘게 쪼개 잔다(6~10초 sleep 중 중단 눌러도 바로 멈춤)
+      const sleep = async (ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          await new Promise((r) => setTimeout(r, Math.min(500, end - Date.now())));
+          if (stopped || await isStopped()) { stopped = true; return; }
+        }
+      };
+      // 살아있음 신호 — 루프가 죽으면 끊긴다(그때만 재시작 허용)
+      const hb = setInterval(() => { patch({}); }, 15000);
 
       // 카테고리 순서(1차 → 2차 → 3차)로 대기열을 받는다. 비면 서버에서 다음 분류를 받아온다.
+      // ★ 워커가 동시에 호출하면 각자 같은 20개를 받아 같은 키워드를 중복 수집한다(실측: 4개 워커가 '린넨원피스' 반복).
+      //   → 리필을 단일 체인으로 직렬화하고, 이미 꺼낸 키워드는 taken 으로 걸러 한 번만 나가게 한다.
+      const taken = new Set();
+      let refill = Promise.resolve();
       const next = async () => {
-        if (queue.length) return queue.shift();
-        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=20', { token, apiBase });
-        const d = (ok && json && json.data) || {};
-        queue = d.keywords || [];
-        if (d.category && d.category !== category) {
-          category = d.category;
-          await patch({ category, categoryIndex: d.category_index || 0, categoryTotal: d.category_total || 0, remaining: d.remaining || 0 });
+        while (true) {
+          while (queue.length) {
+            const kw = queue.shift();
+            if (kw && !taken.has(kw)) { taken.add(kw); return kw; }
+          }
+          let got = false;
+          refill = refill.then(async () => {
+            if (queue.length) { got = true; return; }        // 다른 워커가 이미 채웠다
+            const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=20', { token, apiBase });
+            const d = (ok && json && json.data) || {};
+            queue = (d.keywords || []).filter((k) => !taken.has(k));   // 서버가 또 준 것(수집 반영 전)은 제외
+            got = queue.length > 0;
+            if (d.category && d.category !== category) {
+              category = d.category;
+              await patch({ category, categoryIndex: d.category_index || 0, categoryTotal: d.category_total || 0, remaining: d.remaining || 0 });
+            }
+          });
+          await refill;
+          if (!got && !queue.length) return null;            // 정말 더 없음
         }
-        return queue.shift() || null;
       };
 
       // 차단 판정 — 수집 실패 사유가 데이터 없음/시간초과면 네이버가 막았을 가능성
@@ -553,8 +600,13 @@ const handlers = {
         }
       };
 
-      await Promise.all(Array.from({ length: conc }, () => worker()));
-      await patch({ running: false, current: '', finishedAt: Date.now() });
+      try {
+        await Promise.all(Array.from({ length: conc }, () => worker()));
+      } finally {
+        clearInterval(hb);
+        // 어떤 경로로 끝나든 running 을 반드시 내린다(플래그가 남아 재시작이 막히지 않게)
+        await patch({ running: false, current: '', stop: false, finishedAt: Date.now() });
+      }
     })();
 
     return { ok: true, started: true, total: (max === Infinity ? 0 : max), concurrency: conc };
