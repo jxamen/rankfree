@@ -16,7 +16,10 @@ class GeminiQuizSolver
     private const TIMEOUT = 30;
 
     private const DEFAULT_INSTRUCTION =
-        '위 질문과 보기 이미지를 보고 정답만 간결하게 답하라. 숫자 정답이면 숫자만, 보기 선택이면 보기 번호만 답하라. 불필요한 설명은 하지 마라.';
+        "제시된 이미지는 영수증이며 품목별 수량·금액이 표(열)로 적혀 있다. 질문에 맞는 값을 계산해 숫자만 답하라.\n".
+        "- '총 몇 개'처럼 개수를 물으면: 수량 열(숫자가 가장 작은 열)의 값들을 모두 더한 합을 답한다.\n".
+        "- '총 구매 금액'처럼 금액을 물으면: 금액 열(숫자가 가장 큰 열)의 값들을 모두 더한 합을 답한다.\n".
+        '쉼표·단위·기호 없이 아라비아 숫자만 답하고, 그 밖의 설명은 절대 하지 마라.';
 
     /**
      * @param  string  $question  질문 텍스트
@@ -69,6 +72,9 @@ class GeminiQuizSolver
 
         try {
             $res = Http::timeout(self::TIMEOUT)
+                // 이 서버는 IPv6 아웃바운드가 죽어 있고 googleapis는 IPv6 우선 해석이라
+                // 앱(php-fpm) cURL이 IPv6에 물려 간헐적 타임아웃이 난다 — IPv4 강제.
+                ->withOptions(['force_ip_resolve' => 'v4'])
                 ->withHeaders([
                     'x-goog-api-key' => $cred['key'],
                     'Content-Type' => 'application/json',

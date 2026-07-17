@@ -495,21 +495,19 @@ const handlers = {
 
       chrome.runtime.onMessage.addListener(onMsg);
       try {
-        chrome.windows.create({
+        // 팝업 창이 아니라 일반 탭으로 연다 — 팝업(window.open) 컨텍스트가 없어
+        // 정답 통과 후 다음 단계로 넘어가지 못하던 문제를 피한다.
+        chrome.tabs.create({
           url,
-          type: 'popup',
-          width: 540,
-          height: 760,
-          focused: !!active || !!keepOpen,
-        }, (win) => {
-          if (chrome.runtime.lastError || !win) {
-            finish({ ok: false, message: 'seller_info_popup_create_failed', channelUid, channelId, storeId, sellerInfoUrl: url });
+          active: !!active || !!keepOpen,
+        }, (tab) => {
+          if (chrome.runtime.lastError || !tab) {
+            finish({ ok: false, message: 'seller_info_tab_create_failed', channelUid, channelId, storeId, sellerInfoUrl: url });
             return;
           }
-          windowId = win.id;
-          tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
-          if (done && !keepOpen && windowId != null) {
-            try { chrome.windows.remove(windowId); } catch (e) { /* noop */ }
+          tabId = tab.id;
+          if (done && !keepOpen && tabId != null) {
+            try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ }
           }
         });
       } catch (e) {

@@ -210,6 +210,7 @@
     }
     line.style.color = ok === false ? '#9f1239' : '#047857';
     line.textContent = message;
+    positionCardAboveSubmit(box);
   }
 
   // 폼 컨트롤용 가벼운 노출 판정(입력창은 높이가 낮을 수 있어 isVisible 대신 사용).
@@ -250,6 +251,21 @@
     return null;
   }
 
+  // 상태 카드를 확인(제출) 버튼 위쪽에 배치해 버튼을 가리지 않게 한다.
+  function positionCardAboveSubmit(box) {
+    if (!box) return;
+    box.style.right = '12px';
+    box.style.left = 'auto';
+    box.style.top = 'auto';
+    var submit = findSubmitButton();
+    if (submit) {
+      var rect = submit.getBoundingClientRect();
+      box.style.bottom = Math.max(12, Math.round(window.innerHeight - rect.top + 10)) + 'px';
+    } else {
+      box.style.bottom = '12px';
+    }
+  }
+
   // React 제어 입력이라 .value 직접 대입은 무시된다 — native setter로 값을 넣는다.
   function setNativeInputValue(el, value) {
     try {
@@ -261,6 +277,17 @@
       }
     } catch (e) { /* noop */ }
     el.value = value;
+  }
+
+  // 실제 사용자 클릭에 가깝게 이벤트를 순서대로 발생시킨다(단순 .click()으로 반응 안 하는 핸들러 대비).
+  function fireClick(el) {
+    var opts = { bubbles: true, cancelable: true, view: window };
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(function (type) {
+      try { el.dispatchEvent(new MouseEvent(type, opts)); } catch (e) { /* noop */ }
+    });
+    try { el.click(); } catch (e) {
+      try { el.dispatchEvent(new MouseEvent('click', opts)); } catch (e2) { /* noop */ }
+    }
   }
 
   // 정답을 입력창에 넣고 확인 버튼을 클릭한다.
@@ -279,6 +306,7 @@
     try {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
     } catch (e) { /* noop */ }
 
     // React 상태 반영(버튼 활성화 포함) 후 제출.
@@ -288,13 +316,10 @@
         setAnswerStatus('정답 입력됨: ' + value + ' (확인 버튼을 찾지 못함)', false);
         return;
       }
-      try {
-        submit.click();
-        setAnswerStatus('정답 "' + value + '" 입력 후 확인 클릭', true);
-      } catch (e) {
-        setAnswerStatus('확인 클릭 실패: ' + String((e && e.message) || e), false);
-      }
-    }, 200);
+      try { input.focus(); } catch (e) { /* noop */ }
+      fireClick(submit);
+      setAnswerStatus('정답 "' + value + '" 입력 후 확인 클릭', true);
+    }, 250);
     return true;
   }
 
@@ -328,19 +353,8 @@
     var box = statusBox(true);
     box.textContent = '';
 
-    var title = document.createElement('div');
-    title.textContent = 'RankFree captcha saved:';
-    box.appendChild(title);
-
-    var question = String(data.question || fallbackQuestion || '').trim();
-    var questionLine = document.createElement('div');
-    questionLine.style.marginTop = '6px';
-    questionLine.textContent = '질문: ' + (question || '확인 안 됨');
-    box.appendChild(questionLine);
-
     if (data.image_url) {
       var linkLine = document.createElement('div');
-      linkLine.style.marginTop = '6px';
       var link = document.createElement('a');
       link.href = data.image_url;
       link.target = '_blank';
@@ -352,19 +366,7 @@
       box.appendChild(linkLine);
     }
 
-    var path = data.absolute_path || data.path || '';
-    if (path) {
-      var pathLine = document.createElement('div');
-      pathLine.style.marginTop = '6px';
-      pathLine.textContent = path;
-      box.appendChild(pathLine);
-    }
-
-    if (apiBase) {
-      var apiLine = document.createElement('div');
-      apiLine.textContent = 'API: ' + apiBase;
-      box.appendChild(apiLine);
-    }
+    positionCardAboveSubmit(box);
   }
 
   async function scanAndUpload(reason) {
