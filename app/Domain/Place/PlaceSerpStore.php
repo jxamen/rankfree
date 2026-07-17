@@ -84,6 +84,9 @@ class PlaceSerpStore
             DB::table('keyword_place_ranks')->insert($chunk);
         }
 
+        // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
+        app(\App\Domain\Keyword\KeywordMasterSync::class)->touchSerp($keyword, 'place', count($rows));
+
         return count($rows);
     }
 

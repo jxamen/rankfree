@@ -62,6 +62,11 @@ class ExtKeywordShopSerpController extends Controller
     {
         $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
 
+        // 방금 내준 키워드는 잠시 제외한다 — 수집(수십 초) 중에 다시 요청이 오면 같은 걸 또 주게 되고,
+        // 확장이 그걸 걸러내면 큐가 비어 재요청 → 같은 키워드만 반복되는 루프가 된다(실측: '제시뉴욕원피스' 3회).
+        $lease = \Illuminate\Support\Facades\Cache::get('shop_queue_lease', []);
+        $lease = array_filter($lease, fn ($exp) => $exp > time());
+
         // 트리 DFS 순서(1차 sort → 그 자식 → 그 손자) — 카테고리는 정적이라 캐시
         $order = \Illuminate\Support\Facades\Cache::remember('shop_cat_dfs', 3600, function () {
             $cats = \App\Models\KeywordCategory::where('type', 'shopping')
@@ -83,10 +88,17 @@ class ExtKeywordShopSerpController extends Controller
         foreach ($order as $c) {
             $kws = \App\Models\KeywordCandidate::where('category_id', $c['id'])
                 ->whereNotIn('keyword', $fresh)
+                ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))   // 내준 것 제외
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
                 ->distinct()->limit($limit)->pluck('keyword')->values();
 
             if ($kws->isNotEmpty()) {
+                // 5분간 재발급 금지 — 수집이 끝나 스냅샷이 생기면 어차피 $fresh 로 걸러진다
+                foreach ($kws as $k) {
+                    $lease[$k] = time() + 300;
+                }
+                \Illuminate\Support\Facades\Cache::put('shop_queue_lease', $lease, 600);
+
                 return response()->json(['data' => [
                     'keywords' => $kws,
                     'category' => $c['path'],                       // 지금 수집 중인 분류(화면 표시)

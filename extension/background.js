@@ -481,7 +481,7 @@ const handlers = {
     // limit=0(또는 미지정) = 무제한 — 카테고리를 순서대로 끝까지. 멈춰도 서버 대기열이 이어할 지점을 알려준다.
     const max = Number(limit) > 0 ? Math.min(100000, Number(limit)) : Infinity;
     // 너무 빨리 열면 네이버가 일시 차단한다 — 건당 최소 4초, 기본 6초.
-    const baseGap = Math.max(4000, Number(delayMs) || 6000);
+    const baseGap = Math.max(1000, Number(delayMs) || 6000);   // 하한 1초 — 차단되면 아래에서 1초씩 자동으로 늘린다
     // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~6).
     const conc = Math.min(6, Math.max(1, Number(concurrency) || 2));
     await chrome.storage.local.set({ rfBulk: {
@@ -547,11 +547,11 @@ const handlers = {
       // 차단 판정 — 수집 실패 사유가 데이터 없음/시간초과면 네이버가 막았을 가능성
       const looksBlocked = (msg) => /차단|시간이 초과|데이터를 찾지 못/.test(String(msg || ''));
 
-      // 탭은 '순서대로' 연다 — 동시에 N개를 한꺼번에 열면 차단당한다.
-      // 워커는 N개가 동시에 돌지만, 탭 여는 시점만 이 게이트로 직렬화하고 gap 만큼 벌린다.
+      // 탭은 '순서대로' 열되 기다리지 않는다 — 앞 탭이 열리면 바로 다음 탭을 연다.
+      // (gap 만큼 직렬 대기시키면 동시 N개가 무의미해져 사실상 순차가 된다)
       let openChain = Promise.resolve();
       const openSlot = () => {
-        const my = openChain.then(() => sleep(gap));   // 앞 사람이 연 뒤 gap 만큼 기다렸다 연다
+        const my = openChain.then(() => sleep(300));   // 탭 생성만 0.3초 간격으로 겹치지 않게
         openChain = my;
 
         return my;

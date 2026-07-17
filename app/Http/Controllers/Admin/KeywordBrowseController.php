@@ -70,41 +70,31 @@ class KeywordBrowseController extends Controller
         $collected = (string) $request->query('collected', '');   // ''=전체 · 'y'=수집됨 · 'n'=미수집
         $serpTable = $type === 'place' ? 'keyword_place_ranks' : 'keyword_shop_ranks';
 
-        $base = fn () => KeywordCandidate::whereIn('category_id', $scopeIds)
+        // ★ 키워드 마스터(keywords) 기반 — candidates(99만 행)를 키워드로 합치면 풀스캔 18.5초.
+        //   마스터는 고유 키워드(26.8만)만 담고 (type, monthly_total)·(type, serp_collected_at) 인덱스로 정렬한다.
+        //   분류를 고른 경우에만 매핑(candidates)으로 좁힌다.
+        $narrow = $selectedId || ($type === 'place' && ($rg !== '' || $inRegions !== []));
+        $base = fn () => \App\Models\Keyword::where('type', $type)
+            ->when($selectedId, fn ($x) => $x->whereIn('keyword', fn ($s) => $s->select('keyword')->from('keyword_candidates')->whereIn('category_id', $scopeIds)))
             ->when($type === 'place' && $rg !== '', fn ($x) => $x->where('region', $rg))
             ->when($inRegions !== [], fn ($x) => $x->whereIn('region', $inRegions))
             ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'))
-            ->when($collected === 'y', fn ($x) => $x->whereIn('keyword', fn ($s) => $s->select('keyword')->from($serpTable)))
-            ->when($collected === 'n', fn ($x) => $x->whereNotIn('keyword', fn ($s) => $s->select('keyword')->from($serpTable)));
+            ->when($collected === 'y', fn ($x) => $x->whereNotNull('serp_collected_at'))
+            ->when($collected === 'n', fn ($x) => $x->whereNull('serp_collected_at'));
 
-        // 같은 키워드가 여러 분류에 중복 존재한다(실측 825건·6%, '탑텐'은 7개 분류) — 목록은 키워드 단위로 합친다.
-        // ★ groupBy(keyword) 로 합치면 운영 99만 행에서 풀스캔+filesort 로 18.5초가 걸린다(실측).
-        //   → 인덱스(kc_keyword_vol)를 타도록 정렬은 그대로 두고, 중복은 '같은 키워드 중 가장 작은 id' 만 남겨 거른다.
+        // 정렬 — 기본 검색량순. 수집일은 마스터에 반영해 둔 값(스냅샷 저장 시 touchSerp)을 쓴다.
+        $sort = in_array($request->query('sort'), ['vol', 'collected', 'collected_old', 'keyword'], true)
+            ? $request->query('sort') : 'vol';
+
+        // 마스터 컬럼으로 정렬 — 서브쿼리 없이 인덱스만 탄다
         $items = $base()->with('category')
-            ->whereRaw('id = (select min(c2.id) from keyword_candidates c2 where c2.keyword = keyword_candidates.keyword)')
-            ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
+            ->when($sort === 'vol', fn ($x) => $x->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword'))
+            ->when($sort === 'keyword', fn ($x) => $x->orderBy('keyword'))
+            ->when($sort === 'collected', fn ($x) => $x->orderByRaw('serp_collected_at is null')->orderByDesc('serp_collected_at')->orderBy('keyword'))
+            ->when($sort === 'collected_old', fn ($x) => $x->orderBy('serp_collected_at')->orderBy('keyword'))
             ->paginate(100)->withQueryString();
-
-        // 분류 중복 수(+N 표시) — 현재 페이지의 키워드만 세면 되므로 가볍다
-        $catCnt = \Illuminate\Support\Facades\DB::table('keyword_candidates')
-            ->whereIn('keyword', collect($items->items())->pluck('keyword'))
-            ->selectRaw('keyword, count(*) c')->groupBy('keyword')->pluck('c', 'keyword');
         // 검색어를 넣은 조회는 즉답이 중요하다 — 갱신은 목록을 훑을 때만(검색 중 3초 지연 방지, 실측)
         $refreshed = $q === '' ? $refresher->refresh(collect($items->items())) : 0;
-        // 분류별 키워드가 수천 개라(실측: 패션잡화 9,588) 미수집만 보기·수집 상태 필터가 필요하다
-
-        // 업체·상품 수집일(키워드별 스냅샷) — 목록에서 어느 키워드를 수집했는지 바로 보이게
-        $shown = collect($items->items())->pluck('keyword')->all();
-        $serpTbl = $type === 'place' ? 'keyword_place_ranks' : 'keyword_shop_ranks';
-        $serpAt = \Illuminate\Support\Facades\DB::table($serpTbl)   // 월별 파티션 매핑의 최신 수집일
-            ->whereIn('keyword', $shown)
-            ->selectRaw('keyword, MAX(collected_at) as collected_at')
-            ->groupBy('keyword')->pluck('collected_at', 'keyword');
-        // 수집 상품·업체 수 — 최신 월 기준 몇 개를 수집했는지 목록에서 바로 보이게
-        $serpCnt = \Illuminate\Support\Facades\DB::table($serpTbl)
-            ->whereIn('keyword', $shown)
-            ->selectRaw('keyword, count(*) as c')
-            ->groupBy('keyword')->pluck('c', 'keyword');
 
         return view('admin.keyword-browse', [
             'type' => $type, 'q' => $q,
@@ -116,11 +106,9 @@ class KeywordBrowseController extends Controller
             'sidos' => $grouped['sido'],
             'sggs' => $sido !== '' ? ($grouped['sgg'][$sido] ?? []) : [],
             'regions' => ($sido !== '' && $sgg !== '') ? ($grouped['leaf'][$sido][$sgg] ?? []) : [],
-            'items' => $items,
-            'serpAt' => $serpAt,     // 키워드 => 수집일시
-            'serpCnt' => $serpCnt,   // 키워드 => 수집한 상품·업체 수
-            'catCnt' => $catCnt,     // 키워드 => 속한 분류 수
+            'items' => $items,       // 수집일·분류수·상태는 마스터 컬럼(serp_collected_at·serp_count·cat_cnt·status)
             'collected' => $collected,
+            'sort' => $sort,
             // distinct count 가 운영에서 1.58초라 캐시(필터 조합별 5분) — 총계는 실시간일 필요가 없다
             'total' => \Illuminate\Support\Facades\Cache::remember(
                 'kb:total:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,

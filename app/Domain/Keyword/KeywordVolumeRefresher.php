@@ -2,7 +2,9 @@
 
 namespace App\Domain\Keyword;
 
+use App\Models\Keyword;
 use App\Models\KeywordCandidate;
+use App\Models\KeywordCategory;
 use Illuminate\Support\Collection;
 
 /**
@@ -25,15 +27,18 @@ class KeywordVolumeRefresher
     public function __construct(private NaverKeywordService $keywords) {}
 
     /**
-     * 주어진 후보들 중 갱신 대상(한 번도 조회 안 했거나 7일 경과)을 골라 검색량을 채운다.
+     * 주어진 키워드들 중 갱신 대상(한 번도 조회 안 했거나 7일 경과)을 골라 검색량을 채운다.
      * 갱신한 값은 전달된 모델 인스턴스에도 반영해 그대로 화면에 뿌릴 수 있다.
      *
-     * @param  Collection<int, KeywordCandidate>  $candidates
+     * 후보(KeywordCandidate)와 키워드 마스터(Keyword) 둘 다 받는다 — 목록 화면은 마스터를 읽는다.
+     * 어느 쪽을 받든 같은 키워드의 후보 전부 + 마스터를 함께 갱신한다(둘이 어긋나지 않게).
+     *
+     * @param  Collection<int, KeywordCandidate|Keyword>  $rows
      * @return int 갱신 건수
      */
-    public function refresh(Collection $candidates): int
+    public function refresh(Collection $rows): int
     {
-        $due = $candidates->filter(fn ($c) => $this->isDue($c))->take(self::MAX_PER_VIEW);
+        $due = $rows->filter(fn ($c) => $this->isDue($c))->take(self::MAX_PER_VIEW);
         if ($due->isEmpty()) {
             return 0;
         }
@@ -51,11 +56,23 @@ class KeywordVolumeRefresher
                 continue;
             }
             // 조회는 됐는데 값이 없으면(검색량 0) 0으로 확정 — 매번 재조회하지 않도록 시각은 갱신
-            KeywordCandidate::whereKey($c->id)->update([
+            $vals = [
                 'monthly_total' => $v['monthly_total'],
                 'comp_idx' => $v['comp_idx'],
                 'volume_checked_at' => $now,
-            ]);
+            ];
+
+            if ($c instanceof Keyword) {
+                // 마스터에서 왔으면 그 키워드의 후보 전부(여러 분류)를 함께 맞춘다
+                $catIds = KeywordCategory::where('type', $c->type)->pluck('id');
+                KeywordCandidate::where('keyword', $c->keyword)->whereIn('category_id', $catIds)->update($vals);
+                Keyword::whereKey($c->id)->update($vals);
+            } else {
+                KeywordCandidate::whereKey($c->id)->update($vals);
+                Keyword::where('keyword', $c->keyword)
+                    ->where('type', $c->category?->type ?? '')->update($vals);
+            }
+
             $c->monthly_total = $v['monthly_total'];
             $c->comp_idx = $v['comp_idx'];
             $c->volume_checked_at = $now;
@@ -66,7 +83,7 @@ class KeywordVolumeRefresher
     }
 
     /** 갱신 대상인가 — 한 번도 조회 안 했거나 TTL 경과. */
-    public function isDue(KeywordCandidate $c): bool
+    public function isDue(KeywordCandidate|Keyword $c): bool
     {
         return $c->volume_checked_at === null
             || $c->volume_checked_at->lt(now()->subDays(self::TTL_DAYS));

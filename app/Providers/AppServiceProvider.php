@@ -33,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
         // 상대 시간(diffForHumans) 한글 표기 — "2 days ago" → "2일 전"
         Carbon::setLocale('ko');
 
+        // 키워드 마스터(목록 전용 파생 테이블)를 후보 변경에 맞춰 유지
+        \App\Models\KeywordCandidate::observe(\App\Observers\KeywordCandidateObserver::class);
+
         // canonical·og:image 등 절대 URL 의 https 보장 — 프록시/TLS 종단 뒤에서도 APP_URL 이 https 면 강제
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');

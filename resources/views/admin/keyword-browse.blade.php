@@ -88,6 +88,17 @@
             <option value="n" @selected(($collected ?? '') === 'n')>미수집만</option>
             <option value="y" @selected(($collected ?? '') === 'y')>수집됨만</option>
         </select>
+        {{-- 정렬 — 검색량순(기본) / 수집일순 --}}
+        <select name="sort" class="input" style="height:36px;width:150px;" onchange="kbGo(this, [])" title="정렬">
+            @foreach ([
+                'vol' => '검색량 많은 순',
+                'collected' => ($type === 'place' ? '업체' : '상품').' 수집일 최신순',
+                'collected_old' => ($type === 'place' ? '업체' : '상품').' 수집일 오래된순',
+                'keyword' => '키워드 가나다순',
+            ] as $__k => $__l)
+                <option value="{{ $__k }}" @selected(($sort ?? 'vol') === $__k)>{{ $__l }}</option>
+            @endforeach
+        </select>
         <input type="search" name="q" class="input" style="height:36px;width:200px;" placeholder="키워드 검색" value="{{ $q }}">
         <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
         @if ($c1 || $c2 || $c3 || $sido !== '' || $sgg !== '' || $rg !== '' || $q !== '')
@@ -108,9 +119,12 @@
             <option value="500">500개만</option>
         </select>
         <select id="rf-bulk-gap" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="키워드 간 간격 — 너무 빠르면 네이버가 일시 차단합니다">
+            <option value="1000">간격 1초 (최속·차단 위험)</option>
+            <option value="2000">간격 2초</option>
+            <option value="3000">간격 3초</option>
+            <option value="4000">간격 4초</option>
             <option value="6000" selected>간격 6초 (권장)</option>
             <option value="10000">간격 10초 (안전)</option>
-            <option value="4000">간격 4초 (빠름·차단 위험)</option>
         </select>
         <select id="rf-bulk-conc" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="동시에 돌아가는 탭 수 — 탭은 순서대로 열고 동시 수만 유지합니다">
             <option value="1">동시 1개</option>
@@ -200,7 +214,7 @@
                                class="text-ink font-semibold" style="text-decoration:none;" title="이 키워드로 노출되는 업체 보기">{{ $it->keyword }}</a>
                         </td>
                         {{-- 같은 키워드가 여러 분류에 있으면 대표 1개 + 나머지 개수 --}}
-                        @php $__cc = (int) ($catCnt[$it->keyword] ?? 1); @endphp
+                        @php $__cc = (int) ($it->cat_cnt ?: 1); @endphp
                         <td style="padding:7px 6px;" class="text-muted">
                             {{ $it->category?->name ?? '—' }}
                             @if ($__cc > 1)
@@ -216,10 +230,10 @@
                             {{ $it->volume_checked_at ? $it->volume_checked_at->diffForHumans() : '—' }}
                         </td>
                         {{-- 업체·상품 수집일 — 수집한 키워드만 값이 있고, 클릭하면 상세로 --}}
-                        @php $__sat = $serpAt[$it->keyword] ?? null; @endphp
+                        @php $__sat = $it->serp_collected_at; @endphp
                         <td style="padding:7px 6px;">
                             @if ($__sat)
-                                @php $__c = \Carbon\Carbon::parse($__sat); $__n = (int) ($serpCnt[$it->keyword] ?? 0); @endphp
+                                @php $__c = $__sat; $__n = (int) $it->serp_count; @endphp
                                 <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $it->keyword]) }}"
                                    class="font-mono" style="text-decoration:none;color:{{ $__c->lt(now()->subDays(30)) ? 'var(--color-error)' : 'var(--color-primary)' }};"
                                    title="{{ $__c->format('Y-m-d H:i') }} 수집 · {{ $type === 'place' ? '업체' : '상품' }} {{ number_format($__n) }}개{{ $__c->lt(now()->subDays(30)) ? ' · 30일 지남' : '' }}">

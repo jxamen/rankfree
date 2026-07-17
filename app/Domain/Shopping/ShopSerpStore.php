@@ -77,10 +77,13 @@ class ShopSerpStore
             DB::table('keyword_shop_ranks')->insert($chunk);
         }
 
+        // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
+        app(\App\Domain\Keyword\KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
+
         return count($rows);
     }
 
-    /** 상품 식별자 — nvMid(링크의 nvMid=…) 우선, 없으면 링크/제목 해시. */
+    /** 상품 식별자 — nvMid(링크의 nvMid=…) 우선, 없으면 제목+판매처 해시. */
     private function productKey(array $p): string
     {
         $link = (string) ($p['link'] ?? '');
@@ -90,9 +93,12 @@ class ShopSerpStore
         if ($link !== '' && preg_match('#/products/(\d+)#', $link, $m)) {
             return 'pd'.$m[1];
         }
-        $basis = $link !== '' ? $link : (string) ($p['title'] ?? '');
+        // 광고는 링크가 cr.shopping.naver.com/adcr?x=… 라 상품 id 가 없고, 매 수집마다 x 값이 달라진다.
+        // 링크를 해시하면 같은 상품이 매번 새 행으로 쌓이고, 반대로 링크가 같으면 다른 상품이 한 행으로 합쳐진다.
+        // → 제목+판매처로 식별한다(광고 상품에서 이 둘이 같으면 사실상 같은 노출).
+        $basis = trim((string) ($p['title'] ?? '')).'|'.trim((string) ($p['mallName'] ?? ''));
 
-        return $basis === '' ? '' : 'h'.substr(sha1($basis), 0, 32);
+        return trim($basis, '|') === '' ? '' : 'h'.substr(sha1($basis), 0, 32);
     }
 
     /** 키워드의 수집분(상품 조인) — month 미지정이면 최신 월. */
