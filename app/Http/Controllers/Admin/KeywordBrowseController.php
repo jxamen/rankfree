@@ -109,23 +109,35 @@ class KeywordBrowseController extends Controller
         $cat = $this->placeCatKey($candidate?->category?->name);
         $top = min(300, max(10, (int) $request->query('top', 300)));
 
-        $data = ['blocked' => false, 'total' => 0, 'items' => [], 'cached_at' => null];
+        // 순위·리뷰는 변동이 크지 않아 매번 재수집하지 않는다 — DB 스냅샷을 재사용하고 '다시 수집' 때만 갱신.
+        $data = ['blocked' => false, 'total' => 0, 'items' => [], 'collected_at' => null];
         if ($type === 'place') {
-            $ck = 'admin:kwserp:'.md5($keyword.'|'.$cat.'|'.$top);
-            $hit = Cache::get($ck);
-            if ($hit && ! $request->boolean('refresh')) {
-                $data = $hit;
+            $saved = \App\Models\KeywordPlaceSerp::where('keyword', $keyword)->where('cat', $cat)->first();
+
+            if ($saved && ! $request->boolean('refresh')) {
+                $data = [
+                    'blocked' => false,
+                    'total' => $saved->total,
+                    'items' => $saved->items ?? [],
+                    'collected_at' => $saved->collected_at,
+                ];
             } else {
                 $r = $checker->serpFetch($keyword, $cat, null, $top);
-                $data = [
-                    'blocked' => (bool) ($r['blocked'] ?? false),
-                    'total' => (int) ($r['total'] ?? 0),
-                    'items' => (array) ($r['items'] ?? []),
-                    'cached_at' => now()->toDateTimeString(),
-                ];
-                if (! $data['blocked'] && $data['items']) {
-                    Cache::put($ck, $data, now()->addHours(6));
+                $items = (array) ($r['items'] ?? []);
+                $blocked = (bool) ($r['blocked'] ?? false);
+
+                if (! $blocked && $items) {
+                    $saved = \App\Models\KeywordPlaceSerp::updateOrCreate(
+                        ['keyword' => $keyword, 'cat' => $cat],
+                        ['total' => (int) ($r['total'] ?? 0), 'item_count' => count($items), 'items' => $items, 'collected_at' => now()],
+                    );
                 }
+                $data = [
+                    'blocked' => $blocked,
+                    'total' => (int) ($r['total'] ?? 0),
+                    'items' => $items,
+                    'collected_at' => $saved?->collected_at ?? now(),
+                ];
             }
         }
 

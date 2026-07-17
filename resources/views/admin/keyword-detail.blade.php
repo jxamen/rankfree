@@ -67,8 +67,13 @@
     <div class="card p-5">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">노출 업체 <span class="font-mono text-muted">{{ number_format($items->count()) }}</span></div>
+            @php $__at = $serp['collected_at'] ? \Carbon\Carbon::parse($serp['collected_at']) : null; @endphp
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">
-                수집 {{ $serp['cached_at'] ? \Carbon\Carbon::parse($serp['cached_at'])->diffForHumans() : '방금' }} · 6시간 캐시 · 서울 좌표 기준
+                수집 <b class="text-muted" title="{{ $__at?->format('Y-m-d H:i') }}">{{ $__at ? $__at->format('Y-m-d H:i').' ('.$__at->diffForHumans().')' : '방금' }}</b>
+                · 서울 좌표 기준
+                @if ($__at && $__at->lt(now()->subDay()))
+                    <span style="color:var(--color-error);">· 순위는 매일 바뀔 수 있어 오래된 값입니다 — 다시 수집을 권합니다</span>
+                @endif
             </span>
         </div>
         <div style="overflow-x:auto;">
