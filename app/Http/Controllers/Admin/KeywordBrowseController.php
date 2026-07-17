@@ -52,10 +52,11 @@ class KeywordBrowseController extends Controller
         // 플레이스 지역 — 공개 페이지와 같은 3단계(시/도 > 시/군/구 > 동·상권). 지역명 2,900곳을 계층으로 접는다.
         $grouped = ['sido' => [], 'sgg' => [], 'leaf' => []];
         if ($type === 'place') {
-            $grouped = $tree->group(
+            // 지역 목록은 시딩 때만 바뀐다 — 67만 행 group by 라 운영에서 1.5초(실측). 스코프별로 캐시한다.
+            $grouped = Cache::remember('kb:regions:'.md5($scopeIds->implode(',')), 1800, fn () => $tree->group(
                 KeywordCandidate::whereIn('category_id', $scopeIds)->whereNotNull('region')
                     ->selectRaw('region, count(*) as c')->groupBy('region')->pluck('c', 'region')
-            );
+            ));
             // 상위 선택이 유효할 때만 하위를 살린다(잘못된 조합은 해제)
             $sido = isset($grouped['sido'][$sido]) ? $sido : '';
             $sgg = ($sido !== '' && isset($grouped['sgg'][$sido][$sgg])) ? $sgg : '';
@@ -86,12 +87,15 @@ class KeywordBrowseController extends Controller
         $sort = in_array($request->query('sort'), ['vol', 'collected', 'collected_old', 'keyword'], true)
             ? $request->query('sort') : 'vol';
 
-        // 마스터 컬럼으로 정렬 — 서브쿼리 없이 인덱스만 탄다
+        // 마스터 컬럼으로 정렬 — 인덱스(kw_type_vol·kw_type_serp)를 그대로 탄다.
+        // ★ 'x is null' 을 정렬식에 넣으면 표현식이라 인덱스를 못 쓰고 filesort 가 된다(운영 실측 0.92초 → 0.00초).
+        //   MySQL 은 NULL 을 가장 작은 값으로 보므로 DESC 만 쓰면 미상·미수집이 알아서 뒤로 간다.
         $items = $base()->with('category')
-            ->when($sort === 'vol', fn ($x) => $x->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword'))
+            ->when($sort === 'vol', fn ($x) => $x->orderByDesc('monthly_total')->orderByDesc('id'))
             ->when($sort === 'keyword', fn ($x) => $x->orderBy('keyword'))
-            ->when($sort === 'collected', fn ($x) => $x->orderByRaw('serp_collected_at is null')->orderByDesc('serp_collected_at')->orderBy('keyword'))
-            ->when($sort === 'collected_old', fn ($x) => $x->orderBy('serp_collected_at')->orderBy('keyword'))
+            ->when($sort === 'collected', fn ($x) => $x->orderByDesc('serp_collected_at')->orderByDesc('id'))
+            // 오래된 수집분부터 — 미수집(NULL)은 볼 이유가 없으니 제외해야 인덱스 범위로 좁혀진다
+            ->when($sort === 'collected_old', fn ($x) => $x->whereNotNull('serp_collected_at')->orderBy('serp_collected_at')->orderBy('id'))
             ->paginate(100)->withQueryString();
         // 검색어를 넣은 조회는 즉답이 중요하다 — 갱신은 목록을 훑을 때만(검색 중 3초 지연 방지, 실측)
         $refreshed = $q === '' ? $refresher->refresh(collect($items->items())) : 0;
@@ -109,12 +113,16 @@ class KeywordBrowseController extends Controller
             'items' => $items,       // 수집일·분류수·상태는 마스터 컬럼(serp_collected_at·serp_count·cat_cnt·status)
             'collected' => $collected,
             'sort' => $sort,
-            // distinct count 가 운영에서 1.58초라 캐시(필터 조합별 5분) — 총계는 실시간일 필요가 없다
+            // 마스터는 (keyword,type) 유니크라 distinct 가 필요 없다 — distinct count 는 운영에서 4.0초(실측).
+            // 그래도 66만 행 count 는 1초 안팎이라 필터 조합별로 5분 캐시한다(총계는 실시간일 필요가 없다).
             'total' => \Illuminate\Support\Facades\Cache::remember(
                 'kb:total:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,
-                fn () => $base()->distinct()->count('keyword')
+                fn () => $base()->count()
             ),
-            'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
+            'statusCounts' => \Illuminate\Support\Facades\Cache::remember(
+                'kb:st:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,
+                fn () => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')
+            ),
         ]);
     }
 

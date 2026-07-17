@@ -132,6 +132,7 @@ class ExtKeywordShopSerpController extends Controller
             'products.*.link' => 'nullable|string',
             'products.*.isAd' => 'nullable|boolean',
             'products.*.talkId' => 'nullable|string|max:60',   // 톡톡 코드(talk.naver.com/ct/{code})
+            'products.*.storeId' => 'nullable|string|max:80',  // 스토어 핸들 — 스마트스토어 판별용
             'related_tags' => 'nullable|array|max:50',
         ]);
 

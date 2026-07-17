@@ -649,6 +649,7 @@ const handlers = {
       link: String(p.link || ''),
       isAd: !!p.isAd,
       talkId: String(p.talkId || ''),   // 톡톡 코드(talk.naver.com/ct/{code}) — 관리자에서 톡톡 열기용
+      storeId: String(p.storeId || ''), // 스토어 핸들(smartstore/brand) — 서버가 스마트스토어만 저장한다
     })).filter((p) => p.title);
 
     const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp', {

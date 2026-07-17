@@ -29,6 +29,11 @@ class ShopSerpStore
         $rows = [];
         $malls = [];
         foreach ($products as $p) {
+            // 스마트스토어(brand 포함) 상품만 저장한다 — 외부몰(현대Hmall 등)은 톡톡·판매자 정보가 없어
+            // 이후 분석에 쓸 수 없다. 순위(rnk)는 네이버 원본 그대로 두므로 번호는 띄엄띄엄해진다.
+            if (! $this->isSmartStore($p)) {
+                continue;
+            }
             $key = $this->productKey($p);
             if ($key === '') {
                 continue;
@@ -81,6 +86,21 @@ class ShopSerpStore
         app(\App\Domain\Keyword\KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
 
         return count($rows);
+    }
+
+    /**
+     * 스마트스토어 상품인가 — 상품 URL 이 smartstore/brand.naver.com 인 것만.
+     * 확장이 mallPcUrl(실제 스토어 핸들)로 상품 URL 을 재구성하므로 링크 도메인이 곧 스토어 유형이다.
+     */
+    private function isSmartStore(array $p): bool
+    {
+        $link = (string) ($p['link'] ?? '');
+        if (preg_match('#https?://(smartstore|brand)\.naver\.com/#i', $link)) {
+            return true;
+        }
+
+        // 확장이 스토어 핸들을 따로 넘겨주면 그것으로도 인정(링크가 광고 리다이렉트인 경우)
+        return trim((string) ($p['storeId'] ?? '')) !== '';
     }
 
     /** 상품 식별자 — nvMid(링크의 nvMid=…) 우선, 없으면 제목+판매처 해시. */
