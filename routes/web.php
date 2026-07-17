@@ -328,6 +328,9 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/google-connect/callback', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'callback'])->name('google-connect.callback');
     Route::post('/google-connect/disconnect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'disconnect'])->name('google-connect.disconnect');
 
+    // 키워드 탐색 — 수집된 키워드를 플레이스/쇼핑별로 검색·조회만(관리는 허브에서)
+    Route::get('/keyword-browse', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'index'])->name('keyword-browse');
+
     // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
     Route::post('/keyword-hub/categories', [\App\Http\Controllers\Admin\KeywordHubController::class, 'storeCategory'])->name('keyword-hub.categories.store');
@@ -343,9 +346,8 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/search-stats', [\App\Http\Controllers\Admin\SearchStatsController::class, 'index'])->name('search-stats');
     Route::post('/search-stats/collect', [\App\Http\Controllers\Admin\SearchStatsController::class, 'collect'])->name('search-stats.collect');
 
-    // 방문 분석 (GA4)
-    Route::get('/traffic-stats', [\App\Http\Controllers\Admin\TrafficStatsController::class, 'index'])->name('traffic-stats');
-    Route::post('/traffic-stats/collect', [\App\Http\Controllers\Admin\TrafficStatsController::class, 'collect'])->name('traffic-stats.collect');
+    // 방문 분석 (GA4) — ga4-insights 패키지가 /admin/traffic-stats(route명 admin.traffic-stats)에 마운트.
+    //   패키지: packages/ga4-insights · 설정: config/ga4-insights.php · 자격증명: App\Support\AppGa4Credentials
 
     // 외부 발주 업체 관리 (API/구글시트)
     Route::get('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'index'])->name('vendors');
