@@ -79,9 +79,21 @@ function sleep(ms) {
 // running 플래그만 남아 "이미 수집이 진행 중입니다"로 영구히 막히는 것을 막는다.
 (async () => {
   try {
-    const s = await chrome.storage.local.get(['rfBulk']);
+    const s = await chrome.storage.local.get(['rfBulk', 'rfSellerCaptcha']);
     if (s.rfBulk && s.rfBulk.running) {
       await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { running: false, stop: false, current: '' }) });
+    }
+    if (s.rfSellerCaptcha && s.rfSellerCaptcha.running) {
+      await chrome.storage.local.set({
+        rfSellerCaptcha: Object.assign({}, s.rfSellerCaptcha, {
+          running: false,
+          stop: false,
+          current: '',
+          inFlight: 0,
+          lastError: 'extension service worker restarted',
+          finishedAt: Date.now(),
+        }),
+      });
     }
   } catch (e) { /* noop */ }
 })();
@@ -379,15 +391,21 @@ const handlers = {
    * 셀러력 경쟁 상품 상세 수집 — 봇 차단(429)으로 fetch 불가하니, 비활성 백그라운드 탭으로
    * 실제 렌더한 뒤 content script(수집 모드)가 __PRELOADED_STATE__를 추출해 보내면 탭을 닫는다.
    */
-  async sellerCollectDetail({ url }) {
+  async sellerCollectDetail({ url, shouldStop }) {
     return new Promise((resolve) => {
       let tabId = null;
       let done = false;
       const to = setTimeout(() => finish({ ok: false, timeout: true }), 20000);
+      const stopTimer = setInterval(async () => {
+        try {
+          if (!done && shouldStop && await shouldStop()) finish({ ok: false, stopped: true, message: 'stopped' });
+        } catch (e) { /* noop */ }
+      }, 500);
       function finish(res) {
         if (done) return;
         done = true;
         clearTimeout(to);
+        clearInterval(stopTimer);
         chrome.runtime.onMessage.removeListener(onMsg);
         if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
         resolve(res);
@@ -414,7 +432,7 @@ const handlers = {
    * 리포트 HTML 회수, 탭 자동 닫음. 결과는 검색 패널에 in-panel 표시.
    * (로그인 리다이렉트는 'main' 제네릭 URL 때문이었고, 실제 스토어 URL은 백그라운드에서도 정상 로드)
    */
-  async openSellerInfoCaptcha({ channelUid, channelId, storeId, productUrl, active }) {
+  async openSellerInfoCaptcha({ channelUid, channelId, storeId, productUrl, active, keepOpen, shouldStop }) {
     return new Promise((resolve) => {
       let tabId = null;
       let done = false;
@@ -428,13 +446,29 @@ const handlers = {
         sellerInfoUrl: url,
         message: 'seller-info captcha capture timeout',
       }), 18000);
+      const stopTimer = setInterval(async () => {
+        try {
+          if (!done && shouldStop && await shouldStop()) {
+            finish({
+              ok: false,
+              stopped: true,
+              channelUid,
+              channelId,
+              storeId,
+              sellerInfoUrl: url,
+              message: 'stopped',
+            });
+          }
+        } catch (e) { /* noop */ }
+      }, 500);
 
       function finish(res) {
         if (done) return;
         done = true;
         clearTimeout(to);
+        clearInterval(stopTimer);
         chrome.runtime.onMessage.removeListener(onMsg);
-        if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        if (tabId != null && !keepOpen) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
         resolve(res);
       }
 
@@ -467,7 +501,7 @@ const handlers = {
     });
   },
 
-  async sellerCaptchaStart({ products, active, force }) {
+  async sellerCaptchaStart({ products, active, force, concurrency, keepOpen }) {
     const { token } = await getStore();
     if (!token) return { ok: false, loggedIn: false, message: 'RankFree extension login is required.' };
 
@@ -485,9 +519,11 @@ const handlers = {
       return { ok: false, message: 'Seller captcha collection is already running.' };
     }
 
+    const conc = Math.min(5, Math.max(1, Number(concurrency) || (list.length === 1 ? 1 : 3)));
+    const keepTabsOpen = !!keepOpen;
     const init = {
       running: true, stop: false, total: list.length, done: 0, saved: 0, failed: 0,
-      current: '', lastError: '', results: [], startedAt: Date.now(), heartbeat: Date.now(),
+      current: '', inFlight: 0, concurrency: conc, lastError: '', results: [], startedAt: Date.now(), heartbeat: Date.now(),
     };
     await chrome.storage.local.set({ rfSellerCaptcha: init });
 
@@ -497,48 +533,98 @@ const handlers = {
         await chrome.storage.local.set({ rfSellerCaptcha: Object.assign({}, cur, data, { heartbeat: Date.now() }) });
       };
       const isStopped = async () => !!(((await chrome.storage.local.get(['rfSellerCaptcha'])).rfSellerCaptcha || {}).stop);
-      let done = 0, saved = 0, failed = 0;
+      let nextIndex = 0, done = 0, saved = 0, failed = 0;
       const results = [];
+      const activeItems = new Map();
 
-      for (const item of list) {
-        if (await isStopped()) break;
-        const storeId = item.storeId || storeIdFromProductUrl(item.url);
-        await patch({ current: item.title || item.url });
+      const currentText = () => Array.from(activeItems.values()).slice(0, 3).join(', ');
 
-        let result = { ok: false, url: item.url, title: item.title, storeId, message: '' };
-        try {
-          if (!storeId) throw new Error('store_id_not_found');
+      const take = async () => {
+        if (await isStopped()) return null;
+        if (nextIndex >= list.length) return null;
+        return list[nextIndex++];
+      };
 
-          const detail = await handlers.sellerCollectDetail({ url: item.url });
-          const channel = detail && detail.data && detail.data.smartStoreV2 && detail.data.smartStoreV2.channel
-            ? detail.data.smartStoreV2.channel
-            : {};
-          const channelUid = String(channel.channelUid || '');
-          const channelId = String(channel.channelId || '');
-          const channelNo = channel.id || null;
-          if (!detail || !detail.ok || !channelUid) throw new Error((detail && detail.message) || 'channel_uid_not_found');
+      const worker = async (workerId) => {
+        while (true) {
+          const item = await take();
+          if (!item) break;
 
-          const cap = await handlers.openSellerInfoCaptcha({
-            channelUid, channelId, storeId, productUrl: item.url, active: !!active,
+          const label = item.title || item.url;
+          const storeId = item.storeId || storeIdFromProductUrl(item.url);
+          activeItems.set(workerId, label);
+          await patch({ current: currentText(), inFlight: activeItems.size });
+
+          let result = { ok: false, url: item.url, title: item.title, storeId, message: '' };
+          try {
+            if (await isStopped()) break;
+            if (!storeId) throw new Error('store_id_not_found');
+
+            const detail = await handlers.sellerCollectDetail({ url: item.url, shouldStop: isStopped });
+            if (detail && detail.stopped) break;
+
+            const channel = detail && detail.data && detail.data.smartStoreV2 && detail.data.smartStoreV2.channel
+              ? detail.data.smartStoreV2.channel
+              : {};
+            const channelUid = String(channel.channelUid || '');
+            const channelId = String(channel.channelId || '');
+            const channelNo = channel.id || null;
+            if (!detail || !detail.ok || !channelUid) throw new Error((detail && detail.message) || 'channel_uid_not_found');
+
+            const cap = await handlers.openSellerInfoCaptcha({
+              channelUid,
+              channelId,
+              storeId,
+              productUrl: item.url,
+              active: !!active,
+              keepOpen: keepTabsOpen,
+              shouldStop: isStopped,
+            });
+            if (cap && cap.stopped) break;
+
+            result = Object.assign({
+              url: item.url, title: item.title, storeId, channelUid, channelId, channelNo,
+            }, cap || { ok: false, message: 'unknown_error' });
+          } catch (e) {
+            result.message = String((e && e.message) || e);
+          } finally {
+            activeItems.delete(workerId);
+          }
+
+          done++;
+          if (result.ok) saved++; else failed++;
+          results.push(result);
+          await patch({
+            done,
+            saved,
+            failed,
+            results,
+            current: currentText(),
+            inFlight: activeItems.size,
+            lastError: result.ok ? '' : (result.message || 'failed'),
           });
-          result = Object.assign({
-            url: item.url, title: item.title, storeId, channelUid, channelId, channelNo,
-          }, cap || { ok: false, message: 'unknown_error' });
-        } catch (e) {
-          result.message = String((e && e.message) || e);
+
+          if (await isStopped()) break;
+          await sleep(200);
         }
+      };
 
-        done++;
-        if (result.ok) saved++; else failed++;
-        results.push(result);
-        await patch({ done, saved, failed, results, lastError: result.ok ? '' : (result.message || 'failed') });
-        await sleep(500);
+      try {
+        await Promise.all(Array.from({ length: conc }, (_, i) => worker(i)));
+      } finally {
+        const stopped = await isStopped();
+        await patch({
+          running: false,
+          stop: false,
+          stopped,
+          current: '',
+          inFlight: 0,
+          finishedAt: Date.now(),
+        });
       }
-
-      await patch({ running: false, stop: false, current: '', finishedAt: Date.now() });
     })();
 
-    return { ok: true, started: true, total: list.length };
+    return { ok: true, started: true, total: list.length, concurrency: conc };
   },
 
   async sellerCaptchaStatus() {

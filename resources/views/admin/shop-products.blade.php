@@ -54,6 +54,12 @@
 
     <div class="mt-3 flex items-center gap-2 flex-wrap">
         <button type="button" id="rf-seller-captcha-all" class="btn btn-primary btn-sm">현재 페이지 판매자정보 수집</button>
+        <select id="rf-seller-captcha-conc" class="input" style="height:32px;width:108px;">
+            <option value="1">동시 1개</option>
+            <option value="2">동시 2개</option>
+            <option value="3" selected>동시 3개</option>
+            <option value="4">동시 4개</option>
+        </select>
         <button type="button" id="rf-seller-captcha-stop" class="btn btn-secondary btn-sm" hidden>중단</button>
         <span id="rf-seller-captcha-msg" class="text-muted" style="font-size:var(--fs-xs);">상품별 수집 버튼 또는 현재 페이지 일괄 수집을 사용할 수 있습니다.</span>
     </div>
@@ -171,6 +177,7 @@
     (function () {
         var allBtn = document.getElementById('rf-seller-captcha-all');
         var stopBtn = document.getElementById('rf-seller-captcha-stop');
+        var conc = document.getElementById('rf-seller-captcha-conc');
         var msg = document.getElementById('rf-seller-captcha-msg');
         var pollTimer = null;
 
@@ -205,16 +212,20 @@
 
         function setRunning(on) {
             if (allBtn) allBtn.disabled = on;
+            if (conc) conc.disabled = on;
             if (stopBtn) stopBtn.hidden = !on;
             document.querySelectorAll('.rf-seller-captcha-one').forEach(function (b) { b.disabled = on; });
         }
 
         function renderJob(job) {
             job = job || {};
-            var text = '진행 ' + (job.done || 0) + '/' + (job.total || 0) +
+            var running = !!job.running;
+            var text = (running ? '수집 중 ' : '수집 종료 ') + (job.done || 0) + '/' + (job.total || 0) +
                 ' · 저장 ' + (job.saved || 0) +
                 ' · 실패 ' + (job.failed || 0);
-            if (job.current) text += ' · 현재: ' + job.current;
+            if (running && job.inFlight) text += ' · 처리 중 ' + job.inFlight;
+            if (job.concurrency) text += ' · 동시 ' + job.concurrency;
+            if (running && job.current) text += ' · 현재: ' + job.current;
             if (job.lastError) text += ' · 최근 오류: ' + job.lastError;
             msg.textContent = text;
         }
@@ -232,7 +243,12 @@
             });
         }
 
-        function start(products) {
+        function selectedConcurrency() {
+            return Math.max(1, Math.min(4, Number(conc && conc.value) || 3));
+        }
+
+        function start(products, options) {
+            options = options || {};
             if (!hasExtension()) {
                 msg.style.color = 'var(--color-error)';
                 msg.textContent = '확장이 설치돼 있지 않습니다. RankFree 확장을 리로드하고 로그인해 주세요.';
@@ -246,7 +262,12 @@
             msg.style.color = '';
             msg.textContent = '판매자정보 수집 작업을 시작합니다...';
             setRunning(true);
-            callExt('sellerCaptchaStart', { products: products }, function (res) {
+            callExt('sellerCaptchaStart', {
+                products: products,
+                concurrency: options.concurrency || selectedConcurrency(),
+                active: !!options.active,
+                keepOpen: !!options.keepOpen
+            }, function (res) {
                 if (!res || !res.ok) {
                     setRunning(false);
                     msg.style.color = 'var(--color-error)';
@@ -259,30 +280,39 @@
 
         if (allBtn) {
             allBtn.addEventListener('click', function () {
-                start(currentProducts());
+                start(currentProducts(), { concurrency: selectedConcurrency() });
             });
         }
         if (stopBtn) {
             stopBtn.addEventListener('click', function () {
                 callExt('sellerCaptchaStop', {}, function () {
-                    msg.textContent = '중단 요청을 보냈습니다. 현재 처리 중인 상품이 끝나면 멈춥니다.';
+                    msg.textContent = '중단 요청을 보냈습니다. 현재 처리 중인 상품을 정리하고 멈춥니다.';
+                    setRunning(true);
+                    if (!pollTimer) poll();
                 });
             });
         }
         document.addEventListener('click', function (e) {
             var btn = e.target.closest && e.target.closest('.rf-seller-captcha-one');
             if (!btn) return;
-            start([productFromButton(btn)]);
+            start([productFromButton(btn)], { active: true, keepOpen: true, concurrency: 1 });
         });
 
-        if (hasExtension()) {
-            callExt('sellerCaptchaStatus', {}, function (res) {
-                if (res && res.job && res.job.running) {
-                    setRunning(true);
-                    poll();
-                }
-            });
-        }
+        (function recover(n) {
+            if (hasExtension()) {
+                callExt('sellerCaptchaStatus', {}, function (res) {
+                    if (res && res.job) {
+                        renderJob(res.job);
+                        if (res.job.running) {
+                            setRunning(true);
+                            if (!pollTimer) poll();
+                        }
+                    }
+                });
+                return;
+            }
+            if (n > 0) setTimeout(function () { recover(n - 1); }, 300);
+        })(20);
     })();
 </script>
 @endsection
