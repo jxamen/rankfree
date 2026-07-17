@@ -111,6 +111,11 @@ class KeywordHubCollector
         if (preg_match('/[^\p{Hangul}a-zA-Z0-9\s]/u', $kw)) {
             return false;
         }
+        // 모델명류 제외 — 한글이 없으면서 숫자가 섞인 영숫자 조합(12aae892·12v2a·iphone15 …).
+        // '3M 테이프'·'아이폰15'처럼 한글이 있으면 통과, 'nike'처럼 숫자 없는 영문도 통과.
+        if (! preg_match('/\p{Hangul}/u', $kw) && preg_match('/\d/', $kw)) {
+            return false;
+        }
         foreach ((array) config('rankfree.hub.banned_patterns', []) as $p) {
             if (@preg_match('/'.$p.'/u', $kw) === 1) {
                 return false;
