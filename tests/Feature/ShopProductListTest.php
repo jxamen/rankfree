@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Domain\Shopping\ShopSerpStore;
+use App\Models\ShopSellerCaptcha;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /** 수집 상품 목록 — 키워드와 별개로 상품 기준으로 본다(검색·판매처·광고·톡톡 필터·정렬). */
@@ -60,5 +62,37 @@ class ShopProductListTest extends TestCase
         foreach (['recent', 'kw', 'price_high', 'price_low', 'title'] as $s) {
             $this->actingAs($u)->get('/admin/shop-products?sort='.$s)->assertOk();
         }
+    }
+
+    public function test_shows_recent_seller_captcha_questions_with_image_links(): void
+    {
+        Storage::fake('local');
+        $user = $this->admin();
+        $path = 'seller-captchas/channel/captcha.png';
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+        Storage::disk('local')->put($path, $png);
+
+        $captcha = ShopSellerCaptcha::create([
+            'user_id' => $user->id,
+            'store_id' => 'melvint',
+            'channel_uid' => 'channel',
+            'captcha_key' => 'captcha',
+            'question' => '영수증에 구매한 상품은 몇 개입니까?',
+            'image_disk' => 'local',
+            'image_path' => $path,
+            'image_mime' => 'image/png',
+            'image_bytes' => strlen($png),
+            'captured_at' => now(),
+        ]);
+
+        $this->actingAs($user)->get('/admin/shop-products')
+            ->assertOk()
+            ->assertSee('최근 판매자정보 캡차')
+            ->assertSee('영수증에 구매한 상품은 몇 개입니까?')
+            ->assertSee(route('admin.shop-products.seller-captchas.image', $captcha), false);
+
+        $this->actingAs($user)->get(route('admin.shop-products.seller-captchas.image', $captcha))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ShopSellerCaptcha;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * 수집 상품(관리자) — 키워드와 무관하게 지금까지 수집된 상품 전체를 한 곳에서 본다.
@@ -70,6 +72,8 @@ class ShopProductController extends Controller
         return view('admin.shop-products', [
             'items' => $items,
             'kwMap' => $kwMap,
+            'recentCaptchas' => ShopSellerCaptcha::query()
+                ->latest('captured_at')->latest('id')->limit(30)->get(),
             'q' => $q, 'mall' => $mall, 'ad' => $ad, 'talk' => $talk, 'month' => $month, 'sort' => $sort,
             // 필터 후보 — 판매처가 많아질 수 있어 상위만(캐시)
             'malls' => Cache::remember('shop_products:malls', 300, fn () => DB::table('shop_products')
@@ -82,6 +86,27 @@ class ShopProductController extends Controller
                 'shop_products:total:'.md5(implode('|', [$q, $mall, $ad, $talk, $month])), 300,
                 fn () => $base()->count()
             ),
+        ]);
+    }
+
+    public function captchaImage(ShopSellerCaptcha $captcha)
+    {
+        $disk = $captcha->image_disk ?: 'local';
+        abort_unless($captcha->image_path && Storage::disk($disk)->exists($captcha->image_path), 404);
+
+        $mime = $captcha->image_mime ?: 'application/octet-stream';
+        $name = ($captcha->captcha_key ?: 'seller-captcha').'.'.match ($mime) {
+            'image/png' => 'png',
+            'image/jpeg', 'image/pjpeg' => 'jpg',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => 'bin',
+        };
+
+        return response(Storage::disk($disk)->get($captcha->image_path), 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="'.$name.'"',
+            'Cache-Control' => 'private, max-age=300',
         ]);
     }
 }

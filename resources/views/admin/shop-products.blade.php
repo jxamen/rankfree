@@ -169,6 +169,50 @@
     </div>
 </div>
 
+@if (!empty($recentCaptchas) && $recentCaptchas->isNotEmpty())
+    <div class="card p-4 mt-4">
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div>
+                <h2 class="font-semibold text-ink" style="font-size:var(--fs-md);">최근 판매자정보 캡차</h2>
+                <p class="text-muted" style="font-size:var(--fs-xs);margin-top:2px;">질문과 저장된 이미지를 확인합니다.</p>
+            </div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm);">
+                <thead>
+                    <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
+                        <th style="padding:8px 6px;width:120px;">저장일</th>
+                        <th style="padding:8px 6px;">질문</th>
+                        <th style="padding:8px 6px;width:140px;">스토어ID</th>
+                        <th style="padding:8px 6px;width:110px;">이미지</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($recentCaptchas as $captcha)
+                        <tr style="border-bottom:1px solid var(--color-hairline-soft);">
+                            <td style="padding:8px 6px;" class="font-mono text-muted-soft">
+                                {{ $captcha->captured_at ? $captcha->captured_at->format('m-d H:i') : $captcha->created_at?->format('m-d H:i') }}
+                            </td>
+                            <td style="padding:8px 6px;max-width:640px;">
+                                <span class="text-ink">{{ $captcha->question ?: '질문 없음' }}</span>
+                                @if ($captcha->seller_info_url)
+                                    <a href="{{ $captcha->seller_info_url }}" target="_blank" rel="noopener"
+                                       class="text-muted-soft" style="margin-left:8px;text-decoration:none;font-size:var(--fs-xs);">원문</a>
+                                @endif
+                            </td>
+                            <td style="padding:8px 6px;" class="font-mono text-muted">{{ $captcha->store_id ?: '-' }}</td>
+                            <td style="padding:8px 6px;">
+                                <a href="{{ route('admin.shop-products.seller-captchas.image', $captcha) }}"
+                                   target="_blank" rel="noopener" class="btn btn-secondary btn-sm">이미지 열기</a>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endif
+
 @if ($items->hasPages())
     <div class="mt-4">{{ $items->links() }}</div>
 @endif

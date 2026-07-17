@@ -349,9 +349,11 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::delete('/keyword-browse/month', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'deleteMonth'])->name('keyword-browse.month.delete');
     // 수집 상품 — 키워드와 별개로, 수집된 상품 전체를 상품 기준으로 본다
     Route::get('/shop-products', [\App\Http\Controllers\Admin\ShopProductController::class, 'index'])->name('shop-products');
+    Route::get('/shop-products/seller-captchas/{captcha}/image', [\App\Http\Controllers\Admin\ShopProductController::class, 'captchaImage'])->name('shop-products.seller-captchas.image');
 
     // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
+    Route::get('/keyword-hub/candidates', [\App\Http\Controllers\Admin\KeywordHubController::class, 'candidates'])->name('keyword-hub.candidates');
     Route::post('/keyword-hub/categories', [\App\Http\Controllers\Admin\KeywordHubController::class, 'storeCategory'])->name('keyword-hub.categories.store');
     Route::put('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'updateCategory'])->name('keyword-hub.categories.update');
     Route::post('/keyword-hub/categories/{category}/toggle', [\App\Http\Controllers\Admin\KeywordHubController::class, 'toggleCategory'])->name('keyword-hub.categories.toggle');
@@ -360,6 +362,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/candidates/bulk-all', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkAllCandidates'])->name('keyword-hub.candidates.bulk-all');
     Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
     Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
+    Route::post('/keyword-hub/publish-batch', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publishBatch'])->name('keyword-hub.publish-batch');
 
     // 신규 개업(24) — 인허가 공공데이터 열람 + 네이버 플레이스 등록 여부. ⚠️ 열람 전용(광고 발송 금지)
     Route::get('/new-businesses', [\App\Http\Controllers\Admin\NewBusinessController::class, 'index'])->name('new-businesses');
