@@ -59,18 +59,21 @@ class KeywordHubSeedTest extends TestCase
 
         $this->artisan('hub:shopping-collect', ['--pages' => 1, '--delay-ms' => 0])->assertSuccessful();
 
-        // 1·2분류 카테고리 동기화(naver_cid 매핑)
+        // 1·2·3분류 카테고리 동기화(naver_cid 매핑) — 데이터랩 트리를 그대로 3계층으로
         $root = KeywordCategory::where('naver_cid', 50000001)->first();
         $sub = KeywordCategory::where('naver_cid', 50000173)->first();
+        $third = KeywordCategory::where('naver_cid', 50000174)->first();
         $this->assertNotNull($root);
         $this->assertNotNull($sub);
+        $this->assertNotNull($third, '3분류(운동화)도 카테고리로 연동돼야 한다');
         $this->assertSame('shopping', $root->type);
         $this->assertNull($root->parent_id);
         $this->assertSame($root->id, $sub->parent_id);
+        $this->assertSame($sub->id, $third->parent_id);
 
-        // 2분류 인기검색어 + 3분류(운동화) 인기검색어 모두 2분류 카테고리 후보로
+        // 인기검색어는 각 분류 카테고리의 후보로 — 3분류 키워드는 3분류 카테고리에
         $this->assertDatabaseHas('keyword_candidates', ['category_id' => $sub->id, 'keyword' => '젤리슈즈', 'source' => 'datalab', 'status' => 'pending']);
-        $this->assertDatabaseHas('keyword_candidates', ['category_id' => $sub->id, 'keyword' => '나이키운동화', 'source' => 'datalab']);
+        $this->assertDatabaseHas('keyword_candidates', ['category_id' => $third->id, 'keyword' => '나이키운동화', 'source' => 'datalab']);
         // 이미 허브 발행된 키워드는 제외
         $this->assertDatabaseMissing('keyword_candidates', ['keyword' => '이미발행슈즈']);
 
