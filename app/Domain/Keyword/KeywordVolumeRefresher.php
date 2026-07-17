@@ -15,8 +15,12 @@ class KeywordVolumeRefresher
     /** 갱신 주기(일) — "조회수는 일주일에 한번 업데이트" */
     public const TTL_DAYS = 7;
 
-    /** 한 화면에서 갱신할 최대 건수(5의 배수 — API 호출 = 이 값 / 5) */
-    public const MAX_PER_VIEW = 50;
+    /**
+     * 한 화면에서 갱신할 최대 건수(5의 배수 — API 호출 = 이 값 / 5).
+     * 50건이면 첫 조회가 3.1초 걸려 "검색이 안 된다"고 느껴진다(실측) → 15건(API 3회, 약 1초)으로 낮춘다.
+     * 나머지는 페이지를 넘기거나 다시 볼 때 이어서 채워진다.
+     */
+    public const MAX_PER_VIEW = 15;
 
     public function __construct(private NaverKeywordService $keywords) {}
 

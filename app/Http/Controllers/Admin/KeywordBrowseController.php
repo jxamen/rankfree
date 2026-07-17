@@ -75,7 +75,8 @@ class KeywordBrowseController extends Controller
         $items = $base()->with('category')
             ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
             ->paginate(100)->withQueryString();
-        $refreshed = $refresher->refresh(collect($items->items()));
+        // 검색어를 넣은 조회는 즉답이 중요하다 — 갱신은 목록을 훑을 때만(검색 중 3초 지연 방지, 실측)
+        $refreshed = $q === '' ? $refresher->refresh(collect($items->items())) : 0;
 
         // 업체·상품 수집일(키워드별 스냅샷) — 목록에서 어느 키워드를 수집했는지 바로 보이게
         $shown = collect($items->items())->pluck('keyword')->all();
