@@ -108,7 +108,10 @@
             <tbody>
                 @forelse ($items as $it)
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
-                        <td style="padding:7px 6px;" class="text-ink font-semibold">{{ $it->keyword }}</td>
+                        <td style="padding:7px 6px;">
+                            <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $it->keyword]) }}"
+                               class="text-ink font-semibold" style="text-decoration:none;" title="이 키워드로 노출되는 업체 보기">{{ $it->keyword }}</a>
+                        </td>
                         <td style="padding:7px 6px;" class="text-muted">{{ $it->category?->name ?? '—' }}</td>
                         @if ($type === 'place')
                             <td style="padding:7px 6px;" class="text-muted">{{ $it->region ?: '—' }}</td>

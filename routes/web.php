@@ -344,6 +344,8 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
 
     // 키워드 탐색 — 수집된 키워드를 플레이스/쇼핑별로 검색·조회만(관리는 허브에서)
     Route::get('/keyword-browse', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'index'])->name('keyword-browse');
+    // 키워드 상세 — 그 키워드로 노출되는 업체 수집(플레이스 SERP 최대 300)
+    Route::get('/keyword-browse/detail', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'detail'])->name('keyword-browse.detail');
 
     // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
@@ -355,6 +357,11 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/candidates/bulk-all', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkAllCandidates'])->name('keyword-hub.candidates.bulk-all');
     Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
     Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
+
+    // 신규 개업(24) — 인허가 공공데이터 열람 + 네이버 플레이스 등록 여부. ⚠️ 열람 전용(광고 발송 금지)
+    Route::get('/new-businesses', [\App\Http\Controllers\Admin\NewBusinessController::class, 'index'])->name('new-businesses');
+    Route::post('/new-businesses/collect', [\App\Http\Controllers\Admin\NewBusinessController::class, 'collect'])->name('new-businesses.collect');
+    Route::post('/new-businesses/place-match', [\App\Http\Controllers\Admin\NewBusinessController::class, 'placeMatch'])->name('new-businesses.place-match');
 
     // 검색 유입 분석 (구글 서치 콘솔)
     Route::get('/search-stats', [\App\Http\Controllers\Admin\SearchStatsController::class, 'index'])->name('search-stats');

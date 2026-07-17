@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * 키워드 탐색(관리자) — 수집된 키워드 조회 전용.
@@ -90,6 +91,65 @@ class KeywordBrowseController extends Controller
             'total' => $base()->count(),
             'statusCounts' => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
         ]);
+    }
+
+    /**
+     * 키워드 상세 — 그 키워드로 실제 노출되는 업체를 수집해 보여준다.
+     *   플레이스: pcmap SERP 최대 300개(순위·리뷰·저장수·place+·새로오픈·톡톡) — 6페이지 × 3초라 결과를 캐시한다.
+     *   쇼핑: 서버는 search.shopping 이 418 로 막혀 확장 수집이 필요 — 여기서는 안내만 한다.
+     */
+    public function detail(Request $request, \App\Domain\Place\PlaceRankChecker $checker)
+    {
+        $keyword = trim((string) $request->query('keyword', ''));
+        abort_if($keyword === '', 404);
+
+        $candidate = KeywordCandidate::with('category')
+            ->where('keyword', $keyword)->orderByDesc('id')->first();
+        $type = $candidate?->category?->type ?? 'place';
+        $cat = $this->placeCatKey($candidate?->category?->name);
+        $top = min(300, max(10, (int) $request->query('top', 300)));
+
+        $data = ['blocked' => false, 'total' => 0, 'items' => [], 'cached_at' => null];
+        if ($type === 'place') {
+            $ck = 'admin:kwserp:'.md5($keyword.'|'.$cat.'|'.$top);
+            $hit = Cache::get($ck);
+            if ($hit && ! $request->boolean('refresh')) {
+                $data = $hit;
+            } else {
+                $r = $checker->serpFetch($keyword, $cat, null, $top);
+                $data = [
+                    'blocked' => (bool) ($r['blocked'] ?? false),
+                    'total' => (int) ($r['total'] ?? 0),
+                    'items' => (array) ($r['items'] ?? []),
+                    'cached_at' => now()->toDateTimeString(),
+                ];
+                if (! $data['blocked'] && $data['items']) {
+                    Cache::put($ck, $data, now()->addHours(6));
+                }
+            }
+        }
+
+        return view('admin.keyword-detail', [
+            'keyword' => $keyword,
+            'type' => $type,
+            'cat' => $cat,
+            'candidate' => $candidate,
+            'top' => $top,
+            'serp' => $data,
+        ]);
+    }
+
+    /** 허브 업종 카테고리명 → pcmap 업종 키(payload 선택). */
+    private function placeCatKey(?string $name): string
+    {
+        return match ($name) {
+            '맛집·음식점' => 'restaurant',
+            '병원·의원' => 'hospital',
+            '헤어샵' => 'hairshop',
+            '네일·뷰티' => 'nailshop',
+            '숙박·여행' => 'accommodation',
+            default => 'place',
+        };
     }
 
     /** 카테고리 자신 + 자식 + 손자 id(데이터랩 3계층). */
