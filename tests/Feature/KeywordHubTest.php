@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Keyword\HubAutoRun;
 use App\Domain\Keyword\KeywordHubCollector;
 use App\Domain\Keyword\KeywordHubPublisher;
 use App\Domain\Keyword\KeywordReportBuilder;
@@ -190,7 +191,7 @@ class KeywordHubTest extends TestCase
         $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=approved')
             ->assertOk()->assertSee('캠핑의자')->assertSee('후보 큐');
         $this->actingAs($admin)->get('/admin/keyword-hub')
-            ->assertOk()->assertDontSee('후보 큐')->assertSee('연속 발행');
+            ->assertOk()->assertDontSee('후보 큐')->assertSee('자동 분석·발행');
     }
 
     public function test_admin_page_shows_source_counts_and_filters_by_source(): void
@@ -228,7 +229,7 @@ class KeywordHubTest extends TestCase
             });
         });
 
-        // 검색량 큰 순으로 1건만 발행하고 남은 승인 수를 돌려준다(연속 발행 루프의 종료 조건)
+        // 검색량 큰 순으로 1건만 발행하고 남은 수를 돌려준다(연속 발행 루프의 종료 조건)
         $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch')
             ->assertOk()
             ->assertJsonPath('data.published', 1)
@@ -236,12 +237,102 @@ class KeywordHubTest extends TestCase
             ->assertJsonPath('data.items.0.keyword', '캠핑의자')
             ->assertJsonPath('data.items.0.ok', true);
 
-        // 승인 후보가 소진되면 published=0 · remaining=0 (루프 정지 신호)
-        KeywordCandidate::where('status', 'approved')->update(['status' => 'pending']);
+        // 쌓인 키워드가 소진되면 published=0 · remaining=0 (루프 정지 신호)
+        KeywordCandidate::query()->update(['status' => 'published']);
         $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch')
             ->assertOk()
             ->assertJsonPath('data.published', 0)
             ->assertJsonPath('data.remaining', 0);
+    }
+
+    public function test_publish_batch_runs_accumulated_pending_filtered_by_type(): void
+    {
+        $admin = $this->admin();
+        // 승인 절차 없이 pending 으로 쌓인 키워드 — 쇼핑/플레이스 각각
+        $shop = $this->category(['type' => 'shopping', 'name' => '캠핑용품', 'slug' => '캠핑용품', 'seed_keywords' => []]);
+        $place = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집', 'seed_keywords' => []]);
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+        KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'monthly_total' => 8000, 'status' => 'pending']);
+
+        $this->mock(KeywordHubPublisher::class, function ($m) {
+            $m->shouldReceive('publish')->andReturnUsing(function ($c) {
+                $c->update(['status' => 'published']);
+
+                return KeywordSearch::create(['origin' => 'hub', 'keyword' => $c->keyword, 'category_id' => $c->category_id]);
+            });
+        });
+
+        // 쇼핑 선택 → 쇼핑 카테고리의 pending 을 승인 없이 발행, 플레이스는 건드리지 않는다
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch', ['type' => 'shopping'])
+            ->assertOk()
+            ->assertJsonPath('data.published', 1)
+            ->assertJsonPath('data.items.0.keyword', '캠핑의자')
+            ->assertJsonPath('data.remaining', 0); // 쇼핑 pending 1개뿐 → 처리 후 0
+
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'published']);
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '강남 맛집', 'status' => 'pending']); // 타입 격리
+
+        // 플레이스 선택 → 플레이스 pending 발행
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch', ['type' => 'place'])
+            ->assertOk()
+            ->assertJsonPath('data.published', 1)
+            ->assertJsonPath('data.items.0.keyword', '강남 맛집')
+            ->assertJsonPath('data.remaining', 0);
+    }
+
+    public function test_auto_toggle_starts_and_stops_with_type(): void
+    {
+        $admin = $this->admin();
+        $shop = $this->category(['seed_keywords' => []]);
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+
+        // 시작 — running·유형·남은 수 반영
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1, 'type' => 'shopping'])
+            ->assertOk()
+            ->assertJsonPath('data.running', true)
+            ->assertJsonPath('data.type', 'shopping')
+            ->assertJsonPath('data.remaining', 1);
+        $this->assertTrue(HubAutoRun::isRunning());
+
+        // 상태 폴링
+        $this->actingAs($admin)->getJson('/admin/keyword-hub/auto-status')
+            ->assertOk()->assertJsonPath('data.running', true)->assertJsonPath('data.type', 'shopping');
+
+        // 중단
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 0])
+            ->assertOk()->assertJsonPath('data.running', false);
+        $this->assertFalse(HubAutoRun::isRunning());
+    }
+
+    public function test_hub_auto_publish_command_drains_pending_by_type_when_on(): void
+    {
+        $shop = $this->category(['seed_keywords' => []]);
+        $place = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집', 'seed_keywords' => []]);
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+        KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'monthly_total' => 8000, 'status' => 'pending']);
+
+        $this->mock(KeywordHubPublisher::class, function ($m) {
+            $m->shouldReceive('publish')->andReturnUsing(function ($c) {
+                $c->update(['status' => 'published']);
+
+                return KeywordSearch::create(['origin' => 'hub', 'keyword' => $c->keyword, 'category_id' => $c->category_id]);
+            });
+        });
+
+        // 꺼져 있으면 아무 것도 안 한다
+        $this->artisan('hub:auto-publish')->assertSuccessful();
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'pending']);
+
+        // 쇼핑으로 켜고 실행 → 쇼핑 pending 만 발행(승인 없이), 플레이스는 격리. 다 드레인되면 자동 종료.
+        HubAutoRun::start('shopping');
+        $this->artisan('hub:auto-publish')->assertSuccessful();
+
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'published']);
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '강남 맛집', 'status' => 'pending']);
+        $s = HubAutoRun::state();
+        $this->assertSame(1, $s['done']);
+        $this->assertSame(0, $s['remaining']);
+        $this->assertFalse($s['running']); // 쇼핑 소진 → 자동 종료
     }
 
     public function test_admin_seed_list_hides_datalab_tree_categories(): void

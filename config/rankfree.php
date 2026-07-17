@@ -118,6 +118,8 @@ return [
         'collect_categories' => (int) env('HUB_COLLECT_CATEGORIES', 3),
         // hub:publish 1회 발행 상한(검색광고 쿼터 보호 — 도어웨이 대량 발행 방지)
         'publish_per_run' => (int) env('HUB_PUBLISH_PER_RUN', 10),
+        // hub:auto-publish(관리자 토글, 매분) 1회 발행 상한 — 시간 예산(45초) 안에서 이 개수까지
+        'auto_per_run' => (int) env('HUB_AUTO_PER_RUN', 15),
         // hub:refresh 1회 재수집 상한(refreshed_at 오래된 순)
         'refresh_per_run' => (int) env('HUB_REFRESH_PER_RUN', 20),
         // 발행 문서 재수집 주기(일) — 이보다 어린 문서는 갱신하지 않음

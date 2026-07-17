@@ -363,6 +363,8 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
     Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
     Route::post('/keyword-hub/publish-batch', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publishBatch'])->name('keyword-hub.publish-batch');
+    Route::post('/keyword-hub/auto', [\App\Http\Controllers\Admin\KeywordHubController::class, 'autoToggle'])->name('keyword-hub.auto');
+    Route::get('/keyword-hub/auto-status', [\App\Http\Controllers\Admin\KeywordHubController::class, 'autoStatus'])->name('keyword-hub.auto-status');
 
     // 신규 개업(24) — 인허가 공공데이터 열람 + 네이버 플레이스 등록 여부. ⚠️ 열람 전용(광고 발송 금지)
     Route::get('/new-businesses', [\App\Http\Controllers\Admin\NewBusinessController::class, 'index'])->name('new-businesses');

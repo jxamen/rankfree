@@ -68,6 +68,9 @@ if (config('rankfree.hub.publish_enabled', true)) {
     Schedule::command('hub:publish')->cron("*/{$__hubPublishItv} * * * *")->withoutOverlapping()->runInBackground();
 }
 
+// 키워드 허브 자동 발행(관리자 토글) — 켜져 있을 때만 쌓인 후보를 유형별로 매분 배치 발행. 꺼져 있으면 즉시 no-op.
+Schedule::command('hub:auto-publish')->everyMinute()->withoutOverlapping()->runInBackground();
+
 // 키워드 허브 발굴·갱신 — 후보 수집/발굴/갱신. 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호.
 if (config('rankfree.hub.schedule_enabled', false)) {
     Schedule::command('hub:collect')->timezone('Asia/Seoul')->dailyAt('06:10')->withoutOverlapping()->runInBackground();

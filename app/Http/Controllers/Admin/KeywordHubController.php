@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Keyword\HubAutoRun;
 use App\Domain\Keyword\KeywordHubCollector;
 use App\Domain\Keyword\KeywordHubPublisher;
 use App\Domain\Seo\SearchEnginePing;
@@ -24,7 +25,42 @@ class KeywordHubController extends Controller
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
             'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
             'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
+            'auto' => $this->autoPayload(),   // 자동 발행 초기 상태(새로고침·재방문 복원용)
         ]);
+    }
+
+    /** 자동 발행 상태(폴링용 JSON). */
+    public function autoStatus()
+    {
+        return response()->json(['data' => $this->autoPayload()]);
+    }
+
+    /** 자동 발행 on/off 토글 — {on: bool, type: shopping|place}. 서버 크론(hub:auto-publish)이 실제 발행을 이어간다. */
+    public function autoToggle(Request $request)
+    {
+        $state = $request->boolean('on')
+            ? HubAutoRun::start($request->input('type'))
+            : HubAutoRun::stop();
+
+        return response()->json(['data' => $this->autoPayload($state)]);
+    }
+
+    /** 자동 발행 상태 → 화면/폴링 페이로드. */
+    private function autoPayload(?array $s = null): array
+    {
+        $s = $s ?? HubAutoRun::state();
+        $last = $s['last_at'] ?? null;
+        $ago = $last ? max(0, now()->timestamp - (int) $last) : null;
+
+        return [
+            'running' => (bool) ($s['running'] ?? false),
+            'type' => $s['type'] ?? null,
+            'done' => (int) ($s['done'] ?? 0),
+            'held' => (int) ($s['held'] ?? 0),
+            'remaining' => (int) ($s['remaining'] ?? 0),
+            'updated_ago' => $ago,
+            'stale' => $ago !== null && $ago > 180,   // 3분 넘게 갱신 없으면 크론 미동작 의심
+        ];
     }
 
     /** 후보·수집 관리 — 후보 큐(필터·일괄 처리)·카테고리 시드·수동 수집. 발행은 index 에서. */
@@ -242,13 +278,21 @@ class KeywordHubController extends Controller
     }
 
     /**
-     * 연속 발행 배치(JSON) — 허브 화면의 [연속 발행]이 반복 호출한다.
-     * 요청당 1건만 발행해 웹 타임아웃을 피하고(문서 분석은 외부 API 여러 번), 남은 승인 수를 돌려줘
+     * 연속 분석·발행 배치(JSON) — 허브 화면의 [시작]이 반복 호출한다.
+     * 승인 절차 없이 쌓인 후보(pending·approved)를 유형(쇼핑/플레이스)별로 검색량 큰 순 1건씩 분석·발행한다.
+     * 요청당 1건만 처리해 웹 타임아웃을 피하고(분석은 외부 API 여러 번), 남은 수를 돌려줘
      * 클라이언트 루프가 0이 되거나 [중단]을 누를 때까지 이어간다.
      */
-    public function publishBatch(KeywordHubPublisher $publisher, SearchEnginePing $ping)
+    public function publishBatch(Request $request, KeywordHubPublisher $publisher, SearchEnginePing $ping)
     {
-        $c = KeywordCandidate::where('status', 'approved')
+        // 유형 선택(쇼핑/플레이스)은 카테고리 type 으로 거른다. 미지정이면 전체.
+        $type = in_array($request->input('type'), ['shopping', 'place'], true) ? $request->input('type') : null;
+
+        // 쌓인 키워드 = 아직 발행/보류되지 않은 후보(pending·approved). 매번 새로 조회(처리분은 status 가 바뀌어 빠진다).
+        $pending = fn () => KeywordCandidate::whereIn('status', ['pending', 'approved'])
+            ->when($type, fn ($q) => $q->whereHas('category', fn ($c) => $c->where('type', $type)));
+
+        $c = $pending()
             ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('id')
             ->first();
 
@@ -258,13 +302,13 @@ class KeywordHubController extends Controller
             ]]);
         }
 
-        $doc = $publisher->publish($c);
+        $doc = $publisher->publish($c);   // 실시간 분석(검색량) → 데이터 있으면 발행+published, 없으면 보류(rejected)
         $note = $doc ? $ping->afterHubPublish(collect([$doc])) : '';
 
         return response()->json(['data' => [
             'published' => $doc ? 1 : 0,
             'held' => $doc ? 0 : 1,
-            'remaining' => KeywordCandidate::where('status', 'approved')->count(),
+            'remaining' => $pending()->count(),
             'items' => [[
                 'keyword' => $c->keyword,
                 'ok' => (bool) $doc,
