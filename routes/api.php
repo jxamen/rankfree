@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CompeteController;
+use App\Http\Controllers\Api\ExtQuizController;
 use App\Http\Controllers\Api\ExtAuthController;
 use App\Http\Controllers\Api\ExtKeywordController;
 use App\Http\Controllers\Api\ExtMarketController;
@@ -64,6 +65,7 @@ Route::prefix('ext')->group(function (): void {
         Route::get('/seller-power', [ExtSellerPowerController::class, 'index']);
         Route::post('/talk-contacts', [ExtSellerPowerController::class, 'harvestTalk'])->middleware('throttle:20,1');
         Route::get('/seller-power/{analysis}', [ExtSellerPowerController::class, 'show']);
+        Route::post('/quiz/solve', [ExtQuizController::class, 'solve'])->middleware('throttle:20,1');
     });
 });
 

@@ -186,9 +186,11 @@ class KeywordHubTest extends TestCase
         $this->assertSame('approved', $c1->fresh()->status);
         $this->assertSame('approved', $c2->fresh()->status);
 
-        // 화면 렌더 — 승인 탭에 후보 표시
-        $this->actingAs($admin)->get('/admin/keyword-hub?status=approved')
+        // 화면 렌더 — 후보 큐는 별도 관리 페이지(candidates)의 승인 탭에 표시(허브 첫 화면은 발행 전용)
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=approved')
             ->assertOk()->assertSee('캠핑의자')->assertSee('후보 큐');
+        $this->actingAs($admin)->get('/admin/keyword-hub')
+            ->assertOk()->assertDontSee('후보 큐')->assertSee('연속 발행');
     }
 
     public function test_admin_page_shows_source_counts_and_filters_by_source(): void
@@ -202,13 +204,74 @@ class KeywordHubTest extends TestCase
         KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '자동완성후보어', 'source' => 'autocomplete', 'status' => 'pending', 'monthly_total' => 5000]);
 
         // 후보 현황에 출처별 카운트(지역조합)가 보이고, 후보 큐에 combo 결과가 표시된다
-        $this->actingAs($admin)->get('/admin/keyword-hub')
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates')
             ->assertOk()->assertSee('전체 출처')->assertSee('지역조합')
             ->assertSee('강남 맛집')->assertSee('성수동 맛집')->assertSee('자동완성후보어');
 
         // source=combo 필터 — 지역조합만 남고 다른 출처(autocomplete)는 후보 큐에서 빠진다
-        $this->actingAs($admin)->get('/admin/keyword-hub?source=combo')
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?source=combo')
             ->assertOk()->assertSee('강남 맛집')->assertDontSee('자동완성후보어');
+    }
+
+    public function test_publish_batch_publishes_one_and_reports_remaining(): void
+    {
+        $admin = $this->admin();
+        $cat = $this->category();
+        KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'approved']);
+        KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑테이블', 'monthly_total' => 2000, 'status' => 'approved']);
+
+        $this->mock(KeywordHubPublisher::class, function ($m) use ($cat) {
+            $m->shouldReceive('publish')->once()->andReturnUsing(function ($c) use ($cat) {
+                $c->update(['status' => 'published']);
+
+                return KeywordSearch::create(['origin' => 'hub', 'keyword' => $c->keyword, 'category_id' => $cat->id]);
+            });
+        });
+
+        // 검색량 큰 순으로 1건만 발행하고 남은 승인 수를 돌려준다(연속 발행 루프의 종료 조건)
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch')
+            ->assertOk()
+            ->assertJsonPath('data.published', 1)
+            ->assertJsonPath('data.remaining', 1)
+            ->assertJsonPath('data.items.0.keyword', '캠핑의자')
+            ->assertJsonPath('data.items.0.ok', true);
+
+        // 승인 후보가 소진되면 published=0 · remaining=0 (루프 정지 신호)
+        KeywordCandidate::where('status', 'approved')->update(['status' => 'pending']);
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/publish-batch')
+            ->assertOk()
+            ->assertJsonPath('data.published', 0)
+            ->assertJsonPath('data.remaining', 0);
+    }
+
+    public function test_admin_seed_list_hides_datalab_tree_categories(): void
+    {
+        $admin = $this->admin();
+        $manual = $this->category(); // 수동 카테고리(naver_cid 없음)
+        $datalab = KeywordCategory::create([
+            'type' => 'shopping', 'name' => '패션잡화', 'slug' => '패션잡화',
+            'naver_cid' => 50000001, 'is_active' => true,
+        ]);
+
+        $res = $this->actingAs($admin)->get('/admin/keyword-hub/candidates')->assertOk();
+
+        // 시드 카드(카테고리 수정 폼)는 수동 카테고리만 — 데이터랩 분류는 카드로 안 펼친다(화면 폭주 방지)
+        $res->assertSee('keyword-hub/categories/'.$manual->id, false);
+        $res->assertDontSee('keyword-hub/categories/'.$datalab->id, false);
+    }
+
+    public function test_admin_collect_rotation_skips_datalab_categories(): void
+    {
+        $admin = $this->admin();
+        // 데이터랩 분류만 있는 상태 — 자동 로테이션 대상이 아니므로 '수집할 카테고리 없음' 안내
+        KeywordCategory::create([
+            'type' => 'shopping', 'name' => '패션잡화', 'slug' => '패션잡화',
+            'naver_cid' => 50000001, 'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)->post('/admin/keyword-hub/collect')
+            ->assertRedirect()
+            ->assertSessionHas('status', fn ($s) => str_contains($s, '수집할 카테고리가 없습니다'));
     }
 
     public function test_admin_collect_and_publish_actions(): void

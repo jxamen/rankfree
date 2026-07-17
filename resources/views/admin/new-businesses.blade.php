@@ -152,7 +152,15 @@
                         <td style="padding:7px 6px;" class="text-muted">{{ $b->svc_label }}{{ $b->uptae_nm ? ' · '.$b->uptae_nm : '' }}</td>
                         <td style="padding:7px 6px;" class="text-muted">{{ trim(($b->sgg ?? '').' '.($b->emd ?? '')) ?: '—' }}</td>
                         <td style="padding:7px 6px;" class="text-muted-soft" title="{{ $b->road_addr ?: $b->site_addr }}">{{ \Illuminate\Support\Str::limit($b->road_addr ?: $b->site_addr, 28) ?: '—' }}</td>
-                        <td style="padding:7px 6px;" class="font-mono text-muted">{{ $b->site_tel ?: '—' }}</td>
+                        {{-- 인허가 원천은 전화가 대부분 비어 있어(실측) 플레이스 등록 번호로 보완한다 --}}
+                        <td style="padding:7px 6px;" class="font-mono text-muted">
+                            {{ $b->displayTel() ?: '—' }}
+                            @if ($b->telSource() === 'virtual')
+                                <span class="text-muted-soft" title="플레이스 안심번호(0507) — 업체 실번호가 아닙니다">안심</span>
+                            @elseif ($b->telSource() === 'normal')
+                                <span class="text-muted-soft" title="플레이스에 등록된 번호">플레이스</span>
+                            @endif
+                        </td>
                         <td style="padding:7px 6px;">
                             @if ($b->place_status === 'found')
                                 <a href="{{ $b->placeUrl() }}" target="_blank" rel="noopener" class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;background:color-mix(in srgb,var(--color-success) 12%,var(--color-canvas));color:var(--color-success);" title="{{ $b->place_name }}{{ $b->place_cat ? ' · '.$b->place_cat : '' }}">플레이스 ↗</a>

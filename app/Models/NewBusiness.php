@@ -15,7 +15,7 @@ class NewBusiness extends Model
     protected $fillable = [
         'source', 'svc', 'svc_label', 'mgt_no', 'bplc_nm', 'uptae_nm', 'apv_perm_ymd', 'trd_state_nm',
         'site_tel', 'site_addr', 'road_addr', 'sido', 'sgg', 'emd', 'update_gbn', 'src_updated_at', 'collected_at',
-        'place_id', 'place_name', 'place_cat', 'place_status', 'place_checked_at',
+        'place_id', 'place_name', 'place_cat', 'place_phone', 'place_phone_type', 'place_status', 'place_checked_at',
     ];
 
     protected $casts = [
@@ -23,8 +23,25 @@ class NewBusiness extends Model
         'src_updated_at' => 'datetime',
         'collected_at' => 'datetime',
         'place_checked_at' => 'datetime',
-        'site_tel' => 'encrypted',   // 개인정보 취급 — 평문 저장 금지
+        'site_tel' => 'encrypted',      // 개인정보 취급 — 평문 저장 금지
+        'place_phone' => 'encrypted',   // 플레이스에서 가져온 번호도 동일 취급
     ];
+
+    /** 화면에 보여줄 전화번호 — 인허가 원천(SITETEL)이 대부분 비어 있어 플레이스 번호로 보완한다. */
+    public function displayTel(): ?string
+    {
+        return $this->site_tel ?: ($this->place_phone ?: null);
+    }
+
+    /** 번호 출처 — 'license'(인허가) | 'virtual'(플레이스 안심번호 0507) | 'normal'(플레이스 일반) | null */
+    public function telSource(): ?string
+    {
+        if ($this->site_tel) {
+            return 'license';
+        }
+
+        return $this->place_phone ? ($this->place_phone_type ?: 'normal') : null;
+    }
 
     /**
      * 네이버 지도 검색 링크 — 클릭하면 해당 업체 플레이스로 이동한다.

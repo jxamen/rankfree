@@ -16,7 +16,7 @@ use App\Models\NewBusiness;
  */
 class NewBusinessPlaceMatcher
 {
-    public function __construct(private NaverLocalSearchService $search) {}
+    public function __construct(private NaverLocalSearchService $search, private PlacePhoneFetcher $phones) {}
 
     /** @return 'found'|'not_found' */
     public function match(NewBusiness $biz): string
@@ -64,11 +64,23 @@ class NewBusinessPlaceMatcher
 
     private function save(NewBusiness $biz, ?array $hit): void
     {
-        $biz->forceFill([
+        $data = [
             'place_name' => $hit['title'] ?? null,
             'place_cat' => $hit ? mb_substr((string) $hit['category'], 0, 30) : null,
             'place_status' => $hit ? 'found' : 'not_found',
             'place_checked_at' => now(),
-        ])->save();
+        ];
+
+        // 인허가 원천에 전화가 없는 업소만 플레이스에서 번호를 가져온다(원천은 대부분 결측 — 실측 236/254).
+        // 공식 지역검색 응답엔 번호·플레이스 ID 가 없어 pcmap 검색 페이지에서 따로 받아온다.
+        if ($hit && ! $biz->site_tel) {
+            if ($p = $this->phones->fetch($biz)) {
+                $data['place_id'] = $p['place_id'] ?: null;
+                $data['place_phone'] = $p['phone'] ?: null;
+                $data['place_phone_type'] = $p['type'] ?: null;
+            }
+        }
+
+        $biz->forceFill($data)->save();
     }
 }

@@ -19,7 +19,9 @@ class HubCollect extends Command
     {
         $cats = $this->option('category')
             ? KeywordCategory::whereKey((int) $this->option('category'))->get()
-            : KeywordCategory::where('is_active', true)
+            // 로테이션은 수동(시드) 카테고리만 — 데이터랩 분류(naver_cid)는 시드가 없어
+            // 로테이션 슬롯만 소모한다(그쪽은 hub:shopping-collect 가 수집).
+            : KeywordCategory::where('is_active', true)->whereNull('naver_cid')
                 ->orderByRaw('collected_at is null desc')->orderBy('collected_at')
                 ->limit((int) ($this->option('limit') ?: config('rankfree.hub.collect_categories', 3)))
                 ->get();

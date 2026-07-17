@@ -17,7 +17,18 @@ use Illuminate\Http\Request;
  */
 class KeywordHubController extends Controller
 {
-    public function index(Request $request)
+    /** 허브 첫 화면 — 발행 전용(현황 요약·발행 실행·최근 발행). 후보 큐·카테고리 시드·수집은 candidates 로 분리. */
+    public function index()
+    {
+        return view('admin.keyword-hub.index', [
+            'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
+            'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
+            'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
+        ]);
+    }
+
+    /** 후보·수집 관리 — 후보 큐(필터·일괄 처리)·카테고리 시드·수동 수집. 발행은 index 에서. */
+    public function candidates(Request $request)
     {
         $status = in_array($request->query('status'), KeywordCandidate::STATUSES, true) ? $request->query('status') : 'pending';
         $catId = (int) $request->query('category', 0);
@@ -25,8 +36,12 @@ class KeywordHubController extends Controller
         $kw = trim((string) $request->query('q', ''));    // 키워드 검색(대량 후보 탐색용)
         $region = trim((string) $request->query('region', '')); // 지역 필터(플레이스 — 강남역·망원동…)
 
-        return view('admin.keyword-hub.index', [
-            'categories' => KeywordCategory::with('parent')->withCount([
+        return view('admin.keyword-hub.candidates', [
+            // 후보 필터 select 용 전체 목록(카운트 불필요 — 2천여 데이터랩 분류 포함)
+            'categories' => KeywordCategory::with('parent')->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
+            // 시드 관리 대상 = 수동 카테고리만. 데이터랩 트리(naver_cid 보유, 쇼핑 1~3분류 2천여 개)는
+            // hub:shopping-collect 가 자동 관리하므로 시드 카드 목록에 펼치지 않는다(화면 폭주 방지).
+            'seedCategories' => KeywordCategory::with('parent')->whereNull('naver_cid')->withCount([
                 'candidates as pending_count' => fn ($q) => $q->where('status', 'pending'),
                 'candidates as approved_count' => fn ($q) => $q->where('status', 'approved'),
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
@@ -52,8 +67,6 @@ class KeywordHubController extends Controller
                 ->whereNotNull('region')
                 ->selectRaw('region, count(*) as c')->groupBy('region')->orderByDesc('c')->orderBy('region')
                 ->limit(200)->pluck('c', 'region'),
-            'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
-            'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
         ]);
     }
 
@@ -181,7 +194,9 @@ class KeywordHubController extends Controller
         $catId = (int) $request->input('category_id', 0);
         $cat = $catId
             ? KeywordCategory::findOrFail($catId)
-            : KeywordCategory::where('is_active', true)->orderByRaw('collected_at is null desc')->orderBy('collected_at')->first();
+            // 자동 로테이션은 수동(시드) 카테고리만 — 데이터랩 분류는 시드가 없어 헛돈다(hub:shopping-collect 담당)
+            : KeywordCategory::where('is_active', true)->whereNull('naver_cid')
+                ->orderByRaw('collected_at is null desc')->orderBy('collected_at')->first();
 
         if (! $cat) {
             return back()->with('status', '수집할 카테고리가 없습니다. 먼저 카테고리와 시드 키워드를 추가하세요.');
@@ -224,6 +239,39 @@ class KeywordHubController extends Controller
         }
 
         return back()->with('status', $msg);
+    }
+
+    /**
+     * 연속 발행 배치(JSON) — 허브 화면의 [연속 발행]이 반복 호출한다.
+     * 요청당 1건만 발행해 웹 타임아웃을 피하고(문서 분석은 외부 API 여러 번), 남은 승인 수를 돌려줘
+     * 클라이언트 루프가 0이 되거나 [중단]을 누를 때까지 이어간다.
+     */
+    public function publishBatch(KeywordHubPublisher $publisher, SearchEnginePing $ping)
+    {
+        $c = KeywordCandidate::where('status', 'approved')
+            ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('id')
+            ->first();
+
+        if (! $c) {
+            return response()->json(['data' => [
+                'published' => 0, 'held' => 0, 'remaining' => 0, 'items' => [], 'ping' => '',
+            ]]);
+        }
+
+        $doc = $publisher->publish($c);
+        $note = $doc ? $ping->afterHubPublish(collect([$doc])) : '';
+
+        return response()->json(['data' => [
+            'published' => $doc ? 1 : 0,
+            'held' => $doc ? 0 : 1,
+            'remaining' => KeywordCandidate::where('status', 'approved')->count(),
+            'items' => [[
+                'keyword' => $c->keyword,
+                'ok' => (bool) $doc,
+                'url' => $doc?->shareUrl(),
+            ]],
+            'ping' => $note,
+        ]]);
     }
 
     /** 시드 textarea(줄바꿈/콤마 구분) → 배열. */
