@@ -193,6 +193,136 @@
     box.textContent = message;
   }
 
+  // 저장 상태 박스 안에 정답 줄을 추가/갱신한다(박스 전체 색은 건드리지 않는다).
+  function setAnswerStatus(message, ok) {
+    var box = document.getElementById('rankfree-captcha-status');
+    if (!box) {
+      showStatus(message, ok);
+      return;
+    }
+    var line = document.getElementById('rankfree-captcha-answer');
+    if (!line) {
+      line = document.createElement('div');
+      line.id = 'rankfree-captcha-answer';
+      line.style.marginTop = '6px';
+      line.style.fontWeight = '700';
+      box.appendChild(line);
+    }
+    line.style.color = ok === false ? '#9f1239' : '#047857';
+    line.textContent = message;
+  }
+
+  // 폼 컨트롤용 가벼운 노출 판정(입력창은 높이가 낮을 수 있어 isVisible 대신 사용).
+  function isShown(el) {
+    if (!el || !el.getBoundingClientRect) return false;
+    var rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    var style = getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0;
+  }
+
+  // 정답 입력창 찾기: placeholder("정답을 입력해주세요.") 우선, 없으면 보이는 텍스트 입력.
+  function findAnswerInput() {
+    var byPlaceholder = document.querySelector('input[placeholder="정답을 입력해주세요."]');
+    if (byPlaceholder && isShown(byPlaceholder)) return byPlaceholder;
+
+    var inputs = Array.prototype.slice.call(document.querySelectorAll('input[type="text"], input:not([type])'));
+    for (var i = 0; i < inputs.length; i++) {
+      if (/정답/.test(String(inputs[i].getAttribute('placeholder') || '')) && isShown(inputs[i])) return inputs[i];
+    }
+    for (var j = 0; j < inputs.length; j++) {
+      if (isShown(inputs[j])) return inputs[j];
+    }
+    return null;
+  }
+
+  // 제출(확인) 버튼 찾기: type=submit + "확인" 텍스트 우선.
+  function findSubmitButton() {
+    var submits = Array.prototype.slice.call(document.querySelectorAll('button[type="submit"]'));
+    for (var i = 0; i < submits.length; i++) {
+      if (isShown(submits[i]) && /확인/.test(textOf(submits[i]))) return submits[i];
+    }
+    if (submits.length === 1 && isShown(submits[0])) return submits[0];
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('button'));
+    for (var j = 0; j < buttons.length; j++) {
+      if (isShown(buttons[j]) && textOf(buttons[j]) === '확인') return buttons[j];
+    }
+    return null;
+  }
+
+  // React 제어 입력이라 .value 직접 대입은 무시된다 — native setter로 값을 넣는다.
+  function setNativeInputValue(el, value) {
+    try {
+      var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
+      var desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc && desc.set) {
+        desc.set.call(el, value);
+        return;
+      }
+    } catch (e) { /* noop */ }
+    el.value = value;
+  }
+
+  // 정답을 입력창에 넣고 확인 버튼을 클릭한다.
+  function fillAndSubmitAnswer(answer) {
+    var value = String(answer == null ? '' : answer).trim();
+    if (!value) return false;
+
+    var input = findAnswerInput();
+    if (!input) {
+      setAnswerStatus('정답: ' + value + ' (입력창을 찾지 못함)', false);
+      return false;
+    }
+
+    try { input.focus(); } catch (e) { /* noop */ }
+    setNativeInputValue(input, value);
+    try {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) { /* noop */ }
+
+    // React 상태 반영(버튼 활성화 포함) 후 제출.
+    setTimeout(function () {
+      var submit = findSubmitButton();
+      if (!submit) {
+        setAnswerStatus('정답 입력됨: ' + value + ' (확인 버튼을 찾지 못함)', false);
+        return;
+      }
+      try {
+        submit.click();
+        setAnswerStatus('정답 "' + value + '" 입력 후 확인 클릭', true);
+      } catch (e) {
+        setAnswerStatus('확인 클릭 실패: ' + String((e && e.message) || e), false);
+      }
+    }, 200);
+    return true;
+  }
+
+  // 저장 완료 후 질문+이미지를 서버(Gemini)로 보내 정답을 받아 입력·제출한다.
+  function requestQuizSolve(question, imageData) {
+    if (!question && !imageData) return;
+    setAnswerStatus('정답 풀이 중...', true);
+    try {
+      chrome.runtime.sendMessage({
+        type: 'solveQuiz',
+        payload: { question: question || '', image_data: imageData || '' },
+      }, function (res) {
+        if (chrome.runtime.lastError) {
+          setAnswerStatus('정답 풀이 실패: ' + chrome.runtime.lastError.message, false);
+          return;
+        }
+        if (res && res.ok && res.data && res.data.answer) {
+          setAnswerStatus('정답: ' + res.data.answer, true);
+          fillAndSubmitAnswer(res.data.answer);
+        } else {
+          setAnswerStatus('정답 풀이 실패: ' + ((res && res.message) || 'unknown error'), false);
+        }
+      });
+    } catch (e) {
+      setAnswerStatus('정답 풀이 실패: ' + String((e && e.message) || e), false);
+    }
+  }
+
   function showSavedStatus(data, apiBase, fallbackQuestion) {
     data = data || {};
     var box = statusBox(true);
@@ -279,6 +409,7 @@
       }
       if (res && res.ok && res.data) {
         showSavedStatus(res.data, res.apiBase || '', question);
+        requestQuizSolve(question, image.dataUrl);
         try {
           chrome.runtime.sendMessage({
             type: '__sellerCaptchaCaptured',

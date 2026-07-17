@@ -756,9 +756,12 @@ const handlers = {
     const baseGap = Math.max(1000, Number(delayMs) || 6000);   // 하한 1초 — 차단되면 아래에서 1초씩 자동으로 늘린다
     // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~10).
     const conc = Math.min(10, Math.max(1, Number(concurrency) || 2));
+    // ★ 콜드스타트 버스트 방지 — 처음부터 conc개(예: 10) 탭을 한꺼번에 열면 네이버가 바로 429/차단한다.
+    //   낮게(warmStart) 시작해 성공이 이어지면 1씩 올리고(램프업), 차단되면 절반으로 줄인다.
+    const warmStart = conc <= 2 ? conc : 2;
     await chrome.storage.local.set({ rfBulk: {
       running: true, done: 0, failed: 0, total: (max === Infinity ? 0 : max), current: '', category: '',
-      conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
+      conc: warmStart, target: conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
       heartbeat: Date.now(),   // 살아있음 표시 — 끊기면 죽은 세션으로 보고 재시작 허용
     } });
 
@@ -771,8 +774,11 @@ const handlers = {
       let category = '';
       let stopped = false;
       let blocked = false;      // 차단 상태 — 모든 워커가 대기한다
-      let liveConc = conc;      // 실제 동시 수 — 차단이 이어지면 자동으로 줄인다(429 방어)
+      let liveConc = warmStart; // 실제 동시 수 — 낮게 시작(warmStart)해 성공하면 올리고 차단되면 줄인다
       let blockHits = 0;        // 연속 차단 횟수
+      let okStreak = 0;         // 연속 성공 횟수 — 일정 이상이면 동시 수를 1 올린다(램프업)
+      let exhausted = false;    // 모든 분류 소진 — 대기 중이던 워커도 이걸 보고 종료한다
+      const RAMP_EVERY = 3;     // 연속 성공 N회마다 동시 수 +1 (target = conc 까지)
 
       const patch = async (o) => {
         const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
@@ -837,9 +843,14 @@ const handlers = {
 
       let workerNo = 0;
       const worker = async () => {
-        const me = workerNo++;                              // 0..conc-1 — 동시 수가 줄면 뒤 번호부터 빠진다
-        while (!stopped && done + failed < max) {
-          if (me >= liveConc) break;                        // 차단으로 동시 수가 줄었다 → 이 워커는 종료
+        const me = workerNo++;                              // 0..conc-1 — 워밍업/차단으로 정원이 바뀌면 합류·대기한다
+        while (!stopped && !exhausted && done + failed < max) {
+          // 아직/이미 정원(liveConc) 밖이면 — 종료하지 말고 대기한다.
+          // 워밍업으로 정원이 늘면 합류하고, 차단으로 줄면 다시 빠진다(종료 X → 회복 시 재합류).
+          if (me >= liveConc) {
+            await sleep(1500);
+            continue;                                       // 다시 조건 검사(stopped/exhausted/정원 반영)
+          }
           if (await isStopped()) { stopped = true; break; }
 
           // 차단 중이면 다음 작업을 하지 않고 대기한다(계속 두드리면 더 오래 막힌다)
@@ -850,7 +861,7 @@ const handlers = {
           if (stopped) break;
 
           const kw = await next();
-          if (!kw) break;                                   // 모든 분류를 다 비웠다
+          if (!kw) { exhausted = true; break; }             // 모든 분류를 다 비웠다 — 대기 중 워커도 종료시킨다
 
           await openSlot();                                 // ★ 탭 여는 순번 대기(직렬)
           if (stopped || blocked) continue;
@@ -861,7 +872,16 @@ const handlers = {
             done++;
             gap = Math.max(baseGap, gap - 1000);            // 성공하면 1초씩 되돌린다(하한 = 설정값)
             blockHits = 0;                                  // 잘 돌고 있다 — 연속 차단 카운터 초기화
-            await patch({ done, failed, gap, blockedUntil: 0 });
+            // ★ 램프업 — 성공이 이어지면 동시 수를 target(conc)까지 1씩 천천히 올린다.
+            //   (콜드스타트에 10개를 한꺼번에 열지 않고, 네이버가 받아주는 만큼만 서서히 늘린다)
+            okStreak++;
+            if (okStreak >= RAMP_EVERY && liveConc < conc) {
+              liveConc++;
+              okStreak = 0;
+              await patch({ done, failed, gap, conc: liveConc, blockedUntil: 0 });
+            } else {
+              await patch({ done, failed, gap, blockedUntil: 0 });
+            }
           } else {
             failed++;
             const lastError = (r && r.message) || '알 수 없는 오류';
@@ -870,6 +890,7 @@ const handlers = {
               gap = Math.min(MAX_GAP, gap + 1000);
               blocked = true;
               blockHits++;
+              okStreak = 0;                                 // 차단됨 — 램프업 진행도 초기화(다시 낮은 데서 올린다)
 
               // ★ 차단이 이어지면 동시 수를 줄인다 — 간격만 늘려봐야 탭 N개가 한꺼번에 몰리는 건 그대로다.
               //   (동시 10으로 돌리면 네이버가 429로 막는다 — 실측). 최소 2까지 절반씩 줄이고,
@@ -1053,6 +1074,29 @@ const handlers = {
       apiBase,
       data: json && json.data,
       message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to save seller captcha.'),
+    };
+  },
+
+  /**
+   * 퀴즈 풀이 — 질문 텍스트 + 보기 이미지를 서버(Gemini)로 보내 정답을 받아온다. (저장하지 않음)
+   * payload: { question?, image_data?, images?, instruction? }
+   */
+  async solveQuiz(payload) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, apiBase, message: 'RankFree extension login is required.' };
+    const { ok, status, json } = await apiFetch('/api/ext/quiz/solve', {
+      method: 'POST',
+      body: payload,
+      token,
+      apiBase,
+    });
+    return {
+      ok,
+      status,
+      apiBase,
+      data: json && json.data,
+      answer: json && json.data ? json.data.answer : null,
+      message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to solve quiz.'),
     };
   },
 
