@@ -101,10 +101,10 @@
             <option value="200">200개</option>
             <option value="500">500개</option>
         </select>
-        <select id="rf-bulk-gap" class="input" style="height:32px;width:130px;font-size:var(--fs-xs);" title="키워드 간 간격(부하 조절)">
-            <option value="2500">간격 2.5초</option>
-            <option value="4000">간격 4초</option>
-            <option value="6000">간격 6초</option>
+        <select id="rf-bulk-gap" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="키워드 간 간격 — 너무 빠르면 네이버가 일시 차단합니다">
+            <option value="6000" selected>간격 6초 (권장)</option>
+            <option value="10000">간격 10초 (안전)</option>
+            <option value="4000">간격 4초 (빠름·차단 위험)</option>
         </select>
         <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
         <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
@@ -130,7 +130,8 @@
         if (m.type === 'bulkStatusResult' && m.bulk) {
             var b = m.bulk;
             msg.textContent = (b.running ? '수집 중… ' : '수집 종료 — ') + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
-                + (b.running && b.current ? ' · 현재: ' + b.current : '');
+                + (b.running && b.current ? ' · 현재: ' + b.current : '')
+                + (b.running && b.gap ? ' · 간격 ' + Math.round(b.gap / 1000) + '초' : '');   // 차단 시 자동 감속이 보이게
             // 실패가 있으면 사유를 보여준다(원인 없이 '실패 33' 만 뜨면 손쓸 수 없다)
             if (b.failed > 0 && b.lastError) {
                 msg.textContent += ' · 사유: ' + b.lastError;

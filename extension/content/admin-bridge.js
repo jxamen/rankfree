@@ -35,14 +35,22 @@
     try {
       const [type, payload] = ROUTES[m.type](m);
       chrome.runtime.sendMessage({ type, payload }, (res) => {
+        // 서비스워커가 잠들었거나 확장이 리로드되면 여기로 온다 — 실제 사유를 그대로 노출해야 원인을 안다
         if (chrome.runtime.lastError) {
-          reply({ ok: false, message: '확장과 통신할 수 없습니다. 확장을 새로고침해 주세요.' });
+          reply({ ok: false, message: '확장 통신 실패: ' + chrome.runtime.lastError.message + ' — 확장을 새로고침(chrome://extensions) 후 다시 시도하세요.' });
           return;
         }
-        reply(res || { ok: false, message: '수집 실패' });
+        reply(res || { ok: false, message: '확장이 응답하지 않았습니다.' });
       });
     } catch (err) {
-      reply({ ok: false, message: '확장이 설치돼 있지 않거나 권한이 없습니다.' });
+      // "Extension context invalidated" = 확장을 업데이트/리로드한 뒤 페이지를 새로고침하지 않은 상태
+      const raw = String((err && err.message) || err);
+      reply({
+        ok: false,
+        message: raw.indexOf('context invalidated') >= 0
+          ? '확장이 업데이트되었습니다 — 이 페이지를 새로고침(F5)한 뒤 다시 시도하세요.'
+          : '확장 호출 실패: ' + raw,
+      });
     }
   });
 })();

@@ -52,13 +52,22 @@ class ExtKeywordShopSerpController extends Controller
             'products.*.rank' => 'nullable|integer|min:0',
             'products.*.price' => 'nullable|integer|min:0',
             'products.*.mallName' => 'nullable|string|max:120',
-            'products.*.link' => 'nullable|string|max:1000',
+            // 링크 길이는 제한하지 않는다 — 네이버 광고 링크(cr.shopping.naver.com/adcr?x=…)가 2,000자를 넘는다.
+            // 길이 제한을 걸면 광고 상품이 섞인 키워드는 전부 저장 실패한다(실측).
+            'products.*.link' => 'nullable|string',
             'products.*.isAd' => 'nullable|boolean',
             'related_tags' => 'nullable|array|max:50',
         ]);
 
         // 저장은 상위 80개까지 — 화면 목적상 그 이상은 불필요
         $items = array_slice(array_values($data['products']), 0, 80);
+        // 지나치게 긴 광고 링크는 잘라 저장(표시·이동엔 지장 없는 선). JSON 비대화 방지.
+        foreach ($items as &$it) {
+            if (! empty($it['link']) && mb_strlen($it['link']) > 2000) {
+                $it['link'] = mb_substr($it['link'], 0, 2000);
+            }
+        }
+        unset($it);
 
         $row = KeywordShopSerp::updateOrCreate(
             ['keyword' => trim($data['keyword'])],

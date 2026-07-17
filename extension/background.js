@@ -457,12 +457,15 @@ const handlers = {
     if (state.rfBulk && state.rfBulk.running) return { ok: false, message: '이미 수집이 진행 중입니다.' };
 
     const max = Math.min(500, Math.max(1, Number(limit) || 50));
-    const gap = Math.max(1000, Number(delayMs) || 2500);   // 네이버 부하를 낮추려 건당 최소 1초
+    // 너무 빨리 열면 네이버가 일시 차단한다 — 건당 최소 4초, 기본 6초.
+    const baseGap = Math.max(4000, Number(delayMs) || 6000);
     await chrome.storage.local.set({ rfBulk: { running: true, done: 0, failed: 0, total: max, current: '', startedAt: Date.now(), stop: false } });
 
     // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
     (async () => {
       let done = 0, failed = 0;
+      let gap = baseGap;        // 실패가 이어지면 늘리고(차단 회피), 성공하면 천천히 되돌린다
+      let streak = 0;           // 연속 실패 수
       while (done + failed < max) {
         const st = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
         if (st.stop) break;
@@ -480,18 +483,28 @@ const handlers = {
           let lastError = '';
           if (r && r.ok) {
             done++;
+            streak = 0;
+            gap = Math.max(baseGap, Math.round(gap * 0.8));   // 성공하면 서서히 원래 속도로
           } else {
             failed++;
+            streak++;
             lastError = (r && r.message) || '알 수 없는 오류';   // 실패 사유를 남겨야 원인을 안다
+            // 수집 실패 = 차단 가능성 → 간격을 2배로(최대 60초). 차단 상태에서 계속 두드리면 더 오래 막힌다.
+            gap = Math.min(60000, gap * 2);
           }
 
           const now = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, { done, failed, lastError: lastError || now.lastError || '' }) });
+          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, {
+            done, failed, gap, lastError: lastError || now.lastError || '',
+          }) });
 
-          // 연속 5건 이상 실패하면 중단 — 차단·로그인 만료 상태로 계속 두드리지 않는다
-          if (failed >= 5 && done === 0) {
+          // 연속 5건 실패하면 중단 — 차단·로그인 만료 상태로 계속 두드리지 않는다
+          if (streak >= 5) {
             const st2 = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-            await chrome.storage.local.set({ rfBulk: Object.assign({}, st2, { stop: true, lastError: lastError + ' (연속 실패로 중단)' }) });
+            await chrome.storage.local.set({ rfBulk: Object.assign({}, st2, {
+              stop: true,
+              lastError: lastError + ' (연속 5건 실패 — 네이버 차단일 수 있습니다. 잠시 후 다시 시도하세요)',
+            }) });
             break;
           }
           await new Promise((r2) => setTimeout(r2, gap));
