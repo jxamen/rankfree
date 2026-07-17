@@ -27,9 +27,11 @@ class SettingsController extends Controller
         'openai' => 'OpenAI (GPT)',
     ];
 
-    public function index()
+    public function index(\App\Domain\Keyword\PlaceKeywordPatterns $patterns)
     {
         return view('admin.settings.index', [
+            // 플레이스 업종별 패턴(지역 × 패턴 조합 시딩에 사용) — 넣고 뺄 수 있게
+            'placePatterns' => $patterns->all(),
             'searchadRows' => AppSetting::readJson('searchad.accounts'),
             'adsRows' => AppSetting::readJson('ads.logins'),
             'openapiRows' => AppSetting::readJson('openapi.keys'),
@@ -87,12 +89,18 @@ class SettingsController extends Controller
         'ga.property_id' => 'ga_property_id',
     ];
 
-    public function update(Request $request)
+    public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)
     {
         foreach (self::GROUPS as $key => $def) {
             $this->saveGroup($request, $key, $def['g'], $def['plain'], $def['secret']);
         }
         $this->saveAiKeys($request);
+
+        // 플레이스 업종별 패턴 — 콤마/줄바꿈 구분 입력을 배열로. 탭을 열어 제출했을 때만 저장한다.
+        if ($request->has('place_patterns')) {
+            $patterns->save(collect((array) $request->input('place_patterns', []))
+                ->map(fn ($raw) => \App\Domain\Keyword\PlaceKeywordPatterns::parse((string) $raw))->all());
+        }
 
         // 커스텀 head 코드(CSS·스크립트/HTML) 저장 + 캐시 무효화
         AppSetting::write('custom.head_css', (string) $request->input('custom_head_css', ''));

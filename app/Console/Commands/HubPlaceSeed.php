@@ -25,10 +25,11 @@ class HubPlaceSeed extends Command
 
     protected $description = '키워드 허브 — 플레이스 지역×업종 조합 키워드 후보 생성(22)';
 
-    public function handle(): int
+    public function handle(\App\Domain\Keyword\PlaceKeywordPatterns $patterns): int
     {
         $matrix = require database_path('data/place_keyword_matrix.php');
         $regions = $this->regionPools($matrix['regions']);
+        $patternMap = $patterns->all();   // 관리자 환경설정(플레이스 패턴 탭)에서 넣고 뺀 목록이 우선
         $keys = $this->option('category') ? [(string) $this->option('category')] : array_keys($matrix['categories']);
         $limit = max(1, (int) $this->option('limit'));
 
@@ -59,9 +60,10 @@ class HubPlaceSeed extends Command
                 }
             };
 
+            $catPatterns = $patternMap[$key]['patterns'] ?? $def['patterns'];
             foreach ($def['region_types'] as $rt) {
                 foreach ((array) ($regions[$rt] ?? []) as $region) {
-                    foreach ($def['patterns'] as $pattern) {
+                    foreach ($catPatterns as $pattern) {
                         if ($created >= $limit) {
                             $flush();
                             $this->info("상한 도달 — 신규 {$created} · 제외 {$skipped}. 재실행하면 이어서 추가됩니다.");

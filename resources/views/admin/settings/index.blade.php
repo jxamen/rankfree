@@ -14,7 +14,7 @@
 @section('admin-content')
 @php
     // 저장/리디렉션 후에도 보던 탭 유지 — ?tab= 파라미터로 초기 활성 탭 결정
-    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'custom' => '커스텀 코드'];
+    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'place' => '플레이스 패턴', 'custom' => '커스텀 코드'];
     $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
 @endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
@@ -216,6 +216,37 @@
     </div>
 
     {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}
+    {{-- ── 플레이스 패턴: 업종별 키워드 패턴 넣고 빼기 ───────────────────── --}}
+    <div class="rf-tabpane" data-tab="place" @if ($__active !== 'place') hidden @endif>
+        <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
+            플레이스 키워드는 <b>{지역} + {패턴}</b> 조합으로 만들어집니다(예: 강남역 + <b>곱창</b> → "강남역 곱창").
+            여기서 업종별 패턴을 <b>넣고 뺄 수</b> 있고, 저장 후 <code>hub:place-seed</code> 를 실행하면 <b>새로 추가된 조합만</b> 생성됩니다(기존은 중복 제외).
+            패턴 1개를 추가하면 그 업종의 지역 수만큼 키워드가 늘어납니다.
+        </p>
+
+        @php $__totalP = collect($placePatterns)->sum(fn ($c) => count($c['patterns'])); @endphp
+        <div class="card-soft px-4 py-3 mb-4 flex items-center gap-3 flex-wrap" style="font-size:var(--fs-xs);">
+            <span class="text-muted">현재 총 패턴 <b class="font-mono text-ink">{{ number_format($__totalP) }}</b>개</span>
+            @foreach ($placePatterns as $__k => $__c)
+                <span class="badge border border-hairline">{{ $__c['name'] }} <b class="font-mono">{{ count($__c['patterns']) }}</b></span>
+            @endforeach
+        </div>
+
+        <div class="flex flex-col gap-4">
+            @foreach ($placePatterns as $__key => $__cat)
+                <div class="card p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $__cat['name'] }}</label>
+                        <span class="text-muted-soft font-mono" style="font-size:var(--fs-xs);">{{ count($__cat['patterns']) }}개</span>
+                    </div>
+                    <textarea name="place_patterns[{{ $__key }}]" class="input" rows="4"
+                              style="font-size:var(--fs-xs);line-height:1.7;height:auto;"
+                              placeholder="콤마 또는 줄바꿈으로 구분 — 예: 맛집, 곱창, 감자탕">{{ implode(', ', $__cat['patterns']) }}</textarea>
+                </div>
+            @endforeach
+        </div>
+    </div>
+
     <div class="rf-tabpane" data-tab="custom" @if ($__active !== 'custom') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             아래 코드가 모든 공개 페이지(홈·콘솔)의 <code>&lt;head&gt;</code>에 삽입됩니다. 웹폰트·분석 스크립트(GA·GTM·메타 픽셀)·커스텀 CSS 등에 사용하세요.
