@@ -163,7 +163,7 @@
     }
   }
 
-  function showStatus(message, ok) {
+  function statusBox(ok) {
     var box = document.getElementById('rankfree-captcha-status');
     if (!box) {
       box = document.createElement('div');
@@ -185,7 +185,56 @@
     box.style.background = ok === false ? '#fff1f2' : '#ecfdf5';
     box.style.color = ok === false ? '#9f1239' : '#065f46';
     box.style.border = ok === false ? '1px solid #fecdd3' : '1px solid #a7f3d0';
+    return box;
+  }
+
+  function showStatus(message, ok) {
+    var box = statusBox(ok);
     box.textContent = message;
+  }
+
+  function showSavedStatus(data, apiBase, fallbackQuestion) {
+    data = data || {};
+    var box = statusBox(true);
+    box.textContent = '';
+
+    var title = document.createElement('div');
+    title.textContent = 'RankFree captcha saved:';
+    box.appendChild(title);
+
+    var question = String(data.question || fallbackQuestion || '').trim();
+    var questionLine = document.createElement('div');
+    questionLine.style.marginTop = '6px';
+    questionLine.textContent = '질문: ' + (question || '확인 안 됨');
+    box.appendChild(questionLine);
+
+    if (data.image_url) {
+      var linkLine = document.createElement('div');
+      linkLine.style.marginTop = '6px';
+      var link = document.createElement('a');
+      link.href = data.image_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = '이미지 열기';
+      link.style.color = '#047857';
+      link.style.fontWeight = '700';
+      linkLine.appendChild(link);
+      box.appendChild(linkLine);
+    }
+
+    var path = data.absolute_path || data.path || '';
+    if (path) {
+      var pathLine = document.createElement('div');
+      pathLine.style.marginTop = '6px';
+      pathLine.textContent = path;
+      box.appendChild(pathLine);
+    }
+
+    if (apiBase) {
+      var apiLine = document.createElement('div');
+      apiLine.textContent = 'API: ' + apiBase;
+      box.appendChild(apiLine);
+    }
   }
 
   async function scanAndUpload(reason) {
@@ -229,7 +278,7 @@
         return;
       }
       if (res && res.ok && res.data) {
-        showStatus('RankFree captcha saved:\n' + (res.data.absolute_path || res.data.path) + (res.apiBase ? '\nAPI: ' + res.apiBase : ''), true);
+        showSavedStatus(res.data, res.apiBase || '', question);
         try {
           chrome.runtime.sendMessage({
             type: '__sellerCaptchaCaptured',

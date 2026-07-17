@@ -498,8 +498,8 @@ const handlers = {
         chrome.windows.create({
           url,
           type: 'popup',
-          width: 430,
-          height: 720,
+          width: 540,
+          height: 760,
           focused: !!active || !!keepOpen,
         }, (win) => {
           if (chrome.runtime.lastError || !win) {

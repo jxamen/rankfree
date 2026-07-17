@@ -47,7 +47,8 @@ class ExtSellerCaptchaApiTest extends TestCase
             ->assertJsonPath('ok', true)
             ->assertJsonPath('data.store_id', 'j-square')
             ->assertJsonPath('data.channel_uid', '2sWDyHZmje7LqpCivmXk3')
-            ->assertJsonPath('data.captcha_key', 'BXWkU2sLos7vJx');
+            ->assertJsonPath('data.captcha_key', 'BXWkU2sLos7vJx')
+            ->assertJsonPath('data.image_url', route('admin.shop-products.seller-captchas.image', 1));
 
         Storage::disk('local')->assertExists($response->json('data.path'));
         $this->assertDatabaseHas('shop_seller_captchas', [

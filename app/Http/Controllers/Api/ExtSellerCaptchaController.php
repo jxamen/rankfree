@@ -82,6 +82,7 @@ class ExtSellerCaptchaController extends Controller
                 'captcha_key' => $row->captcha_key,
                 'question' => $row->question,
                 'path' => $row->image_path,
+                'image_url' => route('admin.shop-products.seller-captchas.image', $row),
                 'absolute_path' => Storage::disk('local')->path($row->image_path),
                 'captured_at' => $row->captured_at?->toDateTimeString(),
             ],
