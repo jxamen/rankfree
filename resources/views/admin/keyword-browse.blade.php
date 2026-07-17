@@ -14,6 +14,8 @@
     @foreach (['shopping' => '쇼핑', 'place' => '플레이스'] as $t => $label)
         <a href="{{ route('admin.keyword-browse', ['type' => $t]) }}" class="btn {{ $type === $t ? 'btn-primary' : 'btn-secondary' }} btn-sm">{{ $label }}</a>
     @endforeach
+    {{-- 키워드가 아니라 상품 기준으로 보는 목록 --}}
+    <a href="{{ route('admin.shop-products') }}" class="btn btn-secondary btn-sm" title="수집된 쇼핑 상품 전체를 상품 기준으로 봅니다">수집 상품</a>
     <span class="text-muted ml-auto" style="font-size:var(--fs-xs);">
         @if (($refreshed ?? 0) > 0)
             <span class="badge border border-hairline" title="검색량은 {{ $volumeTtlDays ?? 7 }}일마다 자동 갱신됩니다">검색량 {{ $refreshed }}건 갱신됨</span>

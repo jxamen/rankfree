@@ -347,6 +347,8 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 키워드 상세 — 그 키워드로 노출되는 업체 수집(플레이스 SERP 최대 300)
     Route::get('/keyword-browse/detail', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'detail'])->name('keyword-browse.detail');
     Route::delete('/keyword-browse/month', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'deleteMonth'])->name('keyword-browse.month.delete');
+    // 수집 상품 — 키워드와 별개로, 수집된 상품 전체를 상품 기준으로 본다
+    Route::get('/shop-products', [\App\Http\Controllers\Admin\ShopProductController::class, 'index'])->name('shop-products');
 
     // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
