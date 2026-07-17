@@ -147,17 +147,26 @@
     var poll = null;
     function send(type, extra) { window.postMessage(Object.assign({ source: 'rankfree-admin', type: type }, extra || {}), '*'); }
     function hasExt() { return document.documentElement.getAttribute('data-rf-ext') === '1'; }
+    /** 수집 중 화면 — 중단 버튼을 띄우고 상태를 계속 따라간다(이미 켜져 있으면 그대로). */
+    function live() {
+        stop.hidden = false; start.disabled = true;
+        if (!poll) poll = setInterval(function () { send('bulkStatus'); }, 1500);
+    }
 
     window.addEventListener('message', function (e) {
         var m = e.data;
         if (!m || m.source !== 'rankfree-ext') return;
         if (m.type === 'bulkStartResult') {
             if (!m.ok) { msg.style.color = 'var(--color-error)'; msg.textContent = m.message || '시작 실패'; start.disabled = false; return; }
-            msg.style.color = ''; stop.hidden = false; start.disabled = true;
-            poll = setInterval(function () { send('bulkStatus'); }, 1500);
+            msg.style.color = ''; live();
         }
         if (m.type === 'bulkStatusResult' && m.bulk) {
             var b = m.bulk;
+            // ★ 새로고침해도 진행 상태·중단 버튼이 살아나야 한다.
+            //   예전엔 시작 버튼을 누른 경우(bulkStartResult)에만 폴링·중단을 켜서,
+            //   새로고침하면 상태를 한 번 받고 멈춘 채 중단도 못 눌렀다.
+            //   수집은 확장 백그라운드에서 계속 돌고 있으므로 화면이 그걸 따라가야 한다.
+            if (b.running) live();
             var waiting = b.blockedUntil && b.blockedUntil > Date.now();
             var head = !b.running ? '수집 종료 — ' : (waiting ? '차단 감지 — 대기 중… ' : '수집 중… ');
             msg.textContent = head + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
@@ -187,7 +196,13 @@
         });
     });
     stop.addEventListener('click', function () { send('bulkStop'); });
-    if (hasExt()) send('bulkStatus');   // 진행 중이면 이어서 표시
+
+    // 진행 중이면 이어서 표시 — 확장(admin-bridge)이 붙기 전에 물으면 답이 없으므로,
+    // 붙을 때까지 잠깐 재시도한다(새로고침 직후 상태가 안 뜨던 원인 중 하나).
+    (function ask(n) {
+        if (hasExt()) { send('bulkStatus'); return; }
+        if (n > 0) setTimeout(function () { ask(n - 1); }, 300);
+    })(10);
 })();
 </script>
 @endif
