@@ -224,6 +224,18 @@
                 </div>
             </div>
         </header>
+        {{-- 대량 수집 진행 바 — 수집은 확장 백그라운드에서 도므로 어느 관리자 화면에 있든 보이게 한다.
+             (수집 설정·시작은 키워드 탐색에, 여기는 진행 상황과 중단만) --}}
+        <div id="rf-bulkbar" hidden
+             style="position:sticky;top:0;z-index:40;background:var(--color-surface);border-bottom:1px solid var(--color-hairline);">
+            <div class="flex items-center gap-3 px-4 py-2" style="max-width:1440px;margin:0 auto;">
+                <span class="badge border border-hairline flex-none" style="font-size:var(--fs-xs);">수집 중</span>
+                <span id="rf-bulkbar-msg" class="text-muted" style="font-size:var(--fs-xs);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <a href="{{ route('admin.keyword-browse', ['type' => 'shopping']) }}" class="btn btn-ghost btn-sm flex-none">자세히</a>
+                <button type="button" id="rf-bulkbar-stop" class="btn btn-secondary btn-sm flex-none">중단</button>
+            </div>
+        </div>
+
         <main class="p-4 sm:p-8 flex-1">
             <div style="max-width:1440px;margin:0 auto;">
                 {{-- 모바일: 헤더 줄이 좁아 브레드크럼을 콘텐츠 타이틀 위에 표시 --}}
@@ -373,6 +385,42 @@
             syncThemeIcon();
         });
     }
+})();
+</script>
+
+{{-- 대량 수집 진행 바 — 확장(admin-bridge)에 상태를 물어 수집 중일 때만 띄운다.
+     수집은 페이지가 아니라 확장 백그라운드에서 돌아, 새로고침하거나 다른 화면으로 가도 계속된다. --}}
+<script>
+(function () {
+    var bar = document.getElementById('rf-bulkbar');
+    if (!bar) return;
+    var msg = document.getElementById('rf-bulkbar-msg'), stop = document.getElementById('rf-bulkbar-stop');
+    function send(type) { window.postMessage({ source: 'rankfree-admin', type: type }, '*'); }
+
+    window.addEventListener('message', function (e) {
+        var m = e.data;
+        if (!m || m.source !== 'rankfree-ext') return;
+        if (m.type === 'bulkStatusResult') {
+            var b = m.bulk;
+            if (!b || !b.running) { bar.hidden = true; return; }
+            var waiting = b.blockedUntil && b.blockedUntil > Date.now();
+            bar.hidden = false;
+            msg.textContent = (waiting ? '차단 감지 — 대기 중… ' : '')
+                + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+                + (b.category ? ' · ' + b.category + (b.categoryTotal ? ' (' + b.categoryIndex + '/' + b.categoryTotal + ')' : '') : '')
+                + (b.current ? ' · 현재: ' + b.current : '')
+                + (b.gap ? ' · 간격 ' + Math.round(b.gap / 1000) + '초' : '')
+                + (b.remaining ? ' · 남은 ' + Number(b.remaining).toLocaleString() : '');
+        }
+        if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }
+    });
+
+    stop.addEventListener('click', function () { send('bulkStop'); });
+
+    // 확장이 붙은 뒤에 물어야 한다(admin-bridge 가 data-rf-ext 를 세운다)
+    function tick() { if (document.documentElement.getAttribute('data-rf-ext') === '1') send('bulkStatus'); }
+    setTimeout(tick, 400);
+    setInterval(tick, 2000);
 })();
 </script>
 @stack('scripts')

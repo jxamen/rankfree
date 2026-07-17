@@ -60,8 +60,10 @@
         <table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm);">
             <thead>
                 <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
+                    <th style="padding:8px 6px;text-align:right;width:56px;">No</th>
                     <th style="padding:8px 6px;">상품명</th>
                     <th style="padding:8px 6px;">판매처</th>
+                    <th style="padding:8px 6px;width:130px;">스토어ID</th>
                     <th style="padding:8px 6px;">노출 키워드</th>
                     <th style="padding:8px 6px;text-align:right;width:64px;">최고순위</th>
                     <th style="padding:8px 6px;text-align:right;width:90px;">가격</th>
@@ -72,6 +74,10 @@
             <tbody>
                 @forelse ($items as $p)
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
+                        {{-- No — 전체에서 역순(첫 행이 가장 큰 번호). 페이지를 넘겨도 이어진다 --}}
+                        <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted-soft">
+                            {{ number_format($items->total() - ($items->firstItem() - 1) - $loop->index) }}
+                        </td>
                         <td style="padding:7px 6px;max-width:420px;">
                             @if (!empty($p->link))
                                 <a href="{{ $p->link }}" target="_blank" rel="noopener" class="text-ink font-semibold"
@@ -84,6 +90,21 @@
                             @endif
                         </td>
                         <td style="padding:7px 6px;" class="text-muted">{{ $p->mall_name ?: '—' }}</td>
+
+                        {{-- 스토어 핸들 — 누르면 그 스토어 홈으로(상품 URL 에서 /products/ 앞이 곧 스토어 주소) --}}
+                        <td style="padding:7px 6px;">
+                            @if (!empty($p->store_id))
+                                @php $__home = $p->link ? preg_replace('#/products/.*$#', '', $p->link) : null; @endphp
+                                @if ($__home)
+                                    <a href="{{ $__home }}" target="_blank" rel="noopener" class="font-mono"
+                                       style="color:var(--color-primary);text-decoration:none;" title="{{ $__home }}">{{ $p->store_id }}</a>
+                                @else
+                                    <span class="font-mono text-muted">{{ $p->store_id }}</span>
+                                @endif
+                            @else
+                                <span class="text-muted-soft">—</span>
+                            @endif
+                        </td>
 
                         {{-- 이 상품이 걸린 키워드 — 누르면 그 키워드 상세로 --}}
                         <td style="padding:7px 6px;">
@@ -116,7 +137,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="text-muted-soft text-center" style="padding:40px;">
+                    <tr><td colspan="9" class="text-muted-soft text-center" style="padding:40px;">
                         수집된 상품이 없습니다. 키워드 탐색에서 상품을 수집해 주세요.
                     </td></tr>
                 @endforelse
