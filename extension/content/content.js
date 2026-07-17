@@ -3492,6 +3492,10 @@
     const count = num((location.hash.split('=')[1]) || '') || 80;
     const query = getQueryFromUrl();
     const out = { ok: false, products: [], total: 0, relatedTags: [], message: '' };
+
+    // 살아있음 신호 — 네이버가 429/차단으로 막으면 크롬 에러 페이지가 떠서 이 스크립트 자체가 안 돈다.
+    // 이 신호가 없으면 background 가 '페이지가 안 떴다 = 차단'으로 보고 즉시 쉰다(타임아웃만 기다리지 않는다).
+    try { chrome.runtime.sendMessage({ type: '__shoppingCollectStarted' }); } catch (e) { /* noop */ }
     try {
       if (!query) throw new Error('검색어 없음');
       let page = await collectFromDocAndHtml(query, count);

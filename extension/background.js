@@ -668,6 +668,8 @@ const handlers = {
       let category = '';
       let stopped = false;
       let blocked = false;      // 차단 상태 — 모든 워커가 대기한다
+      let liveConc = conc;      // 실제 동시 수 — 차단이 이어지면 자동으로 줄인다(429 방어)
+      let blockHits = 0;        // 연속 차단 횟수
 
       const patch = async (o) => {
         const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
@@ -718,7 +720,7 @@ const handlers = {
       // 차단 판정 — 네이버가 실제로 막았을 때의 문구만 본다.
       // '시간이 초과'는 차단이 아니라 우리 쪽이 오래 걸린 것이라 여기서 뺀다
       // (실측: 가격비교 많은 의류 키워드에서 카탈로그를 다 읽다 초과 → 창엔 차단 메시지가 없었다).
-      const looksBlocked = (msg) => /차단|일시적으로 제한|데이터를 찾지 못/.test(String(msg || ''));
+      const looksBlocked = (msg) => /차단|429|일시적으로 제한|데이터를 찾지 못|페이지가 열리지 않/.test(String(msg || ''));
 
       // 탭은 '순서대로' 열되 기다리지 않는다 — 앞 탭이 열리면 바로 다음 탭을 연다.
       // (gap 만큼 직렬 대기시키면 동시 N개가 무의미해져 사실상 순차가 된다)
@@ -730,8 +732,11 @@ const handlers = {
         return my;
       };
 
+      let workerNo = 0;
       const worker = async () => {
+        const me = workerNo++;                              // 0..conc-1 — 동시 수가 줄면 뒤 번호부터 빠진다
         while (!stopped && done + failed < max) {
+          if (me >= liveConc) break;                        // 차단으로 동시 수가 줄었다 → 이 워커는 종료
           if (await isStopped()) { stopped = true; break; }
 
           // 차단 중이면 다음 작업을 하지 않고 대기한다(계속 두드리면 더 오래 막힌다)
@@ -752,6 +757,7 @@ const handlers = {
           if (r && r.ok) {
             done++;
             gap = Math.max(baseGap, gap - 1000);            // 성공하면 1초씩 되돌린다(하한 = 설정값)
+            blockHits = 0;                                  // 잘 돌고 있다 — 연속 차단 카운터 초기화
             await patch({ done, failed, gap, blockedUntil: 0 });
           } else {
             failed++;
@@ -760,9 +766,24 @@ const handlers = {
               // 차단 — 간격을 1초 늘리고(최대 10초), 그 시간만큼 전 워커가 쉰다
               gap = Math.min(MAX_GAP, gap + 1000);
               blocked = true;
-              const until = Date.now() + gap;
-              await patch({ done, failed, gap, lastError: lastError + ' — 차단 감지, ' + Math.round(gap / 1000) + '초 대기 후 재개', blockedUntil: until });
-              await sleep(gap);
+              blockHits++;
+
+              // ★ 차단이 이어지면 동시 수를 줄인다 — 간격만 늘려봐야 탭 N개가 한꺼번에 몰리는 건 그대로다.
+              //   (동시 10으로 돌리면 네이버가 429로 막는다 — 실측). 최소 2까지 절반씩 줄이고,
+              //   줄인 워커는 스스로 빠진다(quota 초과분).
+              if (blockHits >= 2 && liveConc > 2) {
+                liveConc = Math.max(2, Math.floor(liveConc / 2));
+                blockHits = 0;
+                await patch({ conc: liveConc });
+              }
+
+              // 차단이 반복될수록 더 오래 쉰다(429 는 계속 두드리면 더 길어진다)
+              const rest = Math.min(60000, gap * (1 + blockHits));
+              const until = Date.now() + rest;
+              await patch({ done, failed, gap, conc: liveConc,
+                lastError: lastError + ' — 차단 감지, ' + Math.round(rest / 1000) + '초 대기 후 재개(동시 ' + liveConc + ')',
+                blockedUntil: until });
+              await sleep(rest);
               blocked = false;
               await patch({ blockedUntil: 0 });
             } else {
@@ -844,16 +865,26 @@ const handlers = {
       let done = false;
       // 상품 5페이지(약 20초) + 가격비교 카탈로그 확장(예산 20초) + 여유
       const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), 75000);
+      // 네이버가 429/차단으로 막으면 크롬 에러 페이지라 content script 가 아예 안 돈다.
+      // 그때는 살아있음 신호가 없다 — 75초를 기다리지 말고 12초에 차단으로 판정해 바로 쉰다
+      // (계속 두드리면 네이버가 더 오래 막는다).
+      const alive = setTimeout(() => {
+        finish({ ok: false, message: '페이지가 열리지 않았습니다 — 차단(429)으로 보입니다.' });
+      }, 12000);
       function finish(res) {
         if (done) return;
         done = true;
         clearTimeout(to);
+        clearTimeout(alive);
         chrome.runtime.onMessage.removeListener(onMsg);
         if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
         resolve(res);
       }
       function onMsg(msg, sender) {
-        if (sender && sender.tab && sender.tab.id === tabId && msg && msg.type === '__shoppingCollected') {
+        if (!sender || !sender.tab || sender.tab.id !== tabId || !msg) return;
+        // 수집 스크립트가 떴다 — 페이지는 정상이니 살아있음 타이머만 끈다(수집 자체는 계속 기다린다)
+        if (msg.type === '__shoppingCollectStarted') { clearTimeout(alive); return; }
+        if (msg.type === '__shoppingCollected') {
           finish({ ok: !!msg.ok, products: msg.products || [], total: msg.total || 0, relatedTags: msg.relatedTags || [], message: msg.message || '' });
         }
       }

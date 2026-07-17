@@ -128,14 +128,14 @@
             <option value="6000" selected>간격 6초 (권장)</option>
             <option value="10000">간격 10초 (안전)</option>
         </select>
-        <select id="rf-bulk-conc" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="동시에 돌아가는 탭 수 — 탭은 순서대로 열고 동시 수만 유지합니다">
+        <select id="rf-bulk-conc" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="동시에 돌아가는 탭 수 — 많으면 네이버가 429로 막습니다. 차단이 이어지면 동시 수가 자동으로 줄어듭니다(최소 2).">
             <option value="1">동시 1개</option>
             <option value="2" selected>동시 2개</option>
             <option value="3">동시 3개</option>
             <option value="4">동시 4개</option>
             <option value="6">동시 6개</option>
-            <option value="8">동시 8개 (차단 위험)</option>
-            <option value="10">동시 10개 (차단 위험)</option>
+            <option value="8">동시 8개 (429 위험)</option>
+            <option value="10">동시 10개 (429 위험)</option>
         </select>
         <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
         <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
