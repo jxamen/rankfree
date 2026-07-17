@@ -165,10 +165,34 @@
                     <option value="{{ $c->id }}" @selected($catId === $c->id)>{{ $c->parent ? $c->parent->name.' › ' : '' }}{{ $c->name }}</option>
                 @endforeach
             </select>
+            @if (!empty($regionCounts) && count($regionCounts))
+                <select name="region" class="input" style="height:36px;max-width:170px;" onchange="this.form.submit()" title="지역 필터(플레이스)">
+                    <option value="">전체 지역</option>
+                    @foreach ($regionCounts as $rg => $cnt)
+                        <option value="{{ $rg }}" @selected(($region ?? '') === (string) $rg)>{{ $rg }} ({{ number_format($cnt) }})</option>
+                    @endforeach
+                </select>
+            @endif
             <input type="search" name="q" class="input" style="height:36px;width:160px;" placeholder="키워드 검색" value="{{ $q ?? '' }}">
             <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
+            @if (($q ?? '') !== '' || ($region ?? '') !== '' || ($source ?? '') !== '' || $catId)
+                <a href="{{ route('admin.keyword-hub', ['status' => $status]) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
+            @endif
         </form>
     </div>
+
+    {{-- 지역별 후보 수(현재 상태·카테고리·출처 기준) — 지역으로 키워드 훑기 --}}
+    @if (!empty($regionCounts) && count($regionCounts))
+        <div class="flex flex-wrap items-center gap-1.5 mb-3 pb-3" style="border-bottom:1px solid var(--color-hairline-soft);">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">지역 {{ count($regionCounts) }}곳</span>
+            <a href="{{ route('admin.keyword-hub', ['status' => $status, 'category' => $catId ?: null, 'source' => $source ?: null, 'q' => $q ?: null]) }}"
+               class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($region ?? '') === '' ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">전체</a>
+            @foreach ($regionCounts as $rg => $cnt)
+                <a href="{{ route('admin.keyword-hub', ['status' => $status, 'category' => $catId ?: null, 'source' => $source ?: null, 'q' => $q ?: null, 'region' => $rg]) }}"
+                   class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($region ?? '') === (string) $rg ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">{{ $rg }} <b class="font-mono">{{ number_format($cnt) }}</b></a>
+            @endforeach
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('admin.keyword-hub.candidates.bulk') }}" id="kh-bulk">
         @csrf
@@ -224,6 +248,7 @@
             <input type="hidden" name="category" value="{{ $catId ?: '' }}">
             <input type="hidden" name="source" value="{{ $source ?? '' }}">
             <input type="hidden" name="q" value="{{ $q ?? '' }}">
+            <input type="hidden" name="region" value="{{ $region ?? '' }}">
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">필터 전체 <b class="font-mono">{{ number_format($candidates->total()) }}</b>건 일괄:</span>
             <button type="submit" name="action" value="approve" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 승인할까요?" data-confirm-text="승인된 후보는 hub:publish 크론이 검색량 큰 순으로 발행합니다.">전체 승인</button>
             <button type="submit" name="action" value="reject" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 거부할까요?">전체 거부</button>

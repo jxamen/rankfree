@@ -22,6 +22,7 @@ class KeywordHubController extends Controller
         $catId = (int) $request->query('category', 0);
         $source = (string) $request->query('source', ''); // 출처 필터(combo=지역조합/seed/related/autocomplete/gsc/datalab)
         $kw = trim((string) $request->query('q', ''));    // 키워드 검색(대량 후보 탐색용)
+        $region = trim((string) $request->query('region', '')); // 지역 필터(플레이스 — 강남역·망원동…)
 
         return view('admin.keyword-hub.index', [
             'categories' => KeywordCategory::with('parent')->withCount([
@@ -29,7 +30,7 @@ class KeywordHubController extends Controller
                 'candidates as approved_count' => fn ($q) => $q->where('status', 'approved'),
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
             ])->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
-            'candidates' => $this->filteredCandidates($status, $catId, $source, $kw)
+            'candidates' => $this->filteredCandidates($status, $catId, $source, $kw, $region)
                 ->with('category')
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
                 ->paginate(50)->withQueryString(),
@@ -37,11 +38,19 @@ class KeywordHubController extends Controller
             'catId' => $catId,
             'source' => $source,
             'q' => $kw,
+            'region' => $region,
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
             // 출처별 후보 수(현 status 기준) — 시딩(지역조합) 결과를 화면에서 바로 확인
             'sourceCounts' => KeywordCandidate::where('status', $status)
                 ->when($catId, fn ($q) => $q->where('category_id', $catId))
                 ->selectRaw('source, count(*) as c')->groupBy('source')->pluck('c', 'source'),
+            // 지역별 후보 수(현 status·카테고리·출처 기준) — 플레이스를 지역으로 훑기
+            'regionCounts' => KeywordCandidate::where('status', $status)
+                ->when($catId, fn ($q) => $q->where('category_id', $catId))
+                ->when($source !== '', fn ($q) => $q->where('source', $source))
+                ->whereNotNull('region')
+                ->selectRaw('region, count(*) as c')->groupBy('region')->orderByDesc('c')->orderBy('region')
+                ->limit(200)->pluck('c', 'region'),
             'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
             'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
         ]);
@@ -137,9 +146,10 @@ class KeywordHubController extends Controller
             'category' => 'nullable|integer',
             'source' => 'nullable|string|max:20',
             'q' => 'nullable|string|max:120',
+            'region' => 'nullable|string|max:60',
         ]);
 
-        $query = $this->filteredCandidates($data['status'], (int) ($data['category'] ?? 0), (string) ($data['source'] ?? ''), trim((string) ($data['q'] ?? '')));
+        $query = $this->filteredCandidates($data['status'], (int) ($data['category'] ?? 0), (string) ($data['source'] ?? ''), trim((string) ($data['q'] ?? '')), trim((string) ($data['region'] ?? '')));
 
         if ($data['action'] === 'delete') {
             $n = $query->delete();
@@ -154,12 +164,13 @@ class KeywordHubController extends Controller
     }
 
     /** 승인 큐 공통 필터(목록·전체 일괄 처리가 동일 조건을 쓰도록 단일화). */
-    private function filteredCandidates(string $status, int $catId, string $source, string $kw)
+    private function filteredCandidates(string $status, int $catId, string $source, string $kw, string $region = '')
     {
         return KeywordCandidate::query()
             ->where('status', $status)
             ->when($catId, fn ($q) => $q->where('category_id', $catId))
             ->when($source !== '', fn ($q) => $q->where('source', $source))
+            ->when($region !== '', fn ($q) => $q->where('region', $region))
             ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'));
     }
 
