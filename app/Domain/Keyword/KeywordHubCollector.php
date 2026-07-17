@@ -100,11 +100,15 @@ class KeywordHubCollector
         return $isSeed || $volume === null || $volume >= (int) config('rankfree.hub.min_volume', 1000);
     }
 
-    /** 키워드 형태 필터(길이 2~60자 + 금지 패턴) — hub:discover 등 다른 유입 경로도 공용. */
+    /** 키워드 형태 필터(길이 2~60자 + 특수문자 제외 + 금지 패턴) — hub:discover 등 다른 유입 경로도 공용. */
     public static function acceptableKeyword(string $kw): bool
     {
         $len = mb_strlen($kw, 'UTF-8');
         if ($len < 2 || $len > 60) {
+            return false;
+        }
+        // 특수문자가 든 키워드는 수집하지 않는다 — 한글·영문·숫자·공백만 허용
+        if (preg_match('/[^\p{Hangul}a-zA-Z0-9\s]/u', $kw)) {
             return false;
         }
         foreach ((array) config('rankfree.hub.banned_patterns', []) as $p) {

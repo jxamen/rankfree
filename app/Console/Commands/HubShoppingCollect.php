@@ -20,6 +20,7 @@ class HubShoppingCollect extends Command
         {--root= : 특정 1분류 cid 만(예: 50000001 패션잡화)}
         {--pages= : 분야당 인기검색어 페이지 수(페이지당 20개 · 최대 25=500위, 기본 config)}
         {--depth=3 : 인기검색어 수집 분류 깊이(2=2분류만, 3=3분류 포함)}
+        {--tree-only : 카테고리 트리(1·2·3분류)만 동기화하고 인기검색어는 건너뛴다 — 몇 초면 끝난다}
         {--delay-ms=300 : 분야 간 대기(ms)}';
 
     protected $description = '키워드 허브 — 데이터랩 쇼핑인사이트 분야별(1~3분류) 인기검색어 수집(22)';
@@ -64,6 +65,11 @@ class HubShoppingCollect extends Command
                 }
             }
             $this->info("[트리] {$root['name']} — 누적 분류 ".count($targets));
+        }
+        if ($this->option('tree-only')) {
+            $this->info('트리 동기화 완료 — 분류 '.count($targets).'개. (--tree-only: 인기검색어 수집은 건너뜀)');
+
+            return self::SUCCESS;
         }
         $this->info('트리 동기화 완료 — 분류 '.count($targets).'개. 이제 분류별 인기검색어를 수집합니다.');
 
