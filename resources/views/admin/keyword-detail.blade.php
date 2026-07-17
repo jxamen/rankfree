@@ -148,12 +148,35 @@
         </p>
     </div>
 @else
+    {{-- 월 선택·삭제 — 월별 파티션에 쌓인 수집분을 꺼내 보거나 지운다 --}}
+    @if (count($months) > 0)
+        <div class="card p-3 mb-4 flex items-center gap-2 flex-wrap">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">수집 월</span>
+            @foreach ($months as $m)
+                @php $on = ($month ?? $months[0]) === $m; @endphp
+                <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $keyword, 'month' => $m]) }}"
+                   class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;{{ $on ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">
+                    {{ substr($m, 0, 4) }}-{{ substr($m, 4, 2) }}
+                </a>
+            @endforeach
+            <form method="POST" action="{{ route('admin.keyword-browse.month.delete') }}" class="ml-auto">
+                @csrf @method('DELETE')
+                <input type="hidden" name="keyword" value="{{ $keyword }}">
+                <input type="hidden" name="cat" value="{{ $cat }}">
+                <input type="hidden" name="month" value="{{ $month ?? $months[0] }}">
+                <button type="submit" class="btn btn-ghost btn-sm"
+                        data-confirm="{{ substr($month ?? $months[0], 0, 4) }}-{{ substr($month ?? $months[0], 4, 2) }} 수집분을 삭제할까요?"
+                        data-confirm-text="업체 정보는 남고 이 달의 순위 기록만 지웁니다.">이 달 삭제</button>
+            </form>
+        </div>
+    @endif
+
     {{-- 집계 --}}
     @php
         $items = collect($serp['items']);
-        $cntPlus = $items->where('place_plus', true)->count();
-        $cntNew = $items->where('new_opening', true)->count();
-        $cntTalk = $items->filter(fn ($i) => ($i['talktalk_id'] ?? '') !== '')->count();
+        $cntPlus = $items->filter(fn ($i) => ! empty($i->place_plus))->count();
+        $cntNew = $items->filter(fn ($i) => ! empty($i->new_opening))->count();
+        $cntTalk = $items->filter(fn ($i) => ($i->talktalk_id ?? '') !== '')->count();
     @endphp
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
         @foreach ([
@@ -201,29 +224,29 @@
                 <tbody>
                     @forelse ($items as $i)
                         <tr style="border-bottom:1px solid var(--color-hairline-soft);">
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $i['rnk'] }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $i->rnk }}</td>
                             <td style="padding:7px 6px;">
-                                <a href="https://m.place.naver.com/place/{{ $i['place_id'] }}" target="_blank" rel="noopener"
-                                   class="text-ink font-semibold" style="text-decoration:none;">{{ $i['name'] }}</a>
+                                <a href="https://m.place.naver.com/place/{{ $i->place_id }}" target="_blank" rel="noopener"
+                                   class="text-ink font-semibold" style="text-decoration:none;">{{ $i->name }}</a>
                             </td>
                             <td style="padding:7px 6px;">
-                                @if (!empty($i['place_plus']))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;" title="place+">place+</span>@endif
-                                @if (!empty($i['new_opening']))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;color:var(--color-error);" title="새로오픈">새로오픈</span>@endif
-                                @if (empty($i['place_plus']) && empty($i['new_opening']))<span class="text-muted-soft">—</span>@endif
+                                @if (!empty($i->place_plus))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;" title="place+">place+</span>@endif
+                                @if (!empty($i->new_opening))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;color:var(--color-error);" title="새로오픈">새로오픈</span>@endif
+                                @if (empty($i->place_plus) && empty($i->new_opening))<span class="text-muted-soft">—</span>@endif
                             </td>
                             <td style="padding:7px 6px;">
-                                @if (($i['talktalk_id'] ?? '') !== '')
-                                    <a href="{{ $i['talktalk_url'] }}" target="_blank" rel="noopener" class="font-mono" style="color:var(--color-primary);text-decoration:none;">{{ $i['talktalk_id'] }}</a>
+                                @if (($i->talktalk_id ?? '') !== '')
+                                    <a href="{{ $i->talktalk_url }}" target="_blank" rel="noopener" class="font-mono" style="color:var(--color-primary);text-decoration:none;">{{ $i->talktalk_id }}</a>
                                 @else
                                     <span class="text-muted-soft">—</span>
                                 @endif
                             </td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i['visitor_cnt'] ?? null) }}</td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i['blog_cnt'] ?? null) }}</td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i['booking_cnt'] ?? null) }}</td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i['save_cnt'] ?? null) }}</td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i['img_cnt'] ?? null) }}</td>
-                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $i['review_score'] ?? '—' }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i->visitor_cnt ?? null) }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i->blog_cnt ?? null) }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i->booking_cnt ?? null) }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i->save_cnt ?? null) }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $num($i->img_cnt ?? null) }}</td>
+                            <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $i->review_score ?? '—' }}</td>
                         </tr>
                     @empty
                         <tr><td colspan="10" class="text-muted-soft text-center" style="padding:40px;">노출 업체가 없습니다.</td></tr>

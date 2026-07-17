@@ -80,8 +80,10 @@ class KeywordBrowseController extends Controller
         // 업체·상품 수집일(키워드별 스냅샷) — 목록에서 어느 키워드를 수집했는지 바로 보이게
         $shown = collect($items->items())->pluck('keyword')->all();
         $serpAt = $type === 'place'
-            ? \App\Models\KeywordPlaceSerp::whereIn('keyword', $shown)
-                ->pluck('collected_at', 'keyword')
+            ? \Illuminate\Support\Facades\DB::table('keyword_place_ranks')   // 월별 파티션 매핑의 최신 수집일
+                ->whereIn('keyword', $shown)
+                ->selectRaw('keyword, MAX(collected_at) as collected_at')
+                ->groupBy('keyword')->pluck('collected_at', 'keyword')
             : \App\Models\KeywordShopSerp::whereIn('keyword', $shown)
                 ->pluck('collected_at', 'keyword');
 
@@ -107,7 +109,7 @@ class KeywordBrowseController extends Controller
      *   플레이스: pcmap SERP 최대 300개(순위·리뷰·저장수·place+·새로오픈·톡톡) — 6페이지 × 3초라 결과를 캐시한다.
      *   쇼핑: 서버는 search.shopping 이 418 로 막혀 확장 수집이 필요 — 여기서는 안내만 한다.
      */
-    public function detail(Request $request, \App\Domain\Place\PlaceRankChecker $checker)
+    public function detail(Request $request, \App\Domain\Place\PlaceRankChecker $checker, \App\Domain\Place\PlaceSerpStore $store)
     {
         $keyword = trim((string) $request->query('keyword', ''));
         abort_if($keyword === '', 404);
@@ -118,17 +120,23 @@ class KeywordBrowseController extends Controller
         $cat = $this->placeCatKey($candidate?->category?->name);
         $top = min(300, max(10, (int) $request->query('top', 300)));
 
-        // 순위·리뷰는 변동이 크지 않아 매번 재수집하지 않는다 — DB 스냅샷을 재사용하고 '다시 수집' 때만 갱신.
-        $data = ['blocked' => false, 'total' => 0, 'items' => [], 'collected_at' => null];
-        if ($type === 'place') {
-            $saved = \App\Models\KeywordPlaceSerp::where('keyword', $keyword)->where('cat', $cat)->first();
+        // 업체는 마스터(place_businesses)에 1회만, 키워드↔업체는 월별 파티션 매핑(keyword_place_ranks).
+        // 저장분을 재사용하고 '다시 수집' 때만 갱신한다(순위는 매일 바뀌지만 매번 17초를 쓸 이유는 없다).
+        $data = ['blocked' => false, 'total' => 0, 'items' => collect(), 'collected_at' => null];
+        $months = [];
+        $month = (int) $request->query('month', 0) ?: null;   // 특정 월 수집분 보기
 
-            if ($saved && ! $request->boolean('refresh')) {
+        if ($type === 'place') {
+            $months = $store->months($keyword, $cat);
+            $has = $months !== [];
+
+            if ($has && ! $request->boolean('refresh')) {
+                $items = $store->items($keyword, $cat, $month);
                 $data = [
                     'blocked' => false,
-                    'total' => $saved->total,
-                    'items' => $saved->items ?? [],
-                    'collected_at' => $saved->collected_at,
+                    'total' => \App\Models\KeywordPlaceSerp::where('keyword', $keyword)->where('cat', $cat)->value('total') ?: 0,
+                    'items' => $items,
+                    'collected_at' => $items->first()->collected_at ?? null,
                 ];
             } else {
                 $r = $checker->serpFetch($keyword, $cat, null, $top);
@@ -136,16 +144,19 @@ class KeywordBrowseController extends Controller
                 $blocked = (bool) ($r['blocked'] ?? false);
 
                 if (! $blocked && $items) {
-                    $saved = \App\Models\KeywordPlaceSerp::updateOrCreate(
+                    $store->save($keyword, $cat, $items);
+                    // 전체 노출 수는 별도 보관(매핑 행에 넣기엔 중복)
+                    \App\Models\KeywordPlaceSerp::updateOrCreate(
                         ['keyword' => $keyword, 'cat' => $cat],
-                        ['total' => (int) ($r['total'] ?? 0), 'item_count' => count($items), 'items' => $items, 'collected_at' => now()],
+                        ['total' => (int) ($r['total'] ?? 0), 'item_count' => count($items), 'items' => [], 'collected_at' => now()],
                     );
+                    $months = $store->months($keyword, $cat);
                 }
                 $data = [
                     'blocked' => $blocked,
                     'total' => (int) ($r['total'] ?? 0),
-                    'items' => $items,
-                    'collected_at' => $saved?->collected_at ?? now(),
+                    'items' => $blocked ? collect() : $store->items($keyword, $cat),
+                    'collected_at' => now(),
                 ];
             }
         }
@@ -163,7 +174,23 @@ class KeywordBrowseController extends Controller
             'top' => $top,
             'serp' => $data,
             'shop' => $shop,
+            'months' => $months,       // 수집된 월 목록(최신순)
+            'month' => $month,         // 지금 보고 있는 월(null = 최신)
         ]);
+    }
+
+    /** 특정 월 수집분 삭제 — 매핑만 지우고 업체 마스터는 남긴다(다른 키워드가 참조). */
+    public function deleteMonth(Request $request, \App\Domain\Place\PlaceSerpStore $store)
+    {
+        $data = $request->validate([
+            'keyword' => 'required|string|max:120',
+            'cat' => 'required|string|max:20',
+            'month' => 'required|integer|min:202001|max:209912',
+        ]);
+
+        $n = $store->deleteMonth($data['keyword'], $data['cat'], (int) $data['month']);
+
+        return back()->with('status', "{$data['month']} 수집분 {$n}건을 삭제했습니다.");
     }
 
     /** 허브 업종 카테고리명 → pcmap 업종 키(payload 선택). */
