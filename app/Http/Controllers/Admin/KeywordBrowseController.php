@@ -119,9 +119,11 @@ class KeywordBrowseController extends Controller
                 'kb:total:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,
                 fn () => $base()->count()
             ),
+            // ★ 캐시에는 순수 배열만 넣는다 — Collection 을 캐시하면 파일 캐시에서 되살릴 때
+            //   __PHP_Incomplete_Class 가 되어 뷰가 죽는다(운영 500, 실측).
             'statusCounts' => \Illuminate\Support\Facades\Cache::remember(
                 'kb:st:'.md5(implode('|', [$type, $c1, $c2, $c3, $sido, $sgg, $rg, $q, $collected])), 300,
-                fn () => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')
+                fn () => $base()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all()
             ),
         ]);
     }
