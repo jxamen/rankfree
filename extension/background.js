@@ -435,6 +435,7 @@ const handlers = {
   async openSellerInfoCaptcha({ channelUid, channelId, storeId, productUrl, active, keepOpen, shouldStop }) {
     return new Promise((resolve) => {
       let tabId = null;
+      let windowId = null;
       let done = false;
       const url = sellerInfoPopupUrl({ channelUid, storeId, productUrl });
       const to = setTimeout(() => finish({
@@ -468,7 +469,13 @@ const handlers = {
         clearTimeout(to);
         clearInterval(stopTimer);
         chrome.runtime.onMessage.removeListener(onMsg);
-        if (tabId != null && !keepOpen) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        if (!keepOpen) {
+          if (windowId != null) {
+            try { chrome.windows.remove(windowId); } catch (e) { /* noop */ }
+          } else if (tabId != null) {
+            try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ }
+          }
+        }
         resolve(res);
       }
 
@@ -488,12 +495,22 @@ const handlers = {
 
       chrome.runtime.onMessage.addListener(onMsg);
       try {
-        chrome.tabs.create({ url, active: !!active }, (tab) => {
-          if (chrome.runtime.lastError || !tab) {
-            finish({ ok: false, message: 'seller_info_tab_create_failed', channelUid, channelId, storeId, sellerInfoUrl: url });
+        chrome.windows.create({
+          url,
+          type: 'popup',
+          width: 430,
+          height: 720,
+          focused: !!active || !!keepOpen,
+        }, (win) => {
+          if (chrome.runtime.lastError || !win) {
+            finish({ ok: false, message: 'seller_info_popup_create_failed', channelUid, channelId, storeId, sellerInfoUrl: url });
             return;
           }
-          tabId = tab.id;
+          windowId = win.id;
+          tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
+          if (done && !keepOpen && windowId != null) {
+            try { chrome.windows.remove(windowId); } catch (e) { /* noop */ }
+          }
         });
       } catch (e) {
         finish({ ok: false, message: String(e && e.message || e), channelUid, channelId, storeId, sellerInfoUrl: url });
