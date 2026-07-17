@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ExtKeywordController;
 use App\Http\Controllers\Api\ExtMarketController;
 use App\Http\Controllers\Api\ExtPlaceController;
 use App\Http\Controllers\Api\ExtProductController;
+use App\Http\Controllers\Api\ExtSellerCaptchaController;
 use App\Http\Controllers\Api\ExtSellerPowerController;
 use App\Http\Controllers\Api\ExtShoppingSeoController;
 use App\Http\Controllers\Api\KeywordController;
@@ -31,6 +32,8 @@ Route::prefix('ext')->group(function (): void {
         Route::post('/keyword-shop-serp', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1');
         // 대량 자동 수집 대기열 — 미수집·오래된 키워드를 검색량 순으로(확장이 연속 수집)
         Route::get('/keyword-shop-serp/queue', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1');
+        // 판매자 정보 팝업의 수동 입력용 퀴즈 문구/이미지 저장. 정답 추론·제출은 하지 않는다.
+        Route::post('/seller-captchas', [ExtSellerCaptchaController::class, 'store'])->middleware('throttle:60,1');
 
         // 플레이스 리스트 순위(map.naver 배지·시장분석) — 키워드 상위 오가닉 순위 + N1/N2/N3
         Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');

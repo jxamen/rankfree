@@ -18,6 +18,18 @@
   // 페이지 요청 타입 → 확장 핸들러
   const ROUTES = {
     collectShop: (m) => ['collectShopSerp', { keyword: String(m.keyword || ''), count: Number(m.count) || 80 }],
+    collectSellerCaptchas: (m) => ['sellerCaptchaStart', {
+      products: Array.isArray(m.products) ? m.products : [],
+      active: !!m.active,
+      force: !!m.force,
+    }],
+    sellerCaptchaStart: (m) => ['sellerCaptchaStart', {
+      products: Array.isArray(m.products) ? m.products : [],
+      active: !!m.active,
+      force: !!m.force,
+    }],
+    sellerCaptchaStatus: () => ['sellerCaptchaStatus', {}],
+    sellerCaptchaStop: () => ['sellerCaptchaStop', {}],
     bulkStart: (m) => ['bulkShopStart', {
       limit: Number(m.limit) || 0, delayMs: Number(m.delayMs) || 6000,
       concurrency: Number(m.concurrency) || 2, force: !!m.force,
