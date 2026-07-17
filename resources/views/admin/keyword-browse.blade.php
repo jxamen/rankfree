@@ -101,22 +101,23 @@
 <div class="card p-4 mb-4">
     <div class="flex items-center gap-2 flex-wrap">
         <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">상품 대량 수집</span>
-        <select id="rf-bulk-limit" class="input" style="height:32px;width:110px;font-size:var(--fs-xs);">
-            <option value="50">50개</option>
-            <option value="100">100개</option>
-            <option value="200">200개</option>
-            <option value="500">500개</option>
+        {{-- 수량 대신 '분류 순서대로 끝까지' — 멈춰도 미수집이 남은 첫 분류부터 이어서 시작된다 --}}
+        <select id="rf-bulk-limit" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="분류 순서(1차→2차→3차)대로 수집합니다">
+            <option value="0" selected>전체(분류 순서대로)</option>
+            <option value="100">100개만</option>
+            <option value="500">500개만</option>
         </select>
         <select id="rf-bulk-gap" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="키워드 간 간격 — 너무 빠르면 네이버가 일시 차단합니다">
             <option value="6000" selected>간격 6초 (권장)</option>
             <option value="10000">간격 10초 (안전)</option>
             <option value="4000">간격 4초 (빠름·차단 위험)</option>
         </select>
-        <select id="rf-bulk-conc" class="input" style="height:32px;width:140px;font-size:var(--fs-xs);" title="동시에 여는 탭 수 — 많을수록 빠르지만 차단 위험이 커집니다">
-            <option value="2" selected>병렬 2개</option>
-            <option value="3">병렬 3개</option>
-            <option value="4">병렬 4개 (차단 위험)</option>
-            <option value="1">병렬 없음(1개)</option>
+        <select id="rf-bulk-conc" class="input" style="height:32px;width:150px;font-size:var(--fs-xs);" title="동시에 돌아가는 탭 수 — 탭은 순서대로 열고 동시 수만 유지합니다">
+            <option value="1">동시 1개</option>
+            <option value="2" selected>동시 2개</option>
+            <option value="3">동시 3개</option>
+            <option value="4">동시 4개</option>
+            <option value="6">동시 6개 (차단 위험)</option>
         </select>
         <button type="button" id="rf-bulk-start" class="btn btn-primary btn-sm">수집 시작</button>
         <button type="button" id="rf-bulk-stop" class="btn btn-ghost btn-sm" hidden>중단</button>
@@ -141,17 +142,20 @@
         }
         if (m.type === 'bulkStatusResult' && m.bulk) {
             var b = m.bulk;
-            msg.textContent = (b.running ? '수집 중… ' : '수집 종료 — ') + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+            var waiting = b.blockedUntil && b.blockedUntil > Date.now();
+            var head = !b.running ? '수집 종료 — ' : (waiting ? '차단 감지 — 대기 중… ' : '수집 중… ');
+            msg.textContent = head + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+                + (b.category ? ' · 분류: ' + b.category + (b.categoryTotal ? ' (' + b.categoryIndex + '/' + b.categoryTotal + ')' : '') : '')
                 + (b.running && b.current ? ' · 현재: ' + b.current : '')
-                + (b.running && b.gap ? ' · 간격 ' + Math.round(b.gap / 1000) + '초' : '');   // 차단 시 자동 감속이 보이게
-            // 실패가 있으면 사유를 보여준다(원인 없이 '실패 33' 만 뜨면 손쓸 수 없다)
+                + (b.running && b.gap ? ' · 간격 ' + Math.round(b.gap / 1000) + '초' : '')
+                + (b.remaining ? ' · 남은 ' + Number(b.remaining).toLocaleString() : '');
             if (b.failed > 0 && b.lastError) {
                 msg.textContent += ' · 사유: ' + b.lastError;
-                msg.style.color = 'var(--color-error)';
+                msg.style.color = waiting ? '' : 'var(--color-error)';
             }
             if (!b.running) {
                 clearInterval(poll); poll = null; stop.hidden = true; start.disabled = false;
-                if (!b.failed) { msg.textContent += ' — 새로고침하면 반영됩니다'; }
+                msg.textContent += ' — 다시 시작하면 남은 분류부터 이어집니다';
             }
         }
         if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }

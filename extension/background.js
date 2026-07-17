@@ -456,61 +456,100 @@ const handlers = {
     const state = await chrome.storage.local.get(['rfBulk']);
     if (state.rfBulk && state.rfBulk.running) return { ok: false, message: '이미 수집이 진행 중입니다.' };
 
-    const max = Math.min(2000, Math.max(1, Number(limit) || 50));
+    // limit=0(또는 미지정) = 무제한 — 카테고리를 순서대로 끝까지. 멈춰도 서버 대기열이 이어할 지점을 알려준다.
+    const max = Number(limit) > 0 ? Math.min(100000, Number(limit)) : Infinity;
     // 너무 빨리 열면 네이버가 일시 차단한다 — 건당 최소 4초, 기본 6초.
     const baseGap = Math.max(4000, Number(delayMs) || 6000);
-    // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~4).
-    const conc = Math.min(4, Math.max(1, Number(concurrency) || 2));
-    await chrome.storage.local.set({ rfBulk: { running: true, done: 0, failed: 0, total: max, current: '', conc, startedAt: Date.now(), stop: false } });
+    // 병렬 수집 — 동시에 탭 N개. 많을수록 빠르지만 차단 위험이 커진다(1~6).
+    const conc = Math.min(6, Math.max(1, Number(concurrency) || 2));
+    await chrome.storage.local.set({ rfBulk: {
+      running: true, done: 0, failed: 0, total: (max === Infinity ? 0 : max), current: '', category: '',
+      conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
+    } });
 
     // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
     (async () => {
-      let done = 0, failed = 0, streak = 0;
-      let gap = baseGap;        // 실패가 이어지면 늘리고(차단 회피), 성공하면 천천히 되돌린다
+      const MAX_GAP = 10000;    // 간격 상한 10초
+      let done = 0, failed = 0;
+      let gap = baseGap;        // 차단이 뜨면 1초씩 늘리고, 성공이 이어지면 천천히 되돌린다
       let queue = [];           // 서버 대기열 버퍼
+      let category = '';
       let stopped = false;
+      let blocked = false;      // 차단 상태 — 모든 워커가 대기한다
 
       const patch = async (o) => {
         const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
         await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, o) });
       };
       const isStopped = async () => stopped || !!((await chrome.storage.local.get(['rfBulk'])).rfBulk || {}).stop;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-      // 대기열에서 키워드 하나 꺼내기(비면 서버에서 더 받아온다)
+      // 카테고리 순서(1차 → 2차 → 3차)로 대기열을 받는다. 비면 서버에서 다음 분류를 받아온다.
       const next = async () => {
         if (queue.length) return queue.shift();
-        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?limit=20', { token, apiBase });
-        queue = (ok && json && json.data && json.data.keywords) || [];
+        const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=20', { token, apiBase });
+        const d = (ok && json && json.data) || {};
+        queue = d.keywords || [];
+        if (d.category && d.category !== category) {
+          category = d.category;
+          await patch({ category, categoryIndex: d.category_index || 0, categoryTotal: d.category_total || 0, remaining: d.remaining || 0 });
+        }
         return queue.shift() || null;
       };
 
-      // 워커 — conc 개를 동시에 돌린다. 각 워커는 자기 탭으로 수집하므로 병렬이 된다.
+      // 차단 판정 — 수집 실패 사유가 데이터 없음/시간초과면 네이버가 막았을 가능성
+      const looksBlocked = (msg) => /차단|시간이 초과|데이터를 찾지 못/.test(String(msg || ''));
+
+      // 탭은 '순서대로' 연다 — 동시에 N개를 한꺼번에 열면 차단당한다.
+      // 워커는 N개가 동시에 돌지만, 탭 여는 시점만 이 게이트로 직렬화하고 gap 만큼 벌린다.
+      let openChain = Promise.resolve();
+      const openSlot = () => {
+        const my = openChain.then(() => sleep(gap));   // 앞 사람이 연 뒤 gap 만큼 기다렸다 연다
+        openChain = my;
+
+        return my;
+      };
+
       const worker = async () => {
         while (!stopped && done + failed < max) {
           if (await isStopped()) { stopped = true; break; }
+
+          // 차단 중이면 다음 작업을 하지 않고 대기한다(계속 두드리면 더 오래 막힌다)
+          while (blocked && !stopped) {
+            await sleep(2000);
+            if (await isStopped()) { stopped = true; break; }
+          }
+          if (stopped) break;
+
           const kw = await next();
-          if (!kw) break;                                   // 더 수집할 게 없음
+          if (!kw) break;                                   // 모든 분류를 다 비웠다
+
+          await openSlot();                                 // ★ 탭 여는 순번 대기(직렬)
+          if (stopped || blocked) continue;
           await patch({ current: kw });
 
           const r = await handlers.collectShopSerp({ keyword: kw, count: 80 });
           if (r && r.ok) {
-            done++; streak = 0;
-            gap = Math.max(baseGap, Math.round(gap * 0.8));  // 성공하면 서서히 원래 속도로
-            await patch({ done, failed, gap });
+            done++;
+            gap = Math.max(baseGap, gap - 1000);            // 성공하면 1초씩 되돌린다(하한 = 설정값)
+            await patch({ done, failed, gap, blockedUntil: 0 });
           } else {
-            failed++; streak++;
+            failed++;
             const lastError = (r && r.message) || '알 수 없는 오류';
-            gap = Math.min(60000, gap * 2);                  // 실패 = 차단 가능성 → 감속
-            await patch({ done, failed, gap, lastError });
-            // 연속 5건 실패면 전체 중단 — 차단 상태로 계속 두드리지 않는다
-            if (streak >= 5) {
-              stopped = true;
-              await patch({ stop: true, lastError: lastError + ' (연속 5건 실패 — 네이버 차단일 수 있습니다. 잠시 후 다시 시도하세요)' });
-              break;
+            if (looksBlocked(lastError)) {
+              // 차단 — 간격을 1초 늘리고(최대 10초), 그 시간만큼 전 워커가 쉰다
+              gap = Math.min(MAX_GAP, gap + 1000);
+              blocked = true;
+              const until = Date.now() + gap;
+              await patch({ done, failed, gap, lastError: lastError + ' — 차단 감지, ' + Math.round(gap / 1000) + '초 대기 후 재개', blockedUntil: until });
+              await sleep(gap);
+              blocked = false;
+              await patch({ blockedUntil: 0 });
+            } else {
+              await patch({ done, failed, gap, lastError });
             }
           }
-          // 워커별로 간격을 두되, 동시 수만큼 전체 속도가 빨라진다
-          await new Promise((r2) => setTimeout(r2, gap));
+          // 다음 탭 간격은 openSlot 이 관리한다(여기서 또 쉬면 이중 대기)
         }
       };
 
@@ -518,7 +557,7 @@ const handlers = {
       await patch({ running: false, current: '', finishedAt: Date.now() });
     })();
 
-    return { ok: true, started: true, total: max, concurrency: conc };
+    return { ok: true, started: true, total: (max === Infinity ? 0 : max), concurrency: conc };
   },
 
   /** 대량 수집 진행 상황 */

@@ -77,6 +77,8 @@
         <span id="nb-progress-spin" style="width:14px;height:14px;border:2px solid var(--color-primary);border-top-color:transparent;border-radius:50%;display:inline-block;animation:nbspin .7s linear infinite;"></span>
         <span class="text-ink font-semibold" id="nb-progress-text" style="font-size:var(--fs-xs);">준비 중…</span>
         <span class="text-muted-soft font-mono ml-auto" id="nb-progress-num" style="font-size:var(--fs-xs);"></span>
+        {{-- 중단 — 진행 중인 배치는 마무리하고(결과 보존) 다음 배치부터 멈춘다 --}}
+        <button type="button" id="nb-stop" class="btn btn-ghost btn-sm" style="height:30px;display:none;">중단</button>
     </div>
     <div style="height:6px;background:var(--color-surface);border-radius:var(--radius-pill);overflow:hidden;margin-top:10px;">
         <div id="nb-progress-bar" style="height:100%;width:0;background:var(--color-primary);border-radius:var(--radius-pill);transition:width .25s;"></div>
@@ -188,7 +190,15 @@
         var num = document.getElementById('nb-progress-num');
         var bar = document.getElementById('nb-progress-bar');
         var spin = document.getElementById('nb-progress-spin');
-        var busy = false;
+        var stopBtn = document.getElementById('nb-stop');
+        var busy = false, stopped = false;
+
+        // 중단은 **진행 중인 배치를 끝낸 뒤** 다음 배치부터 멈춘다 — 이미 네이버에 물어본 건의 결과를 버리지 않는다
+        stopBtn.addEventListener('click', function () {
+            stopped = true;
+            stopBtn.disabled = true;
+            stopBtn.textContent = '중단 중…';
+        });
 
         function lock(on, btn) {
             document.querySelectorAll('form[data-nb-run] button[type=submit]').forEach(function (b) {
@@ -239,9 +249,10 @@
                     since = since || r.since;
                     found += r.found; notFound += r.not_found; done += r.done;
                     total = Math.max(total, done + r.remaining);
-                    show((force ? '전체 재확인 중… ' : '플레이스 확인 중… ') + '있음 ' + found + ' · 미등록 ' + notFound, done, total);
-                    if (r.done === 0 || r.remaining === 0) {
-                        return { found: found, not_found: notFound, done: done };
+                    show((stopped ? '중단하는 중… ' : (force ? '전체 재확인 중… ' : '플레이스 확인 중… '))
+                        + '있음 ' + found + ' · 미등록 ' + notFound, done, total);
+                    if (stopped || r.done === 0 || r.remaining === 0) {
+                        return { found: found, not_found: notFound, done: done, stopped: stopped, remaining: r.remaining };
                     }
                     return step();   // 남은 게 있으면 계속
                 });
@@ -254,6 +265,10 @@
                 e.preventDefault();
                 if (busy) { return; }
                 busy = true;
+                stopped = false;
+                stopBtn.disabled = false;
+                stopBtn.textContent = '중단';
+                stopBtn.style.display = '';
                 var btn = f.querySelector('button[type=submit]');
                 var token = f.querySelector('input[name=_token]').value;
                 var isCollect = f.action.indexOf('collect') !== -1;
@@ -265,21 +280,17 @@
                 var first = isCollect ? post(f.action, new FormData(f)) : Promise.resolve(null);
                 first.then(function (c) {
                     var total = c ? c.remaining : (force ? {{ $recheckable }} : {{ $needCheck }});
+                    // 수집 중에 중단을 눌렀으면 이어지는 플레이스 확인은 시작하지 않는다(수집분은 이미 저장됨)
+                    if (c && stopped) { return { found: 0, not_found: 0, done: 0, stopped: true, remaining: total }; }
                     if (c) { show('수집 완료 — 신규 ' + c.created + ' · 갱신 ' + c.updated + ' → 플레이스 확인 시작', 0, total); }
-                    return matchAll('{{ route('admin.new-businesses.place-match') }}', token, total, force).then(function (m) {
-                        var msg = (c ? '수집 신규 ' + c.created + '건 · 갱신 ' + c.updated + '건 · ' : '')
-                            + (m.done === 0 ? '확인할 대상이 없습니다(미등록을 지금 다시 보려면 전체 재확인)'
-                                : (force ? '전체 재확인 ' : '플레이스 확인 ') + m.done + '건(있음 ' + m.found + ' · 미등록 ' + m.not_found + ')');
-                        if (c && c.errors && c.errors.length) { msg += ' · 오류: ' + c.errors.join(' / '); }
-                        if (c && c.sample) { msg += ' (인증키가 sample 이라 일자당 5건 제한)'; }
-                        sessionStorage.setItem('nb-flash', msg);
-                        spin.style.display = 'none';
-                        show('완료 — ' + msg, 1, 1);
-                        location.reload();
-                    });
+                    return matchAll('{{ route('admin.new-businesses.place-match') }}', token, total, force);
+                }).then(function (m) {
+                    var c = null;
+                    return { m: m, c: c };
                 }).catch(function (err) {
                     busy = false;
                     lock(false, btn);
+                    stopBtn.style.display = 'none';
                     spin.style.display = 'none';
                     show('실패 — ' + err.message + ' (다시 시도해 주세요)', 0, 0);
                 });

@@ -23,6 +23,12 @@ class ExtKeywordShopSerpController extends Controller
         // 기본 1일 — 순위는 매일 바뀔 수 있으니 하루 지난 것부터 재수집 대상.
         $days = max(1, (int) $request->query('days', 1));
 
+        // 카테고리 순회 모드 — 데이터랩 트리 순서(1차 → 그 2차 → 그 3차 …)로 한 분류씩 비운다.
+        // 검색량 순으로 전체를 훑으면 어느 분류가 끝났는지 알 수 없어, 분류 단위로 끝내고 넘어간다.
+        if ($request->query('mode') === 'category') {
+            return $this->queueByCategory($limit, $days);
+        }
+
         // 쇼핑 카테고리에 속한 후보 중, 스냅샷이 없거나 오래된 것
         $shopCatIds = \App\Models\KeywordCategory::where('type', 'shopping')->pluck('id');
         $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
@@ -44,6 +50,58 @@ class ExtKeywordShopSerpController extends Controller
             'keywords' => $keywords,
             'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
                 ->whereNotIn('keyword', $fresh)->distinct()->count('keyword'),
+        ]]);
+    }
+
+    /**
+     * 카테고리 순회 대기열 — 데이터랩 트리 순서(1차 → 그 하위 2차 → 그 하위 3차 …)로
+     * "아직 다 못 비운 첫 분류"의 미수집 키워드를 준다. 분류 하나를 싹 끝내고 다음으로 넘어간다.
+     * 진행 위치를 따로 저장하지 않아도 '미수집이 남은 첫 분류'가 곧 이어할 지점이라, 멈췄다 다시 시작해도 그대로 이어진다.
+     */
+    private function queueByCategory(int $limit, int $days)
+    {
+        $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
+
+        // 트리 DFS 순서(1차 sort → 그 자식 → 그 손자) — 카테고리는 정적이라 캐시
+        $order = \Illuminate\Support\Facades\Cache::remember('shop_cat_dfs', 3600, function () {
+            $cats = \App\Models\KeywordCategory::where('type', 'shopping')
+                ->orderBy('sort')->orderBy('id')->get(['id', 'parent_id', 'name']);
+            $out = [];
+            $walk = function ($pid, string $path) use (&$walk, $cats, &$out) {
+                foreach ($cats->where('parent_id', $pid) as $c) {
+                    $full = $path === '' ? $c->name : $path.' > '.$c->name;
+                    $out[] = ['id' => $c->id, 'path' => $full];
+                    $walk($c->id, $full);
+                }
+            };
+            $walk(null, '');
+
+            return $out;
+        });
+
+        $doneCats = 0;
+        foreach ($order as $c) {
+            $kws = \App\Models\KeywordCandidate::where('category_id', $c['id'])
+                ->whereNotIn('keyword', $fresh)
+                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
+                ->distinct()->limit($limit)->pluck('keyword')->values();
+
+            if ($kws->isNotEmpty()) {
+                return response()->json(['data' => [
+                    'keywords' => $kws,
+                    'category' => $c['path'],                       // 지금 수집 중인 분류(화면 표시)
+                    'category_index' => $doneCats + 1,
+                    'category_total' => count($order),
+                    'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', collect($order)->pluck('id'))
+                        ->whereNotIn('keyword', $fresh)->distinct()->count('keyword'),
+                ]]);
+            }
+            $doneCats++;
+        }
+
+        return response()->json(['data' => [
+            'keywords' => [], 'category' => null,
+            'category_index' => count($order), 'category_total' => count($order), 'remaining' => 0,
         ]]);
     }
 
