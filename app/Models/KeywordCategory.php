@@ -48,12 +48,21 @@ class KeywordCategory extends Model
             ->unique()->values()->all();
     }
 
-    /** 이름 → 슬러그(공유 슬러그와 동일 규칙 — 한글/영문/숫자 보존). 중복이면 -2, -3…. */
+    /**
+     * /keywords 하위 고정 경로와 겹치면 안 되는 슬러그 — 라우트가 먼저 잡아 카테고리가 404 가 된다.
+     * 라우트 등록 순서·제약으로 1차 방어하고, 여기서 슬러그 자체를 피해 2중으로 막는다.
+     */
+    public const RESERVED_SLUGS = ['place', 'shopping', 'search'];
+
+    /** 이름 → 슬러그(공유 슬러그와 동일 규칙 — 한글/영문/숫자 보존). 예약어는 -cat, 중복이면 -2, -3…. */
     public static function makeSlug(string $name, ?int $ignoreId = null): string
     {
         $base = KeywordSearch::slugify($name); // HasShareSlug::slugify 규칙 재사용
         if ($base === '') {
             $base = 'cat';
+        }
+        if (in_array($base, self::RESERVED_SLUGS, true)) {
+            $base .= '-cat';
         }
         $slug = $base;
         $i = 2;

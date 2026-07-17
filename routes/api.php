@@ -88,3 +88,14 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth.apikey:keyword')->get('/keyword', [KeywordController::class, 'show']);
     Route::middleware('auth.apikey:keyword_detail')->get('/keyword/detail', [KeywordController::class, 'detail']);
 });
+
+/*
+|--------------------------------------------------------------------------
+| 키워드 인사이트 허브(22) — 공개 자동완성(인증 없음)
+|--------------------------------------------------------------------------
+| /keywords 검색창의 제안어. 발행 문서(origin=hub)와 카테고리만 노출한다.
+| ⚠️ origin=hub 강제 — 빠지면 타 사용자의 검색 내역(origin=user)이 공개된다(21 비공개 원칙).
+| 응답은 JSON 이라 meta robots 를 못 쓴다 → X-Robots-Tag 헤더로 색인 차단(컨트롤러).
+*/
+Route::get('/keywords/suggest', [\App\Http\Controllers\Api\KeywordSuggestController::class, 'index'])
+    ->middleware('throttle:60,1')->name('api.keywords.suggest');

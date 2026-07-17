@@ -15,6 +15,7 @@ class KeywordHubPublisher
     public function __construct(
         private KeywordReportBuilder $builder,
         private KeywordAiInsight $ai,
+        private PlaceKeywordRegions $regions,
     ) {}
 
     /** 발행 — 성공 시 허브 문서 반환, 데이터 부족이면 null(후보는 rejected + 사유). */
@@ -33,13 +34,15 @@ class KeywordHubPublisher
             $result['ai_insight'] = $insight;
         }
 
+        $place = $this->placeRegion($c);
+
         $doc = KeywordSearch::updateOrCreate(
             ['origin' => 'hub', 'keyword' => $c->keyword],
             [
                 'user_id' => null,
                 'category_id' => $c->category_id,
-                'region' => $c->region,           // 플레이스 지역 축(쇼핑은 null)
-                'region_type' => $c->region_type,
+                'region' => $place['region'],           // 플레이스 지역 축(쇼핑은 null)
+                'region_type' => $place['region_type'],
                 'monthly_total' => $vm['total'],
                 'monthly_pc' => $vm['pc'],
                 'monthly_mobile' => $vm['mobile'],
@@ -49,9 +52,29 @@ class KeywordHubPublisher
                 'refreshed_at' => now(),
             ],
         );
-        $c->update(['status' => 'published', 'note' => null]);
+        $c->update(['status' => 'published', 'note' => null] + array_filter($place, fn ($v) => $v !== null));
 
         return $doc;
+    }
+
+    /**
+     * 후보의 지역(플레이스 2번째 분류 축). region 컬럼 도입 전 후보는 비어 있으므로
+     * 키워드에서 되짚어 채운다 — 안 그러면 카테고리 허브 지역 배지 수가 실제보다 적게 나온다.
+     *
+     * @return array{region: ?string, region_type: ?string}
+     */
+    private function placeRegion(KeywordCandidate $c): array
+    {
+        if ($c->region !== null) {
+            return ['region' => $c->region, 'region_type' => $c->region_type];
+        }
+        $cat = $c->category ?? $c->category()->first();
+        if (! $cat || $cat->type !== 'place') {
+            return ['region' => null, 'region_type' => null];
+        }
+
+        return $this->regions->resolve((string) $c->keyword, (string) $cat->name)
+            ?? ['region' => null, 'region_type' => null];
     }
 
     /** 발행 문서 갱신(hub:refresh) — 볼륨이 안 나오면 기존 스냅샷 유지, 커서만 전진(재시도 폭주 방지). */

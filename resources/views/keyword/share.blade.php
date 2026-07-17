@@ -18,8 +18,11 @@
     $__rec = $record ?? null;
     $__cat = $__rec?->category;
     $__date = $__rec?->refreshed_at ?? $__rec?->updated_at;
+    // 경로: 홈 › 키워드 인사이트 › {플레이스|쇼핑} › {카테고리} › {키워드}
+    $__typeLabel = $__cat ? ($__cat->type === 'place' ? '플레이스' : '쇼핑') : null;
     $__crumbs = array_values(array_filter([
         ['name' => '키워드 인사이트', 'url' => route('keywords.index')],
+        $__cat ? ['name' => $__typeLabel, 'url' => route('keywords.type', $__cat->type)] : null,
         $__cat ? ['name' => $__cat->name, 'url' => route('keywords.category', $__cat->slug)] : null,
     ]));
 @endphp
@@ -30,13 +33,16 @@
 @include('partials.report-seo', ['seoTitle' => $__kw.' 키워드 분석', 'seoDesc' => $__summary, 'seoSection' => '키워드 분석', 'seoDate' => $__date, 'seoFaq' => $__faq, 'seoCrumbs' => $__crumbs])
 
 @section('content')
-<section class="container-page" style="padding-top:48px;padding-bottom:80px;">
+{{-- 헤더 → 브레드크럼 16px, 브레드크럼 → 제목 블록 34px (keywords/type 과 동일 리듬) --}}
+<section class="container-page" style="padding-top:16px;padding-bottom:80px;">
     {{-- 브레드크럼(가시) — 허브 페이지로의 내부 링크(BreadcrumbList JSON-LD 와 동일 경로) --}}
-    <nav class="text-muted-soft" style="font-size:var(--fs-xs);margin-bottom:14px;" aria-label="브레드크럼">
+    <nav class="text-muted-soft" style="font-size:var(--fs-xs);margin-bottom:34px;" aria-label="브레드크럼">
         <a href="{{ url('/') }}" class="text-muted-soft" style="text-decoration:none;">홈</a>
         <span aria-hidden="true"> › </span>
         <a href="{{ route('keywords.index') }}" class="text-muted-soft" style="text-decoration:none;">키워드 인사이트</a>
         @if ($__cat)
+            <span aria-hidden="true"> › </span>
+            <a href="{{ route('keywords.type', $__cat->type) }}" class="text-muted-soft" style="text-decoration:none;">{{ $__typeLabel }}</a>
             <span aria-hidden="true"> › </span>
             <a href="{{ route('keywords.category', $__cat->slug) }}" class="text-muted-soft" style="text-decoration:none;">{{ $__cat->name }}</a>
         @endif
@@ -45,7 +51,15 @@
     </nav>
 
     <div class="badge mb-4 border border-hairline">키워드 분석 리포트 · 랭크프리</div>
-    <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $__kw }} 키워드 분석</h1>
+    {{-- 제목 라인에 네이버 통합검색(새 창) — 본문에서 키워드·버튼을 다시 그리지 않는다(제목 중복 방지).
+         'N' 은 네이버 브랜드색이라 예외적으로 인라인 hex 사용(콘솔 검색폼과 동일). --}}
+    <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $__kw }} 키워드 분석</h1>
+        <a href="https://search.naver.com/search.naver?query={{ urlencode($__kw) }}" target="_blank" rel="noopener"
+           class="btn btn-secondary btn-sm inline-flex items-center gap-1" title="「{{ $__kw }}」 네이버 통합검색 (새 창)">
+            <span style="color:#03c75a;font-weight:800;font-size:var(--fs-xs);">N</span> 통합검색
+        </a>
+    </div>
     <p class="text-muted" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.6;">{{ $__summary }}</p>
 
     {{-- AEO 요약 답변 — 답변엔진·생성엔진이 인용할 완결형 수치 문장 + 출처·기준일(GEO) --}}
@@ -69,6 +83,8 @@
         </div>
     @endif
 
+    {{-- 요약 답변(·AI 인사이트) 과 본문(자동완성 카드부터) 사이 간격 — 요약 블록과 데이터 블록의 경계 --}}
+    <div style="margin-top:32px;">
     @include('partials._keyword_body', [
         'vm' => $vm,
         'saturation' => $saturation,
@@ -78,6 +94,7 @@
         'public' => true,
         'shareUrl' => null,
     ])
+    </div>
 
     {{-- 자주 묻는 질문(가시 FAQ) — FAQPage JSON-LD 와 동일 문항(AEO) --}}
     @if (count($__faq))

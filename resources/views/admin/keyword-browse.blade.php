@@ -30,7 +30,7 @@
         <span class="text-ink font-semibold flex-none" style="font-size:var(--fs-xs);">분야</span>
 
         {{-- 1단: 쇼핑=1분류 / 플레이스=업종 --}}
-        <select name="c1" class="input" style="height:36px;min-width:150px;" onchange="kbGo(this, ['c2','c3','rt','rg'])">
+        <select name="c1" class="input" style="height:36px;min-width:150px;" onchange="kbGo(this, ['c2','c3','sido','sgg','rg'])">
             <option value="">{{ $type === 'shopping' ? '1분류' : '업종' }}</option>
             @foreach ($lv1 as $c)
                 <option value="{{ $c->id }}" @selected($c1 === $c->id)>{{ $c->name }}</option>
@@ -55,17 +55,23 @@
                 @endforeach
             </select>
         @else
-            {{-- 플레이스 2단: 지역유형 --}}
-            <select name="rt" class="input" style="height:36px;min-width:150px;" onchange="kbGo(this, ['rg'])">
-                <option value="">지역유형</option>
-                @foreach ($regionTypes as $k => $label)
-                    <option value="{{ $k }}" @selected($rt === $k)>{{ $label }}@isset($regionTypeCounts[$k]) ({{ number_format($regionTypeCounts[$k]) }})@endisset</option>
+            {{-- 플레이스 지역 3단 — 공개 /keywords/place 와 동일 계층(시/도 › 시/군/구 › 지역) --}}
+            <select name="sido" class="input" style="height:36px;min-width:130px;" onchange="kbGo(this, ['sgg','rg'])">
+                <option value="">시/도</option>
+                @foreach ($sidos as $s => $cnt)
+                    <option value="{{ $s }}" @selected($sido === (string) $s)>{{ $s }} ({{ number_format($cnt) }})</option>
                 @endforeach
             </select>
             <span class="text-muted-soft">›</span>
-            {{-- 플레이스 3단: 지역 --}}
-            <select name="rg" class="input" style="height:36px;min-width:170px;" onchange="kbGo(this, [])" @disabled($regions->isEmpty())>
-                <option value="">지역{{ $regions->isNotEmpty() ? ' ('.number_format(count($regions)).'곳)' : '' }}</option>
+            <select name="sgg" class="input" style="height:36px;min-width:150px;" onchange="kbGo(this, ['rg'])" @disabled(empty($sggs))>
+                <option value="">시/군/구</option>
+                @foreach ($sggs as $g => $cnt)
+                    <option value="{{ $g }}" @selected($sgg === (string) $g)>{{ $g }} ({{ number_format($cnt) }})</option>
+                @endforeach
+            </select>
+            <span class="text-muted-soft">›</span>
+            <select name="rg" class="input" style="height:36px;min-width:170px;" onchange="kbGo(this, [])" @disabled(empty($regions))>
+                <option value="">지역{{ $regions ? ' ('.number_format(count($regions)).'곳)' : '' }}</option>
                 @foreach ($regions as $r => $cnt)
                     <option value="{{ $r }}" @selected($rg === (string) $r)>{{ $r }} ({{ number_format($cnt) }})</option>
                 @endforeach
@@ -75,7 +81,7 @@
         <span class="mx-1"></span>
         <input type="search" name="q" class="input" style="height:36px;width:200px;" placeholder="키워드 검색" value="{{ $q }}">
         <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
-        @if ($c1 || $c2 || $c3 || $rt !== '' || $rg !== '' || $q !== '')
+        @if ($c1 || $c2 || $c3 || $sido !== '' || $sgg !== '' || $rg !== '' || $q !== '')
             <a href="{{ route('admin.keyword-browse', ['type' => $type]) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
         @endif
     </form>

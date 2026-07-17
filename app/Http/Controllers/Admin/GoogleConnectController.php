@@ -17,7 +17,9 @@ class GoogleConnectController extends Controller
 {
     private const SCOPES = [
         'openid', 'email',
-        'https://www.googleapis.com/auth/webmasters.readonly',
+        // 서치 콘솔은 쓰기 스코프 — 검색 성과 조회 + 발행 시 사이트맵 재제출(sitemaps.submit, 21).
+        // readonly 시절 연동 계정은 조회만 되므로 재제출까지 쓰려면 재연동 필요.
+        'https://www.googleapis.com/auth/webmasters',
         'https://www.googleapis.com/auth/analytics.readonly',
     ];
 

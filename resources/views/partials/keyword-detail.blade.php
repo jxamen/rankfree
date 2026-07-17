@@ -95,14 +95,17 @@
                 @endif
             @endforeach
         </div>
-        {{-- 요약 — 눈에 띄게(아이콘 칩 + 그라데이션, 좌측 바 금지) --}}
-        <div class="card p-5 mb-6 relative overflow-hidden">
-            <x-card-bg pattern="gradient" color="var(--color-accent)" color2="var(--color-badge-violet)" opacity="0.18" />
-            <div class="relative flex items-start gap-3">
-                <span class="w-9 h-9 rounded-lg flex items-center justify-center flex-none" style="background:color-mix(in srgb, var(--color-accent) 15%, transparent);font-size:16px;">💡</span>
-                <p class="text-ink" style="font-size:var(--fs-base);line-height:1.75;font-weight:600;">{{ $ins['summary'] }}</p>
+        {{-- 요약 — 눈에 띄게(아이콘 칩 + 그라데이션, 좌측 바 금지).
+             $hideSummary: 같은 문장을 상단에 이미 보여주는 화면(공개 공유의 'AEO 요약 답변')에서 중복 제거용. --}}
+        @unless ($hideSummary ?? false)
+            <div class="card p-5 mb-6 relative overflow-hidden">
+                <x-card-bg pattern="gradient" color="var(--color-accent)" color2="var(--color-badge-violet)" opacity="0.18" />
+                <div class="relative flex items-start gap-3">
+                    <span class="w-9 h-9 rounded-lg flex items-center justify-center flex-none" style="background:color-mix(in srgb, var(--color-accent) 15%, transparent);font-size:16px;">💡</span>
+                    <p class="text-ink" style="font-size:var(--fs-base);line-height:1.75;font-weight:600;">{{ $ins['summary'] }}</p>
+                </div>
             </div>
-        </div>
+        @endunless
     @endif
 
     {{-- 12개월 검색량 추이 — 선그래프(PC·모바일) + 호버 툴팁 --}}

@@ -57,6 +57,21 @@
 - **[public/ai.txt](../public/ai.txt)** — AI 크롤러·생성엔진 정책(robots 유사 문법). 공개 콘텐츠 크롤·인용 허용 + 개인 영역(`/console·/admin·/order` 등) 제외 + 출처 표기 요청.
 - **[public/robots.txt](../public/robots.txt)** — AI 봇 그룹(GPTBot·ClaudeBot·PerplexityBot·Google-Extended 등) 명시 허용 + `/ai.txt`·`/llms.txt` 참조. GEO/AEO 전략상 AI 인용을 **허용**하는 방향.
 
+## 검색엔진 발행 알림 (2026-07-17)
+
+허브 문서 발행 시 **공식 지원 경로로만** 검색엔진에 알린다. 구현: [SearchEnginePing](../app/Domain/Seo/SearchEnginePing.php) · [config/seo-ping.php](../config/seo-ping.php)
+
+- **폐기된 구글 sitemap ping(`google.com/ping`) 은 쓰지 않는다**(2024-01부터 404). **Indexing API 도 쓰지 않는다**(채용공고·라이브방송 전용 — 일반 콘텐츠는 정책 위반).
+- **IndexNow**(네이버·빙·얀덱스 공식 참여): 발행된 문서 URL + `/keywords` + 해당 카테고리 페이지를 `api.indexnow.org` 로 일괄 제출. 한 번 보내면 참여 엔진 전체에 전파.
+  - 키: `.env INDEXNOW_KEY`(영숫자 16~64자). 키 파일 `/{key}.txt` 는 라우트가 자동 서빙(web.php `indexnow.key`) — 파일 업로드 불필요. **운영 .env 에도 키 추가 필요**(로컬과 같은 키 사용 가능).
+  - 네이버 반영엔 서치어드바이저에 사이트 등록이 선행되어야 함.
+- **구글**: 발행 직후 사이트맵 캐시 버전 bump(새 URL·lastmod 즉시 반영) + Search Console API `sitemaps.submit` 으로 사이트맵 재제출 — 폐기된 ping 의 공식 대체.
+  - 쓰기 스코프(`auth/webmasters`) 필요 — OAuth 연동 스코프를 readonly→쓰기로 변경([GoogleConnectController](../app/Http/Controllers/Admin/GoogleConnectController.php)). **기존(readonly) 연동 계정은 재연동해야 재제출까지 동작**(조회는 계속 동작).
+  - [GoogleToken](../app/Support/GoogleToken.php) 스코프 판정을 부분 문자열→**정확 매칭**으로 교정(readonly 연동이 쓰기 요청에 오탑승해 403 나던 결함). 풀 스코프는 같은 API 의 `.readonly` 요청을 충족.
+- **훅 위치**: 관리자 [지금 발행](../app/Http/Controllers/Admin/KeywordHubController.php)·[hub:publish](../app/Console/Commands/HubPublish.php) 의 발행 루프 **완료 후 1회 배치 호출**(`afterHubPublish`). `hub:refresh` 갱신은 알리지 않는다(사이트맵 lastmod 로 충분 — 대량 반복 제출 방지). 실패해도 발행 흐름은 막지 않고 로그+메시지만.
+- **수동 실행**: `php artisan seo:ping [--url=…]` — 최초 등록·점검용(사이트맵 재제출 + 지정 URL IndexNow).
+- 끄기: `SEO_PING_ENABLED=false`(전체) · `SEO_PING_GSC_SITEMAP=false`(구글만).
+
 ## 주의
 
 - `include_analyses`(config) off 로 분석 슬러그 전체를 사이트맵에서 뺄 수 있음.

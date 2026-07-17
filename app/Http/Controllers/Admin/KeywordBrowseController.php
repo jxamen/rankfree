@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Keyword\PlaceRegionTree;
 use App\Http\Controllers\Controller;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
@@ -11,14 +12,12 @@ use Illuminate\Http\Request;
  * 키워드 탐색(관리자) — 수집된 키워드 조회 전용.
  * 셀렉트는 항상 고정 표기하고, 상위를 고르면 하위 옵션이 채워진다(선택 없으면 전체 키워드).
  *   쇼핑    1차 · 2차 · 3차 (데이터랩 카테고리 트리)
- *   플레이스 업종 · 지역유형 · 지역 (지역은 2,900곳이라 유형으로 먼저 좁힌다)
+ *   플레이스 업종 · **시/도 · 시/군/구 · 지역** (공개 /keywords/place 와 동일한 3단계 지역 계층 — PlaceRegionTree)
  * 승인·발행 등 파이프라인 관리는 키워드 콘텐츠 허브(admin.keyword-hub)에서 한다.
  */
 class KeywordBrowseController extends Controller
 {
-    private const REGION_TYPES = ['hotplace' => '핫플레이스', 'district' => '구', 'city' => '시군구', 'dong' => '읍면동', 'travel' => '여행지'];
-
-    public function index(Request $request)
+    public function index(Request $request, PlaceRegionTree $tree)
     {
         $type = in_array($request->query('type'), ['place', 'shopping'], true) ? $request->query('type') : 'shopping';
         $q = trim((string) $request->query('q', ''));
@@ -27,8 +26,9 @@ class KeywordBrowseController extends Controller
         $c1 = (int) $request->query('c1', 0);
         $c2 = (int) $request->query('c2', 0);
         $c3 = (int) $request->query('c3', 0);
-        $rt = (string) $request->query('rt', '');   // 플레이스 지역유형
-        $rg = trim((string) $request->query('rg', '')); // 플레이스 지역
+        $sido = trim((string) $request->query('sido', ''));  // 플레이스 지역 1단계(시/도)
+        $sgg = trim((string) $request->query('sgg', ''));    // 2단계(시/군/구)
+        $rg = trim((string) $request->query('rg', ''));      // 3단계(동·상권)
 
         // 1차 = 쇼핑은 최상위 분류, 플레이스는 업종(플랫)
         $lv1 = $type === 'shopping'
@@ -48,29 +48,36 @@ class KeywordBrowseController extends Controller
             ? $this->descendantIds(KeywordCategory::find($selectedId))
             : KeywordCategory::where('type', $type)->pluck('id');
 
-        $base = fn () => KeywordCandidate::whereIn('category_id', $scopeIds)
-            ->when($type === 'place' && $rt !== '', fn ($x) => $x->where('region_type', $rt))
-            ->when($type === 'place' && $rg !== '', fn ($x) => $x->where('region', $rg))
-            ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'));
+        // 플레이스 지역 — 공개 페이지와 같은 3단계(시/도 > 시/군/구 > 동·상권). 지역명 2,900곳을 계층으로 접는다.
+        $grouped = ['sido' => [], 'sgg' => [], 'leaf' => []];
+        if ($type === 'place') {
+            $grouped = $tree->group(
+                KeywordCandidate::whereIn('category_id', $scopeIds)->whereNotNull('region')
+                    ->selectRaw('region, count(*) as c')->groupBy('region')->pluck('c', 'region')
+            );
+            // 상위 선택이 유효할 때만 하위를 살린다(잘못된 조합은 해제)
+            $sido = isset($grouped['sido'][$sido]) ? $sido : '';
+            $sgg = ($sido !== '' && isset($grouped['sgg'][$sido][$sgg])) ? $sgg : '';
+            $rg = ($sgg !== '' && isset($grouped['leaf'][$sido][$sgg][$rg])) ? $rg : '';
+        }
+        // 선택 깊이만큼 지역을 좁힌다 — 지역(rg) > 시군구 > 시도 순
+        $inRegions = $type === 'place' && $rg === '' && $sido !== ''
+            ? $tree->regionsIn($grouped, $sido, $sgg ?: null)
+            : [];
 
-        // 플레이스 지역 옵션 — 유형을 골라야 채운다(2,900곳 전체 나열 방지)
-        $regions = ($type === 'place' && $rt !== '')
-            ? KeywordCandidate::whereIn('category_id', $scopeIds)->where('region_type', $rt)->whereNotNull('region')
-                ->selectRaw('region, count(*) as c')->groupBy('region')->orderBy('region')->get()->pluck('c', 'region')
-            : collect();
-        $regionTypeCounts = $type === 'place'
-            ? KeywordCandidate::whereIn('category_id', $scopeIds)->whereNotNull('region_type')
-                ->selectRaw('region_type, count(*) as c')->groupBy('region_type')->pluck('c', 'region_type')
-            : collect();
+        $base = fn () => KeywordCandidate::whereIn('category_id', $scopeIds)
+            ->when($type === 'place' && $rg !== '', fn ($x) => $x->where('region', $rg))
+            ->when($inRegions !== [], fn ($x) => $x->whereIn('region', $inRegions))
+            ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'));
 
         return view('admin.keyword-browse', [
             'type' => $type, 'q' => $q,
             'c1' => $c1, 'c2' => $c2, 'c3' => $c3,
             'lv1' => $lv1, 'lv2' => $lv2, 'lv3' => $lv3,
-            'rt' => $rt, 'rg' => $rg,
-            'regionTypes' => self::REGION_TYPES,
-            'regionTypeCounts' => $regionTypeCounts,
-            'regions' => $regions,
+            'sido' => $sido, 'sgg' => $sgg, 'rg' => $rg,
+            'sidos' => $grouped['sido'],
+            'sggs' => $sido !== '' ? ($grouped['sgg'][$sido] ?? []) : [],
+            'regions' => ($sido !== '' && $sgg !== '') ? ($grouped['leaf'][$sido][$sgg] ?? []) : [],
             'items' => $base()->with('category')
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('keyword')
                 ->paginate(100)->withQueryString(),

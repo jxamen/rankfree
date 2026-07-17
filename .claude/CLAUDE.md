@@ -84,5 +84,6 @@
 | [20_SEARCH_CONSOLE.md](./20_SEARCH_CONSOLE.md) | 검색 유입 분석 — 구글 서치 콘솔 연동(서비스 계정·일별 수집 크론·관리자 대시보드) |
 | [21_SEO_SLUG_SITEMAP.md](./21_SEO_SLUG_SITEMAP.md) | SEO 공유 슬러그(/keyword/여름브라)·robots·사이트맵(인덱스+섹션, 추적 슬롯 제외) |
 | [22_KEYWORD_CONTENT_HUB.md](./22_KEYWORD_CONTENT_HUB.md) | 키워드 콘텐츠 허브 — 카테고리→키워드 수집(시드·지역조합·데이터랩·GSC)·승인·발행→허브 페이지(/keywords)·AEO 문서·AI 인사이트·상호 추천(Phase 0~3 + 대량 시드 구현) |
+| [23_GA4_INSIGHTS_PACKAGE.md](./23_GA4_INSIGHTS_PACKAGE.md) | GA4 상세 분석 대시보드(/admin/traffic-stats) — 이식형 패키지 jcurve/ga4-insights(유입·랜딩/이탈·기기·이벤트·실시간, 기간대비) |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

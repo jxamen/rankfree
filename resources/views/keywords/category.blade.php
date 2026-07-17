@@ -8,15 +8,20 @@
     $__crumbs = [
         ['@type' => 'ListItem', 'position' => 1, 'name' => '홈', 'item' => url('/')],
         ['@type' => 'ListItem', 'position' => 2, 'name' => '키워드 인사이트', 'item' => route('keywords.index')],
+        ['@type' => 'ListItem', 'position' => 3, 'name' => $typeLabel, 'item' => route('keywords.type', $cat->type)],
     ];
     if ($cat->parent) {
-        $__crumbs[] = ['@type' => 'ListItem', 'position' => 3, 'name' => $cat->parent->name, 'item' => route('keywords.category', $cat->parent->slug)];
+        $__crumbs[] = ['@type' => 'ListItem', 'position' => 4, 'name' => $cat->parent->name, 'item' => route('keywords.category', $cat->parent->slug)];
     }
     $__crumbs[] = ['@type' => 'ListItem', 'position' => count($__crumbs) + 1, 'name' => $cat->name, 'item' => url()->current()];
 @endphp
 
 @section('title', $cat->name.' 키워드 인사이트 — 검색량·트렌드 분석 · 랭크프리')
 @section('description', $__desc)
+{{-- 레거시 ?q= (검색 폼은 /keywords/search 로 제출) — 내용이 달라지므로 색인 제외, 링크는 유지 --}}
+@if ($q !== '')
+    @section('robots', 'noindex, follow')
+@endif
 
 @push('head')
 <script type="application/ld+json">{!! json_encode([
@@ -48,6 +53,8 @@
         <a href="{{ url('/') }}" class="text-muted-soft" style="text-decoration:none;">홈</a>
         <span aria-hidden="true"> › </span>
         <a href="{{ route('keywords.index') }}" class="text-muted-soft" style="text-decoration:none;">키워드 인사이트</a>
+        <span aria-hidden="true"> › </span>
+        <a href="{{ route('keywords.type', $cat->type) }}" class="text-muted-soft" style="text-decoration:none;">{{ $typeLabel }}</a>
         @if ($cat->parent)
             <span aria-hidden="true"> › </span>
             <a href="{{ route('keywords.category', $cat->parent->slug) }}" class="text-muted-soft" style="text-decoration:none;">{{ $cat->parent->name }}</a>
@@ -56,27 +63,13 @@
         <span class="text-ink">{{ $cat->name }}</span>
     </nav>
 
-    <div class="badge mb-4 border border-hairline">{{ $cat->type === 'place' ? '플레이스' : '쇼핑' }} 키워드 인사이트</div>
-    <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $cat->name }} 키워드 인사이트</h1>
-    <p class="text-muted" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.6;">
-        {{ $cat->description ?: "'{$cat->name}' 카테고리 키워드의 네이버 검색량·경쟁강도·성별연령·트렌드 분석 리포트입니다." }}
+    {{-- 제목 1줄 + 설명 1줄 — 배지·중복 문구 없이(브레드크럼이 경로를 이미 보여준다) --}}
+    <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">
+        {{ $region !== '' ? $region.' ' : '' }}{{ $cat->name }} 키워드 인사이트
+    </h1>
+    <p class="text-muted" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.6;">
+        {{ $cat->description ?: '네이버 검색량·경쟁강도·성별·연령·트렌드를 담은 무료 분석 리포트입니다.' }}
     </p>
-
-    {{-- 집계 --}}
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4" style="margin-top:20px;max-width:640px;">
-        <div class="card p-4 text-center">
-            <div class="text-muted-soft" style="font-size:var(--fs-xs);">분석 리포트</div>
-            <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($docTotal) }}건</div>
-        </div>
-        <div class="card p-4 text-center">
-            <div class="text-muted-soft" style="font-size:var(--fs-xs);">월간 검색량 합계</div>
-            <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($volumeSum) }}회</div>
-        </div>
-        <div class="card p-4 text-center col-span-2 sm:col-span-1">
-            <div class="text-muted-soft" style="font-size:var(--fs-xs);">기준</div>
-            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);padding-top:4px;">네이버 검색광고<br>자체 집계</div>
-        </div>
-    </div>
 
     {{-- 하위/형제 카테고리 --}}
     @if ($children->isNotEmpty() || $siblings->isNotEmpty())
@@ -93,15 +86,14 @@
         </div>
     @endif
 
-    {{-- 검색 + (플레이스) 지역 필터 --}}
-    <form method="GET" class="flex items-center gap-2 flex-wrap" style="margin-top:24px;">
-        <input type="search" name="q" value="{{ $q }}" placeholder="{{ $cat->name }} 키워드 검색" class="input" style="max-width:280px;height:40px;">
-        @if ($region !== '')<input type="hidden" name="region" value="{{ $region }}">@endif
-        <button type="submit" class="btn btn-secondary btn-sm" style="height:40px;">검색</button>
-        @if ($q !== '' || $region !== '')
-            <a href="{{ route('keywords.category', $cat->slug) }}" class="btn btn-ghost btn-sm" style="height:40px;">초기화</a>
-        @endif
-    </form>
+    {{-- 검색(공용 검색바 — 타입 컨텍스트 유지, 제출은 /keywords/search) --}}
+    @include('keywords._searchbar', ['active' => $cat->type, 'q' => $q, 'big' => false])
+
+    @if ($region !== '' || $q !== '')
+        <div style="margin-top:10px;">
+            <a href="{{ route('keywords.category', $cat->slug) }}" class="btn btn-ghost btn-sm">필터 초기화</a>
+        </div>
+    @endif
 
     @if ($regions->isNotEmpty())
         <div class="flex flex-wrap items-center gap-2" style="margin-top:14px;">

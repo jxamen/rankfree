@@ -74,9 +74,13 @@
 
 ## Phase 2 — 카테고리 허브 페이지 + 문서 강화 (✅ 2026-07-16 구현·검증 완료)
 
+> ⚠️ **허브 IA 는 2026-07-17 재편됐다 — 최신 기준은 아래 Phase 4.** `/keywords` 는 더 이상 카테고리를 나열하지 않는다(검색 진입점).
+
 - **공개 허브** ([KeywordInsightController](../app/Http/Controllers/KeywordInsightController.php)):
-  - `/keywords` ([keywords/index.blade.php](../resources/views/keywords/index.blade.php)) — 대분류>소분류 카드(문서 수 합산) + 인기 리포트 12 + CollectionPage JSON-LD
-  - `/keywords/{slug}` ([keywords/category.blade.php](../resources/views/keywords/category.blade.php)) — 집계(리포트 수·검색량 합계) + 문서 목록(검색량순, 24 페이징) + 하위/형제 카테고리 + CTA + BreadcrumbList·CollectionPage(ItemList) JSON-LD. **대분류는 하위 카테고리 문서 합산**. 비활성/미존재 404
+  - `/keywords` ([keywords/index.blade.php](../resources/views/keywords/index.blade.php)) — ~~대분류>소분류 카드~~ → Phase 4 에서 검색 진입점으로 전환
+  - `/keywords/{slug}` ([keywords/category.blade.php](../resources/views/keywords/category.blade.php)) — 문서 목록(검색량순, 24 페이징) + 검색·지역 필터 + 하위/형제 카테고리 + CTA + BreadcrumbList·CollectionPage(ItemList) JSON-LD. **대분류는 하위 카테고리 문서 합산**. 비활성/미존재 404
+    - **헤더는 3요소만**(2026-07-17): 브레드크럼 → h1 → 한 줄 설명. 집계 카드 3종(리포트 수·검색량 합계·기준)과 타입 배지("플레이스 키워드 인사이트")는 **제거** — 브레드크럼·h1과 같은 말을 4줄 반복해 가독성이 떨어졌다. 문서 수(`docTotal`)는 화면 비표시, ItemList `numberOfItems`·메타 설명에만 사용
+    - 지역 필터 시 h1 에 지역 반영("가경동 맛집·음식점 키워드 인사이트"). `?region=`·`?q=` 변형은 canonical(`url()->current()` — 쿼리 제외)이 기본 카테고리 URL 로 정규화하므로 색인 중복 없음
   - 헤더 내비 '분석 도구 > 키워드 인사이트' 링크([site-header](../resources/views/partials/site-header.blade.php))
 - **사이트맵 `keywords` 섹션** ([SitemapController](../app/Http/Controllers/SitemapController.php)) — `/keywords` + 발행 문서 있는 활성 카테고리(lastmod=문서 최신 refreshed_at). 발행 문서 0이면 섹션 미노출. ⚠️ 인덱스 캐시는 버전 키 — 신규 섹션은 `sitemap:refresh`(매일 05:40) 후 반영
 - **문서(keyword.share) SEO/AEO/GEO 강화** ([share.blade.php](../resources/views/keyword/share.blade.php)):
@@ -87,6 +91,53 @@
   - 퍼널 CTA — '무료로 시작'(로그인 시 콘솔) 1개(pill, 희소성 유지)
 - **추천 고도화** — [RelatedDocsService](../app/Domain/Seo/RelatedDocsService.php): 허브 키워드 문서는 **"'{카테고리}' 카테고리 인기 키워드" 섹션을 맨 앞에**(검색량순) + **페이지 전체(섹션 간) 제목 중복 제거**. 지역 변형(강남→서초) 추천은 Phase 3 과제로 이월
 - 검증: [tests/Feature/KeywordInsightTest.php](../tests/Feature/KeywordInsightTest.php) 6건 + [tests/Unit/KeywordAeoTest.php](../tests/Unit/KeywordAeoTest.php) 2건 + **Playwright**(실 API, 로컬): /keywords·/keywords/캠핑용품·/keyword/캠핑의자(AEO 요약·FAQ·브레드크럼·카테고리 추천·CTA)·사이트맵 섹션 전부 확인
+
+## Phase 4 — 타입 우선 IA(검색 진입 + 카테고리 메뉴 분리) (✅ 2026-07-17 구현·검증 완료)
+
+> 배경: `/keywords` 가 카테고리를 통째로 나열해 "너무 복잡"했다. 설계안 3종(미니멀검색·타입우선·색인보존)을 4개 렌즈(디자인시스템·IA·SEO·구현리스크)로 심사해 **타입 우선안** 채택 + 각 안의 강점 이식.
+
+### 라우트 (순서 의존 — routes/web.php)
+
+```php
+Route::get('/keywords',        …'index');                       // 검색 진입점
+Route::get('/keywords/search', …'search');                      // 결과(noindex, follow)
+Route::get('/keywords/{type}', …'typeHome')->whereIn('type', ['place','shopping']);
+Route::get('/keywords/{slug}', …'category');                    // 한글 슬러그 — 위 3개 뒤
+Route::get('/api/keywords/suggest', …)->middleware('throttle:60,1');   // routes/api.php
+```
+- **고정 경로는 반드시 `{slug}` 앞**. `{type}` 은 `whereIn` 제약이라 `/keywords/맛집-음식점` 은 통과해 카테고리로 내려간다. 회귀는 `test_static_routes_win_over_category_slug` 가 고정.
+- 2중 방어: [KeywordCategory::RESERVED_SLUGS](../app/Models/KeywordCategory.php) = `place·shopping·search` → `makeSlug()` 가 `-cat` 접미(예: `place-cat`). 운영 배포 전 `select slug from keyword_categories where slug in ('place','shopping','search')` 확인(로컬 0건).
+
+### 페이지
+
+| URL | 내용 | 색인 |
+|---|---|---|
+| `/keywords` | h1 → 1줄 설명 → **세그먼트(전체/플레이스/쇼핑) + 큰 pill 검색창(56px)** → 인기 칩 → **타입 카드 2장(=카테고리 메뉴 진입)** → 인기 리포트 12 → CTA. **카테고리 나열 없음** | index + `WebSite.potentialAction=SearchAction` |
+| `/keywords/place` | **업종 칩 1줄**(전체/맛집·음식점/…) + **지역 3단계 드릴다운**(시/도 → 시/군/구 → 동·상권) → 고른 지역의 키워드 목록(24 페이징). 업종 카드·건수 표기·"지역으로 찾기" 블록은 제거(2026-07-17) | index (해당 타입 문서 0건이면 `noindex, follow`) |
+| `/keywords/shopping` | **대분류 섹션 + 소분류 텍스트 인덱스**(다열 `column-width:220px`, 카드 아님) + 인기 리포트 | index (동일 가드) |
+| `/keywords/search?q=&type=` | 매칭 **카테고리 블록(결과 위 — 색인 자산으로 되돌리는 깔때기)** + 문서 카드 24 페이징 + 0건 폴백(타입 유지) | **`noindex, follow`** + 정규화 자기참조 canonical |
+| `/keywords/{slug}` | (기존) + **타입 브레드크럼**·공용 검색바 | index (`?q=` 있으면 `noindex, follow`) |
+| `/api/keywords/suggest` | 접두 우선 매칭 8 + 카테고리 3, 5분 캐시 | `X-Robots-Tag: noindex` |
+
+- **타입별 나열이 다르다**(사용자 요구): 플레이스=업종 플랫 카드 + 지역 축 / 쇼핑=대>소분류 텍스트 인덱스. 쇼핑 `<details>`·즉시 필터는 **v1 미도입**(실측 L1당 L2=18 — 없는 문제). L1당 L2 > 40 에서 재검토.
+- ⚠️ **소분류 링크를 JS lazy-fetch 로 '최적화'하지 말 것** — 내부 링크 그물이 통째로 사라진다.
+- 세그먼트·검색바는 [keywords/_searchbar.blade.php](../resources/views/keywords/_searchbar.blade.php) 공용. 세그먼트는 **항상 `<a href>`**(+`aria-current`), 자동완성은 JS 없으면 사라지고 **폼 제출로 동작**(progressive enhancement, Playwright 로 검증).
+- **모든 공개 쿼리에 `origin='hub'` 강제** — 빠지면 타 사용자 검색 내역(origin=user)이 검색·자동완성에 노출된다(21). 회귀 테스트 2건이 고정.
+
+### 이번에 고친 실제 결함
+
+- **canonical 이중 이스케이프**([seo.blade.php](../resources/views/partials/seo.blade.php)): Blade `@section('canonical', $url)` 은 내용을 `e()` 로 저장 → 파셜이 `{{ }}` 로 재이스케이프 → 쿼리 2개 이상 URL 이 `&amp;amp;` 로 깨짐(기존엔 `?cat=qna` 처럼 파라미터 1개뿐이라 무증상). 파셜에서 `html_entity_decode` 후 출력하도록 수정 — 전 페이지 공통 이득.
+- 검색 0건 폴백이 타입 필터를 무시해 플레이스 검색에 쇼핑 리포트가 섞이던 문제(테스트가 검출).
+- **금지**: `noindex` + 타 URL canonical 조합(되돌리기 가장 비싼 사고). utm 은 canonical 에 싣지 않되 **리다이렉트로 벗기지도 않는다**(GA/GSC 캠페인 귀속 소실).
+
+### 사이트맵
+
+`keywords` 섹션 = `/keywords` + **타입 홈(문서 있는 타입만)** + 카테고리. `/keywords/search`·suggest 는 **절대 미포함**. `keywordHubCategories()` 는 `type` 까지 select.
+
+### 이월 과제
+
+- **지역 축 색인 미스매치**: 플레이스의 실질 2축은 지역인데 `?region=` 은 canonical 병합이라 색인 자산 0. `/keywords/{slug}/{region}` 승격은 GSC(20) 노출 상위 50 조합만 선별 승격하는 경로로 판단.
+- **롤백 기준**: `/keywords` 에서 카테고리 덤프를 뺀 뒤 GSC 로 4~8주 추적 — 노출/클릭 하락 시에만 요약 블록 복원.
 
 ## Phase 3 — 자동화·확장 (✅ 2026-07-16 구현·검증 완료)
 

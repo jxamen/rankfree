@@ -32,5 +32,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- 검색엔진 알림(21) — 테스트에서 실제 IndexNow/GSC 전송 차단(개별 테스트가 config 로 켠다) -->
+        <env name="INDEXNOW_KEY" value=""/>
     </php>
 </phpunit>

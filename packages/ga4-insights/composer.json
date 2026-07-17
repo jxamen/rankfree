@@ -1,0 +1,26 @@
+{
+    "name": "jcurve/ga4-insights",
+    "description": "Portable, beginner-friendly Google Analytics 4 detailed analytics dashboard for Laravel (acquisition, landing/exit, pages, devices, geo, events, realtime).",
+    "keywords": ["laravel", "ga4", "google-analytics", "analytics", "dashboard"],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        { "name": "JCurve Interactive", "email": "jcurve19@gmail.com" }
+    ],
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Jcurve\\Ga4Insights\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Jcurve\\Ga4Insights\\Ga4InsightsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable"
+}

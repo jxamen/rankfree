@@ -40,13 +40,26 @@ class GoogleToken
     /** 스코프에 맞는 액세스 토큰 — OAuth 우선, 서비스 계정 폴백. 실패 시 null. */
     public static function token(string $scope): ?string
     {
-        if (self::oauthConnected() && str_contains((string) AppSetting::read(self::KEY_SCOPES), $scope)) {
+        if (self::oauthConnected() && self::grantedCovers($scope)) {
             if ($t = self::refreshOauth()) {
                 return $t;
             }
         }
 
         return GoogleServiceAccount::token($scope);
+    }
+
+    /**
+     * 연동 때 저장된 스코프가 요청 스코프를 충족하는지 — 정확 매칭 기준.
+     * (부분 문자열 비교면 readonly 만 연동된 계정이 쓰기 스코프 요청에도 통과해 403 이 난다.)
+     * 풀 스코프는 같은 API 의 .readonly 를 포함하므로 충족으로 본다.
+     */
+    private static function grantedCovers(string $scope): bool
+    {
+        $granted = preg_split('/\s+/', (string) AppSetting::read(self::KEY_SCOPES), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return in_array($scope, $granted, true)
+            || (str_ends_with($scope, '.readonly') && in_array(substr($scope, 0, -strlen('.readonly')), $granted, true));
     }
 
     /** 연동 해제 — 저장된 refresh token 제거. */

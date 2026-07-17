@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Keyword\KeywordHubPublisher;
+use App\Domain\Seo\SearchEnginePing;
 use App\Models\KeywordCandidate;
 use Illuminate\Console\Command;
 
@@ -28,6 +29,7 @@ class HubPublish extends Command
         }
 
         $ok = $hold = 0;
+        $published = collect();
         foreach ($cands as $i => $c) {
             if ($i > 0) {
                 usleep(300_000); // 연속 수집 간 간격 — 외부 API 부담 완화
@@ -35,6 +37,7 @@ class HubPublish extends Command
             $doc = $publisher->publish($c);
             if ($doc) {
                 $ok++;
+                $published->push($doc);
                 $this->info("발행: {$c->keyword} → ".$doc->shareUrl());
             } else {
                 $hold++;
@@ -42,6 +45,10 @@ class HubPublish extends Command
             }
         }
         $this->info("완료 — 발행 {$ok} · 보류 {$hold}");
+
+        if ($note = app(SearchEnginePing::class)->afterHubPublish($published)) {
+            $this->line($note);
+        }
 
         return self::SUCCESS;
     }

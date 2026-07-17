@@ -2,7 +2,11 @@
      입력: $title, $description (레이아웃에서 계산해 전달 — 원문/비이스케이프).
      페이지 오버라이드: @section('canonical') · @section('robots','noindex, nofollow') · @section('og-type','article') · @section('og-image', 절대URL) --}}
 @php
-    $__canonical = trim($__env->yieldContent('canonical')) ?: url()->current();
+    // ⚠️ @section('canonical', $url) 은 Blade 가 내용을 e() 로 이스케이프해 저장한다(ManagesLayouts::startSection).
+    //    아래에서 {{ }} 로 한 번 더 이스케이프하면 쿼리 2개 이상인 URL 이 &amp;amp; 로 깨진다.
+    //    → 섹션 값은 여기서 원문으로 되돌리고, 출력 시 {{ }} 가 한 번만 이스케이프하게 한다.
+    $__canonicalRaw = trim($__env->yieldContent('canonical'));
+    $__canonical = $__canonicalRaw !== '' ? html_entity_decode($__canonicalRaw, ENT_QUOTES, 'UTF-8') : url()->current();
     $__robots = trim($__env->yieldContent('robots'));
     $__ogImageCustom = trim($__env->yieldContent('og-image'));
     $__ogImage = $__ogImageCustom !== '' ? $__ogImageCustom : asset('og-image.png');

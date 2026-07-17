@@ -25,6 +25,7 @@
     "autoload": {
         "psr-4": {
             "App\\": "app/",
+            "Jcurve\\Ga4Insights\\": "packages/ga4-insights/src/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
         }

@@ -41,20 +41,8 @@
     };
 @endphp
 
-{{-- 헤더(키워드·N통합검색) — 공개 공유 뷰에만. 콘솔은 검색폼에 이미 키워드·N통합검색이 있어 중복이라 숨김 --}}
-@if ($public)
-<div class="flex items-end justify-between flex-wrap gap-2 mb-3">
-    <div>
-        <div class="flex items-center gap-3 flex-wrap">
-            <span class="text-ink font-display" style="font-size:var(--fs-xl);">{{ $vm['keyword'] }}</span>
-            <a href="https://search.naver.com/search.naver?query={{ urlencode($vm['keyword']) }}" target="_blank" rel="noopener"
-               class="btn btn-secondary btn-sm inline-flex items-center gap-1" title="「{{ $vm['keyword'] }}」 네이버 통합검색 (새 창)">
-                <span style="color:#03c75a;font-weight:800;font-size:var(--fs-xs);">N</span> 통합검색
-            </a>
-        </div>
-    </div>
-</div>
-@endif
+{{-- 본문 헤더 없음 — 공개 공유 뷰는 h1 라인(keyword/share)에 키워드·N통합검색이 있고,
+     콘솔은 검색폼에 있어 여기서 다시 그리면 제목이 중복된다. --}}
 
 {{-- 키워드 리스트 복사 헬퍼 — data-kw 를 줄바꿈('lines') 또는 쉼표('comma')로 구분해 복사(대량분석 입력·확장 호환) --}}
 <script>
@@ -70,8 +58,9 @@ window.rfCopyKw = window.rfCopyKw || function (containerId, btn, mode) {
 };
 </script>
 
-{{-- 키워드 인사이트(데이터 기반 요약) — 최상단(메타 스트립 위). 공유 모듈 --}}
-@include('partials.keyword-detail', ['d' => $vm, 'only' => ['insights']])
+{{-- 키워드 인사이트(데이터 기반 요약) — 최상단(메타 스트립 위). 공유 모듈.
+     공개 공유 뷰는 상단 'AEO 요약 답변' 카드가 같은 문장(insights.summary)을 이미 보여주므로 인사이트 요약은 숨긴다. --}}
+@include('partials.keyword-detail', ['d' => $vm, 'only' => ['insights'], 'hideSummary' => $public])
 
 {{-- 함께 많이 찾는 (네이버 통합검색 연관 키워드) — 인사이트 아래. 콘솔 전용, 섹션배치 AJAX 응답으로 채움 --}}
 @unless ($public)

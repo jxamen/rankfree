@@ -153,6 +153,22 @@ class SitemapController extends Controller
         }
 
         $e = [['loc' => route('keywords.index'), 'lastmod' => null, 'freq' => 'daily', 'priority' => '0.7']];
+
+        // 타입 홈(카테고리 메뉴) — 해당 타입 발행 문서가 있을 때만(빈 목록 색인 방지)
+        foreach (['place', 'shopping'] as $t) {
+            $typeCats = $cats->where('type', $t);
+            if ($typeCats->isEmpty()) {
+                continue;
+            }
+            $last = \App\Models\KeywordSearch::where('origin', 'hub')->whereIn('category_id', $typeCats->pluck('id'))->max('refreshed_at');
+            $e[] = [
+                'loc' => route('keywords.type', $t),
+                'lastmod' => $last ? \Illuminate\Support\Carbon::parse($last)->toDateString() : null,
+                'freq' => 'weekly',
+                'priority' => '0.7',
+            ];
+        }
+
         foreach ($cats as $c) {
             $last = \App\Models\KeywordSearch::where('origin', 'hub')->where('category_id', $c->id)->max('refreshed_at');
             $e[] = [
@@ -170,7 +186,7 @@ class SitemapController extends Controller
     {
         return \App\Models\KeywordCategory::where('is_active', true)
             ->whereHas('searches', fn ($q) => $q->where('origin', 'hub'))
-            ->orderBy('sort')->orderBy('id')->get(['id', 'slug']);
+            ->orderBy('sort')->orderBy('id')->get(['id', 'slug', 'type']);   // type = 타입 홈 분기용
     }
 
     // ── 분석 섹션 정의 ─────────────────────────────────────────────────

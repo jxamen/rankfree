@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Domain\Keyword\KeywordHubCollector;
 use App\Domain\Keyword\KeywordHubPublisher;
+use App\Domain\Seo\SearchEnginePing;
 use App\Http\Controllers\Controller;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
@@ -195,7 +196,7 @@ class KeywordHubController extends Controller
     }
 
     /** 지금 발행 — 승인 후보를 검색량 큰 순으로 소량 동기 발행(요청 타임아웃 보호). */
-    public function publish(Request $request, KeywordHubPublisher $publisher)
+    public function publish(Request $request, KeywordHubPublisher $publisher, SearchEnginePing $ping)
     {
         $limit = min(max((int) $request->input('limit', 3), 1), 10);
         $cands = KeywordCandidate::where('status', 'approved')
@@ -207,11 +208,22 @@ class KeywordHubController extends Controller
         }
 
         $ok = $hold = 0;
+        $published = collect();
         foreach ($cands as $c) {
-            $publisher->publish($c) ? $ok++ : $hold++;
+            if ($doc = $publisher->publish($c)) {
+                $ok++;
+                $published->push($doc);
+            } else {
+                $hold++;
+            }
         }
 
-        return back()->with('status', "발행 완료 — 발행 {$ok}건 · 데이터 부족 보류 {$hold}건.");
+        $msg = "발행 완료 — 발행 {$ok}건 · 데이터 부족 보류 {$hold}건.";
+        if ($note = $ping->afterHubPublish($published)) {
+            $msg .= ' '.$note;
+        }
+
+        return back()->with('status', $msg);
     }
 
     /** 시드 textarea(줄바꿈/콤마 구분) → 배열. */
