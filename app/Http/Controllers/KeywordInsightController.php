@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Keyword\PlaceRegionTree;
 use App\Models\KeywordCategory;
 use App\Models\KeywordSearch;
 use Illuminate\Http\Request;
@@ -40,33 +41,78 @@ class KeywordInsightController extends Controller
         ]);
     }
 
-    /** 타입 홈 = 카테고리 메뉴. 플레이스(업종 플랫 + 지역 축)와 쇼핑(대>소분류 인덱스)은 나열 방식이 다르다. */
-    public function typeHome(string $type)
+    /**
+     * 타입 홈 = 카테고리 메뉴. 나열 방식이 타입별로 다르다.
+     *   플레이스: 업종 칩 + **지역 3단계 드릴다운**(시/도 → 시/군/구 → 동·상권) → 고른 지역의 키워드 목록
+     *   쇼핑: 대분류 섹션 + 소분류 텍스트 인덱스
+     */
+    public function typeHome(string $type, Request $request, PlaceRegionTree $tree)
     {
         $cats = KeywordCategory::where('is_active', true)->where('type', $type)
             ->withCount(['searches as docs_count' => fn ($q) => $q->where('origin', 'hub')])
             ->orderBy('sort')->orderBy('id')->get();
         $ids = $cats->pluck('id');
-
         $docs = fn () => KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids);
 
-        return view('keywords.type', [
+        $data = [
             'type' => $type,
             'typeLabel' => self::TYPES[$type],
             'groups' => $cats->whereNull('parent_id')->values(),
             'byParent' => $cats->whereNotNull('parent_id')->groupBy('parent_id'),
             'typeDocCount' => $docs()->count(),
-            'topDocs' => $docs()->orderByDesc('monthly_total')->limit(12)->get(),
-            // 플레이스의 실질 2번째 축 = 지역. 카테고리 카드의 지역 칩 + 전역 지역 진입에 쓴다.
-            'regions' => $type === 'place'
-                ? $docs()->whereNotNull('region')->selectRaw('region, count(*) as c')
-                    ->groupBy('region')->orderByDesc('c')->orderBy('region')->limit(24)->pluck('c', 'region')
-                : collect(),
-            'regionsByCat' => $type === 'place'
-                ? KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids)->whereNotNull('region')
-                    ->selectRaw('category_id, region, count(*) as c')->groupBy('category_id', 'region')
-                    ->orderByDesc('c')->get()->groupBy('category_id')
-                : collect(),
+        ];
+
+        if ($type !== 'place') {
+            return view('keywords.type', $data + [
+                'topDocs' => $docs()->orderByDesc('monthly_total')->limit(12)->get(),
+            ]);
+        }
+
+        // ── 플레이스: 업종(cat) 칩 + 지역 드릴다운(sido → sgg → region) ──
+        $catSlug = trim((string) $request->query('cat', ''));
+        $activeCat = $catSlug !== '' ? $cats->firstWhere('slug', $catSlug) : null;
+        $scoped = fn () => KeywordSearch::where('origin', 'hub')
+            ->whereIn('category_id', $activeCat ? [$activeCat->id] : $ids);
+
+        // 업종 필터가 걸린 상태의 지역 분포 → 3단계로 접는다
+        $grouped = $tree->group(
+            $scoped()->whereNotNull('region')->selectRaw('region, count(*) as c')
+                ->groupBy('region')->pluck('c', 'region')
+        );
+
+        $sido = trim((string) $request->query('sido', '')) ?: null;
+        $sgg = trim((string) $request->query('sgg', '')) ?: null;
+        if ($sido !== null && ! isset($grouped['sido'][$sido])) {
+            $sido = $sgg = null;   // 없는 지역 → 1단계로
+        }
+        if ($sgg !== null && ! isset($grouped['sgg'][$sido][$sgg])) {
+            $sgg = null;
+        }
+        $region = trim((string) $request->query('region', '')) ?: null;
+        $q = trim((string) $request->query('q', ''));   // 셀렉트 줄 우측 검색 — 선택 범위 안에서 좁힌다
+
+        // 선택 깊이만큼 좁힌 지역들의 키워드 문서 — "지역 고르면 그 지역 키워드가 쭉".
+        // 아무것도 고르지 않은 첫 진입은 최근 발행 문서를 보여준다(빈 화면 방지).
+        $picked = $region !== null ? [$region] : $tree->regionsIn($grouped, $sido, $sgg);
+        $list = $scoped()
+            ->when($sido !== null, fn ($x) => $x->whereIn('region', $picked))
+            ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'))
+            ->when($sido === null && $q === '', fn ($x) => $x->latest('id')->limit(30))       // 첫 진입 = 최근 30개
+            ->when($sido !== null || $q !== '', fn ($x) => $x->orderByDesc('monthly_total'));
+        $list = ($sido === null && $q === '') ? $list->get() : $list->paginate(24)->withQueryString();
+        $isRecent = $sido === null && $q === '';
+
+        return view('keywords.type', $data + [
+            'cats' => $cats->whereNull('parent_id')->values(),
+            'activeCat' => $activeCat,
+            'grouped' => $grouped,
+            'sido' => $sido,
+            'sgg' => $sgg,
+            'region' => $region,
+            'q' => $q,
+            'docs' => $list,
+            'isRecent' => $isRecent,   // 첫 진입(최근 문서 30개) 여부 — 뷰에서 제목·페이지네이션 분기
+            'topDocs' => collect(),
         ]);
     }
 
@@ -93,8 +139,11 @@ class KeywordInsightController extends Controller
                 ->where('name', 'like', $like)
                 ->withCount(['searches as docs_count' => fn ($x) => $x->where('origin', 'hub')])
                 ->limit(3)->get(),
+            // 결과 0건 폴백 — 타입 컨텍스트를 유지한다(플레이스 검색에 쇼핑 리포트를 들이밀지 않는다)
             'fallbackDocs' => $docs->total() === 0
-                ? KeywordSearch::where('origin', 'hub')->orderByDesc('monthly_total')->limit(6)->get()
+                ? KeywordSearch::where('origin', 'hub')
+                    ->when($type, fn ($x) => $x->whereHas('category', fn ($c) => $c->where('type', $type)))
+                    ->orderByDesc('monthly_total')->limit(6)->get()
                 : collect(),
         ]);
     }
