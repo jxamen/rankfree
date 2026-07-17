@@ -7,35 +7,36 @@
 {{-- 필터 — 한 줄 고정(좁으면 가로 스크롤) --}}
 <div class="card p-4 mb-4">
     <form method="GET" action="{{ route('admin.shop-products') }}" class="flex items-center gap-2" style="flex-wrap:nowrap;overflow-x:auto;">
-        <input type="text" name="q" value="{{ $q }}" placeholder="상품명 검색" class="input flex-none"
-               style="height:36px;min-width:220px;" autocomplete="off">
+        {{-- .input 은 width:100% 라 폭을 명시하지 않으면 뒤의 셀렉트를 전부 밀어낸다 --}}
+        <input type="search" name="q" value="{{ $q }}" placeholder="상품명 검색" class="input flex-none"
+               style="height:36px;width:220px;" autocomplete="off">
 
-        <select name="mall" class="input flex-none" style="height:36px;min-width:150px;" onchange="this.form.submit()">
+        <select name="mall" class="input flex-none" style="height:36px;width:170px;" onchange="this.form.submit()">
             <option value="">판매처 전체</option>
             @foreach ($malls as $name => $c)
                 <option value="{{ $name }}" @selected($mall === (string) $name)>{{ $name }} ({{ number_format($c) }})</option>
             @endforeach
         </select>
 
-        <select name="month" class="input flex-none" style="height:36px;min-width:120px;" onchange="this.form.submit()">
+        <select name="month" class="input flex-none" style="height:36px;width:130px;" onchange="this.form.submit()">
             <option value="">수집월 전체</option>
             @foreach ($months as $m)
                 <option value="{{ $m }}" @selected($month === (int) $m)>{{ substr($m, 0, 4) }}-{{ substr($m, 4, 2) }}</option>
             @endforeach
         </select>
 
-        <select name="ad" class="input flex-none" style="height:36px;min-width:110px;" onchange="this.form.submit()">
+        <select name="ad" class="input flex-none" style="height:36px;width:110px;" onchange="this.form.submit()">
             <option value="">광고 전체</option>
             <option value="n" @selected($ad === 'n')>광고 제외</option>
             <option value="y" @selected($ad === 'y')>광고만</option>
         </select>
 
-        <select name="talk" class="input flex-none" style="height:36px;min-width:120px;" onchange="this.form.submit()">
+        <select name="talk" class="input flex-none" style="height:36px;width:130px;" onchange="this.form.submit()">
             <option value="">톡톡 전체</option>
             <option value="y" @selected($talk === 'y')>톡톡 있는 것만</option>
         </select>
 
-        <select name="sort" class="input flex-none" style="height:36px;min-width:140px;" onchange="this.form.submit()">
+        <select name="sort" class="input flex-none" style="height:36px;width:150px;" onchange="this.form.submit()">
             <option value="recent" @selected($sort === 'recent')>최근 수집순</option>
             <option value="kw" @selected($sort === 'kw')>노출 키워드 많은순</option>
             <option value="price_high" @selected($sort === 'price_high')>가격 높은순</option>
