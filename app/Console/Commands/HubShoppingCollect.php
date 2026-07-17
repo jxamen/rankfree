@@ -44,30 +44,40 @@ class HubShoppingCollect extends Command
         $depth = max(2, min(3, (int) $this->option('depth')));
         $delay = max(0, (int) $this->option('delay-ms')) * 1000;
 
+        // ── 1단계: 카테고리 트리 전체 먼저 동기화 ──
+        // 분류마다 인기검색어까지 받으면 1차 하나당 수 분이 걸려 화면에 카테고리가 찔끔찔끔 나타난다.
+        // 트리(children API)만 먼저 훑어 전 분류를 만들고, 키워드는 2단계에서 채운다.
+        $targets = []; // [cid, KeywordCategory, 표시경로]
         foreach ($roots as $i => $root) {
             $rootCat = $this->ensureCategory($root['cid'], $root['name'], null, $i + 1);
+            $targets[] = [$root['cid'], $rootCat, $root['name']];
 
             foreach ($datalab->children($root['cid']) as $j => $sub) { // 2분류
                 $subCat = $this->ensureCategory($sub['cid'], $sub['name'], $rootCat->id, $j + 1);
-
-                usleep($delay);
-                $this->ingest($subCat, $datalab->topKeywords($sub['cid'], $pages), $root['name'].' > '.$sub['name']);
+                $targets[] = [$sub['cid'], $subCat, $root['name'].' > '.$sub['name']];
 
                 if ($depth >= 3 && ! $sub['leaf']) {
-                    foreach ($datalab->children($sub['cid']) as $k => $third) { // 3분류도 카테고리로 연동(3계층)
+                    foreach ($datalab->children($sub['cid']) as $k => $third) { // 3분류도 카테고리로(3계층)
                         $thirdCat = $this->ensureCategory($third['cid'], $third['name'], $subCat->id, $k + 1);
-                        usleep($delay);
-                        $this->ingest($thirdCat, $datalab->topKeywords($third['cid'], $pages), $root['name'].' > '.$sub['name'].' > '.$third['name']);
-                        $thirdCat->forceFill(['collected_at' => now()])->save();
+                        $targets[] = [$third['cid'], $thirdCat, $root['name'].' > '.$sub['name'].' > '.$third['name']];
                     }
                 }
-                $subCat->forceFill(['collected_at' => now()])->save();
             }
-            $rootCat->forceFill(['collected_at' => now()])->save();
-            $this->info("[{$root['name']}] 누적 신규 {$this->created} · 제외 {$this->skipped}");
+            $this->info("[트리] {$root['name']} — 누적 분류 ".count($targets));
+        }
+        $this->info('트리 동기화 완료 — 분류 '.count($targets).'개. 이제 분류별 인기검색어를 수집합니다.');
+
+        // ── 2단계: 분류별 인기검색어 ──
+        foreach ($targets as $n => [$cid, $cat, $path]) {
+            usleep($delay);
+            $this->ingest($cat, $datalab->topKeywords($cid, $pages), $path);
+            $cat->forceFill(['collected_at' => now()])->save();
+            if (($n + 1) % 50 === 0) {
+                $this->info('  키워드 '.($n + 1).'/'.count($targets)." 분류 · 신규 {$this->created}");
+            }
         }
 
-        $this->info("완료 — 신규 후보 {$this->created} · 제외(기존/필터) {$this->skipped}");
+        $this->info("완료 — 분류 ".count($targets)." · 신규 후보 {$this->created} · 제외(기존/필터) {$this->skipped}");
 
         return self::SUCCESS;
     }

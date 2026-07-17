@@ -24,9 +24,10 @@
 
 {{-- 분야 셀렉트 — 항상 3단 고정 표기. 상위 선택 시 하위 option 이 채워진다(미선택이면 비활성). --}}
 <div class="card p-4 mb-4">
-    <form method="GET" action="{{ route('admin.keyword-browse') }}" id="kb-form" class="flex items-center gap-2 flex-wrap">
+    {{-- 한 줄 고정 — 좁으면 가로 스크롤(줄바꿈 금지) --}}
+    <form method="GET" action="{{ route('admin.keyword-browse') }}" id="kb-form" class="flex items-center gap-2" style="flex-wrap:nowrap;overflow-x:auto;">
         <input type="hidden" name="type" value="{{ $type }}">
-        <span class="text-ink font-semibold" style="font-size:var(--fs-xs);width:38px;">분야</span>
+        <span class="text-ink font-semibold flex-none" style="font-size:var(--fs-xs);">분야</span>
 
         {{-- 1단: 쇼핑=1분류 / 플레이스=업종 --}}
         <select name="c1" class="input" style="height:36px;min-width:150px;" onchange="kbGo(this, ['c2','c3','rt','rg'])">
