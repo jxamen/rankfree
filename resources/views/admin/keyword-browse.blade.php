@@ -131,9 +131,14 @@
             var b = m.bulk;
             msg.textContent = (b.running ? '수집 중… ' : '수집 종료 — ') + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
                 + (b.running && b.current ? ' · 현재: ' + b.current : '');
+            // 실패가 있으면 사유를 보여준다(원인 없이 '실패 33' 만 뜨면 손쓸 수 없다)
+            if (b.failed > 0 && b.lastError) {
+                msg.textContent += ' · 사유: ' + b.lastError;
+                msg.style.color = 'var(--color-error)';
+            }
             if (!b.running) {
                 clearInterval(poll); poll = null; stop.hidden = true; start.disabled = false;
-                msg.textContent += ' — 새로고침하면 반영됩니다';
+                if (!b.failed) { msg.textContent += ' — 새로고침하면 반영됩니다'; }
             }
         }
         if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }

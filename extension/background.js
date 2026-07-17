@@ -477,10 +477,23 @@ const handlers = {
           await chrome.storage.local.set({ rfBulk: Object.assign({}, cur, { current: kw }) });
 
           const r = await handlers.collectShopSerp({ keyword: kw, count: 80 });
-          if (r && r.ok) done++; else failed++;
+          let lastError = '';
+          if (r && r.ok) {
+            done++;
+          } else {
+            failed++;
+            lastError = (r && r.message) || '알 수 없는 오류';   // 실패 사유를 남겨야 원인을 안다
+          }
 
           const now = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
-          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, { done, failed }) });
+          await chrome.storage.local.set({ rfBulk: Object.assign({}, now, { done, failed, lastError: lastError || now.lastError || '' }) });
+
+          // 연속 5건 이상 실패하면 중단 — 차단·로그인 만료 상태로 계속 두드리지 않는다
+          if (failed >= 5 && done === 0) {
+            const st2 = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
+            await chrome.storage.local.set({ rfBulk: Object.assign({}, st2, { stop: true, lastError: lastError + ' (연속 실패로 중단)' }) });
+            break;
+          }
           await new Promise((r2) => setTimeout(r2, gap));
         }
       }

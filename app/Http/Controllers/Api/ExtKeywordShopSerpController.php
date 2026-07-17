@@ -19,7 +19,9 @@ class ExtKeywordShopSerpController extends Controller
     public function queue(Request $request)
     {
         $limit = min(50, max(1, (int) $request->query('limit', 20)));
-        $days = max(1, (int) $request->query('days', 30));   // 이 기간 지난 스냅샷은 다시 수집 대상
+        // 최근 이 기간 안에 수집한 키워드는 다시 주지 않는다(같은 키워드가 반복 수집되는 것 방지).
+        // 기본 1일 — 순위는 매일 바뀔 수 있으니 하루 지난 것부터 재수집 대상.
+        $days = max(1, (int) $request->query('days', 1));
 
         // 쇼핑 카테고리에 속한 후보 중, 스냅샷이 없거나 오래된 것
         $shopCatIds = \App\Models\KeywordCategory::where('type', 'shopping')->pluck('id');
