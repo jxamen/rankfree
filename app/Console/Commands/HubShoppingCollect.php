@@ -11,9 +11,8 @@ use Illuminate\Console\Command;
 
 /**
  * 키워드 허브 — 데이터랩 쇼핑인사이트 분야별 인기검색어 수집(22).
- * 1·2분류는 KeywordCategory 로 동기화(naver_cid 매핑)하고,
- * 2분류 + 그 하위 3분류의 인기검색어를 해당 2분류 카테고리의 후보(source=datalab)로 적재한다.
- * (허브 카테고리 트리는 2계층 유지 — 3분류 키워드는 소속 2분류로 흡수)
+ * 데이터랩 1·2·3분류를 그대로 KeywordCategory 트리로 동기화(naver_cid 매핑, parent_id 3계층)하고,
+ * 각 분류의 인기검색어를 해당 분류 카테고리의 후보(source=datalab)로 적재한다.
  */
 class HubShoppingCollect extends Command
 {
@@ -55,9 +54,11 @@ class HubShoppingCollect extends Command
                 $this->ingest($subCat, $datalab->topKeywords($sub['cid'], $pages), $root['name'].' > '.$sub['name']);
 
                 if ($depth >= 3 && ! $sub['leaf']) {
-                    foreach ($datalab->children($sub['cid']) as $third) { // 3분류 → 2분류 카테고리로 흡수
+                    foreach ($datalab->children($sub['cid']) as $k => $third) { // 3분류도 카테고리로 연동(3계층)
+                        $thirdCat = $this->ensureCategory($third['cid'], $third['name'], $subCat->id, $k + 1);
                         usleep($delay);
-                        $this->ingest($subCat, $datalab->topKeywords($third['cid'], $pages), $root['name'].' > '.$sub['name'].' > '.$third['name']);
+                        $this->ingest($thirdCat, $datalab->topKeywords($third['cid'], $pages), $root['name'].' > '.$sub['name'].' > '.$third['name']);
+                        $thirdCat->forceFill(['collected_at' => now()])->save();
                     }
                 }
                 $subCat->forceFill(['collected_at' => now()])->save();
