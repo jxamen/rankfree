@@ -141,6 +141,7 @@
                     <th style="padding:8px 6px;">주소</th>
                     <th style="padding:8px 6px;">전화</th>
                     <th style="padding:8px 6px;">플레이스</th>
+                    <th style="padding:8px 6px;">최종 확인</th>
                 </tr>
             </thead>
             <tbody>
@@ -161,9 +162,13 @@
                                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">미확인</span>
                             @endif
                         </td>
+                        {{-- 언제 본 결과인지 — 미등록은 이 시점 이후 플레이스가 생겼을 수 있다(재확인 주기 참고) --}}
+                        <td style="padding:7px 6px;" class="font-mono text-muted-soft" title="{{ $b->place_checked_at?->format('Y-m-d H:i') }}">
+                            {{ $b->place_checked_at?->format('m-d H:i') ?? '—' }}
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="text-muted-soft text-center" style="padding:40px;">
+                    <tr><td colspan="8" class="text-muted-soft text-center" style="padding:40px;">
                         수집된 신규 개업이 없습니다. 위 '수집 실행'을 누르거나 <code>php artisan newbiz:collect</code> 를 실행하세요.
                     </td></tr>
                 @endforelse
@@ -280,13 +285,30 @@
                 var first = isCollect ? post(f.action, new FormData(f)) : Promise.resolve(null);
                 first.then(function (c) {
                     var total = c ? c.remaining : (force ? {{ $recheckable }} : {{ $needCheck }});
-                    // 수집 중에 중단을 눌렀으면 이어지는 플레이스 확인은 시작하지 않는다(수집분은 이미 저장됨)
-                    if (c && stopped) { return { found: 0, not_found: 0, done: 0, stopped: true, remaining: total }; }
+                    // 수집 중에 중단했으면 이어지는 플레이스 확인은 시작하지 않는다(받아둔 수집분은 이미 저장됨)
+                    if (c && stopped) {
+                        return { c: c, m: { found: 0, not_found: 0, done: 0, stopped: true, remaining: total } };
+                    }
                     if (c) { show('수집 완료 — 신규 ' + c.created + ' · 갱신 ' + c.updated + ' → 플레이스 확인 시작', 0, total); }
-                    return matchAll('{{ route('admin.new-businesses.place-match') }}', token, total, force);
-                }).then(function (m) {
-                    var c = null;
-                    return { m: m, c: c };
+                    return matchAll('{{ route('admin.new-businesses.place-match') }}', token, total, force)
+                        .then(function (m) { return { c: c, m: m }; });
+                }).then(function (r) {
+                    var c = r.c, m = r.m;
+                    var msg = (c ? '수집 신규 ' + c.created + '건 · 갱신 ' + c.updated + '건' : '');
+                    if (m.done > 0) {
+                        msg += (msg ? ' · ' : '') + (force ? '전체 재확인 ' : '플레이스 확인 ')
+                            + m.done + '건(있음 ' + m.found + ' · 미등록 ' + m.not_found + ')';
+                    } else if (!c) {
+                        msg = '확인할 대상이 없습니다(미등록을 지금 다시 보려면 전체 재확인)';
+                    }
+                    if (m.stopped) { msg = '중단됨 — ' + msg + (m.remaining ? ' · ' + m.remaining + '건 남음' : ''); }
+                    if (c && c.errors && c.errors.length) { msg += ' · 오류: ' + c.errors.join(' / '); }
+                    if (c && c.sample) { msg += ' (인증키가 sample 이라 일자당 5건 제한)'; }
+                    sessionStorage.setItem('nb-flash', msg);
+                    spin.style.display = 'none';
+                    stopBtn.style.display = 'none';
+                    show((m.stopped ? '' : '완료 — ') + msg, 1, 1);
+                    location.reload();   // 목록·현황 갱신(결과는 nb-flash 로 이어 보여준다)
                 }).catch(function (err) {
                     busy = false;
                     lock(false, btn);
@@ -297,13 +319,15 @@
             });
         });
 
-        // 새로고침 뒤 결과 표시
+        // 새로고침 뒤 결과 표시 — 중단이면 중단된 대로 보여준다
         var flash = sessionStorage.getItem('nb-flash');
         if (flash) {
             sessionStorage.removeItem('nb-flash');
             spin.style.display = 'none';
-            show('완료 — ' + flash, 1, 1);
-            bar.style.background = 'var(--color-success)';
+            stopBtn.style.display = 'none';
+            var isStop = flash.indexOf('중단됨') === 0;
+            show(isStop ? flash : '완료 — ' + flash, 1, 1);
+            bar.style.background = isStop ? 'var(--color-hairline)' : 'var(--color-success)';
         }
     })();
 </script>

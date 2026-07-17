@@ -200,10 +200,11 @@
                                class="text-ink font-semibold" style="text-decoration:none;" title="이 키워드로 노출되는 업체 보기">{{ $it->keyword }}</a>
                         </td>
                         {{-- 같은 키워드가 여러 분류에 있으면 대표 1개 + 나머지 개수 --}}
+                        @php $__cc = (int) ($catCnt[$it->keyword] ?? 1); @endphp
                         <td style="padding:7px 6px;" class="text-muted">
                             {{ $it->category?->name ?? '—' }}
-                            @if (($it->cat_cnt ?? 1) > 1)
-                                <span class="text-muted-soft" title="이 키워드는 {{ $it->cat_cnt }}개 분류에 있습니다(수집은 1회만)">+{{ $it->cat_cnt - 1 }}</span>
+                            @if ($__cc > 1)
+                                <span class="text-muted-soft" title="이 키워드는 {{ $__cc }}개 분류에 있습니다(수집은 1회만)">+{{ $__cc - 1 }}</span>
                             @endif
                         </td>
                         @if ($type === 'place')
@@ -218,10 +219,13 @@
                         @php $__sat = $serpAt[$it->keyword] ?? null; @endphp
                         <td style="padding:7px 6px;">
                             @if ($__sat)
-                                @php $__c = \Carbon\Carbon::parse($__sat); @endphp
+                                @php $__c = \Carbon\Carbon::parse($__sat); $__n = (int) ($serpCnt[$it->keyword] ?? 0); @endphp
                                 <a href="{{ route('admin.keyword-browse.detail', ['keyword' => $it->keyword]) }}"
                                    class="font-mono" style="text-decoration:none;color:{{ $__c->lt(now()->subDays(30)) ? 'var(--color-error)' : 'var(--color-primary)' }};"
-                                   title="{{ $__c->format('Y-m-d H:i') }} 수집{{ $__c->lt(now()->subDays(30)) ? ' · 30일 지남' : '' }}">{{ $__c->format('m-d') }}</a>
+                                   title="{{ $__c->format('Y-m-d H:i') }} 수집 · {{ $type === 'place' ? '업체' : '상품' }} {{ number_format($__n) }}개{{ $__c->lt(now()->subDays(30)) ? ' · 30일 지남' : '' }}">
+                                    {{ $__c->format('m-d') }}
+                                    <span class="text-muted-soft">({{ number_format($__n) }})</span>
+                                </a>
                             @else
                                 <span class="text-muted-soft">미수집</span>
                             @endif

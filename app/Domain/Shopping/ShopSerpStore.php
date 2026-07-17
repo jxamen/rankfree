@@ -44,6 +44,7 @@ class ShopSerpStore
                 'title' => mb_substr((string) ($p['title'] ?? ''), 0, 300),
                 'price' => (int) ($p['price'] ?? 0) ?: null,
                 'mall_name' => $mall ?: null,
+                'talk_id' => mb_substr((string) ($p['talkId'] ?? ''), 0, 60) ?: null,   // 판매처 톡톡
                 'link' => $link ?: null,
                 'is_ad' => ! empty($p['isAd']),
                 'seen_at' => $now,
@@ -64,7 +65,7 @@ class ShopSerpStore
         }
 
         foreach (array_chunk(array_values($prod), 200) as $chunk) {
-            DB::table('shop_products')->upsert($chunk, ['product_key'], ['title', 'price', 'mall_name', 'link', 'is_ad', 'seen_at', 'updated_at']);
+            DB::table('shop_products')->upsert($chunk, ['product_key'], ['title', 'price', 'mall_name', 'talk_id', 'link', 'is_ad', 'seen_at', 'updated_at']);
         }
         if ($malls) {
             DB::table('shop_malls')->upsert(array_values($malls), ['mall_name'], ['seen_at', 'updated_at']);
@@ -106,7 +107,7 @@ class ShopSerpStore
             ->join('shop_products as p', 'p.product_key', '=', 'r.product_key')
             ->where('r.keyword', $keyword)->where('r.collected_month', $month)
             ->orderBy('r.rnk')
-            ->select('r.rnk', 'r.collected_at', 'r.is_ad', 'p.title', 'p.price', 'p.mall_name', 'p.link', 'p.product_key')
+            ->select('r.rnk', 'r.collected_at', 'r.is_ad', 'p.title', 'p.price', 'p.mall_name', 'p.talk_id', 'p.link', 'p.product_key')
             ->get();
     }
 

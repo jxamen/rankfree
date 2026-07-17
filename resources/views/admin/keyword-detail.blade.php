@@ -80,6 +80,7 @@
                             <th style="padding:8px 6px;width:44px;text-align:right;">순위</th>
                             <th style="padding:8px 6px;">상품명</th>
                             <th style="padding:8px 6px;">판매처</th>
+                            <th style="padding:8px 6px;">톡톡</th>
                             <th style="padding:8px 6px;text-align:right;">가격</th>
                             <th style="padding:8px 6px;">광고</th>
                         </tr>
@@ -96,6 +97,15 @@
                                     @endif
                                 </td>
                                 <td style="padding:7px 6px;" class="text-muted">{{ $p->mall_name ?: '—' }}</td>
+                                {{-- 판매처 톡톡 — 누르면 톡톡 대화가 열린다(talk.naver.com/ct/{code}) --}}
+                                <td style="padding:7px 6px;">
+                                    @if (!empty($p->talk_id))
+                                        <a href="https://talk.naver.com/ct/{{ $p->talk_id }}" target="_blank" rel="noopener"
+                                           class="font-mono" style="color:var(--color-primary);text-decoration:none;" title="톡톡 열기">{{ $p->talk_id }}</a>
+                                    @else
+                                        <span class="text-muted-soft">—</span>
+                                    @endif
+                                </td>
                                 <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ !empty($p->price) ? number_format($p->price) : '—' }}</td>
                                 <td style="padding:7px 6px;">@if (!empty($p->is_ad))<span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>@else<span class="text-muted-soft">—</span>@endif</td>
                             </tr>

@@ -119,6 +119,7 @@ class ExtKeywordShopSerpController extends Controller
             // 길이 제한을 걸면 광고 상품이 섞인 키워드는 전부 저장 실패한다(실측).
             'products.*.link' => 'nullable|string',
             'products.*.isAd' => 'nullable|boolean',
+            'products.*.talkId' => 'nullable|string|max:60',   // 톡톡 코드(talk.naver.com/ct/{code})
             'related_tags' => 'nullable|array|max:50',
         ]);
 

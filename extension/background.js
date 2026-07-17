@@ -648,6 +648,7 @@ const handlers = {
       mallName: String(p.mallName || ''),
       link: String(p.link || ''),
       isAd: !!p.isAd,
+      talkId: String(p.talkId || ''),   // 톡톡 코드(talk.naver.com/ct/{code}) — 관리자에서 톡톡 열기용
     })).filter((p) => p.title);
 
     const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp', {
