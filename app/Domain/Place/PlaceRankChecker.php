@@ -677,6 +677,11 @@ class PlaceRankChecker
             'review_score' => ($g('visitorReviewScore') !== null && $g('visitorReviewScore') !== '') ? (float) $g('visitorReviewScore') : null,
             'place_plus' => ! empty($it['posInfo']['isPOS']),  // 플레이스+ (posInfo.isPOS)
             'new_opening' => ! empty($g('newOpening')),         // 새로오픈
+            // 톡톡 — SERP 목록 쿼리에서 바로 온다(실측 2026-07-17). 상세 조회 불필요.
+            'talktalk_url' => (string) ($g('talktalkUrl') ?: ''),
+            'talktalk_id' => ($tt = (string) ($g('talktalkUrl') ?: '')) !== ''
+                ? (preg_match('#talk\.naver\.com/([^?/]+)#', $tt, $mm) ? $mm[1] : '')
+                : '',
             'tags' => $tags, 'address' => (string) ($g('address') ?: $g('roadAddress')),
         ];
     }
