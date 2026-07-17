@@ -29,10 +29,11 @@ class KeywordHubController extends Controller
         ]);
     }
 
-    /** 자동 발행 상태(폴링용 JSON). */
+    /** 자동 발행 상태(폴링용 JSON). 브라우저·프록시 캐시 금지 — 폴링이 최신 진행을 봐야 한다. */
     public function autoStatus()
     {
-        return response()->json(['data' => $this->autoPayload()]);
+        return response()->json(['data' => $this->autoPayload()])
+            ->header('Cache-Control', 'no-store, max-age=0');
     }
 
     /** 자동 발행 on/off 토글 — {on: bool, type: shopping|place}. 서버 크론(hub:auto-publish)이 실제 발행을 이어간다. */
@@ -42,7 +43,8 @@ class KeywordHubController extends Controller
             ? HubAutoRun::start($request->input('type'))
             : HubAutoRun::stop();
 
-        return response()->json(['data' => $this->autoPayload($state)]);
+        return response()->json(['data' => $this->autoPayload($state)])
+            ->header('Cache-Control', 'no-store, max-age=0');
     }
 
     /** 자동 발행 상태 → 화면/폴링 페이로드. */

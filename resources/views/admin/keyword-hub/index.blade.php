@@ -114,7 +114,9 @@
 
     async function fetchStatus() {
         try {
-            const res = await fetch(statusUrl, { headers: { 'Accept': 'application/json' } });
+            // 캐시 무력화 — 브라우저가 이전 응답을 재사용하면 진행이 멈춘 것처럼 보인다(타임스탬프 + no-store)
+            const url = statusUrl + (statusUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
             if (res.ok) render((await res.json()).data);
         } catch (e) { /* 이전 상태 유지 */ }
     }
