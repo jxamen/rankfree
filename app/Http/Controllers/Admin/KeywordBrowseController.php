@@ -140,7 +140,12 @@ class KeywordBrowseController extends Controller
 
         $candidate = KeywordCandidate::with('category')
             ->where('keyword', $keyword)->orderByDesc('id')->first();
-        $type = $candidate?->category?->type ?? 'place';
+        // 종류는 마스터가 기준 — 후보로만 판단하면 후보가 없는 키워드(수집만 된 경우)가
+        // 플레이스로 오인돼 쇼핑 상품이 하나도 안 보인다.
+        $type = $candidate?->category?->type
+            ?? \App\Models\Keyword::where('keyword', $keyword)->orderBy('id')->value('type')
+            // 후보·마스터에 없고 수집만 된 키워드는 스냅샷이 있는 쪽으로 본다
+            ?? (\App\Models\KeywordShopSerp::where('keyword', $keyword)->exists() ? 'shopping' : 'place');
         $cat = $this->placeCatKey($candidate?->category?->name);
         $top = min(300, max(10, (int) $request->query('top', 300)));
 
