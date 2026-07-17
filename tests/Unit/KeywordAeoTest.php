@@ -45,6 +45,29 @@ class KeywordAeoTest extends TestCase
         $this->assertStringContainsString('자체 추정', $q4['a']);
     }
 
+    public function test_meta_description_is_real_summary(): void
+    {
+        $desc = KeywordAnalysisPresenter::metaDescription($this->fullVm());
+
+        // 고정 홍보 문구가 아닌 실측 수치 문장
+        $this->assertStringContainsString('월 약 52,700회', $desc);
+        $this->assertStringContainsString("광고 경쟁강도는 '높음'", $desc);
+        $this->assertStringNotContainsString('무료 분석 리포트', $desc);
+    }
+
+    public function test_meta_description_truncates_at_sentence_boundary(): void
+    {
+        $vm = $this->fullVm();
+        $vm['insights']['summary'] = str_repeat('가', 300).'입니다.'; // 한도 초과 문장
+
+        $desc = KeywordAnalysisPresenter::metaDescription($vm);
+
+        // 검색량·경쟁 문장까지만 담고 문장 경계에서 끊는다
+        $this->assertLessThanOrEqual(320, mb_strwidth($desc, 'UTF-8'));
+        $this->assertStringContainsString('월 약 52,700회', $desc);
+        $this->assertStringEndsWith('입니다.', $desc);
+    }
+
     public function test_minimal_data_degrades_gracefully(): void
     {
         $aeo = KeywordAnalysisPresenter::aeo(['keyword' => '신상키워드']);

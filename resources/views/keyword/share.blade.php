@@ -15,6 +15,12 @@
     $__aeo = \App\Domain\Keyword\KeywordAnalysisPresenter::aeo($vm);
     $__faq = $__aeo['faq'];
 
+    // meta/og/twitter description — 고정 문구 대신 실제 요약 답변(검색량·경쟁·타겟 수치 문장).
+    // 검색량 집계 전엔 요약이 빈약하므로 기존 소개 문구($__summary)를 유지한다.
+    $__desc = ! empty($vm['has_volume']) && ($__total ?? 0) > 0
+        ? \App\Domain\Keyword\KeywordAnalysisPresenter::metaDescription($vm)
+        : $__summary;
+
     $__rec = $record ?? null;
     $__cat = $__rec?->category;
     $__date = $__rec?->refreshed_at ?? $__rec?->updated_at;
@@ -28,9 +34,9 @@
 @endphp
 
 @section('title', $__kw.' 키워드 검색량 분석 · 랭크프리')
-@section('description', $__summary)
+@section('description', $__desc)
 
-@include('partials.report-seo', ['seoTitle' => $__kw.' 키워드 분석', 'seoDesc' => $__summary, 'seoSection' => '키워드 분석', 'seoDate' => $__date, 'seoFaq' => $__faq, 'seoCrumbs' => $__crumbs])
+@include('partials.report-seo', ['seoTitle' => $__kw.' 키워드 분석', 'seoDesc' => $__desc, 'seoSection' => '키워드 분석', 'seoDate' => $__date, 'seoFaq' => $__faq, 'seoCrumbs' => $__crumbs])
 
 @section('content')
 {{-- 헤더 → 브레드크럼 16px, 브레드크럼 → 제목 블록 34px (keywords/type 과 동일 리듬) --}}

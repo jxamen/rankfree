@@ -374,6 +374,30 @@ class KeywordAnalysisPresenter
         return ['summary' => $summary, 'faq' => $faq];
     }
 
+    /**
+     * meta/og/twitter description — 고정 홍보 문구 대신 AEO 요약 답변(실측 수치 문장)을 노출.
+     * 문장 단위로 담아 한도를 넘기 직전까지 유지한다(전각=폭2 기준, 폭 320 ≈ 한글 160자).
+     */
+    public static function metaDescription(array $vm, int $maxWidth = 320): string
+    {
+        $text = trim((string) preg_replace('/\s+/u', ' ', self::aeo($vm)['summary']));
+        if (mb_strwidth($text, 'UTF-8') <= $maxWidth) {
+            return $text;
+        }
+
+        $out = '';
+        foreach (preg_split('/(?<=\.)\s+/u', $text) as $sentence) {
+            $joined = $out === '' ? $sentence : $out.' '.$sentence;
+            if (mb_strwidth($joined, 'UTF-8') > $maxWidth) {
+                break;
+            }
+            $out = $joined;
+        }
+
+        // 첫 문장부터 한도를 넘으면 폭 기준으로 잘라낸다
+        return $out !== '' ? $out : rtrim(mb_strimwidth($text, 0, $maxWidth - 2, '', 'UTF-8')).'…';
+    }
+
     /** 검색량 기반 자체 추정 등급(S~F). "네이버 공식 등급" 아님. */
     public static function grade(int $total): string
     {

@@ -46,6 +46,21 @@ class KeywordShareRenderTest extends TestCase
         $this->assertStringNotContainsString('id="rf-sidebar"', $html);
     }
 
+    public function test_share_page_meta_description_is_real_summary(): void
+    {
+        $html = view('keyword.share', [
+            'vm' => $this->vm(), 'saturation' => null, 'popular' => [], 'weekday' => null,
+        ])->render();
+
+        // meta/og/twitter description 이 고정 문구가 아닌 AEO 요약 답변(실측 수치 문장)
+        $expected = KeywordAnalysisPresenter::metaDescription($this->vm());
+        $this->assertStringContainsString('월 약 3,000회 검색되는 키워드', $expected);
+        $this->assertStringContainsString('<meta name="description" content="'.e($expected).'">', $html);
+        $this->assertStringContainsString('<meta property="og:description" content="'.e($expected).'">', $html);
+        $this->assertStringContainsString('<meta name="twitter:description" content="'.e($expected).'">', $html);
+        $this->assertStringNotContainsString('포화도까지 무료 분석 리포트.">', $html);
+    }
+
     public function test_console_keyword_body_has_console_links(): void
     {
         $html = view('partials._keyword_body', [
