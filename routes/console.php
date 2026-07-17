@@ -54,12 +54,17 @@ if (config('rankfree.cafe_crawl.schedule_enabled', true)) {
 // 사이트맵 갱신 — 매일 새벽 5:40(KST). 분석 공유 슬러그 백필 + 사이트맵 캐시 무효화.
 Schedule::command('sitemap:refresh')->timezone('Asia/Seoul')->dailyAt('05:40')->withoutOverlapping()->runInBackground();
 
-// 키워드 콘텐츠 허브(22) — 후보 수집 → 승인분 발행 → 발행 문서 주기 갱신.
-// 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호. 상한은 config rankfree.hub.*
+// 키워드 콘텐츠 허브(22) — 승인 후보 자동 발행. 발굴과 분리(관리자 승인분만 처리 → 쿼터/도어웨이 리스크 없음).
+// 기본 on: publish_interval(분)마다 승인 후보 ≤publish_per_run 발행. 승인 큐가 빌 때까지 자동으로 계속 드레인, 없으면 idle.
+if (config('rankfree.hub.publish_enabled', true)) {
+    $__hubPublishItv = max(1, min(60, (int) config('rankfree.hub.publish_interval', 10)));
+    Schedule::command('hub:publish')->cron("*/{$__hubPublishItv} * * * *")->withoutOverlapping()->runInBackground();
+}
+
+// 키워드 허브 발굴·갱신 — 후보 수집/발굴/갱신. 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호.
 if (config('rankfree.hub.schedule_enabled', false)) {
     Schedule::command('hub:collect')->timezone('Asia/Seoul')->dailyAt('06:10')->withoutOverlapping()->runInBackground();
     Schedule::command('hub:discover')->timezone('Asia/Seoul')->dailyAt('06:20')->withoutOverlapping()->runInBackground(); // GSC 유입 쿼리 발굴(gsc:collect 04:00 이후)
-    Schedule::command('hub:publish')->hourly()->withoutOverlapping()->runInBackground();
     Schedule::command('hub:refresh')->timezone('Asia/Seoul')->dailyAt('06:40')->withoutOverlapping()->runInBackground();
     // 데이터랩 쇼핑인사이트 인기검색어 — 순위 변동이 느려 주 1회면 충분(월요일 새벽)
     Schedule::command('hub:shopping-collect')->timezone('Asia/Seoul')->weeklyOn(1, '06:50')->withoutOverlapping()->runInBackground();

@@ -49,9 +49,15 @@
 
 ### 대량 시드 생성기 2종 (✅ 2026-07-16 추가)
 
-- **hub:place-seed** ([HubPlaceSeed](../app/Console/Commands/HubPlaceSeed.php)) — 플레이스 지역×업종 조합 생성기. pcmap 업종 6종별 카테고리(맛집·음식점/병원·의원/헤어샵/네일·뷰티/숙박·여행/생활·플레이스)를 만들고, [database/data/place_keyword_matrix.php](../database/data/place_keyword_matrix.php)(지역 ~380개: 핫플레이스·구·시·주요 동·여행지 큐레이션 × 업종 패턴 ~60개)를 조합해 "{지역} {패턴}"(강남 치과, 성수동 맛집, 제주도 호텔 …) 후보(source=combo)를 만든다. 조합 가능 총량 ~1.5만, `--limit`(기본 2,000)씩 증분 실행. **검색량 미상(pending) → 발행 시 분석이 볼륨 판정(없으면 자동 보류)** 이라 저품질 대량 발행이 안 된다. 전체 행정동 확장은 매트릭스 파일에 공공데이터 CSV 변환분을 붙이면 됨
-- **hub:shopping-collect** ([HubShoppingCollect](../app/Console/Commands/HubShoppingCollect.php) · [NaverDataLabShoppingService](../app/Domain/Keyword/NaverDataLabShoppingService.php)) — **데이터랩 쇼핑인사이트**(비공식·무로그인, referer+XHR+전체 UA 필수) 분야별 인기검색어 수집. 1·2분류를 KeywordCategory 로 동기화(`naver_cid` 매핑, 2026_07_16_000020 마이그레이션), 2분류+3분류 인기검색어(최근 30일, 분야당 20×pages)를 **소속 2분류 카테고리** 후보(source=datalab)로 적재(트리는 2계층 유지). 카테고리 24h·랭킹 12h 캐시, 요청 간 딜레이. 스케줄: 주 1회(월 06:50, hub 활성 시). 실측: 패션잡화 1분류에서 신규 2,461건
-- 검증: [tests/Feature/KeywordHubSeedTest.php](../tests/Feature/KeywordHubSeedTest.php) 4건 + 실 API 실행(데이터랩 2,461건·조합 1,000건) + 관리자 큐 Playwright(데이터랩/지역조합 배지·카테고리 트리 필터)
+- **hub:place-seed** ([HubPlaceSeed](../app/Console/Commands/HubPlaceSeed.php)) — 플레이스 지역×업종 조합 생성기. pcmap 업종 6종별 카테고리(맛집·음식점/병원·의원/헤어샵/네일·뷰티/숙박·여행/생활·플레이스) × "{지역} {패턴}"(강남 치과, 성수동 맛집, 제주도 호텔 …) 후보(source=combo).
+  - **지역 풀** = 큐레이션([place_keyword_matrix.php](../database/data/place_keyword_matrix.php): 핫플레이스 69·여행지 53·구 33·시 70·주요 동 150) + **전국 행정구역**([regions_kr.php](../database/data/regions_kr.php): 시군구 364·읍면동 2,436 — [scripts/generate-regions-kr.php](../scripts/generate-regions-kr.php) 가 행정동 GeoJSON(vuski/admdongkor)에서 자동 생성, "역삼1동"→"역삼동" 검색형 정규화)
+  - **패턴 128종**(맛집 40·병원 26·생활 34·숙박 12·헤어 8·네일 8) → **조합 가능 총량 343,932개**(실측 계산)
+  - 대량 처리: 기존 키워드 사전 로드 + 500건 배치 insert(3만 건 수 초). `--limit`(기본 2,000)씩 증분. **검색량 미상(pending) → 발행 시 분석이 볼륨 판정(없으면 자동 보류)** 이라 저품질 대량 발행이 안 된다
+- **hub:shopping-collect** ([HubShoppingCollect](../app/Console/Commands/HubShoppingCollect.php) · [NaverDataLabShoppingService](../app/Domain/Keyword/NaverDataLabShoppingService.php)) — **데이터랩 쇼핑인사이트**(비공식·무로그인, referer+XHR+전체 UA 필수) 분야별 인기검색어 수집. 1·2분류를 KeywordCategory 로 동기화(`naver_cid` 매핑, 2026_07_16_000020), 2분류+3분류 인기검색어를 **소속 2분류 카테고리** 후보(source=datalab)로 적재(트리는 2계층 유지).
+  - **분야당 최대 500위(25페이지 × 20개, 실측 26페이지부터 빈 배열)** — 기본 `config rankfree.hub.datalab_pages=25`
+  - ⚠️ **429 레이트리밋**(실측: 150ms 간격 연속 요청 차단) — 페이지 간 600ms + 429 백오프(4·8·12s) 재시도, **부분 수집은 캐시하지 않음**(완주만 12h 캐시). 전체 실행(1분류 10개 × 2·3분류 × 25p)은 수 시간 — 주 1회 크론(월 06:50)
+- **운영 도구(대량 후보)**: 승인 큐 **키워드 검색(q)** + **필터 전체 일괄 승인/거부/삭제**(`bulk-all` — 페이지 선택이 아니라 상태·카테고리·출처·검색어 필터 전체에 적용, SweetAlert 확인)
+- 검증: [tests/Feature/KeywordHubSeedTest.php](../tests/Feature/KeywordHubSeedTest.php) 7건(트리·페이지 누적·전국 풀 2만+·일괄 처리) + 실 API(패션잡화 500위 심층 수집·조합 3.1만 건 생성) + 관리자 큐 Playwright
 
 ### 파이프라인 (크론 3종 + 서비스)
 
@@ -59,7 +65,10 @@
 2. **hub:publish** ([HubPublish](../app/Console/Commands/HubPublish.php) · [KeywordHubPublisher](../app/Domain/Keyword/KeywordHubPublisher.php)) — 승인 후보를 검색량 큰 순으로 상한(기본 10)만큼 발행: `KeywordReportBuilder::build()` → `KeywordSearch(origin=hub, user_id=NULL, category_id, snapshot, refreshed_at)`. **thin content 방지**: has_volume 없으면 발행하지 않고 rejected + '데이터 부족' 사유
 3. **hub:refresh** ([HubRefresh](../app/Console/Commands/HubRefresh.php)) — `refresh_after_days`(기본 30일) 지난 문서를 오래된 순 상한(기본 20)만큼 재수집 → 사이트맵 lastmod 갱신 효과. 볼륨이 안 나오면 기존 스냅샷 유지·커서만 전진
 
-- **스케줄**: [routes/console.php](../routes/console.php) — 수집 06:10 · 발행 매시 · 갱신 06:40(KST). **기본 off** — `.env HUB_SCHEDULE_ENABLED=true` 로 활성(검색광고 쿼터 보호). 상한·임계값은 `config('rankfree.hub.*')`
+- **스케줄**: [routes/console.php](../routes/console.php) — **발행과 발굴을 분리**한다.
+  - **발행(hub:publish)**: 관리자 승인분만 처리(도어웨이·쿼터 리스크 없음) → **기본 on**(`hub.publish_enabled`, `.env HUB_PUBLISH_ENABLED=false` 로 끔). `hub.publish_interval`(분, 기본 10)마다 실행해 승인 후보 ≤`publish_per_run`(10) 발행. **승인 큐가 빌 때까지 자동으로 계속 드레인**하고, 없으면 idle. `withoutOverlapping`.
+  - **발굴(hub:collect 06:10 · hub:discover 06:20 · hub:refresh 06:40 · hub:shopping-collect 월 06:50)**: 후보 대량 생성이라 쿼터 보호로 **기본 off** — `.env HUB_SCHEDULE_ENABLED=true` 로 활성.
+  - ⚠️ 전제: 서버에 `* * * * * php artisan schedule:run` 크론이 매분 돌아야 자동 발행이 동작한다. 상한·간격은 `config('rankfree.hub.*')`
 - **관리자** `/admin/keyword-hub` ([KeywordHubController](../app/Http/Controllers/Admin/KeywordHubController.php) · [index.blade.php](../resources/views/admin/keyword-hub/index.blade.php)) — 카테고리·시드 인라인 CRUD, 후보 큐(상태 탭·카테고리 필터·대량 승인/거부/삭제), 지금 수집(동기 1카테고리)·지금 발행(≤10건), 최근 발행 문서. **메뉴는 /admin/menus 에서 수동 등록**(시더 금지 규칙)
 - 검증: [tests/Feature/KeywordHubTest.php](../tests/Feature/KeywordHubTest.php) 8건(수집 필터·상태 보존·발행/보류·볼륨순 상한·권한·승인 큐) + **Playwright E2E**(실 API): 시드 '캠핑의자' 1개 → 후보 207건 수집(필터 729건) → 승인 2건 → 발행 2건(`/keyword/캠핑의자` 월 52,700) → 문서 렌더 + Phase 0 추천 블록 확인
 

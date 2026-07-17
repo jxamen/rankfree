@@ -335,6 +335,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/categories/{category}/toggle', [\App\Http\Controllers\Admin\KeywordHubController::class, 'toggleCategory'])->name('keyword-hub.categories.toggle');
     Route::delete('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'destroyCategory'])->name('keyword-hub.categories.destroy');
     Route::post('/keyword-hub/candidates/bulk', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkCandidates'])->name('keyword-hub.candidates.bulk');
+    Route::post('/keyword-hub/candidates/bulk-all', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkAllCandidates'])->name('keyword-hub.candidates.bulk-all');
     Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
     Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
 

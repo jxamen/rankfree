@@ -19,9 +19,9 @@ class HubShoppingCollect extends Command
 {
     protected $signature = 'hub:shopping-collect
         {--root= : 특정 1분류 cid 만(예: 50000001 패션잡화)}
-        {--pages=1 : 분야당 인기검색어 페이지 수(페이지당 20개)}
+        {--pages= : 분야당 인기검색어 페이지 수(페이지당 20개 · 최대 25=500위, 기본 config)}
         {--depth=3 : 인기검색어 수집 분류 깊이(2=2분류만, 3=3분류 포함)}
-        {--delay-ms=300 : 요청 간 대기(ms)}';
+        {--delay-ms=300 : 분야 간 대기(ms)}';
 
     protected $description = '키워드 허브 — 데이터랩 쇼핑인사이트 분야별(1~3분류) 인기검색어 수집(22)';
 
@@ -41,7 +41,7 @@ class HubShoppingCollect extends Command
             $roots = array_values(array_filter($roots, fn ($r) => $r['cid'] === (int) $this->option('root')));
         }
 
-        $pages = (int) $this->option('pages');
+        $pages = (int) ($this->option('pages') ?: config('rankfree.hub.datalab_pages', 25));
         $depth = max(2, min(3, (int) $this->option('depth')));
         $delay = max(0, (int) $this->option('delay-ms')) * 1000;
 

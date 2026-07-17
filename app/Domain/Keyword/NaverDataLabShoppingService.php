@@ -50,16 +50,42 @@ class NaverDataLabShoppingService
 
     /**
      * 분야 인기검색어 — 최근 30일 기준, page×20개.
+     * 실측(2026-07): 분야당 최대 25페이지(500위)까지 제공, 그 뒤는 빈 배열.
+     * ⚠️ 데이터랩은 초당 수 회 연속 요청에 429 를 반환 — 페이지 간 600ms + 429 백오프 재시도.
+     * 부분 수집(중간 실패)은 캐시하지 않는다(다음 실행에서 온전히 재수집).
      *
      * @return list<array{rank:int,keyword:string}>
      */
-    public function topKeywords(int $cid, int $pages = 1): array
+    public function topKeywords(int $cid, int $pages = 25): array
     {
-        $pages = max(1, min($pages, 5)); // 페이지당 20개 · 상한 100개
+        $pages = max(1, min($pages, 25)); // 페이지당 20개 · 상한 500개(실측 최대)
+        $key = "datalab:shop:rank:{$cid}:{$pages}";
+        $hit = Cache::get($key);
+        if ($hit !== null) {
+            return $hit;
+        }
 
-        return Cache::remember("datalab:shop:rank:{$cid}:{$pages}", now()->addHours(12), function () use ($cid, $pages) {
-            $out = [];
-            for ($page = 1; $page <= $pages; $page++) {
+        [$out, $complete] = $this->fetchRanks($cid, $pages);
+        if ($complete) {
+            Cache::put($key, $out, now()->addHours(12));
+        }
+
+        return $out;
+    }
+
+    /** @return array{0: list<array{rank:int,keyword:string}>, 1: bool} [결과, 완주 여부] */
+    private function fetchRanks(int $cid, int $pages): array
+    {
+        $out = [];
+        for ($page = 1; $page <= $pages; $page++) {
+            if ($page > 1) {
+                usleep(600_000); // 페이지 간 대기 — 429 방지(실측 150ms 간격은 차단됨)
+            }
+            $resp = null;
+            for ($try = 0; $try <= 3; $try++) {
+                if ($try > 0) {
+                    sleep(4 * $try); // 429 백오프 — 4·8·12초
+                }
                 try {
                     $resp = Http::asForm()->withHeaders($this->headers() + ['origin' => 'https://datalab.naver.com'])
                         ->timeout(15)
@@ -72,27 +98,32 @@ class NaverDataLabShoppingService
                             'page' => $page,
                             'count' => 20,
                         ]);
-                    if (! $resp->successful() || (int) $resp->json('returnCode', -1) !== 0) {
-                        Log::warning('datalab shop: rank error', ['cid' => $cid, 'status' => $resp->status()]);
-                        break;
-                    }
-                    $ranks = (array) ($resp->json('ranks') ?? []);
-                    foreach ($ranks as $r) {
-                        if (($r['keyword'] ?? '') !== '') {
-                            $out[] = ['rank' => (int) ($r['rank'] ?? 0), 'keyword' => (string) $r['keyword']];
-                        }
-                    }
-                    if (count($ranks) < 20) {
-                        break; // 마지막 페이지
-                    }
                 } catch (\Throwable $e) {
-                    Log::warning('datalab shop: rank failed', ['cid' => $cid, 'msg' => $e->getMessage()]);
+                    Log::warning('datalab shop: rank failed', ['cid' => $cid, 'page' => $page, 'msg' => $e->getMessage()]);
+
+                    return [$out, false];
+                }
+                if ($resp->status() !== 429) {
                     break;
                 }
             }
+            if (! $resp || ! $resp->successful() || (int) $resp->json('returnCode', -1) !== 0) {
+                Log::warning('datalab shop: rank error', ['cid' => $cid, 'page' => $page, 'status' => $resp?->status()]);
 
-            return $out;
-        });
+                return [$out, false];
+            }
+            $ranks = (array) ($resp->json('ranks') ?? []);
+            foreach ($ranks as $r) {
+                if (($r['keyword'] ?? '') !== '') {
+                    $out[] = ['rank' => (int) ($r['rank'] ?? 0), 'keyword' => (string) $r['keyword']];
+                }
+            }
+            if (count($ranks) < 20) {
+                break; // 마지막 페이지
+            }
+        }
+
+        return [$out, true];
     }
 
     private function headers(): array

@@ -21,6 +21,7 @@ class KeywordHubController extends Controller
         $status = in_array($request->query('status'), KeywordCandidate::STATUSES, true) ? $request->query('status') : 'pending';
         $catId = (int) $request->query('category', 0);
         $source = (string) $request->query('source', ''); // 출처 필터(combo=지역조합/seed/related/autocomplete/gsc/datalab)
+        $kw = trim((string) $request->query('q', ''));    // 키워드 검색(대량 후보 탐색용)
 
         return view('admin.keyword-hub.index', [
             'categories' => KeywordCategory::with('parent')->withCount([
@@ -28,15 +29,14 @@ class KeywordHubController extends Controller
                 'candidates as approved_count' => fn ($q) => $q->where('status', 'approved'),
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
             ])->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
-            'candidates' => KeywordCandidate::with('category')
-                ->where('status', $status)
-                ->when($catId, fn ($q) => $q->where('category_id', $catId))
-                ->when($source !== '', fn ($q) => $q->where('source', $source))
+            'candidates' => $this->filteredCandidates($status, $catId, $source, $kw)
+                ->with('category')
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
                 ->paginate(50)->withQueryString(),
             'status' => $status,
             'catId' => $catId,
             'source' => $source,
+            'q' => $kw,
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
             // 출처별 후보 수(현 status 기준) — 시딩(지역조합) 결과를 화면에서 바로 확인
             'sourceCounts' => KeywordCandidate::where('status', $status)
@@ -126,6 +126,41 @@ class KeywordHubController extends Controller
         $n = $q->where('status', '!=', 'published')->update(['status' => $status]);
 
         return back()->with('status', "후보 {$n}건을 '{$status}' 상태로 변경했습니다.");
+    }
+
+    /** 필터 전체 일괄 처리 — 현재 필터(상태·카테고리·출처·검색어)에 걸린 모든 후보를 승인/거부/삭제(대량 시딩 운영용). */
+    public function bulkAllCandidates(Request $request)
+    {
+        $data = $request->validate([
+            'action' => 'required|in:approve,reject,pending,delete',
+            'status' => 'required|in:'.implode(',', KeywordCandidate::STATUSES),
+            'category' => 'nullable|integer',
+            'source' => 'nullable|string|max:20',
+            'q' => 'nullable|string|max:120',
+        ]);
+
+        $query = $this->filteredCandidates($data['status'], (int) ($data['category'] ?? 0), (string) ($data['source'] ?? ''), trim((string) ($data['q'] ?? '')));
+
+        if ($data['action'] === 'delete') {
+            $n = $query->delete();
+
+            return back()->with('status', "필터 전체 {$n}건을 삭제했습니다.");
+        }
+
+        $status = ['approve' => 'approved', 'reject' => 'rejected', 'pending' => 'pending'][$data['action']];
+        $n = $query->where('status', '!=', 'published')->update(['status' => $status]);
+
+        return back()->with('status', "필터 전체 {$n}건을 '{$status}' 상태로 변경했습니다.");
+    }
+
+    /** 승인 큐 공통 필터(목록·전체 일괄 처리가 동일 조건을 쓰도록 단일화). */
+    private function filteredCandidates(string $status, int $catId, string $source, string $kw)
+    {
+        return KeywordCandidate::query()
+            ->where('status', $status)
+            ->when($catId, fn ($q) => $q->where('category_id', $catId))
+            ->when($source !== '', fn ($q) => $q->where('source', $source))
+            ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'));
     }
 
     /** 지금 수집 — 선택 카테고리(없으면 로테이션 순서대로 1개)를 동기 수집. */

@@ -6,6 +6,7 @@ use App\Domain\Keyword\NaverDataLabShoppingService;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
 use App\Models\KeywordSearch;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -106,5 +107,62 @@ class KeywordHubSeedTest extends TestCase
 
         $this->assertDatabaseMissing('keyword_candidates', ['keyword' => '강남 치과']);
         $this->assertSame(3, KeywordCandidate::count()); // 발행분 건너뛰고 다음 조합으로 채움
+    }
+
+    public function test_place_seed_includes_national_region_pool(): void
+    {
+        // 전국 행정구역 병합 — 조합 가능 총량이 수십만 규모(업종당 수만)여야 한다
+        $this->artisan('hub:place-seed', ['--category' => 'hairshop', '--limit' => 999999])->assertSuccessful();
+
+        $cat = KeywordCategory::where('type', 'place')->where('name', '헤어샵')->first();
+        $count = KeywordCandidate::where('category_id', $cat->id)->count();
+        $this->assertGreaterThan(20000, $count); // 지역 ~2,900 × 패턴 8
+        // 전국 읍면동(regions_kr.php) 조합 포함 확인
+        $this->assertDatabaseHas('keyword_candidates', ['category_id' => $cat->id, 'keyword' => '목천읍 미용실']);
+    }
+
+    public function test_topkeywords_accumulates_full_pages(): void
+    {
+        // 20개(꽉 찬 페이지) → 다음 페이지 계속, 5개(마지막) → 중단. 총 45개 누적.
+        Http::fake(function ($request) {
+            $page = (int) ($request['page'] ?? 1);
+            $n = $page <= 2 ? 20 : 5;
+            $ranks = [];
+            for ($i = 1; $i <= $n; $i++) {
+                $ranks[] = ['rank' => ($page - 1) * 20 + $i, 'keyword' => "키워드{$page}_{$i}"];
+            }
+
+            return Http::response(['returnCode' => 0, 'ranks' => $ranks], 200);
+        });
+
+        $out = app(NaverDataLabShoppingService::class)->topKeywords(50000173, 3);
+
+        $this->assertCount(45, $out);
+        $this->assertSame(41, $out[40]['rank']);
+    }
+
+    public function test_admin_bulk_all_applies_to_whole_filter(): void
+    {
+        $admin = User::create(['name' => '관리자', 'email' => 'bulk@rf.kr', 'password' => 'x1234567', 'role' => 'super']);
+        $cat = KeywordCategory::create(['type' => 'place', 'name' => '병원·의원', 'slug' => '병원-의원', 'is_active' => true]);
+        foreach (['강남 치과', '서초 치과', '송파 치과'] as $kw) {
+            KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => $kw, 'source' => 'combo', 'status' => 'pending']);
+        }
+        $other = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '데이터랩키워드', 'source' => 'datalab', 'status' => 'pending']);
+
+        $this->actingAs($admin)->post('/admin/keyword-hub/candidates/bulk-all', [
+            'action' => 'approve', 'status' => 'pending', 'category' => $cat->id, 'source' => 'combo',
+        ])->assertRedirect();
+
+        // 필터(출처=combo)에 걸린 3건 전부 승인, 다른 출처는 그대로
+        $this->assertSame(3, KeywordCandidate::where('status', 'approved')->count());
+        $this->assertSame('pending', $other->fresh()->status);
+
+        // 검색어 필터 일괄 — '강남'만 거부
+        $this->actingAs($admin)->post('/admin/keyword-hub/candidates/bulk-all', [
+            'action' => 'reject', 'status' => 'approved', 'q' => '강남',
+        ])->assertRedirect();
+        $this->assertSame('rejected', KeywordCandidate::where('keyword', '강남 치과')->value('status'));
+        $this->assertSame('approved', KeywordCandidate::where('keyword', '서초 치과')->value('status'));
     }
 }

@@ -101,10 +101,17 @@ return [
     | 키워드 콘텐츠 허브 (22_KEYWORD_CONTENT_HUB) — 카테고리별 키워드 수집·발행
     |--------------------------------------------------------------------------
     | hub:collect(시드→연관·자동완성 후보 수집) → 관리자 승인 → hub:publish(분석 발행)
-    | → hub:refresh(주기 갱신). 스케줄은 기본 off — 운영에서 명시적으로 켠다(쿼터 보호).
+    | → hub:refresh(주기 갱신).
+    | 발굴(collect/discover/refresh)은 기본 off(쿼터 보호). 발행(publish)은 관리자 승인분만 처리하므로
+    | 발굴과 분리해 기본 on — 승인 큐가 빌 때까지 자동으로 계속 드레인한다(회당 ≤publish_per_run).
     */
     'hub' => [
+        // 발굴(hub:collect/discover/refresh/shopping-collect) 자동 실행 — 쿼터·도어웨이 보호로 기본 off
         'schedule_enabled' => (bool) env('HUB_SCHEDULE_ENABLED', false),
+        // 승인 후보 자동 발행 — 발굴과 분리(관리자 승인분만 처리). 기본 on: 승인분을 자동으로 계속 발행
+        'publish_enabled' => (bool) env('HUB_PUBLISH_ENABLED', true),
+        // hub:publish 자동 실행 간격(분, 1~60) — 이 주기마다 승인 후보 ≤publish_per_run 발행(없으면 idle)
+        'publish_interval' => (int) env('HUB_PUBLISH_INTERVAL', 10),
         // 후보 자동 필터: 이 미만 월간 검색량은 후보에서 제외(자동완성 등 볼륨 미상은 pending 유지)
         'min_volume' => (int) env('HUB_MIN_VOLUME', 1000),
         // hub:collect 1회에 처리할 카테고리 수(collected_at 오래된 순 로테이션)
@@ -120,6 +127,8 @@ return [
         // GSC 발굴(hub:discover) — 유입 쿼리를 후보로 적재할 카테고리 슬러그(빈값=발굴 끔)·최소 노출수
         'discover_category' => env('HUB_DISCOVER_CATEGORY', ''),
         'discover_min_impressions' => (int) env('HUB_DISCOVER_MIN_IMPRESSIONS', 30),
+        // 데이터랩 쇼핑 인기검색어 수집 페이지 수(hub:shopping-collect, 페이지당 20개 · 실측 최대 25=500위)
+        'datalab_pages' => (int) env('HUB_DATALAB_PAGES', 25),
     ],
 
     /*
