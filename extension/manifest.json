@@ -11,6 +11,8 @@
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://rankfree.kr/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
     "https://search.shopping.naver.com/*",
     "https://search.naver.com/*",
     "https://smartstore.naver.com/*",
@@ -36,8 +38,12 @@
       "run_at": "document_idle"
     },
     {
-      "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단)",
-      "matches": ["https://rankfree.kr/admin/*"],
+      "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단). 로컬 개발 주소 포함",
+      "matches": [
+        "https://rankfree.kr/admin/*",
+        "http://127.0.0.1:8000/admin/*",
+        "http://localhost:8000/admin/*"
+      ],
       "js": ["content/admin-bridge.js"],
       "run_at": "document_idle"
     },
