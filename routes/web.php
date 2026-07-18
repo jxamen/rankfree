@@ -318,7 +318,9 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
 
 // 관리자 (운영자 전용)
 Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(function () {
-    Route::get('/', fn () => redirect()->route('admin.menus'))->name('home');
+    // 관리자 대시보드 — /admin 진입 시 핵심 지표(방문·가입·추적·문의·커뮤니티·발행 등)
+    Route::get('/', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('home');
+    Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
 
     // 마케팅 상품 관리 (폼 빌더 + 주문 URL 발급)
     Route::get('/products', [MarketingProductController::class, 'index'])->name('products');

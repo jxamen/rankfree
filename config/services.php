@@ -45,10 +45,13 @@ return [
     // Google Gemini — 커뮤니티 글 재작성 기본 공급자(무료 티어). OpenAI 는 저장·표시용.
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
-        // 캡차 이미지(영수증) 분석 전용 — 정확도 위해 더 강한 비전 모델 사용.
-        // 글 재작성 등 일반 용도(model)와 분리. .env GEMINI_QUIZ_MODEL 로 재정의 가능.
-        'quiz_model' => env('GEMINI_QUIZ_MODEL', 'gemini-2.5-pro'),
+        // 별칭(-latest) 사용 — 구모델이 종료돼도 현재 모델로 자동 승계.
+        // (신규 프로젝트는 gemini-2.5-pro/2.5-flash/2.0-flash 가 404. 3.x·-latest 만 사용 가능)
+        'model' => env('GEMINI_MODEL', 'gemini-flash-latest'),
+        // 캡차 이미지(영수증) 분석 Gemini 기본 — Pro(정확도). quiz.model 설정이 우선.
+        'quiz_model' => env('GEMINI_QUIZ_MODEL', 'gemini-pro-latest'),
+        // Gemini 모델이 404/429/503 이면 자동 전환할 폴백(한도 넉넉·저비용 Flash).
+        'quiz_fallback_model' => env('GEMINI_QUIZ_FALLBACK_MODEL', 'gemini-flash-latest'),
     ],
     'openai' => [
         'key' => env('OPENAI_API_KEY'),

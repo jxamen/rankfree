@@ -20,10 +20,13 @@ class GeminiQuizSolver
 
     private const RETRY_BASE_MS = 700;
 
-    // 재시도 대상 HTTP 상태.
+    // 같은 모델로 재시도(백오프)할 HTTP 상태.
     private const RETRYABLE_STATUS = [429, 500, 503];
 
-    private const DEFAULT_INSTRUCTION =
+    // 다음(폴백) 모델로 넘어갈 상태 — 위 재시도 + 404(모델 미제공/신규 프로젝트 차단).
+    private const MODEL_FALLBACK_STATUS = [429, 500, 503, 404];
+
+    public const DEFAULT_INSTRUCTION =
         "제시된 이미지는 영수증이며 품목별 수량·금액이 표(열)로 적혀 있다. 질문에 맞는 값을 계산해 숫자만 답하라.\n".
         "- '총 몇 개'처럼 개수를 물으면: 수량 열(숫자가 가장 작은 열)의 값들을 모두 더한 합을 답한다.\n".
         "- '총 구매 금액'처럼 금액을 물으면: 금액 열(숫자가 가장 큰 열)의 값들을 모두 더한 합을 답한다.\n".
@@ -35,7 +38,7 @@ class GeminiQuizSolver
      * @param  string|null  $instruction  모델에 줄 추가 지시(미지정 시 기본 지시 사용)
      * @return array{ok:bool, answer:?string, error:?string}
      */
-    public static function solve(string $question, array $images, ?string $instruction = null): array
+    public static function solve(string $question, array $images, ?string $instruction = null, ?string $primaryModel = null): array
     {
         $cred = GeminiCredentials::credentials();
         if ($cred === null) {
@@ -76,10 +79,6 @@ class GeminiQuizSolver
                 : self::DEFAULT_INSTRUCTION,
         ];
 
-        // 캡차 이미지 분석은 정확도 위해 전용(더 강한) 모델을 쓴다 — 없으면 일반 모델로 폴백.
-        $model = trim((string) config('services.gemini.quiz_model', '')) ?: $cred['model'];
-        $endpoint = sprintf(self::ENDPOINT_TPL, $model);
-
         $payload = [
             'contents' => [
                 ['role' => 'user', 'parts' => $parts],
@@ -89,49 +88,47 @@ class GeminiQuizSolver
             ],
         ];
 
+        // 정확도 위해 전용(강한) 모델을 우선 쓰고, 429(rate limit)/503(과부하)이면
+        // 한도 넉넉한 폴백 모델로 자동 전환한다. (429는 '차단'이 아니라 사용량 한도)
+        $primary = $primaryModel ?: (trim((string) config('services.gemini.quiz_model', '')) ?: $cred['model']);
+        $fallback = trim((string) config('services.gemini.quiz_fallback_model', '')) ?: 'gemini-flash-latest';
+        $models = array_values(array_unique(array_filter([$primary, $fallback])));
+
         $res = null;
-        for ($attempt = 1; $attempt <= self::RETRY_ATTEMPTS; $attempt++) {
-            try {
-                $res = Http::timeout(self::TIMEOUT)
-                    // 이 서버는 IPv6 아웃바운드가 죽어 있고 googleapis는 IPv6 우선 해석이라
-                    // 앱(php-fpm) cURL이 IPv6에 물려 간헐적 타임아웃이 난다 — IPv4 강제.
-                    ->withOptions(['force_ip_resolve' => 'v4'])
-                    ->withHeaders([
-                        'x-goog-api-key' => $cred['key'],
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->post($endpoint, $payload);
-            } catch (\Throwable $e) {
-                Log::warning('[GeminiQuizSolver] request failed', ['attempt' => $attempt, 'error' => $e->getMessage()]);
-                // 네트워크 예외도 마지막 시도 전까지 재시도.
-                if ($attempt < self::RETRY_ATTEMPTS) {
-                    self::backoff($attempt);
+        $networkError = null;
+        foreach ($models as $mi => $model) {
+            $result = self::requestWithRetries($model, $cred['key'], $payload);
+            $res = $result['res'];
+            $networkError = $result['error'];
 
-                    continue;
-                }
-
-                return ['ok' => false, 'answer' => null, 'error' => 'Gemini 요청 실패: '.$e->getMessage()];
+            if ($res !== null && $res->successful()) {
+                break;
             }
 
-            // 과부하/rate limit/일시 오류면 백오프 후 재시도.
-            if (in_array($res->status(), self::RETRYABLE_STATUS, true) && $attempt < self::RETRY_ATTEMPTS) {
-                Log::info('[GeminiQuizSolver] retryable status, backing off', ['attempt' => $attempt, 'status' => $res->status()]);
-                self::backoff($attempt);
-
-                continue;
+            // 429/503/500(일시) + 404(모델 미제공)면 폴백 모델로, 그 외 오류는 중단.
+            $status = $res?->status();
+            $canFallback = $status !== null && in_array($status, self::MODEL_FALLBACK_STATUS, true);
+            if ($res !== null && ! $canFallback) {
+                break;
             }
 
-            break;
+            if ($mi < count($models) - 1) {
+                Log::info('[GeminiQuizSolver] falling back to next model', ['from' => $model, 'status' => $status]);
+            }
+        }
+
+        if ($res === null) {
+            return ['ok' => false, 'answer' => null, 'error' => 'Gemini 요청 실패: '.($networkError ?: 'unknown')];
         }
 
         if (! $res->successful()) {
             $status = $res->status();
             if (in_array($status, self::RETRYABLE_STATUS, true)) {
-                return [
-                    'ok' => false,
-                    'answer' => null,
-                    'error' => 'Gemini 서버가 일시적으로 혼잡합니다('.$status.'). 잠시 후 다시 시도하세요.',
-                ];
+                $msg = $status === 429
+                    ? 'Gemini 사용량 한도(429)에 도달했습니다. 잠시 후 다시 시도하거나 API 키의 결제/한도를 확인하세요.'
+                    : 'Gemini 서버가 일시적으로 혼잡합니다('.$status.'). 잠시 후 다시 시도하세요.';
+
+                return ['ok' => false, 'answer' => null, 'error' => $msg];
             }
 
             return [
@@ -153,6 +150,50 @@ class GeminiQuizSolver
         }
 
         return ['ok' => true, 'answer' => $answer, 'error' => null];
+    }
+
+    /**
+     * 단일 모델로 요청 + 재시도(지수 백오프). 404 등은 재시도하지 않고 즉시 반환(상위에서 폴백).
+     *
+     * @return array{res: ?\Illuminate\Http\Client\Response, error: ?string}
+     */
+    private static function requestWithRetries(string $model, string $apiKey, array $payload): array
+    {
+        $endpoint = sprintf(self::ENDPOINT_TPL, $model);
+        $res = null;
+        for ($attempt = 1; $attempt <= self::RETRY_ATTEMPTS; $attempt++) {
+            try {
+                $res = Http::timeout(self::TIMEOUT)
+                    // IPv6 아웃바운드가 죽은 서버 대비 — IPv4 강제.
+                    ->withOptions(['force_ip_resolve' => 'v4'])
+                    ->withHeaders([
+                        'x-goog-api-key' => $apiKey,
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->post($endpoint, $payload);
+            } catch (\Throwable $e) {
+                Log::warning('[GeminiQuizSolver] request failed', ['model' => $model, 'attempt' => $attempt, 'error' => $e->getMessage()]);
+                if ($attempt < self::RETRY_ATTEMPTS) {
+                    self::backoff($attempt);
+
+                    continue;
+                }
+
+                return ['res' => null, 'error' => $e->getMessage()];
+            }
+
+            // 429/500/503만 같은 모델로 백오프 재시도(404 등은 즉시 반환).
+            if (in_array($res->status(), self::RETRYABLE_STATUS, true) && $attempt < self::RETRY_ATTEMPTS) {
+                Log::info('[GeminiQuizSolver] retryable status, backing off', ['model' => $model, 'attempt' => $attempt, 'status' => $res->status()]);
+                self::backoff($attempt);
+
+                continue;
+            }
+
+            break;
+        }
+
+        return ['res' => $res, 'error' => null];
     }
 
     /**

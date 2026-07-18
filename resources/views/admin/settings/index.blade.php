@@ -103,17 +103,18 @@
                 </select>
             </div>
             @php
-                // 공급자별 최근 모델 2개(위가 최신 상위). 값은 직접 수정 가능(사용자 지정 옵션 유지).
+                // 공급자별 사용 가능한 최신 모델(위가 상위). 값은 사용자 지정 가능.
+                // Gemini 는 -latest 별칭 권장 — 신규 프로젝트는 2.5-pro/2.5-flash 가 404(종료).
                 $rewriteModelGroups = [
-                    'Gemini' => ['gemini-2.5-pro', 'gemini-2.5-flash'],
-                    'Claude' => ['claude-opus-4-8', 'claude-sonnet-5'],
-                    'OpenAI' => ['gpt-5', 'gpt-4.1'],
-                    'Grok' => ['grok-4', 'grok-3'],
+                    'Gemini' => ['gemini-flash-latest', 'gemini-pro-latest', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'],
+                    'Claude' => ['claude-sonnet-5', 'claude-opus-4-8'],
+                    'OpenAI' => ['gpt-5.6', 'gpt-5'],
+                    'Grok' => ['grok-4.3', 'grok-4'],
                 ];
                 $rewriteModelKnown = collect($rewriteModelGroups)->flatten()->all();
             @endphp
             <div class="mb-3" style="max-width:560px;">
-                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">재작성 모델 <span class="text-muted-soft" style="font-weight:400;">비우면 공급자 기본 — Gemini: gemini-2.5-flash · Claude: claude-opus-4-8</span></label>
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">재작성 모델 <span class="text-muted-soft" style="font-weight:400;">비우면 공급자 기본 — Gemini: gemini-flash-latest · Claude: claude-sonnet-5</span></label>
                 <select name="community_rewrite_model" class="input" style="width:100%;font-size:var(--fs-xs);">
                     <option value="" @selected($rewriteModel === '')>공급자 기본값 사용</option>
                     @if ($rewriteModel !== '' && ! in_array($rewriteModel, $rewriteModelKnown, true))
@@ -134,29 +135,53 @@
             </label>
         </div>
 
-        {{-- 캡차(퀴즈) 이미지 분석 모델 — 판매자정보 영수증 퀴즈 풀이(Gemini 비전) --}}
+        {{-- 캡차(퀴즈) 이미지 분석 모델 — 판매자정보 영수증 퀴즈 풀이(멀티 공급자 비전) --}}
         <div class="card p-5 mb-4">
             <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">캡차(퀴즈) 이미지 분석 <span class="text-muted-soft" style="font-weight:400;">판매자정보 영수증 퀴즈 풀이</span></div>
             <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
-                판매자정보 캡차(영수증)를 어떤 <b>Gemini 비전 모델</b>로 풀지 정합니다.
-                <b>Pro</b>는 숫자·표 판독 정확도가 높고, <b>Flash</b>는 빠릅니다. Gemini 키는 위 <b>AI 모델 API 키</b>에 등록하세요.
+                판매자정보 캡차(영수증)를 어떤 <b>비전 모델</b>로 풀지 정합니다 — <b>Gemini·OpenAI(GPT)·Claude·Grok</b> 지원(모델명으로 공급자 자동 판별).
+                <b>Pro</b>급은 숫자·표 판독 정확도가 높고 <b>Flash</b>급은 빠릅니다. 선택한 공급자의 키를 위 <b>AI 모델 API 키</b>에 등록하세요.
             </p>
             @php
-                $quizModelOptions = [
-                    'gemini-2.5-pro' => 'gemini-2.5-pro — 정확도 우선(기본)',
-                    'gemini-2.5-flash' => 'gemini-2.5-flash — 빠름',
-                    'gemini-2.5-flash-lite' => 'gemini-2.5-flash-lite — 가장 빠름·저비용',
+                // 공급자별 비전(이미지) 모델. 모델 접두사로 서버가 공급자를 자동 판별한다.
+                // 라벨의 요금 = (입력/출력 $/1M) · 1000건 예상(영수증 이미지 1장+짧은 출력 기준, 크기에 따라 ±).
+                // Gemini 는 -latest 별칭 권장(구모델 종료돼도 자동 승계). 키는 위 'AI 모델 API 키'에 등록.
+                $quizModelGroups = [
+                    'Gemini (Google)' => [
+                        'gemini-pro-latest' => 'gemini-pro-latest — 최신 Pro·자동승계(권장)',
+                        'gemini-3.1-pro-preview' => 'Gemini 3.1 Pro — $2/$12 · 1000건 ~$9.00',
+                        'gemini-3.5-flash' => 'Gemini 3.5 Flash — $1.5/$9 · 1000건 ~$6.75',
+                        'gemini-flash-latest' => 'gemini-flash-latest — 최신 Flash·자동승계',
+                        'gemini-3.1-flash-lite' => 'Gemini 3.1 Flash-Lite — $0.25/$1.5 · 최저가',
+                    ],
+                    'OpenAI (GPT)' => [
+                        'gpt-5.6' => 'GPT-5.6 Terra — $2.5/$15 · 1000건 ~$11.25',
+                        'gpt-5' => 'GPT-5',
+                    ],
+                    'Claude (Anthropic)' => [
+                        'claude-sonnet-5' => 'Claude Sonnet 5 — $2/$10(인트로,~8/31) · 1000건 ~$8.00',
+                        'claude-opus-4-8' => 'Claude Opus 4.8',
+                    ],
+                    'Grok (xAI)' => [
+                        'grok-4.3' => 'Grok 4.3 — $1.25/$2.5 · 1000건 ~$3.13',
+                        'grok-4' => 'Grok 4',
+                    ],
                 ];
+                $quizModelKnown = collect($quizModelGroups)->flatMap(fn ($g) => array_keys($g))->all();
                 $quizCurrent = $quizModel !== '' ? $quizModel : $quizModelLive;
             @endphp
             <div style="max-width:560px;">
-                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">분석 모델</label>
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">분석 모델 <span class="text-muted-soft" style="font-weight:400;">Gemini·OpenAI·Claude·Grok · 요금=입력/출력 $1M · 1000건 예상 — 선택 공급자의 키 필요</span></label>
                 <select name="quiz_model" class="input" style="width:100%;font-size:var(--fs-xs);">
-                    @if ($quizCurrent !== '' && ! array_key_exists($quizCurrent, $quizModelOptions))
+                    @if ($quizCurrent !== '' && ! in_array($quizCurrent, $quizModelKnown, true))
                         <option value="{{ $quizCurrent }}" selected>{{ $quizCurrent }} (사용자 지정)</option>
                     @endif
-                    @foreach ($quizModelOptions as $mo => $label)
-                        <option value="{{ $mo }}" @selected($quizCurrent === $mo)>{{ $label }}</option>
+                    @foreach ($quizModelGroups as $grp => $models)
+                        <optgroup label="{{ $grp }}">
+                            @foreach ($models as $mo => $label)
+                                <option value="{{ $mo }}" @selected($quizCurrent === $mo)>{{ $label }}</option>
+                            @endforeach
+                        </optgroup>
                     @endforeach
                 </select>
             </div>

@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Support\GeminiCredentials;
-use App\Support\GeminiQuizSolver;
+use App\Support\QuizSolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,8 +29,8 @@ class ExtQuizController extends Controller
 
     public function solve(Request $request): JsonResponse
     {
-        if (! GeminiCredentials::configured()) {
-            return response()->json(['ok' => false, 'message' => 'Gemini API 키가 설정되지 않았습니다.'], 503);
+        if (! QuizSolver::configured()) {
+            return response()->json(['ok' => false, 'message' => '선택한 퀴즈 모델('.QuizSolver::model().')의 API 키가 설정되지 않았습니다.'], 503);
         }
 
         if (strlen($request->getContent()) > self::MAX_BODY_BYTES) {
@@ -61,7 +60,7 @@ class ExtQuizController extends Controller
             return response()->json(['ok' => false, 'message' => 'question 또는 image 가 필요합니다.'], 422);
         }
 
-        $result = GeminiQuizSolver::solve(
+        $result = QuizSolver::solve(
             $question,
             $images,
             $data['instruction'] ?? null,
@@ -70,7 +69,7 @@ class ExtQuizController extends Controller
         if (! $result['ok']) {
             return response()->json([
                 'ok' => false,
-                'message' => $result['error'] ?? 'Gemini 풀이 실패',
+                'message' => $result['error'] ?? '퀴즈 풀이 실패',
             ], 502);
         }
 

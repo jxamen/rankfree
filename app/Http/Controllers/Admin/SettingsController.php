@@ -61,9 +61,9 @@ class SettingsController extends Controller
             'rewriteProvider' => (string) config('rankfree.community.rewrite.provider', 'auto'),
             'rewriteModel' => (string) config('rankfree.community.rewrite.model', ''),
             'rewriteFallback' => (bool) config('rankfree.community.rewrite.fallback', true),
-            // 캡차(퀴즈) 이미지 분석 모델 — Gemini 전용. 비우면 config 기본(gemini-2.5-pro)
+            // 캡차(퀴즈) 분석 모델 — 멀티 공급자(Gemini/OpenAI/Claude/Grok). 비우면 기본(gemini-pro-latest)
             'quizModel' => (string) AppSetting::read('quiz.model'),
-            'quizModelLive' => (string) config('services.gemini.quiz_model', ''),
+            'quizModelLive' => (string) (config('rankfree.quiz.model') ?: 'gemini-pro-latest'),
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
