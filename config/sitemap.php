@@ -19,8 +19,10 @@ return [
     // 분석데이터 공유링크를 사이트맵에 포함할지 (off 면 게시판·상품·정적 페이지만)
     'include_analyses' => (bool) env('SITEMAP_INCLUDE_ANALYSES', true),
 
-    // 한 사이트맵 파일당 최대 URL 수(표준 상한 50,000 이하). 초과분은 ?page= 로 분할.
-    'chunk' => (int) env('SITEMAP_CHUNK', 20000),
+    // 한 사이트맵 파일당 최대 URL 수. 초과분은 ?page= 로 분할.
+    // ⚠️ 렌더된 XML 은 DB 캐시(cache 테이블)에 저장되므로 파일 하나가 MariaDB max_allowed_packet(~1MB)
+    //    을 넘으면 캐시 INSERT 가 실패한다. url 당 ~200바이트(한글 슬러그 인코딩) 기준 2,000개면 ~400KB 로 안전.
+    'chunk' => (int) env('SITEMAP_CHUNK', 2000),
 
     // 분석 소스 — 1회성 분석만 사이트맵 공개. slug 공개 URL 은 모델 shareUrl() 사용.
     // ⚠️ 순위 추적 슬롯(/place·/shopping)과 플레이스 경쟁분석(/compete)은 사용자의 추적 대상이라

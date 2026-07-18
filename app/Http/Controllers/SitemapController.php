@@ -29,7 +29,7 @@ class SitemapController extends Controller
     /** 사이트맵 인덱스. */
     public function index()
     {
-        $xml = Cache::remember($this->cacheKey('index'), now()->addHours(6), function () {
+        $xml = $this->cachedXml($this->cacheKey('index'), function () {
             $children = [];
             $this->pushPaged($children, 'pages', 1);
             $this->pushPaged($children, 'community', CommunityPost::count());
@@ -61,11 +61,29 @@ class SitemapController extends Controller
         $page = max(1, (int) $request->query('page', 1));
         abort_unless($this->isKnownSection($section), 404);
 
-        $xml = Cache::remember($this->cacheKey("{$section}:{$page}"), now()->addHours(6), function () use ($section, $page) {
-            return $this->renderUrlset($this->entries($section, $page));
-        });
+        $xml = $this->cachedXml($this->cacheKey("{$section}:{$page}"), fn () => $this->renderUrlset($this->entries($section, $page)));
 
         return $this->xml($xml);
+    }
+
+    /**
+     * 렌더 결과를 캐시하되, 저장 실패해도(예: 큰 XML 이 DB 캐시 max_allowed_packet 초과) 서빙은 계속.
+     * 사이트맵은 캐시 실패로 500 나면 색인이 끊기므로, 캐시는 성능 최적화일 뿐 필수가 아니게 한다.
+     */
+    private function cachedXml(string $key, \Closure $builder): string
+    {
+        $cached = Cache::get($key);
+        if ($cached !== null) {
+            return $cached;
+        }
+        $xml = $builder();
+        try {
+            Cache::put($key, $xml, now()->addHours(6));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return $xml;
     }
 
     // ── 섹션별 URL 엔트리 ───────────────────────────────────────────────

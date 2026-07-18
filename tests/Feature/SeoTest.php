@@ -150,6 +150,19 @@ class SeoTest extends TestCase
         $this->assertStringNotContainsString('0000-00-00', $xml);
     }
 
+    /** 회귀: 캐시 저장이 실패해도(예: DB max_allowed_packet 초과) 사이트맵은 500 나지 않고 XML 을 서빙한다. */
+    public function test_sitemap_survives_cache_write_failure(): void
+    {
+        CommunityCategory::create(['slug' => 'tips', 'name' => '꿀팁', 'is_active' => true, 'sort_order' => 1]);
+        // 캐시 put 이 항상 던지도록 목킹(패킷 초과 재현)
+        \Illuminate\Support\Facades\Cache::shouldReceive('get')->andReturn(null);
+        \Illuminate\Support\Facades\Cache::shouldReceive('put')->andThrow(new \RuntimeException('packet too big'));
+
+        $this->get('/sitemap.xml')->assertOk();               // 인덱스 500 아님
+        $pages = $this->get('/sitemap-pages.xml')->assertOk()->getContent();  // 섹션 500 아님
+        $this->assertStringContainsString('<urlset', $pages);
+    }
+
     public function test_post_title_with_script_tag_cannot_break_jsonld(): void
     {
         $cat = CommunityCategory::create(['slug' => 'free', 'name' => '자유', 'is_active' => true, 'sort_order' => 1]);
