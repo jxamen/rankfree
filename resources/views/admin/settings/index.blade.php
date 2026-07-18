@@ -170,9 +170,10 @@
                 $quizModelKnown = collect($quizModelGroups)->flatMap(fn ($g) => array_keys($g))->all();
                 $quizCurrent = $quizModel !== '' ? $quizModel : $quizModelLive;
             @endphp
-            <div style="max-width:560px;">
-                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">분석 모델 <span class="text-muted-soft" style="font-weight:400;">Gemini·OpenAI·Claude·Grok · 요금=입력/출력 $1M · 1000건 예상 — 선택 공급자의 키 필요</span></label>
-                <select name="quiz_model" class="input" style="width:100%;font-size:var(--fs-xs);">
+            <div>
+                {{-- 라벨은 전체 폭 한 줄 고정(설명이 select 폭 560px에 걸려 줄바꿈되지 않게), 입력칸만 폭 제한 --}}
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;white-space:nowrap;">분석 모델 <span class="text-muted-soft" style="font-weight:400;">Gemini·OpenAI·Claude·Grok · 요금=입력/출력 $1M · 1000건 예상 — 선택 공급자의 키 필요</span></label>
+                <select name="quiz_model" class="input" style="width:100%;max-width:560px;font-size:var(--fs-xs);">
                     @if ($quizCurrent !== '' && ! in_array($quizCurrent, $quizModelKnown, true))
                         <option value="{{ $quizCurrent }}" selected>{{ $quizCurrent }} (사용자 지정)</option>
                     @endif
@@ -185,8 +186,8 @@
                     @endforeach
                 </select>
             </div>
-            <div style="max-width:560px;margin-top:12px;">
-                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">풀이 대기 시간(초) <span class="text-muted-soft" style="font-weight:400;">이 시간 안에 정답이 안 오면 요청을 버리고 새로고침해 다른 캡차로 재시도 (기본 10, 3~60)</span></label>
+            <div style="margin-top:12px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;white-space:nowrap;">풀이 대기 시간(초) <span class="text-muted-soft" style="font-weight:400;">이 시간 안에 정답이 안 오면 요청을 버리고 새로고침해 다른 캡차로 재시도 (기본 10, 3~60)</span></label>
                 <input type="number" name="quiz_solve_timeout" value="{{ $quizSolveTimeout }}" min="3" max="60" step="1" class="input" style="width:120px;font-size:var(--fs-xs);">
             </div>
         </div>
