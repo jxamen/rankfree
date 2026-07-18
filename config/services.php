@@ -54,6 +54,8 @@ return [
         'quiz_fallback_model' => env('GEMINI_QUIZ_FALLBACK_MODEL', 'gemini-flash-latest'),
         // 확장이 정답을 기다리는 시간(초) — 초과 시 요청 버리고 새로고침해 다른 캡차로 재시도.
         'quiz_timeout' => (int) env('GEMINI_QUIZ_TIMEOUT', 10),
+        // 추론(thinking) 사용 여부 — 기본 끔(비용 절감). '1'이면 켬(flash/lite 계열에 적용).
+        'quiz_thinking' => env('GEMINI_QUIZ_THINKING'),
     ],
     'openai' => [
         'key' => env('OPENAI_API_KEY'),

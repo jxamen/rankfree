@@ -23,9 +23,6 @@ class GeminiQuizSolver
     // 같은 모델로 재시도(백오프)할 HTTP 상태.
     private const RETRYABLE_STATUS = [429, 500, 503];
 
-    // 다음(폴백) 모델로 넘어갈 상태 — 위 재시도 + 404(모델 미제공/신규 프로젝트 차단).
-    private const MODEL_FALLBACK_STATUS = [429, 500, 503, 404];
-
     public const DEFAULT_INSTRUCTION =
         "제시된 이미지는 영수증이며 품목별 수량·금액이 표(열)로 적혀 있다. 질문에 맞는 값을 계산해 숫자만 답하라.\n".
         "이미지에는 숫자를 가리려고 주변에 낙서·선·점·빗금·얼룩·워터마크·배경 무늬 같은 방해 요소를 일부러 섞어 놓았을 수 있다. ".
@@ -82,43 +79,28 @@ class GeminiQuizSolver
                 : self::DEFAULT_INSTRUCTION,
         ];
 
+        // 환경설정에 지정된 모델만 사용한다(다른 모델로 자동 폴백하지 않음).
+        // 같은 모델에 대한 429/503 일시 오류만 백오프 재시도한다.
+        $model = $primaryModel ?: (trim((string) config('services.gemini.quiz_model', '')) ?: $cred['model']);
+
+        $generationConfig = ['temperature' => 0];
+        // 비용 절감: 추론(thinking) 토큰이 비용의 주범 — 기본은 끈다(설정에서 켤 수 있음).
+        // thinkingBudget=0 은 flash/lite 계열에서 지원(pro 계열은 강제하지 않는다).
+        $thinkingOn = in_array((string) config('services.gemini.quiz_thinking'), ['1', 'true', 'on'], true);
+        if (! $thinkingOn && (str_contains($model, 'flash') || str_contains($model, 'lite'))) {
+            $generationConfig['thinkingConfig'] = ['thinkingBudget' => 0];
+        }
+
         $payload = [
             'contents' => [
                 ['role' => 'user', 'parts' => $parts],
             ],
-            'generationConfig' => [
-                'temperature' => 0,
-            ],
+            'generationConfig' => $generationConfig,
         ];
 
-        // 정확도 위해 전용(강한) 모델을 우선 쓰고, 429(rate limit)/503(과부하)이면
-        // 한도 넉넉한 폴백 모델로 자동 전환한다. (429는 '차단'이 아니라 사용량 한도)
-        $primary = $primaryModel ?: (trim((string) config('services.gemini.quiz_model', '')) ?: $cred['model']);
-        $fallback = trim((string) config('services.gemini.quiz_fallback_model', '')) ?: 'gemini-flash-latest';
-        $models = array_values(array_unique(array_filter([$primary, $fallback])));
-
-        $res = null;
-        $networkError = null;
-        foreach ($models as $mi => $model) {
-            $result = self::requestWithRetries($model, $cred['key'], $payload);
-            $res = $result['res'];
-            $networkError = $result['error'];
-
-            if ($res !== null && $res->successful()) {
-                break;
-            }
-
-            // 429/503/500(일시) + 404(모델 미제공)면 폴백 모델로, 그 외 오류는 중단.
-            $status = $res?->status();
-            $canFallback = $status !== null && in_array($status, self::MODEL_FALLBACK_STATUS, true);
-            if ($res !== null && ! $canFallback) {
-                break;
-            }
-
-            if ($mi < count($models) - 1) {
-                Log::info('[GeminiQuizSolver] falling back to next model', ['from' => $model, 'status' => $status]);
-            }
-        }
+        $result = self::requestWithRetries($model, $cred['key'], $payload);
+        $res = $result['res'];
+        $networkError = $result['error'];
 
         if ($res === null) {
             return ['ok' => false, 'answer' => null, 'error' => 'Gemini 요청 실패: '.($networkError ?: 'unknown')];

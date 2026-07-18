@@ -261,6 +261,8 @@
   }
 
   var refreshCount = 0;
+  var givenUp = false;          // 재시도 3회 초과 시 포기 — 이후 풀이/새로고침 중단
+  var MAX_RETRIES = 3;          // 캡차당 최대 새로고침(재시도) 횟수
 
   // 질문이 알려진 유형(개수/금액)인지 — 키워드가 명확히 보일 때만 풀이한다.
   //  개수: 몇 개·개수·수량·합계 / 금액: 구매 금액·금액·얼마·토탈·총합 (공통: 합)
@@ -271,16 +273,22 @@
     return quantity || amount || /합/.test(q);
   }
 
-  // 새 캡차 요청. 총 새로고침 한도로 무한루프 방지.
+  // 새 캡차 요청. 오답·풀이지연·질문불명확이 모두 이 경로를 쓰며, 최대 3회까지만.
   function tryRefresh(reason) {
-    if (refreshCount >= 8) {
-      setAnswerStatus('시도 한도 도달 — 수동 확인 필요 (' + reason + ')', false);
+    if (refreshCount >= MAX_RETRIES) {
+      givenUp = true;
+      setAnswerStatus('재시도 ' + MAX_RETRIES + '회 실패 — 수동 확인이 필요합니다. (' + reason + ')', false);
+      // 재시도 소진 → 배경에 실패 신호(대량수집이 다음 상품으로 넘어가고 탭 정리).
+      try {
+        var g = popupInfo();
+        chrome.runtime.sendMessage({ type: '__sellerCaptchaCaptured', ok: false, channelUid: g.channelUid, message: 'retries exhausted' });
+      } catch (e) { /* noop */ }
       return false;
     }
     var refresh = findRefreshButton();
     if (!refresh) return false;
     refreshCount++;
-    setAnswerStatus(reason + ' — 새로고침(' + refreshCount + ')', false);
+    setAnswerStatus(reason + ' — 새로고침 재시도 (' + refreshCount + '/' + MAX_RETRIES + ')', false);
     fireClick(refresh);   // 새 캡차 → MutationObserver가 감지해 재검사/재풀이
     return true;
   }
@@ -290,10 +298,6 @@
     setTimeout(function () {
       if (textOf(document.body).indexOf('사업자등록번호') !== -1) return; // 통과
       if (!findAnswerInput()) return; // 화면 전환 중 — 대기
-      if (solveAttempts >= 3) {
-        setAnswerStatus('3회 시도 실패 — 수동 확인이 필요합니다.', false);
-        return;
-      }
       tryRefresh('오답');
     }, 2800);
   }
@@ -425,32 +429,25 @@
     return true;
   }
 
-  // 서버 throttle·과다호출 방지: 최소 호출 간격과 페이지당 시도 상한.
+  // 서버 throttle·과다호출 방지: 최소 호출 간격.
   var lastSolveAt = 0;
-  var solveAttempts = 0;
   var solveTimeoutMs = 10000; // 정답 대기 시간(환경설정에서 받아 덮어씀)
 
   // 저장 완료 후 질문+이미지를 서버로 보내 정답을 받아 입력·제출한다.
   function requestQuizSolve(question, imageData) {
     if (!question && !imageData) return;
+    if (givenUp) return;                              // 재시도 3회 소진 → 중단
     var now = Date.now();
     if (now - lastSolveAt < 3000) return;           // 최소 3초 간격
-    if (solveAttempts >= 3) {                          // 3회까지만 시도(오답 재시도 포함)
-      setAnswerStatus('3회 시도 실패 — 수동 확인이 필요합니다.', false);
-      return;
-    }
     lastSolveAt = now;
-    solveAttempts++;
     setAnswerStatus('정답 풀이 중...', true);
 
-    // 10초 안에 응답이 없으면 이 요청은 버리고(늦게 오면 무시) 새 캡차로 교체한다.
-    // (어려운 문제에 오래 매달리지 않고 새로고침 → 새 질문 → 즉시 재요청)
+    // 대기 시간 안에 응답이 없으면 이 요청은 버리고(늦게 오면 무시) 새 캡차로 교체(재시도).
     var settled = false;
     var waitSec = Math.round(solveTimeoutMs / 1000);
     var timer = setTimeout(function () {
       if (settled) return;
       settled = true;
-      solveAttempts = Math.max(0, solveAttempts - 1); // 지연은 오답이 아니므로 시도 횟수 되돌림
       tryRefresh('풀이 지연(' + waitSec + '초)');
     }, solveTimeoutMs);
 

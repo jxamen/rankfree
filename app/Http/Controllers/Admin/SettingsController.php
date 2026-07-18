@@ -65,6 +65,7 @@ class SettingsController extends Controller
             'quizModel' => (string) AppSetting::read('quiz.model'),
             'quizModelLive' => (string) (config('rankfree.quiz.model') ?: 'gemini-pro-latest'),
             'quizSolveTimeout' => (int) (config('services.gemini.quiz_timeout') ?: 10),
+            'quizThinking' => AppSetting::read('quiz.thinking') === '1',
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
@@ -128,6 +129,9 @@ class SettingsController extends Controller
         AppSetting::write('community.rewrite_provider', in_array($provider, ['auto', 'gemini', 'anthropic', 'openai', 'xai', 'off'], true) ? $provider : 'auto');
         AppSetting::write('community.rewrite_model', trim((string) $request->input('community_rewrite_model', '')));
         AppSetting::write('community.rewrite_fallback', $request->boolean('community_rewrite_fallback') ? '1' : '0');
+
+        // 캡차 퀴즈 추론(thinking) 사용 여부 — 끄면 비용 대폭 절감
+        AppSetting::write('quiz.thinking', $request->boolean('quiz_thinking') ? '1' : '0');
 
         // 회원 — 추천인 보상 설정 (1회당 증가량 · 최대 증가량)
         AppSetting::write('referral.bonus_per', (string) max(0, (int) $request->input('referral_bonus_per', 20)));

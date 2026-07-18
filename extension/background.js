@@ -461,6 +461,8 @@ const handlers = {
       let windowId = null;
       let done = false;
       const url = sellerInfoPopupUrl({ channelUid, storeId, productUrl });
+      // 콘텐츠 스크립트가 캡차 풀이·최대 3회 새로고침 재시도를 하는 동안 탭이 살아있어야 한다.
+      // (성공=판매자정보 저장, 실패=재시도 소진 시 콘텐츠가 즉시 신호를 보내 정리한다.)
       const to = setTimeout(() => finish({
         ok: false,
         timeout: true,
@@ -469,7 +471,7 @@ const handlers = {
         storeId,
         sellerInfoUrl: url,
         message: 'seller-info captcha capture timeout',
-      }), 18000);
+      }), 120000);
       const stopTimer = setInterval(async () => {
         try {
           if (!done && shouldStop && await shouldStop()) {
