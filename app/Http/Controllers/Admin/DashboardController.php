@@ -30,6 +30,14 @@ class DashboardController extends Controller
             ->where(fn ($q) => $q->whereNull('subscription_expires_at')->orWhere('subscription_expires_at', '>', now()))
             ->count();
 
+        // 허브 발행 문서 — 카테고리 종류(플레이스/쇼핑)로 분리. created_at 은 조인 후 모호하므로 테이블 지정.
+        $hubType = fn ($from = null) => KeywordSearch::where('origin', 'hub')
+            ->leftJoin('keyword_categories', 'keyword_searches.category_id', '=', 'keyword_categories.id')
+            ->when($from, fn ($x) => $x->where('keyword_searches.created_at', '>=', $from))
+            ->selectRaw('keyword_categories.type as t, count(*) as c')->groupBy('t')->pluck('c', 't');
+        $hubAll = $hubType();
+        $hub7t = $hubType($d7);
+
         $kpi = [
             'users' => User::count(),
             'usersToday' => User::where('created_at', '>=', $todayStart)->count(),
@@ -45,6 +53,10 @@ class DashboardController extends Controller
             'hubDocs' => KeywordSearch::where('origin', 'hub')->count(),
             'hubToday' => KeywordSearch::where('origin', 'hub')->where('created_at', '>=', $todayStart)->count(),
             'hub7' => KeywordSearch::where('origin', 'hub')->where('created_at', '>=', $d7)->count(),
+            'hubPlace' => (int) ($hubAll['place'] ?? 0),
+            'hubShopping' => (int) ($hubAll['shopping'] ?? 0),
+            'hubPlace7' => (int) ($hub7t['place'] ?? 0),
+            'hubShopping7' => (int) ($hub7t['shopping'] ?? 0),
             'qnaOpen' => Qna::where('status', '!=', 'answered')->count(),
             'qnaTotal' => Qna::count(),
             'orders' => MarketingOrder::count(),

@@ -322,6 +322,10 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('home');
     Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
 
+    // 순위추적 관리 — 전 회원의 플레이스·쇼핑 순위추적 슬롯 열람
+    Route::get('/place-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'place'])->name('place-tracking');
+    Route::get('/shop-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'shop'])->name('shop-tracking');
+
     // 마케팅 상품 관리 (폼 빌더 + 주문 URL 발급)
     Route::get('/products', [MarketingProductController::class, 'index'])->name('products');
     Route::get('/products/create', [MarketingProductController::class, 'create'])->name('products.create');
