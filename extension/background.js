@@ -544,6 +544,8 @@ const handlers = {
     const { token } = await getStore();
     if (!token) return { ok: false, loggedIn: false, message: 'RankFree extension login is required.' };
 
+    quizConfigCache = null; // 수집 시작마다 최신 대기시간 설정을 다시 받아온다.
+
     const list = (Array.isArray(products) ? products : [])
       .map((p) => ({
         url: String((p && p.url) || '').split('#')[0],
