@@ -133,6 +133,23 @@ class SeoTest extends TestCase
         $this->assertNotFalse(simplexml_load_string($pages));
     }
 
+    /** 회귀: keyword 섹션이 허브 발행 문서(origin=hub)를 포함하고, 불량 updated_at 에도 500 나지 않아야 한다. */
+    public function test_sitemap_keyword_section_includes_hub_docs_and_survives_bad_date(): void
+    {
+        $ok = \App\Models\KeywordSearch::create(['keyword' => '강릉 맛집', 'origin' => 'hub', 'user_id' => null]);
+        $bad = \App\Models\KeywordSearch::create(['keyword' => '제주 호텔', 'origin' => 'hub', 'user_id' => null]);
+        // 불량 날짜(MariaDB zero-date 재현) — cast 우회해 raw 저장
+        \Illuminate\Support\Facades\DB::table('keyword_searches')->where('id', $bad->id)->update(['updated_at' => '0000-00-00 00:00:00']);
+
+        $xml = $this->get('/sitemap-keyword.xml')->assertOk()->getContent();
+        $this->assertNotFalse(simplexml_load_string($xml), '유효 XML 이어야(500/파손 아님)');
+        // 허브 문서 슬러그가 포함(퍼센트 인코딩)
+        $this->assertStringContainsString('/keyword/'.rawurlencode($ok->slug), $xml);
+        $this->assertStringContainsString('/keyword/'.rawurlencode($bad->slug), $xml);
+        // 불량 날짜 행은 lastmod 없이(0000-00-00 미출력) 정상 렌더
+        $this->assertStringNotContainsString('0000-00-00', $xml);
+    }
+
     public function test_post_title_with_script_tag_cannot_break_jsonld(): void
     {
         $cat = CommunityCategory::create(['slug' => 'free', 'name' => '자유', 'is_active' => true, 'sort_order' => 1]);

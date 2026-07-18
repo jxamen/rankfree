@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Console\Commands\SitemapRefresh;
 use App\Models\CommunityCategory;
 use App\Models\CommunityPost;
+use App\Models\KeywordCategory;
+use App\Models\KeywordSearch;
 use App\Models\MarketingProduct;
 use App\Models\ProductType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -83,19 +86,39 @@ class SitemapController extends Controller
             return $this->keywordHubEntries();
         }
 
-        // 분석 슬러그 섹션
+        // 분석 슬러그 섹션 — 대량·불량 데이터에도 안전하게.
+        //   toBase(): Eloquent 모델 하이드레이션 없이 raw 로우만 로드(수만 건 메모리 초과 방지)
+        //   safeDate(): DB 원시 datetime 을 Carbon 파싱 없이 슬라이스(MariaDB '0000-00-00' 등 크래시 방지)
         $def = $this->analysisSections()[$section] ?? null;
         if (! $def || ! config('sitemap.include_analyses')) {
             return [];
         }
-        $rows = ($def['query'])()->orderBy('id')->forPage($page, $this->chunkSize())->get(['id', 'slug', 'updated_at']);
+        $rows = ($def['query'])()->toBase()->orderBy('id')->forPage($page, $this->chunkSize())->get(['slug', 'updated_at']);
 
-        return $rows->map(fn ($r) => [
-            'loc' => url('/'.$def['prefix']).'/'.rawurlencode($r->slug),
-            'lastmod' => optional($r->updated_at)->toDateString(),
-            'freq' => $def['freq'],
-            'priority' => $def['priority'],
-        ])->all();
+        $out = [];
+        $base = url('/'.$def['prefix']);
+        foreach ($rows as $r) {
+            $slug = (string) ($r->slug ?? '');
+            if ($slug === '') {
+                continue;
+            }
+            $out[] = [
+                'loc' => $base.'/'.rawurlencode($slug),
+                'lastmod' => $this->safeDate($r->updated_at ?? null),
+                'freq' => $def['freq'],
+                'priority' => $def['priority'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /** DB 원시 datetime → 'Y-m-d'. Carbon 파싱 없이 안전(0000-00-00·빈값·형식 오류는 null). */
+    private function safeDate($v): ?string
+    {
+        $s = substr((string) $v, 0, 10);
+
+        return (preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) && $s !== '0000-00-00') ? $s : null;
     }
 
     private function pageEntries(): array
@@ -120,12 +143,13 @@ class SitemapController extends Controller
 
     private function communityEntries(int $page): array
     {
-        return CommunityPost::orderByDesc('id')
+        // toBase() — 모델 하이드레이션 없이(대량 게시판 대비), route 는 id 로 생성
+        return CommunityPost::query()->toBase()->orderByDesc('id')
             ->forPage($page, $this->chunkSize())
             ->get(['id', 'updated_at'])
             ->map(fn ($p) => [
-                'loc' => route('community.show', $p),
-                'lastmod' => optional($p->updated_at)->toDateString(),
+                'loc' => route('community.show', $p->id),
+                'lastmod' => $this->safeDate($p->updated_at ?? null),
                 'freq' => 'monthly',
                 'priority' => '0.5',
             ])->all();
@@ -160,20 +184,20 @@ class SitemapController extends Controller
             if ($typeCats->isEmpty()) {
                 continue;
             }
-            $last = \App\Models\KeywordSearch::where('origin', 'hub')->whereIn('category_id', $typeCats->pluck('id'))->max('refreshed_at');
+            $last = KeywordSearch::where('origin', 'hub')->whereIn('category_id', $typeCats->pluck('id'))->max('refreshed_at');
             $e[] = [
                 'loc' => route('keywords.type', $t),
-                'lastmod' => $last ? \Illuminate\Support\Carbon::parse($last)->toDateString() : null,
+                'lastmod' => $last ? Carbon::parse($last)->toDateString() : null,
                 'freq' => 'weekly',
                 'priority' => '0.7',
             ];
         }
 
         foreach ($cats as $c) {
-            $last = \App\Models\KeywordSearch::where('origin', 'hub')->where('category_id', $c->id)->max('refreshed_at');
+            $last = KeywordSearch::where('origin', 'hub')->where('category_id', $c->id)->max('refreshed_at');
             $e[] = [
                 'loc' => route('keywords.category', $c->slug),
-                'lastmod' => $last ? \Illuminate\Support\Carbon::parse($last)->toDateString() : null,
+                'lastmod' => $last ? Carbon::parse($last)->toDateString() : null,
                 'freq' => 'weekly',
                 'priority' => '0.6',
             ];
@@ -184,7 +208,7 @@ class SitemapController extends Controller
 
     private function keywordHubCategories()
     {
-        return \App\Models\KeywordCategory::where('is_active', true)
+        return KeywordCategory::where('is_active', true)
             ->whereHas('searches', fn ($q) => $q->where('origin', 'hub'))
             ->orderBy('sort')->orderBy('id')->get(['id', 'slug', 'type']);   // type = 타입 홈 분기용
     }
