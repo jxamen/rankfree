@@ -3470,7 +3470,6 @@
       }
     };
     await Promise.all(Array.from({ length: Math.min(3, catalogs.length) }, worker));
-    if (skipped) console.warn('[RankFree] 카탈로그 ' + skipped + '건은 시간 예산 초과로 건너뜀');
 
     const out = [];
     for (const p of products) {

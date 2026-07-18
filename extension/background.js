@@ -807,28 +807,50 @@ const handlers = {
       //   → 리필을 단일 체인으로 직렬화하고, 이미 꺼낸 키워드는 taken 으로 걸러 한 번만 나가게 한다.
       const taken = new Set();
       let refill = Promise.resolve();
+      // ★ 리필(대기열 재요청) 실패를 '소진'으로 오인하지 않는다.
+      //   예전엔 apiFetch 가 네트워크 blip·일시 5xx 로 {ok:false} 를 주면 곧바로 종료돼,
+      //   리필이 잦은 100~300개 지점에서 한 번만 삐끗해도 전체 수집이 '수집 종료'로 멈췄다(실측 증상).
+      //   → 실패/일시 빈 큐는 재시도하고, 서버가 '더 없음(remaining=0)'을 명시할 때만 종료한다.
+      let retryStreak = 0;              // 연속 재시도(실패·일시 빈 큐) 횟수 — 안전 상한까지만 버틴다
+      const RETRY_MAX = 20;             // 이만큼 연속 재시도해도 못 채우면(≈수 분) 서버 이상으로 보고 종료
       const next = async () => {
         while (true) {
           while (queue.length) {
             const kw = queue.shift();
             if (kw && !taken.has(kw)) { taken.add(kw); return kw; }
           }
-          let got = false;
+          // outcome: 'got'(큐 채움) · 'done'(서버가 소진 확인) · 'retry'(일시적 — 종료 금지)
+          let outcome = 'retry';
           refill = refill.then(async () => {
-            if (queue.length) { got = true; return; }        // 다른 워커가 이미 채웠다
+            if (queue.length) { outcome = 'got'; return; }   // 다른 워커가 이미 채웠다
             // 동시 수가 많으면 20개는 금방 비어 리필이 잦아진다 — 동시 수에 맞춰 넉넉히 받는다(서버 상한 50)
             const qLimit = Math.min(50, Math.max(20, conc * 4));
-            const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=' + qLimit, { token, apiBase });
-            const d = (ok && json && json.data) || {};
+            const { ok, json, status } = await apiFetch('/api/ext/keyword-shop-serp/queue?mode=category&limit=' + qLimit, { token, apiBase });
+            if (!ok || !json || !json.data) {                // 네트워크·5xx·비정상 응답 — 종료하지 말고 재시도
+              outcome = 'retry';
+              await patch({ lastError: '대기열 조회 일시 실패(' + (status || 0) + ') — 재시도 중' });
+              return;
+            }
+            const d = json.data;
             queue = (d.keywords || []).filter((k) => !taken.has(k));   // 서버가 또 준 것(수집 반영 전)은 제외
-            got = queue.length > 0;
             if (d.category && d.category !== category) {
               category = d.category;
               await patch({ category, categoryIndex: d.category_index || 0, categoryTotal: d.category_total || 0, remaining: d.remaining || 0 });
+            } else {
+              await patch({ remaining: d.remaining || 0 });
             }
-          });
+            if (queue.length) outcome = 'got';
+            else if ((d.remaining || 0) > 0) outcome = 'retry';   // 남았지만 지금은 전부 리스(수집 중)/타워커가 가져감 — 잠시 뒤 다시
+            else outcome = 'done';                                 // 서버가 명시적으로 '더 없음' 확인 → 진짜 종료
+          }).catch(async () => { outcome = 'retry'; });            // 리필이 던져도 종료하지 않는다
           await refill;
-          if (!got && !queue.length) return null;            // 정말 더 없음
+
+          if (outcome === 'got') { retryStreak = 0; continue; }    // 큐 채워짐 → 위 while 에서 꺼낸다
+          if (outcome === 'done') return null;                     // 진짜 소진 — 종료
+          // 'retry' — 종료하지 말고 백오프 후 다시(중단 시 즉시 빠짐)
+          if (++retryStreak >= RETRY_MAX) { await patch({ lastError: '대기열이 오래 비어 종료합니다.' }); return null; }
+          await sleep(Math.min(15000, 2000 + retryStreak * 1000));
+          if (stopped || await isStopped()) { stopped = true; return null; }
         }
       };
 
@@ -1065,23 +1087,7 @@ const handlers = {
     return { ok, status, saved: json && json.saved };
   },
 
-  async saveSellerCaptcha(payload) {
-    const { token, apiBase } = await getStore();
-    if (!token) return { ok: false, loggedIn: false, apiBase, message: 'RankFree extension login is required.' };
-    const { ok, status, json } = await apiFetch('/api/ext/seller-captchas', {
-      method: 'POST',
-      body: payload,
-      token,
-      apiBase,
-    });
-    return {
-      ok,
-      status,
-      apiBase,
-      data: json && json.data,
-      message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to save seller captcha.'),
-    };
-  },
+  // (제거됨) 캡차 이미지/질문 저장 — 더 이상 기록하지 않는다. 풀이(solveQuiz)만 수행.
 
   /**
    * 퀴즈 풀이 — 질문 텍스트 + 보기 이미지를 서버(Gemini)로 보내 정답을 받아온다. (저장하지 않음)
@@ -1109,6 +1115,16 @@ const handlers = {
   /** 콘텐츠 스크립트가 '이 탭이 관리자 수집으로 열린 캡차 탭인지' 확인 — 아니면 아무 동작도 안 한다. */
   async isSellerCaptchaTab(_payload, sender) {
     return { allowed: !!(sender && sender.tab && sellerCaptchaTabs.has(sender.tab.id)) };
+  },
+
+  /** 판매자정보 저장 완료 후 콘텐츠 스크립트 요청으로 해당(자기) 탭을 닫는다. */
+  async closeSellerTab(_payload, sender) {
+    const id = sender && sender.tab ? sender.tab.id : null;
+    if (id != null) {
+      sellerCaptchaTabs.delete(id);
+      try { chrome.tabs.remove(id); } catch (e) { /* noop */ }
+    }
+    return { ok: true };
   },
 
   /** 캡차 통과 후 판매자정보 팝업에서 파싱한 사업자 정보를 업체(채널) 기준으로 저장. */

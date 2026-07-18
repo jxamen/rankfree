@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShopSellerCaptcha;
+use App\Models\ShopSellerInfo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -81,17 +82,18 @@ class ShopProductController extends Controller
                 $storeIds[] = $sid;
             }
         }
-        $captchaMap = collect();
+        $sellerInfoMap = collect();
         if ($storeIds) {
-            $captchaMap = ShopSellerCaptcha::whereIn('store_id', array_values(array_unique($storeIds)))
-                ->orderByDesc('captured_at')->orderByDesc('id')->get()->groupBy('store_id');
+            $sellerInfoMap = ShopSellerInfo::whereIn('store_id', array_values(array_unique($storeIds)))
+                ->orderByDesc('captured_at')->orderByDesc('id')->get()
+                ->groupBy('store_id')->map(fn ($g) => $g->first());
         }
 
         return view('admin.shop-products', [
             'items' => $items,
             'kwMap' => $kwMap,
-            'captchaMap' => $captchaMap,
-            'recentCaptchas' => ShopSellerCaptcha::query()
+            'sellerInfoMap' => $sellerInfoMap,
+            'recentSellerInfos' => ShopSellerInfo::query()
                 ->latest('captured_at')->latest('id')->limit(30)->get(),
             'q' => $q, 'mall' => $mall, 'ad' => $ad, 'talk' => $talk, 'month' => $month, 'sort' => $sort,
             // 필터 후보 — 판매처가 많아질 수 있어 상위만(캐시)

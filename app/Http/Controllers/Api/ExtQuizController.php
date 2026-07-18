@@ -82,9 +82,36 @@ class ExtQuizController extends Controller
             'ok' => true,
             'data' => [
                 'question' => $question,
-                'answer' => $result['answer'],
+                'answer' => $this->extractAnswer($result['answer'] ?? null),
+                'raw_answer' => $result['answer'] ?? null,
                 'image_count' => count($images),
             ],
         ]);
+    }
+
+    /** 모델이 설명을 덧붙여도 실제 정답 숫자만 추출한다(마지막 줄의 숫자 우선). */
+    private function extractAnswer(?string $answer): ?string
+    {
+        $t = trim((string) $answer);
+        if ($t === '') {
+            return $t;
+        }
+        // 전체가 숫자(쉼표·공백)면 숫자만 남긴다.
+        if (preg_match('/^[\d,\s]+$/', $t)) {
+            return preg_replace('/\D/', '', $t);
+        }
+        // 마지막 비어있지 않은 줄부터 숫자를 찾는다.
+        $lines = preg_split('/\r?\n/', $t) ?: [];
+        for ($i = count($lines) - 1; $i >= 0; $i--) {
+            $line = trim($lines[$i]);
+            if ($line === '') {
+                continue;
+            }
+            if (preg_match_all('/-?\d[\d,]*/', $line, $mm) && ! empty($mm[0])) {
+                return str_replace(',', '', end($mm[0]));
+            }
+        }
+
+        return $t;
     }
 }

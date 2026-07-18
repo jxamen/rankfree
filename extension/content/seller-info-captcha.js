@@ -251,6 +251,53 @@
     return null;
   }
 
+  // 새로고침 버튼 찾기(오답·불명확 질문 시 새 캡차 요청용). blind 텍스트가 '새로고침'.
+  function findRefreshButton() {
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('button'));
+    for (var i = 0; i < buttons.length; i++) {
+      if (isShown(buttons[i]) && /새로\s*고침|refresh/i.test(textOf(buttons[i]))) return buttons[i];
+    }
+    return null;
+  }
+
+  var refreshCount = 0;
+
+  // 질문이 알려진 유형(개수/금액)인지 — 키워드가 명확히 보일 때만 풀이한다.
+  //  개수: 몇 개·개수·수량·합계 / 금액: 구매 금액·금액·얼마·토탈·총합 (공통: 합)
+  function questionIsRecognized(q) {
+    q = String(q || '');
+    var quantity = /몇\s*개|개수|수량|합계/.test(q);
+    var amount = /구매\s*금액|총\s*금액|금액|얼마|토탈|총합/.test(q);
+    return quantity || amount || /합/.test(q);
+  }
+
+  // 새 캡차 요청. 총 새로고침 한도로 무한루프 방지.
+  function tryRefresh(reason) {
+    if (refreshCount >= 8) {
+      setAnswerStatus('시도 한도 도달 — 수동 확인 필요 (' + reason + ')', false);
+      return false;
+    }
+    var refresh = findRefreshButton();
+    if (!refresh) return false;
+    refreshCount++;
+    setAnswerStatus(reason + ' — 새로고침(' + refreshCount + ')', false);
+    fireClick(refresh);   // 새 캡차 → MutationObserver가 감지해 재검사/재풀이
+    return true;
+  }
+
+  // 제출 후 결과 확인: 통과(판매자정보 렌더)면 종료, 아직 캡차면 오답 → 새로고침 재시도.
+  function checkAnswerResult() {
+    setTimeout(function () {
+      if (textOf(document.body).indexOf('사업자등록번호') !== -1) return; // 통과
+      if (!findAnswerInput()) return; // 화면 전환 중 — 대기
+      if (solveAttempts >= 3) {
+        setAnswerStatus('3회 시도 실패 — 수동 확인이 필요합니다.', false);
+        return;
+      }
+      tryRefresh('오답');
+    }, 2800);
+  }
+
   // 상태 카드를 확인(제출) 버튼 위쪽에 배치해 버튼을 가리지 않게 한다.
   function positionCardAboveSubmit(box) {
     if (!box) return;
@@ -300,9 +347,26 @@
     }
   }
 
+  // 모델이 설명을 덧붙여도(예: "...합계는 4700") 실제 정답 숫자만 뽑아낸다.
+  function extractAnswerValue(answer) {
+    var t = String(answer == null ? '' : answer).trim();
+    if (!t) return '';
+    // 전체가 숫자(쉼표·공백 포함)면 숫자만 남긴다.
+    if (/^[\d,\s]+$/.test(t)) return t.replace(/[^\d]/g, '');
+    // 설명이 섞였으면 마지막 비어있지 않은 줄부터 훑어 숫자를 찾는다(정답을 끝에 두는 경향).
+    var lines = t.split(/\r?\n/);
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var m = line.match(/-?\d[\d,]*/g);
+      if (m && m.length) return m[m.length - 1].replace(/,/g, '');
+    }
+    return t;
+  }
+
   // 정답을 입력창에 넣고 확인 버튼을 클릭한다.
   function fillAndSubmitAnswer(answer) {
-    var value = String(answer == null ? '' : answer).trim();
+    var value = extractAnswerValue(answer);
     if (!value) return false;
 
     var input = findAnswerInput();
@@ -350,11 +414,13 @@
           if (s2 && !s2.disabled) fireClick(s2);
         }, 200);
         setAnswerStatus('정답 "' + value + '" 입력(버튼 비활성 → Enter 제출 시도)', true);
+        checkAnswerResult();
         return;
       }
 
       fireClick(submit);
       setAnswerStatus('정답 "' + value + '" 입력 후 확인 클릭', true);
+      checkAnswerResult();
     }, 300);
     return true;
   }
@@ -368,8 +434,8 @@
     if (!question && !imageData) return;
     var now = Date.now();
     if (now - lastSolveAt < 3000) return;           // 최소 3초 간격
-    if (solveAttempts >= 12) {                        // 무한 오답 루프 방지
-      setAnswerStatus('정답 시도 상한 도달 — 잠시 후/수동으로 확인하세요', false);
+    if (solveAttempts >= 3) {                          // 3회까지만 시도(오답 재시도 포함)
+      setAnswerStatus('3회 시도 실패 — 수동 확인이 필요합니다.', false);
       return;
     }
     lastSolveAt = now;
@@ -385,7 +451,7 @@
           return;
         }
         if (res && res.ok && res.data && res.data.answer) {
-          setAnswerStatus('정답: ' + res.data.answer, true);
+          setAnswerStatus('정답: ' + extractAnswerValue(res.data.answer), true);
           fillAndSubmitAnswer(res.data.answer);
         } else {
           setAnswerStatus('정답 풀이 실패: ' + ((res && res.message) || 'unknown error'), false);
@@ -417,6 +483,31 @@
     positionCardAboveSubmit(box);
   }
 
+  // OCR 정확도 개선: 캡차 이미지를 factor 배로 확대(고품질 스무딩)해 새 dataURL 로 반환.
+  function upscaleDataUrl(dataUrl, factor) {
+    return new Promise(function (resolve) {
+      try {
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var w = Math.max(1, Math.round((img.naturalWidth || img.width) * factor));
+            var h = Math.max(1, Math.round((img.naturalHeight || img.height) * factor));
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) { resolve(dataUrl); }
+        };
+        img.onerror = function () { resolve(dataUrl); };
+        img.src = dataUrl;
+      } catch (e) { resolve(dataUrl); }
+    });
+  }
+
   async function scanAndUpload(reason) {
     var info = popupInfo();
     if (!info.channelUid) return;
@@ -438,50 +529,16 @@
     if (uploadedSignatures.has(signature)) return;
     uploadedSignatures.add(signature);
 
-    showStatus('RankFree captcha image saving...', true);
-    chrome.runtime.sendMessage({
-      type: 'saveSellerCaptcha',
-      payload: {
-        store_id: info.storeId,
-        channel_uid: info.channelUid,
-        channel_id: (meta && meta.channelId) || '',
-        captcha_key: captchaKey,
-        seller_info_type: (meta && meta.sellerInfoType) || info.sellerInfoType || 'profile',
-        question: question,
-        image_data: image.dataUrl,
-        seller_info_url: location.href,
-        prev_url: info.prevUrl,
-      },
-    }, function (res) {
-      if (chrome.runtime.lastError) {
-        showStatus('RankFree captcha save failed:\n' + chrome.runtime.lastError.message, false);
-        return;
-      }
-      if (res && res.ok && res.data) {
-        showSavedStatus(res.data, res.apiBase || '', question);
-        requestQuizSolve(question, image.dataUrl);
-        try {
-          chrome.runtime.sendMessage({
-            type: '__sellerCaptchaCaptured',
-            ok: true,
-            channelUid: info.channelUid,
-            data: res.data,
-            apiBase: res.apiBase || '',
-          });
-        } catch (e) { /* noop */ }
-      } else {
-        showStatus('RankFree captcha save failed:\n' + ((res && res.message) || 'unknown error') + (res && res.apiBase ? '\nAPI: ' + res.apiBase : ''), false);
-        try {
-          chrome.runtime.sendMessage({
-            type: '__sellerCaptchaCaptured',
-            ok: false,
-            channelUid: info.channelUid,
-            message: (res && res.message) || 'unknown error',
-            apiBase: (res && res.apiBase) || '',
-          });
-        } catch (e) { /* noop */ }
-      }
-    });
+    // 질문 유형(개수/금액)이 명확히 안 보이면 새 캡차로 교체한다(불명확한 문제는 오답 위험).
+    if (!questionIsRecognized(question)) {
+      tryRefresh('질문 불명확');
+      return;
+    }
+
+    // 캡차 질문/이미지는 서버에 기록하지 않는다.
+    // OCR 정확도 위해 이미지를 2배 확대해 풀이 API로 전달한다.
+    var solveImage = await upscaleDataUrl(image.dataUrl, 2);
+    requestQuizSolve(question, solveImage);
   }
 
   // ── 판매자(사업자) 정보 파싱·저장 — 캡차 통과 후 표시되는 정보를 업체별 저장 ──
@@ -500,7 +557,7 @@
   // 값에 섞이는 버튼/부가 텍스트 제거.
   function sellerNoise(v) {
     return String(v || '')
-      .replace(/인증완료|인증|잘못된 번호 신고|번호 신고|신고하기|복사하기|복사|자세히 보기|자세히/g, '')
+      .replace(/인증완료|인증|잘못된\s*번호\s*신고|번호\s*신고|신고하기|복사하기|복사|자세히\s*보기|자세히/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -597,7 +654,9 @@
     if (!info.channelUid) return;
 
     var pageText = textOf(document.body);
-    if (!/사업자등록번호|통신판매업번호|상호명/.test(pageText)) return; // 판매자정보 렌더 전이면 대기
+    // 판매자정보가 '완전히' 렌더된 뒤에만 저장 — 사업자등록번호가 나와야 전체 블록 로드로 본다.
+    // (상호명만 먼저 뜬 시점에 조기 저장돼 나머지가 비던 문제 방지)
+    if (pageText.indexOf('사업자등록번호') === -1) return;
 
     var fields = {
       biz_name: sellerNoise(firstValue(['상호명', '상호'])),
@@ -609,7 +668,8 @@
       email: pickEmail(firstValue(['e-mail', 'E-mail', '이메일'])),
     };
 
-    if (!fields.biz_name && !fields.biz_reg_no && !fields.representative) return;
+    // 완전한 정보(사업자등록번호 + 상호명)가 있을 때만 저장한다.
+    if (!fields.biz_reg_no || !fields.biz_name) return;
 
     var sig = [info.channelUid, fields.biz_reg_no, fields.biz_name].join('|');
     if (sentSellerInfoSignatures.has(sig)) return;
@@ -632,6 +692,14 @@
       }
       if (res && res.ok) {
         setSellerInfoStatus('판매자정보 저장됨: ' + (fields.biz_name || fields.biz_reg_no || '완료'), true);
+        // 판매자정보 확보 = 이 상품 수집 완료 → 대량수집이 다음 상품으로 넘어가도록 신호.
+        try {
+          chrome.runtime.sendMessage({ type: '__sellerCaptchaCaptured', ok: true, channelUid: info.channelUid, data: res.data || null });
+        } catch (e) { /* noop */ }
+        // 저장 완료 → 잠깐 상태 보여준 뒤 이 탭을 닫는다.
+        setTimeout(function () {
+          try { chrome.runtime.sendMessage({ type: 'closeSellerTab' }); } catch (e) { /* noop */ }
+        }, 1500);
       } else {
         setSellerInfoStatus('판매자정보 저장 실패: ' + ((res && res.message) || 'unknown error'), false);
         sentSellerInfoSignatures.delete(sig); // 실패 시 재시도 허용
