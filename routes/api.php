@@ -68,7 +68,9 @@ Route::prefix('ext')->group(function (): void {
         Route::get('/seller-power', [ExtSellerPowerController::class, 'index']);
         Route::post('/talk-contacts', [ExtSellerPowerController::class, 'harvestTalk'])->middleware('throttle:20,1');
         Route::get('/seller-power/{analysis}', [ExtSellerPowerController::class, 'show']);
-        Route::post('/quiz/solve', [ExtQuizController::class, 'solve'])->middleware('throttle:20,1');
+        // 운영자 본인이 인증 상태로 대량 수집에 쓰는 엔드포인트 — 서버측 요청 제한 없음
+        // (폭주 방지는 확장 콘텐츠 스크립트의 호출 쿨다운으로 처리).
+        Route::post('/quiz/solve', [ExtQuizController::class, 'solve']);
     });
 });
 

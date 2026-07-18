@@ -7,6 +7,13 @@
 
 const DEFAULT_API_BASE = 'https://rankfree.kr';
 
+// 관리자(슈퍼) 수집이 연 판매자정보 탭 id — 이 탭에서만 캡차 분석/자동풀이가 동작한다.
+// (일반 사용자가 판매자정보 팝업을 열어도 아무 동작·경고 없이 조용히 넘어간다.)
+const sellerCaptchaTabs = new Set();
+try {
+  chrome.tabs.onRemoved.addListener((tabId) => { sellerCaptchaTabs.delete(tabId); });
+} catch (e) { /* noop */ }
+
 async function getStore() {
   const data = await chrome.storage.local.get(['rfToken', 'rfUser', 'rfApiBase', 'rfApiKey']);
   return {
@@ -506,6 +513,7 @@ const handlers = {
             return;
           }
           tabId = tab.id;
+          sellerCaptchaTabs.add(tabId);   // 이 탭에서만 콘텐츠 스크립트의 캡차 분석 허용
           if (done && !keepOpen && tabId != null) {
             try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ }
           }
@@ -1096,6 +1104,11 @@ const handlers = {
       answer: json && json.data ? json.data.answer : null,
       message: (json && (json.message || json.error)) || (ok ? '' : 'Failed to solve quiz.'),
     };
+  },
+
+  /** 콘텐츠 스크립트가 '이 탭이 관리자 수집으로 열린 캡차 탭인지' 확인 — 아니면 아무 동작도 안 한다. */
+  async isSellerCaptchaTab(_payload, sender) {
+    return { allowed: !!(sender && sender.tab && sellerCaptchaTabs.has(sender.tab.id)) };
   },
 
   /** 캡차 통과 후 판매자정보 팝업에서 파싱한 사업자 정보를 업체(채널) 기준으로 저장. */

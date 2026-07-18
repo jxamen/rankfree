@@ -18,6 +18,11 @@ class ExtKeywordShopSerpController extends Controller
      */
     public function queue(Request $request)
     {
+        // 쇼핑 상품 대량 수집은 슈퍼관리자(관리자 콘솔)만.
+        if (! $request->user()?->isSuperAdmin()) {
+            return response()->json(['ok' => false, 'message' => '권한이 없습니다.'], 403);
+        }
+
         $limit = min(50, max(1, (int) $request->query('limit', 20)));
         // 최근 이 기간 안에 수집한 키워드는 다시 주지 않는다(같은 키워드가 반복 수집되는 것 방지).
         // 기본 1일 — 순위는 매일 바뀔 수 있으니 하루 지난 것부터 재수집 대상.
@@ -119,6 +124,11 @@ class ExtKeywordShopSerpController extends Controller
 
     public function store(Request $request)
     {
+        // 쇼핑 상품 대량 수집 저장은 슈퍼관리자(관리자 콘솔)만.
+        if (! $request->user()?->isSuperAdmin()) {
+            return response()->json(['ok' => false, 'message' => '권한이 없습니다.'], 403);
+        }
+
         $data = $request->validate([
             'keyword' => 'required|string|max:120',
             'total' => 'nullable|integer|min:0',

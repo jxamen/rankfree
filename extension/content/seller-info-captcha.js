@@ -266,17 +266,27 @@
     }
   }
 
-  // React 제어 입력이라 .value 직접 대입은 무시된다 — native setter로 값을 넣는다.
+  // React 제어 입력: native setter 로 값을 넣고, _valueTracker 를 이전 값으로 되돌려
+  // React 가 '값이 바뀌었다'고 인식(onChange 발화)하게 한다. (native setter만으론 무시됨)
   function setNativeInputValue(el, value) {
+    var last = '';
+    try { last = el.value; } catch (e) { /* noop */ }
     try {
       var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
       var desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
       if (desc && desc.set) {
         desc.set.call(el, value);
-        return;
+      } else {
+        el.value = value;
+      }
+    } catch (e) {
+      try { el.value = value; } catch (e2) { /* noop */ }
+    }
+    try {
+      if (el._valueTracker && typeof el._valueTracker.setValue === 'function') {
+        el._valueTracker.setValue(last);
       }
     } catch (e) { /* noop */ }
-    el.value = value;
   }
 
   // 실제 사용자 클릭에 가깝게 이벤트를 순서대로 발생시킨다(단순 .click()으로 반응 안 하는 핸들러 대비).
@@ -301,12 +311,18 @@
       return false;
     }
 
+    var lastChar = value.slice(-1);
     try { input.focus(); } catch (e) { /* noop */ }
     setNativeInputValue(input, value);
     try {
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: lastChar }));
+      try {
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }));
+      } catch (e2) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: lastChar }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
     } catch (e) { /* noop */ }
 
     // React 상태 반영(버튼 활성화 포함) 후 제출.
@@ -317,15 +333,47 @@
         return;
       }
       try { input.focus(); } catch (e) { /* noop */ }
+
+      // 버튼이 아직 비활성이면(=React가 입력을 아직 못 받음) Enter 제출 + form.requestSubmit 폴백.
+      if (submit.disabled) {
+        try {
+          input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
+          input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
+        } catch (e) { /* noop */ }
+        var form = submit.form || (input.closest && input.closest('form'));
+        if (form) {
+          try { form.requestSubmit ? form.requestSubmit(submit) : form.submit(); } catch (e) { /* noop */ }
+        }
+        // 잠깐 뒤 다시 활성화됐으면 클릭.
+        setTimeout(function () {
+          var s2 = findSubmitButton();
+          if (s2 && !s2.disabled) fireClick(s2);
+        }, 200);
+        setAnswerStatus('정답 "' + value + '" 입력(버튼 비활성 → Enter 제출 시도)', true);
+        return;
+      }
+
       fireClick(submit);
       setAnswerStatus('정답 "' + value + '" 입력 후 확인 클릭', true);
-    }, 250);
+    }, 300);
     return true;
   }
 
-  // 저장 완료 후 질문+이미지를 서버(Gemini)로 보내 정답을 받아 입력·제출한다.
+  // 서버 throttle·과다호출 방지: 최소 호출 간격과 페이지당 시도 상한.
+  var lastSolveAt = 0;
+  var solveAttempts = 0;
+
+  // 저장 완료 후 질문+이미지를 서버로 보내 정답을 받아 입력·제출한다.
   function requestQuizSolve(question, imageData) {
     if (!question && !imageData) return;
+    var now = Date.now();
+    if (now - lastSolveAt < 3000) return;           // 최소 3초 간격
+    if (solveAttempts >= 12) {                        // 무한 오답 루프 방지
+      setAnswerStatus('정답 시도 상한 도달 — 잠시 후/수동으로 확인하세요', false);
+      return;
+    }
+    lastSolveAt = now;
+    solveAttempts++;
     setAnswerStatus('정답 풀이 중...', true);
     try {
       chrome.runtime.sendMessage({
@@ -596,12 +644,21 @@
     scanTimer = setTimeout(function () { scanAndUpload(reason); scanSellerInfo(); }, 250);
   }
 
-  scheduleScan('load');
-  setTimeout(function () { scheduleScan('late-load'); }, 1200);
-  setTimeout(function () { scheduleScan('late-load-2'); }, 3000);
+  function startScanning() {
+    scheduleScan('load');
+    setTimeout(function () { scheduleScan('late-load'); }, 1200);
+    setTimeout(function () { scheduleScan('late-load-2'); }, 3000);
+    try {
+      var observer = new MutationObserver(function () { scheduleScan('mutation'); });
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'class'] });
+    } catch (e) { /* noop */ }
+  }
 
+  // 관리자(슈퍼) 수집이 연 탭에서만 동작한다. 일반 방문이면 아무 동작·경고도 하지 않는다.
   try {
-    var observer = new MutationObserver(function () { scheduleScan('mutation'); });
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'class'] });
+    chrome.runtime.sendMessage({ type: 'isSellerCaptchaTab' }, function (res) {
+      if (chrome.runtime.lastError || !res || !res.allowed) return;
+      startScanning();
+    });
   } catch (e) { /* noop */ }
 })();

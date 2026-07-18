@@ -29,6 +29,11 @@ class ExtQuizController extends Controller
 
     public function solve(Request $request): JsonResponse
     {
+        // 캡차 분석은 슈퍼관리자(운영자)만 — 일반 확장 사용자에게는 열지 않는다.
+        if (! $request->user()?->isSuperAdmin()) {
+            return response()->json(['ok' => false, 'message' => '권한이 없습니다. 캡차 분석은 슈퍼관리자만 사용할 수 있습니다.'], 403);
+        }
+
         if (! QuizSolver::configured()) {
             return response()->json(['ok' => false, 'message' => '선택한 퀴즈 모델('.QuizSolver::model().')의 API 키가 설정되지 않았습니다.'], 503);
         }
