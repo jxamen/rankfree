@@ -71,13 +71,11 @@
             <thead>
                 <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
                     <th style="padding:8px 6px;text-align:right;width:56px;">No</th>
-                    <th style="padding:8px 6px;">상품명</th>
-                    <th style="padding:8px 6px;width:150px;">판매처 <span class="text-muted-soft" style="font-weight:400;">/ 스토어ID</span></th>
+                    <th style="padding:8px 6px;">상품명 <span class="text-muted-soft" style="font-weight:400;">/ 판매처 · 스토어ID</span></th>
                     <th style="padding:8px 6px;">노출 키워드</th>
-                    <th style="padding:8px 6px;text-align:right;width:90px;">가격</th>
                     <th style="padding:8px 6px;width:90px;">톡톡</th>
                     <th style="padding:8px 6px;width:84px;">수집일</th>
-                    <th style="padding:8px 6px;width:112px;">판매자정보</th>
+                    <th style="padding:8px 6px;width:150px;">판매자정보</th>
                 </tr>
             </thead>
             <tbody>
@@ -89,11 +87,12 @@
                         }
                         $home = !empty($p->link) ? preg_replace('#/products/.*$#', '', $p->link) : null;
                     @endphp
+                    @php $caps = $storeId !== '' ? ($captchaMap[$storeId] ?? null) : null; $hasCap = $caps && $caps->isNotEmpty(); @endphp
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                         <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted-soft">
                             {{ number_format($items->total() - ($items->firstItem() - 1) - $loop->index) }}
                         </td>
-                        <td style="padding:7px 6px;max-width:420px;">
+                        <td style="padding:7px 6px;max-width:460px;">
                             @if (!empty($p->link))
                                 <a href="{{ $p->link }}" target="_blank" rel="noopener" class="text-ink font-semibold"
                                    style="text-decoration:none;" title="{{ $p->title }}">{{ $p->title }}</a>
@@ -103,19 +102,18 @@
                             @if (!empty($p->is_ad))
                                 <span class="badge" style="font-size:var(--fs-xs);padding:1px 6px;">광고</span>
                             @endif
-                        </td>
-                        <td style="padding:7px 6px;">
-                            <div class="text-muted">{{ $p->mall_name ?: '—' }}</div>
-                            @if ($storeId !== '')
-                                @if ($home)
-                                    <a href="{{ $home }}" target="_blank" rel="noopener" class="font-mono"
-                                       style="color:var(--color-primary);text-decoration:none;font-size:var(--fs-xs);" title="{{ $home }}">{{ $storeId }}</a>
-                                @else
-                                    <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $storeId }}</span>
+                            <div style="margin-top:3px;">
+                                <span class="text-muted" style="font-size:var(--fs-xs);">{{ $p->mall_name ?: '—' }}</span>
+                                @if ($storeId !== '')
+                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">·</span>
+                                    @if ($home)
+                                        <a href="{{ $home }}" target="_blank" rel="noopener" class="font-mono"
+                                           style="color:var(--color-primary);text-decoration:none;font-size:var(--fs-xs);" title="{{ $home }}">{{ $storeId }}</a>
+                                    @else
+                                        <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $storeId }}</span>
+                                    @endif
                                 @endif
-                            @else
-                                <span class="text-muted-soft" style="font-size:var(--fs-xs);">—</span>
-                            @endif
+                            </div>
                         </td>
                         <td style="padding:7px 6px;">
                             @php $kws = $kwMap[$p->product_key] ?? []; @endphp
@@ -130,7 +128,6 @@
                                 <span class="text-muted-soft" title="{{ collect($kws)->pluck('keyword')->implode(', ') }}">+{{ count($kws) - 3 }}</span>
                             @endif
                         </td>
-                        <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $p->price ? number_format($p->price) : '—' }}</td>
                         <td style="padding:7px 6px;">
                             @if (!empty($p->talk_id))
                                 <a href="https://talk.naver.com/ct/{{ $p->talk_id }}" target="_blank" rel="noopener"
@@ -144,20 +141,59 @@
                             {{ $p->last_at ? \Carbon\Carbon::parse($p->last_at)->format('m-d') : '—' }}
                         </td>
                         <td style="padding:7px 6px;">
-                            @if (!empty($p->link))
-                                <button type="button" class="btn btn-secondary btn-sm rf-seller-captcha-one"
-                                        data-url="{{ $p->link }}"
-                                        data-title="{{ $p->title }}"
-                                        data-store="{{ $storeId }}">
-                                    수집
-                                </button>
-                            @else
-                                <span class="text-muted-soft">—</span>
-                            @endif
+                            <div class="flex items-center gap-1" style="flex-wrap:wrap;">
+                                @if ($hasCap)
+                                    <button type="button" class="btn btn-primary btn-sm rf-cap-toggle" data-target="cap-{{ $loop->index }}">
+                                        정보 보기 <span class="font-mono">({{ $caps->count() }})</span>
+                                    </button>
+                                @endif
+                                @if (!empty($p->link))
+                                    <button type="button" class="btn btn-secondary btn-sm rf-seller-captcha-one"
+                                            data-url="{{ $p->link }}"
+                                            data-title="{{ $p->title }}"
+                                            data-store="{{ $storeId }}">
+                                        {{ $hasCap ? '재수집' : '수집' }}
+                                    </button>
+                                @elseif (!$hasCap)
+                                    <span class="text-muted-soft">—</span>
+                                @endif
+                            </div>
                         </td>
                     </tr>
+                    @if ($hasCap)
+                        <tr id="cap-{{ $loop->index }}" class="hidden">
+                            <td colspan="6" style="padding:0;">
+                                <div style="background:var(--color-surface-soft);padding:14px 16px;border-bottom:1px solid var(--color-hairline-soft);">
+                                    <div class="text-muted" style="font-size:var(--fs-xs);margin-bottom:10px;">
+                                        퀴즈로 수집한 판매자정보 {{ $caps->count() }}건 — 스토어 <span class="font-mono text-ink">{{ $storeId }}</span>
+                                    </div>
+                                    <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                                        @foreach ($caps as $cap)
+                                            <div class="card p-3" style="width:300px;max-width:100%;">
+                                                <div class="flex items-center justify-between gap-2" style="margin-bottom:6px;">
+                                                    <span class="badge" style="font-size:var(--fs-xs);padding:1px 7px;">{{ $cap->seller_info_type === 'profile' ? '판매자정보' : $cap->seller_info_type }}</span>
+                                                    <span class="text-muted-soft font-mono" style="font-size:var(--fs-xs);">{{ $cap->captured_at ? $cap->captured_at->format('m-d H:i') : $cap->created_at?->format('m-d H:i') }}</span>
+                                                </div>
+                                                @if ($cap->question)
+                                                    <div class="text-ink" style="font-size:var(--fs-xs);margin-bottom:8px;">{{ $cap->question }}</div>
+                                                @endif
+                                                <a href="{{ route('admin.shop-products.seller-captchas.image', $cap) }}" target="_blank" rel="noopener" title="원본 크기로 열기">
+                                                    <img src="{{ route('admin.shop-products.seller-captchas.image', $cap) }}" loading="lazy" alt="판매자정보"
+                                                         style="width:100%;border:1px solid var(--color-hairline);border-radius:8px;display:block;background:#fff;">
+                                                </a>
+                                                @if ($cap->seller_info_url)
+                                                    <a href="{{ $cap->seller_info_url }}" target="_blank" rel="noopener" class="text-muted-soft"
+                                                       style="font-size:var(--fs-xs);display:inline-block;margin-top:6px;text-decoration:none;">원문 페이지 →</a>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    @endif
                 @empty
-                    <tr><td colspan="8" class="text-muted-soft text-center" style="padding:40px;">
+                    <tr><td colspan="6" class="text-muted-soft text-center" style="padding:40px;">
                         수집된 상품이 없습니다. 키워드 상세에서 상품을 먼저 수집해 주세요.
                     </td></tr>
                 @endforelse
@@ -355,5 +391,16 @@
             if (n > 0) setTimeout(function () { recover(n - 1); }, 300);
         })(20);
     })();
+
+    // 수집된 판매자정보 펼치기/접기
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('.rf-cap-toggle');
+        if (!btn) return;
+        var row = document.getElementById(btn.getAttribute('data-target'));
+        if (!row) return;
+        var open = row.classList.toggle('hidden') === false;
+        btn.classList.toggle('btn-primary', !open);
+        btn.classList.toggle('btn-secondary', open);
+    });
 </script>
 @endsection

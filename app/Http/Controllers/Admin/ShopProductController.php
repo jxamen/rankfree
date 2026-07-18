@@ -69,9 +69,28 @@ class ShopProductController extends Controller
             }
         }
 
+        // 퀴즈(판매자정보 캡차)로 수집된 정보 — 보이는 상품의 store_id 기준으로 묶는다.
+        // store_id 는 DB 값 우선, 없으면 상품 링크(스마트스토어/브랜드스토어)에서 추출(뷰와 동일 규칙).
+        $storeIds = [];
+        foreach ($items->items() as $p) {
+            $sid = $p->store_id ?: '';
+            if ($sid === '' && ! empty($p->link) && preg_match('#(?:smartstore|brand)\.naver\.com/([^/]+)/#', $p->link, $mm)) {
+                $sid = $mm[1];
+            }
+            if ($sid !== '') {
+                $storeIds[] = $sid;
+            }
+        }
+        $captchaMap = collect();
+        if ($storeIds) {
+            $captchaMap = ShopSellerCaptcha::whereIn('store_id', array_values(array_unique($storeIds)))
+                ->orderByDesc('captured_at')->orderByDesc('id')->get()->groupBy('store_id');
+        }
+
         return view('admin.shop-products', [
             'items' => $items,
             'kwMap' => $kwMap,
+            'captchaMap' => $captchaMap,
             'recentCaptchas' => ShopSellerCaptcha::query()
                 ->latest('captured_at')->latest('id')->limit(30)->get(),
             'q' => $q, 'mall' => $mall, 'ad' => $ad, 'talk' => $talk, 'month' => $month, 'sort' => $sort,
