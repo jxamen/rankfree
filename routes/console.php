@@ -27,7 +27,7 @@ if (config('rankfree.community.schedule_enabled', true)) {
         ->withoutOverlapping();
 }
 
-// 앱 타임존이 UTC 라 시각 지정 스케줄은 반드시 timezone('Asia/Seoul') 로 KST 고정.
+// 시각 지정 스케줄은 timezone('Asia/Seoul') 명시를 유지한다(앱 타임존 설정과 무관하게 KST 의도를 고정).
 
 // 플레이스 순위추적 — 매일 오전 11:30·오후 4:30(KST). 활성 슬롯 순위 조회·기록(nCaptcha 토큰 필요).
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->withoutOverlapping()->runInBackground();
@@ -70,6 +70,10 @@ if (config('rankfree.hub.publish_enabled', true)) {
 
 // 키워드 허브 자동 발행(관리자 토글) — 켜져 있을 때만 쌓인 후보를 유형별로 매분 배치 발행. 꺼져 있으면 즉시 no-op.
 Schedule::command('hub:auto-publish')->everyMinute()->withoutOverlapping()->runInBackground();
+
+// 키워드 허브 순위 매핑 월 파티션 로테이션 — 이번 달~2개월 뒤 선생성 + 보존기간(기본 13개월) 지난 월 파기.
+// 수집은 발굴 스케줄과 무관하게(확장 업로드·관리자 탐색) 일어나므로 발굴 게이트 밖에서 항상 실행. 멱등·경량.
+Schedule::command('hub:partition-rotate')->timezone('Asia/Seoul')->dailyAt('05:50')->withoutOverlapping()->runInBackground();
 
 // 키워드 허브 발굴·갱신 — 후보 수집/발굴/갱신. 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호.
 if (config('rankfree.hub.schedule_enabled', false)) {

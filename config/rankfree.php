@@ -131,6 +131,9 @@ return [
         'discover_min_impressions' => (int) env('HUB_DISCOVER_MIN_IMPRESSIONS', 30),
         // 데이터랩 쇼핑 인기검색어 수집 페이지 수(hub:shopping-collect, 페이지당 20개 · 실측 최대 25=500위)
         'datalab_pages' => (int) env('HUB_DATALAB_PAGES', 25),
+        // 순위 매핑(keyword_place_ranks·keyword_shop_ranks) 보존 개월 수(현재 월 포함) —
+        // hub:partition-rotate 가 이 기간 지난 월 파티션을 DROP. 0 이하 = 파기 안 함(선생성만 수행)
+        'rank_retention_months' => (int) env('HUB_RANK_RETENTION_MONTHS', 13),
     ],
 
     /*

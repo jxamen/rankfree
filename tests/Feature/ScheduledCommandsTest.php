@@ -38,5 +38,6 @@ class ScheduledCommandsTest extends TestCase
         $this->assertStringContainsString('place:track-run', $joined);
         $this->assertStringContainsString('shop:track-run', $joined);
         $this->assertStringContainsString('smartplace:collect', $joined);
+        $this->assertStringContainsString('hub:partition-rotate', $joined);
     }
 }
