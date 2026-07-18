@@ -441,11 +441,25 @@
     lastSolveAt = now;
     solveAttempts++;
     setAnswerStatus('정답 풀이 중...', true);
+
+    // 10초 안에 응답이 없으면 이 요청은 버리고(늦게 오면 무시) 새 캡차로 교체한다.
+    // (어려운 문제에 오래 매달리지 않고 새로고침 → 새 질문 → 즉시 재요청)
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      solveAttempts = Math.max(0, solveAttempts - 1); // 지연은 오답이 아니므로 시도 횟수 되돌림
+      tryRefresh('풀이 지연(10초)');
+    }, 10000);
+
     try {
       chrome.runtime.sendMessage({
         type: 'solveQuiz',
         payload: { question: question || '', image_data: imageData || '' },
       }, function (res) {
+        if (settled) return;              // 이미 타임아웃 처리됨 — 늦게 온 응답 무시
+        settled = true;
+        clearTimeout(timer);
         if (chrome.runtime.lastError) {
           setAnswerStatus('정답 풀이 실패: ' + chrome.runtime.lastError.message, false);
           return;
@@ -458,7 +472,11 @@
         }
       });
     } catch (e) {
-      setAnswerStatus('정답 풀이 실패: ' + String((e && e.message) || e), false);
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        setAnswerStatus('정답 풀이 실패: ' + String((e && e.message) || e), false);
+      }
     }
   }
 
