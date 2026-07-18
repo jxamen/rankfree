@@ -195,61 +195,6 @@
     </div>
 </div>
 
-@if (!empty($recentSellerInfos) && $recentSellerInfos->isNotEmpty())
-    <div class="card p-4 mt-4">
-        <div class="flex items-center justify-between gap-3 mb-3">
-            <div>
-                <h2 class="font-semibold text-ink" style="font-size:var(--fs-md);">최근 수집한 판매자정보</h2>
-                <p class="text-muted" style="font-size:var(--fs-xs);margin-top:2px;">캡차 통과 후 확보한 사업자 정보입니다.</p>
-            </div>
-        </div>
-        <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm);">
-                <thead>
-                    <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
-                        <th style="padding:8px 6px;width:110px;">수집일</th>
-                        <th style="padding:8px 6px;">상호명 · 대표자</th>
-                        <th style="padding:8px 6px;width:120px;">사업자등록번호</th>
-                        <th style="padding:8px 6px;width:130px;">고객센터</th>
-                        <th style="padding:8px 6px;width:150px;">통신판매업번호</th>
-                        <th style="padding:8px 6px;">e-mail</th>
-                        <th style="padding:8px 6px;width:120px;">스토어ID</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($recentSellerInfos as $si)
-                        <tr style="border-bottom:1px solid var(--color-hairline-soft);">
-                            <td style="padding:8px 6px;" class="font-mono text-muted-soft">
-                                {{ $si->captured_at ? $si->captured_at->format('m-d H:i') : $si->created_at?->format('m-d H:i') }}
-                            </td>
-                            <td style="padding:8px 6px;">
-                                <span class="text-ink font-semibold">{{ $si->biz_name ?: '—' }}</span>
-                                @if ($si->representative)
-                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">· {{ $si->representative }}</span>
-                                @endif
-                                @if ($si->address)
-                                    <div class="text-muted-soft" style="font-size:var(--fs-xs);margin-top:2px;">{{ $si->address }}</div>
-                                @endif
-                            </td>
-                            <td style="padding:8px 6px;" class="font-mono text-muted">{{ $si->biz_reg_no ?: '—' }}</td>
-                            <td style="padding:8px 6px;" class="font-mono text-muted">{{ $si->customer_phone ?: '—' }}</td>
-                            <td style="padding:8px 6px;" class="font-mono text-muted">{{ $si->mail_order_no ?: '—' }}</td>
-                            <td style="padding:8px 6px;" class="text-muted">
-                                {{ $si->email ?: '—' }}
-                                @if ($si->seller_info_url)
-                                    <a href="{{ $si->seller_info_url }}" target="_blank" rel="noopener"
-                                       class="text-muted-soft" style="margin-left:6px;text-decoration:none;font-size:var(--fs-xs);">원문</a>
-                                @endif
-                            </td>
-                            <td style="padding:8px 6px;" class="font-mono text-muted">{{ $si->store_id ?: '-' }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-    </div>
-@endif
-
 @if ($items->hasPages())
     <div class="mt-4">{{ $items->links() }}</div>
 @endif

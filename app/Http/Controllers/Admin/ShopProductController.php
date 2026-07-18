@@ -93,8 +93,6 @@ class ShopProductController extends Controller
             'items' => $items,
             'kwMap' => $kwMap,
             'sellerInfoMap' => $sellerInfoMap,
-            'recentSellerInfos' => ShopSellerInfo::query()
-                ->latest('captured_at')->latest('id')->limit(30)->get(),
             'q' => $q, 'mall' => $mall, 'ad' => $ad, 'talk' => $talk, 'month' => $month, 'sort' => $sort,
             // 필터 후보 — 판매처가 많아질 수 있어 상위만(캐시)
             'malls' => Cache::remember('shop_products:malls', 300, fn () => DB::table('shop_products')

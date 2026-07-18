@@ -357,6 +357,9 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/shop-products', [\App\Http\Controllers\Admin\ShopProductController::class, 'index'])->name('shop-products');
     Route::get('/shop-products/seller-captchas/{captcha}/image', [\App\Http\Controllers\Admin\ShopProductController::class, 'captchaImage'])->name('shop-products.seller-captchas.image');
 
+    // 판매자정보 — 캡차 통과 후 수집된 사업자 정보만 별도 목록(업체명·대표자·톡톡·전화·스토어)
+    Route::get('/seller-infos', [\App\Http\Controllers\Admin\SellerInfoController::class, 'index'])->name('seller-infos');
+
     // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
     Route::get('/keyword-hub/candidates', [\App\Http\Controllers\Admin\KeywordHubController::class, 'candidates'])->name('keyword-hub.candidates');
