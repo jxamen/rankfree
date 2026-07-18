@@ -54,11 +54,12 @@ if (config('rankfree.cafe_crawl.schedule_enabled', true)) {
 // 사이트맵 갱신 — 매일 새벽 5:40(KST). 분석 공유 슬러그 백필 + 사이트맵 캐시 무효화.
 Schedule::command('sitemap:refresh')->timezone('Asia/Seoul')->dailyAt('05:40')->withoutOverlapping()->runInBackground();
 
-// 신규 개업(24) — 인허가 공공데이터 수집 → 네이버 플레이스 매칭.
-// 기본 off(.env NEWBIZ_SCHEDULE_ENABLED=true). 원천이 D-2 현행화라 새벽 1회면 충분.
+// 신규 개업(24) — 인허가 공공데이터 수집 → 네이버 플레이스 매칭(수집이 매칭까지 한 흐름).
+// 기본 off(.env NEWBIZ_SCHEDULE_ENABLED=true — 운영은 on). 원천이 D-2 현행화라 하루 1회면 충분.
 if (config('rankfree.newbiz.schedule_enabled', false)) {
-    Schedule::command('newbiz:collect')->timezone('Asia/Seoul')->dailyAt('07:10')->withoutOverlapping()->runInBackground();
-    Schedule::command('newbiz:place-match')->timezone('Asia/Seoul')->dailyAt('07:30')->withoutOverlapping()->runInBackground();
+    Schedule::command('newbiz:collect')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
+    // 수집 흐름이 매칭까지 끝내므로 아래는 잔여분(재확인 주기 도래분) 캐치업
+    Schedule::command('newbiz:place-match')->timezone('Asia/Seoul')->dailyAt('08:20')->withoutOverlapping()->runInBackground();
 }
 
 // 키워드 콘텐츠 허브(22) — 승인 후보 자동 발행. 발굴과 분리(관리자 승인분만 처리 → 쿼터/도어웨이 리스크 없음).
