@@ -148,11 +148,13 @@
                 // Gemini 는 -latest 별칭 권장(구모델 종료돼도 자동 승계). 키는 위 'AI 모델 API 키'에 등록.
                 $quizModelGroups = [
                     'Gemini (Google)' => [
-                        'gemini-pro-latest' => 'gemini-pro-latest — 최신 Pro·자동승계(권장)',
-                        'gemini-3.1-pro-preview' => 'Gemini 3.1 Pro — $2/$12 · 1000건 ~$9.00',
-                        'gemini-3.5-flash' => 'Gemini 3.5 Flash — $1.5/$9 · 1000건 ~$6.75',
-                        'gemini-flash-latest' => 'gemini-flash-latest — 최신 Flash·자동승계',
+                        'gemini-flash-lite-latest' => 'gemini-flash-lite-latest — 최저가·추론 최소·높은 RPM (대량 권장)',
                         'gemini-3.1-flash-lite' => 'Gemini 3.1 Flash-Lite — $0.25/$1.5 · 최저가',
+                        'gemini-2.0-flash-lite' => 'Gemini 2.0 Flash-Lite — 저가·높은 RPM',
+                        'gemini-flash-latest' => 'gemini-flash-latest — 최신 Flash·자동승계',
+                        'gemini-3.5-flash' => 'Gemini 3.5 Flash — $1.5/$9 · 추론 많음(비용↑ 주의)',
+                        'gemini-pro-latest' => 'gemini-pro-latest — 최신 Pro·정확도↑·비용↑',
+                        'gemini-3.1-pro-preview' => 'Gemini 3.1 Pro — $2/$12 · 1000건 ~$9.00',
                     ],
                     'OpenAI (GPT)' => [
                         'gpt-5.6' => 'GPT-5.6 Terra — $2.5/$15 · 1000건 ~$11.25',
@@ -184,6 +186,13 @@
                             @endforeach
                         </optgroup>
                     @endforeach
+                </select>
+            </div>
+            <div style="margin-top:12px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;white-space:nowrap;">추론(thinking) <span class="text-muted-soft" style="font-weight:400;">Flash·Lite 계열은 <b>끄면</b> 추론 토큰이 사라져 건당 비용이 대폭 절감(권장). 정확도가 아쉬우면 켜기 (Pro 계열은 항상 추론 사용)</span></label>
+                <select name="quiz_thinking" class="input" style="width:100%;max-width:320px;font-size:var(--fs-xs);">
+                    <option value="off" @selected($quizThinking !== 'on')>끄기 — 비용 최소 (thinkingBudget=0)</option>
+                    <option value="on" @selected($quizThinking === 'on')>켜기 — 정확도 우선 (모델 기본 추론)</option>
                 </select>
             </div>
             <div style="margin-top:12px;">

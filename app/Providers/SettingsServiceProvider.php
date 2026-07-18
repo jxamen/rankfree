@@ -114,7 +114,7 @@ class SettingsServiceProvider extends ServiceProvider
             'seoul.openapi_key' => 'rankfree.newbiz.seoul_key',   // 24 — 신규 개업(인허가) 수집
             'quiz.model' => 'rankfree.quiz.model',                // 캡차(퀴즈) 분석 모델(멀티 공급자)
             'quiz.solve_timeout' => 'services.gemini.quiz_timeout', // 확장 정답 대기 시간(초)
-            'quiz.thinking' => 'services.gemini.quiz_thinking',    // 추론 사용 여부('1'/'0')
+            'quiz.thinking' => 'services.gemini.quiz_thinking',    // 캡차 풀이 추론(thinking) on/off
         ] as $mk => $cfg) {
             $v = trim((string) ($m[$mk] ?? ''));
             if ($v !== '') {
