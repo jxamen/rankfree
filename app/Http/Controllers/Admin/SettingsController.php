@@ -64,6 +64,7 @@ class SettingsController extends Controller
             // 캡차(퀴즈) 분석 모델 — 멀티 공급자(Gemini/OpenAI/Claude/Grok). 비우면 기본(gemini-pro-latest)
             'quizModel' => (string) AppSetting::read('quiz.model'),
             'quizModelLive' => (string) (config('rankfree.quiz.model') ?: 'gemini-pro-latest'),
+            'quizSolveTimeout' => (int) (config('services.gemini.quiz_timeout') ?: 10),
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
@@ -96,6 +97,7 @@ class SettingsController extends Controller
         'ga.property_id' => 'ga_property_id',
         'seoul.openapi_key' => 'seoul_openapi_key',
         'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
+        'quiz.solve_timeout' => 'quiz_solve_timeout',   // 확장 정답 대기 시간(초) → services.gemini.quiz_timeout
     ];
 
     public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)

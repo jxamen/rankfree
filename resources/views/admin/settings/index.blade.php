@@ -185,6 +185,10 @@
                     @endforeach
                 </select>
             </div>
+            <div style="max-width:560px;margin-top:12px;">
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;">풀이 대기 시간(초) <span class="text-muted-soft" style="font-weight:400;">이 시간 안에 정답이 안 오면 요청을 버리고 새로고침해 다른 캡차로 재시도 (기본 10, 3~60)</span></label>
+                <input type="number" name="quiz_solve_timeout" value="{{ $quizSolveTimeout }}" min="3" max="60" step="1" class="input" style="width:120px;font-size:var(--fs-xs);">
+            </div>
         </div>
     </div>
 

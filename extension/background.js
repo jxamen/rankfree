@@ -105,6 +105,22 @@ function sleep(ms) {
   } catch (e) { /* noop */ }
 })();
 
+// 확장이 읽는 퀴즈 풀이 설정(정답 대기 시간 등) — 서버에서 한 번 받아 캐시.
+let quizConfigCache = null;
+async function getQuizConfig() {
+  if (quizConfigCache) return quizConfigCache;
+  try {
+    const { token, apiBase } = await getStore();
+    if (!token) return { solveTimeout: 10 };
+    const { ok, json } = await apiFetch('/api/ext/quiz/config', { token, apiBase });
+    const t = ok && json && json.data ? Number(json.data.solve_timeout) : 0;
+    quizConfigCache = { solveTimeout: t > 0 ? t : 10 };
+  } catch (e) {
+    quizConfigCache = { solveTimeout: 10 };
+  }
+  return quizConfigCache;
+}
+
 const handlers = {
   /** 로그인 → 토큰 저장 */
   async login({ email, password, apiBase }) {
@@ -1114,7 +1130,12 @@ const handlers = {
 
   /** 콘텐츠 스크립트가 '이 탭이 관리자 수집으로 열린 캡차 탭인지' 확인 — 아니면 아무 동작도 안 한다. */
   async isSellerCaptchaTab(_payload, sender) {
-    return { allowed: !!(sender && sender.tab && sellerCaptchaTabs.has(sender.tab.id)) };
+    const allowed = !!(sender && sender.tab && sellerCaptchaTabs.has(sender.tab.id));
+    let solveTimeout = 10;
+    if (allowed) {
+      try { solveTimeout = (await getQuizConfig()).solveTimeout; } catch (e) { /* noop */ }
+    }
+    return { allowed, solveTimeout };
   },
 
   /** 판매자정보 저장 완료 후 콘텐츠 스크립트 요청으로 해당(자기) 탭을 닫는다. */

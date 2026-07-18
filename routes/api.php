@@ -71,6 +71,8 @@ Route::prefix('ext')->group(function (): void {
         // 운영자 본인이 인증 상태로 대량 수집에 쓰는 엔드포인트 — 서버측 요청 제한 없음
         // (폭주 방지는 확장 콘텐츠 스크립트의 호출 쿨다운으로 처리).
         Route::post('/quiz/solve', [ExtQuizController::class, 'solve']);
+        // 확장이 읽는 퀴즈 풀이 설정(정답 대기 시간 등)
+        Route::get('/quiz/config', [ExtQuizController::class, 'config']);
     });
 });
 

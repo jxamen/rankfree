@@ -428,6 +428,7 @@
   // 서버 throttle·과다호출 방지: 최소 호출 간격과 페이지당 시도 상한.
   var lastSolveAt = 0;
   var solveAttempts = 0;
+  var solveTimeoutMs = 10000; // 정답 대기 시간(환경설정에서 받아 덮어씀)
 
   // 저장 완료 후 질문+이미지를 서버로 보내 정답을 받아 입력·제출한다.
   function requestQuizSolve(question, imageData) {
@@ -445,12 +446,13 @@
     // 10초 안에 응답이 없으면 이 요청은 버리고(늦게 오면 무시) 새 캡차로 교체한다.
     // (어려운 문제에 오래 매달리지 않고 새로고침 → 새 질문 → 즉시 재요청)
     var settled = false;
+    var waitSec = Math.round(solveTimeoutMs / 1000);
     var timer = setTimeout(function () {
       if (settled) return;
       settled = true;
       solveAttempts = Math.max(0, solveAttempts - 1); // 지연은 오답이 아니므로 시도 횟수 되돌림
-      tryRefresh('풀이 지연(10초)');
-    }, 10000);
+      tryRefresh('풀이 지연(' + waitSec + '초)');
+    }, solveTimeoutMs);
 
     try {
       chrome.runtime.sendMessage({
@@ -744,6 +746,7 @@
   try {
     chrome.runtime.sendMessage({ type: 'isSellerCaptchaTab' }, function (res) {
       if (chrome.runtime.lastError || !res || !res.allowed) return;
+      if (res.solveTimeout && Number(res.solveTimeout) > 0) solveTimeoutMs = Number(res.solveTimeout) * 1000;
       startScanning();
     });
   } catch (e) { /* noop */ }

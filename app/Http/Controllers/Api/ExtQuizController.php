@@ -27,6 +27,17 @@ class ExtQuizController extends Controller
     // 보기 이미지 최대 개수
     private const MAX_IMAGES = 6;
 
+    /** 확장이 읽는 풀이 설정 — 정답 대기 시간(초) 등. */
+    public function config(): JsonResponse
+    {
+        return response()->json([
+            'ok' => true,
+            'data' => [
+                'solve_timeout' => max(3, min(60, (int) (config('services.gemini.quiz_timeout') ?: 10))),
+            ],
+        ]);
+    }
+
     public function solve(Request $request): JsonResponse
     {
         // 캡차 분석은 슈퍼관리자(운영자)만 — 일반 확장 사용자에게는 열지 않는다.

@@ -113,6 +113,7 @@ class SettingsServiceProvider extends ServiceProvider
             'aligo.sender' => 'services.aligo.sender',
             'seoul.openapi_key' => 'rankfree.newbiz.seoul_key',   // 24 — 신규 개업(인허가) 수집
             'quiz.model' => 'rankfree.quiz.model',                // 캡차(퀴즈) 분석 모델(멀티 공급자)
+            'quiz.solve_timeout' => 'services.gemini.quiz_timeout', // 확장 정답 대기 시간(초)
         ] as $mk => $cfg) {
             $v = trim((string) ($m[$mk] ?? ''));
             if ($v !== '') {

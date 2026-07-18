@@ -52,6 +52,8 @@ return [
         'quiz_model' => env('GEMINI_QUIZ_MODEL', 'gemini-pro-latest'),
         // Gemini 모델이 404/429/503 이면 자동 전환할 폴백(한도 넉넉·저비용 Flash).
         'quiz_fallback_model' => env('GEMINI_QUIZ_FALLBACK_MODEL', 'gemini-flash-latest'),
+        // 확장이 정답을 기다리는 시간(초) — 초과 시 요청 버리고 새로고침해 다른 캡차로 재시도.
+        'quiz_timeout' => (int) env('GEMINI_QUIZ_TIMEOUT', 10),
     ],
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
