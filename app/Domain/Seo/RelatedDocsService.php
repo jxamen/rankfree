@@ -68,6 +68,15 @@ class RelatedDocsService
         $sections = [];
         $seen = []; // 페이지 전체(섹션 간) 제목 중복 방지
 
+        // 지리 기반 "주변 지역·업종" — 플레이스 타입 키워드 문서 + 대표 좌표가 있을 때 맨 앞에.
+        // 같은 카테고리(유사도) 추천은 지역이 안 맞을 수 있어, 실제 거리순 다른 지역/업종을 먼저 보여준다.
+        if ($doc instanceof KeywordSearch && $doc->place_x !== null && $doc->place_y !== null) {
+            $geo = $this->nearbyPlaceItems($doc, $seen);
+            if ($geo) {
+                $sections[] = ['title' => '가까운 지역 · 업종 추천', 'items' => $geo];
+            }
+        }
+
         // 같은 카테고리 인기 키워드(허브 문서) — 아고다식 "주변" 추천을 맨 앞에(22 Phase 2·3)
         // 키워드 문서는 자기 카테고리로, 시장/셀러력/매장 문서는 같은 키워드의 허브 문서를 찾아 그 카테고리로 연결.
         [$catId, $catName, $excludeId] = $this->resolveCategory($doc);
@@ -216,6 +225,94 @@ class RelatedDocsService
         $it['url'] = $m->shareUrl();
 
         return $it;
+    }
+
+    /**
+     * 대표 좌표 기준 거리순 주변 허브 문서 — 다른 지역/업종을 가까운 순으로(카테고리당 최대 2개, 다양성).
+     * 바운딩박스(±약 6km)로 1차 좁히고 하버사인 거리로 정렬한다.
+     *
+     * @return array<int, array{type:string,title:string,meta:string,url:string}>
+     */
+    private function nearbyPlaceItems(KeywordSearch $doc, array &$seen): array
+    {
+        $lat = (float) $doc->place_y;
+        $lng = (float) $doc->place_x;
+        if ($lat === 0.0 || $lng === 0.0) {
+            return [];
+        }
+        $km = 6.0;
+        $dLat = $km / 111.0;
+        $dLng = $km / (111.0 * max(0.15, cos(deg2rad($lat))));   // 위도에 따른 경도 1도 거리 보정
+
+        $cands = KeywordSearch::where('origin', 'hub')
+            ->where('id', '!=', $doc->getKey())
+            ->whereNotNull('place_x')->whereNotNull('place_y')
+            ->whereBetween('place_x', [$lng - $dLng, $lng + $dLng])
+            ->whereBetween('place_y', [$lat - $dLat, $lat + $dLat])
+            ->with('category:id,name,type')
+            ->limit(80)->get();
+        if ($cands->isEmpty()) {
+            return [];
+        }
+
+        // 실제 거리 계산 → 8km 이내만 → 가까운 순
+        $cands = $cands
+            ->each(fn ($c) => $c->setAttribute('__dist', $this->haversineKm($lat, $lng, (float) $c->place_y, (float) $c->place_x)))
+            ->filter(fn ($c) => $c->getAttribute('__dist') <= 8.0)
+            ->sortBy(fn ($c) => $c->getAttribute('__dist'))->values();
+
+        // 다양성 우선(카테고리당 최대 2개) → 부족하면 가까운 순 나머지로 채운다(캡에 굶지 않게).
+        $primary = [];
+        $overflow = [];
+        $catCount = [];
+        foreach ($cands as $c) {
+            $kw = trim((string) $c->keyword);
+            $dedupe = mb_strtolower($kw, 'UTF-8');
+            if ($kw === '' || isset($seen[$dedupe])) {
+                continue;
+            }
+            $cid = (int) ($c->category_id ?: 0);
+            if (($catCount[$cid] ?? 0) < 2) {
+                $catCount[$cid] = ($catCount[$cid] ?? 0) + 1;
+                $primary[] = $c;
+            } else {
+                $overflow[] = $c;
+            }
+        }
+
+        $items = [];
+        foreach (array_merge($primary, $overflow) as $c) {
+            if (count($items) >= self::SELF_LIMIT) {
+                break;
+            }
+            $kw = trim((string) $c->keyword);
+            $dedupe = mb_strtolower($kw, 'UTF-8');
+            if (isset($seen[$dedupe])) {
+                continue;
+            }
+            $seen[$dedupe] = true;
+
+            $d = (float) $c->getAttribute('__dist');
+            $dist = $d < 1.0 ? max(50, (int) round($d * 1000 / 50) * 50).'m' : number_format($d, 1).'km';
+            $items[] = [
+                'type' => '주변',
+                'title' => $kw.' 키워드 분석',
+                'meta' => ($c->category?->name ? $c->category->name.' · ' : '').'약 '.$dist,
+                'url' => $c->shareUrl(),
+            ];
+        }
+
+        return $items;
+    }
+
+    /** 두 좌표(위도 lat·경도 lng) 사이 거리(km) — 하버사인. */
+    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return 6371.0 * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     /**

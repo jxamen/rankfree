@@ -90,6 +90,24 @@ class PlaceSerpStore
         // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
         app(\App\Domain\Keyword\KeywordMasterSync::class)->touchSerp($keyword, 'place', count($rows));
 
+        // 허브 문서 대표 좌표(place_x/y) 갱신 — 상위 업체 좌표의 중앙값(지리 "주변 추천"용).
+        // 중앙값은 이상치에 강하다. 최소 3곳 이상 좌표가 있을 때만 대표성을 인정한다.
+        $xs = [];
+        $ys = [];
+        foreach ($items as $i) {
+            if (! empty($i['x']) && ! empty($i['y'])) {
+                $xs[] = (float) $i['x'];
+                $ys[] = (float) $i['y'];
+            }
+        }
+        if (count($xs) >= 3) {
+            sort($xs);
+            sort($ys);
+            $mid = intdiv(count($xs), 2);
+            DB::table('keyword_searches')->where('origin', 'hub')->where('keyword', $keyword)
+                ->update(['place_x' => $xs[$mid], 'place_y' => $ys[$mid]]);
+        }
+
         return count($rows);
     }
 
