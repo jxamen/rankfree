@@ -36,7 +36,8 @@ class KeywordHubPublisher
 
         $place = $this->placeRegion($c);
 
-        $doc = KeywordSearch::updateOrCreate(
+        // 폐기 문서도 찾아 in-place 갱신(스코프 우회) — 중복 문서 생성 방지. retired_at 은 payload 에 없어 유지된다.
+        $doc = KeywordSearch::withoutGlobalScope('notRetired')->updateOrCreate(
             ['origin' => 'hub', 'keyword' => $c->keyword],
             [
                 'user_id' => null,

@@ -15,6 +15,24 @@ class KeywordSearch extends Model
 {
     use HasShareSlug;
 
+    /**
+     * 폐기(retired) 문서는 모든 기본 조회에서 숨긴다 — 공개 목록·카운트·추천·사이트맵.
+     * 단 공유 URL 조회(findByShareKey)만 예외로 찾아 301 리다이렉트한다.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('notRetired', function (\Illuminate\Database\Eloquent\Builder $b) {
+            $b->whereNull('keyword_searches.retired_at');
+        });
+    }
+
+    /** slug/share_token 조회 — 폐기 문서도 찾는다(공유 페이지에서 301 처리하기 위함). */
+    public static function findByShareKey(string $key): ?static
+    {
+        return static::withoutGlobalScope('notRetired')->where('slug', $key)->first()
+            ?? static::withoutGlobalScope('notRetired')->where('share_token', $key)->first();
+    }
+
     protected $fillable = [
         'slug', 'user_id', 'category_id', 'region', 'region_type', 'origin', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile',
         'comp_idx', 'grade', 'share_token', 'snapshot', 'refreshed_at', 'retired_at',

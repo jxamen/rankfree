@@ -94,7 +94,7 @@ class HubShoppingCollect extends Command
         foreach ($ranks as $r) {
             $kw = trim((string) preg_replace('/\s+/u', ' ', $r['keyword']));
             if (! KeywordHubCollector::acceptableKeyword($kw)
-                || KeywordSearch::where('origin', 'hub')->where('keyword', $kw)->exists()
+                || KeywordSearch::withoutGlobalScope('notRetired')->where('origin', 'hub')->where('keyword', $kw)->exists()
                 || KeywordCandidate::where('category_id', $cat->id)->where('keyword', $kw)->exists()) {
                 $this->skipped++;
 

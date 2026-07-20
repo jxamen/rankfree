@@ -60,7 +60,7 @@ class KeywordHubCollector
             return;
         }
         // 이미 허브로 발행된 키워드는 후보 불필요
-        if (KeywordSearch::where('origin', 'hub')->where('keyword', $kw)->exists()) {
+        if (KeywordSearch::withoutGlobalScope('notRetired')->where('origin', 'hub')->where('keyword', $kw)->exists()) {
             $stats['filtered']++;
 
             return;

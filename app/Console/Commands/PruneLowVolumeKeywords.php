@@ -63,8 +63,9 @@ class PruneLowVolumeKeywords extends Command
             }
 
             $vols = $svc->volumes($rows->pluck('keyword')->all());
-            // 이 묶음에서 발행(허브)된 키워드 — 한 번에 조회
-            $published = KeywordSearch::where('origin', 'hub')
+            // 이 묶음에서 발행(허브)된 키워드 — 폐기분도 '발행됨'으로 인정(스코프 우회)해 마스터를 지키지 않게
+            $published = KeywordSearch::withoutGlobalScope('notRetired')
+                ->where('origin', 'hub')
                 ->whereIn('keyword', $rows->pluck('keyword'))
                 ->pluck('keyword')->flip();
 

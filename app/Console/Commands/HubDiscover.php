@@ -54,7 +54,7 @@ class HubDiscover extends Command
         foreach ($rows as $r) {
             $kw = trim((string) preg_replace('/\s+/u', ' ', (string) $r->value));
             if (! KeywordHubCollector::acceptableKeyword($kw)
-                || KeywordSearch::where('origin', 'hub')->where('keyword', $kw)->exists()
+                || KeywordSearch::withoutGlobalScope('notRetired')->where('origin', 'hub')->where('keyword', $kw)->exists()
                 || KeywordCandidate::where('keyword', $kw)->exists()) {
                 $skipped++;
 
