@@ -260,9 +260,17 @@
     return null;
   }
 
-  var refreshCount = 0;
-  var givenUp = false;          // 재시도 3회 초과 시 포기 — 이후 풀이/새로고침 중단
   var MAX_RETRIES = 3;          // 캡차당 최대 새로고침(재시도) 횟수
+  // 새 캡차는 '페이지 새로고침'으로 받는다 — 리로드해도 카운트가 유지되게 sessionStorage 에 저장.
+  var RETRY_KEY = 'rankfree:captchaRetries';
+  function getRetryCount() {
+    try { return parseInt(sessionStorage.getItem(RETRY_KEY) || '0', 10) || 0; } catch (e) { return 0; }
+  }
+  function setRetryCount(n) {
+    try { sessionStorage.setItem(RETRY_KEY, String(n)); } catch (e) { /* noop */ }
+  }
+  var refreshCount = getRetryCount();
+  var givenUp = refreshCount >= MAX_RETRIES;   // 3회 소진 상태로 리로드됐으면 포기
 
   // 질문이 알려진 유형(개수/금액)인지 — 키워드가 명확히 보일 때만 풀이한다.
   //  개수: 몇 개·개수·수량·합계 / 금액: 구매 금액·금액·얼마·토탈·총합 (공통: 합)
@@ -273,24 +281,27 @@
     return quantity || amount || /합/.test(q);
   }
 
-  // 새 캡차 요청. 오답·풀이지연·질문불명확이 모두 이 경로를 쓰며, 최대 3회까지만.
+  // 오답·풀이지연·질문불명확 → 자동으로 '페이지 새로고침'해서 새 문제로 진행한다. 최대 3회.
   function tryRefresh(reason) {
-    if (refreshCount >= MAX_RETRIES) {
-      givenUp = true;
-      setAnswerStatus('재시도 ' + MAX_RETRIES + '회 실패 — 수동 확인이 필요합니다. (' + reason + ')', false);
-      // 재시도 소진 → 배경에 실패 신호(대량수집이 다음 상품으로 넘어가고 탭 정리).
-      try {
-        var g = popupInfo();
-        chrome.runtime.sendMessage({ type: '__sellerCaptchaCaptured', ok: false, channelUid: g.channelUid, message: 'retries exhausted' });
-      } catch (e) { /* noop */ }
-      return false;
-    }
-    var refresh = findRefreshButton();
-    if (!refresh) return false;
+    if (givenUp) return false;
+    if (refreshCount >= MAX_RETRIES) { signalGiveUp(reason); return false; }
     refreshCount++;
+    setRetryCount(refreshCount);
+    givenUp = true;   // 리로드 전까지 이 페이지에선 재풀이 금지(중복 호출 방지)
     setAnswerStatus(reason + ' — 새로고침 재시도 (' + refreshCount + '/' + MAX_RETRIES + ')', false);
-    fireClick(refresh);   // 새 캡차 → MutationObserver가 감지해 재검사/재풀이
+    setTimeout(function () { try { location.reload(); } catch (e) { /* noop */ } }, 500);
     return true;
+  }
+
+  // 재시도 소진 → 카운터 리셋 + 배경에 실패 신호(대량수집이 다음 상품으로 넘어가고 탭 정리).
+  function signalGiveUp(reason) {
+    givenUp = true;
+    setRetryCount(0);
+    setAnswerStatus('재시도 ' + MAX_RETRIES + '회 실패 — 수동 확인이 필요합니다.' + (reason ? ' (' + reason + ')' : ''), false);
+    try {
+      var g = popupInfo();
+      chrome.runtime.sendMessage({ type: '__sellerCaptchaCaptured', ok: false, channelUid: g.channelUid, message: 'retries exhausted' });
+    } catch (e) { /* noop */ }
   }
 
   // 제출 후 결과 확인: 통과(판매자정보 렌더)면 종료, 아직 캡차면 오답 → 새로고침 재시도.
@@ -709,6 +720,7 @@
       }
       if (res && res.ok) {
         setSellerInfoStatus('판매자정보 저장됨: ' + (fields.biz_name || fields.biz_reg_no || '완료'), true);
+        setRetryCount(0);   // 성공 → 재시도 카운터 리셋
         // 판매자정보 확보 = 이 상품 수집 완료 → 대량수집이 다음 상품으로 넘어가도록 신호.
         try {
           chrome.runtime.sendMessage({ type: '__sellerCaptchaCaptured', ok: true, channelUid: info.channelUid, data: res.data || null });
@@ -730,6 +742,7 @@
   }
 
   function startScanning() {
+    if (givenUp) { signalGiveUp(); return; }   // 3회 새로고침 소진 상태로 리로드됨 → 포기
     scheduleScan('load');
     setTimeout(function () { scheduleScan('late-load'); }, 1200);
     setTimeout(function () { scheduleScan('late-load-2'); }, 3000);
