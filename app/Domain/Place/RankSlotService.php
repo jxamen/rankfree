@@ -126,6 +126,14 @@ class RankSlotService
     {
         $r = $this->checker->check($slot->keyword, $slot->place_id, $slot->place_name, (string) $slot->category);
 
+        // 차단(토큰 만료·429) 미발견 결과는 기록하지 않는다 — rank 0 이 '300+' 로 잘못 남거나
+        // 당일의 유효 기록을 덮는 것을 방지. 확인 시각만 남긴다.
+        if ($r['blocked'] && ! $r['found']) {
+            $slot->update(['last_checked_at' => now()]);
+
+            return $r;
+        }
+
         // 슬롯당 (slot_id, checked_date) 유니크 — 당일 기록이 있으면 update, 없으면 create.
         PlaceRankRecord::updateOrCreate(
             ['slot_id' => $slot->id, 'checked_date' => now()->toDateString()],

@@ -100,6 +100,20 @@ class ShopRankSlotService
 
         $rank = ($res['blocked'] && ! $res['found']) ? self::RANK_BLOCKED : (int) $res['rank'];
 
+        // 차단(전 키 429)이라도 오늘 이미 유효 순위가 기록돼 있으면 -1 로 덮지 않는다 —
+        // 매시간 재확인 중 한도가 소진돼도 그날의 정상 데이터를 보존.
+        if ($rank === self::RANK_BLOCKED) {
+            $kept = ShopRankRecord::where('slot_id', $slot->id)
+                ->where('checked_date', now()->toDateString())
+                ->where('rank', '>', 0)->first();
+            if ($kept) {
+                $slot->last_checked_at = now();
+                $slot->save();
+
+                return $res + ['stored_rank' => (int) $kept->rank];
+            }
+        }
+
         ShopRankRecord::updateOrCreate(
             ['slot_id' => $slot->id, 'checked_date' => now()->toDateString()],
             ['rank' => $rank, 'price' => $res['price'] ?: null, 'list_total' => (int) ($res['total'] ?? 0), 'created_at' => now()],

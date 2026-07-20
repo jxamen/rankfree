@@ -51,9 +51,16 @@ class RankTrackController extends Controller
             return back()->withErrors(['place' => $e->getMessage()])->withInput();
         }
 
-        // 등록 즉시 첫 순위 수집 — 실패해도 등록은 유지된다
+        // 등록 즉시 첫 순위 수집 — 실패해도 등록은 유지된다.
+        // 키워드가 많으면 20초 예산까지만 확인(게이트웨이 타임아웃 방지) — 나머지는 일일 자동 수집이 처리.
         $firsts = [];
+        $t0 = microtime(true);
         foreach ($res['created'] as $slot) {
+            if (microtime(true) - $t0 > 20) {
+                $firsts[] = $slot->keyword.' 자동 수집 대기';
+
+                continue;
+            }
             try {
                 $r = $service->run($slot);
                 $firsts[] = $slot->keyword.' '.($r['blocked'] ? '차단' : ($r['found'] ? $r['rank'].'위' : '300+'));

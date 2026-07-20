@@ -33,14 +33,16 @@ class NaverShoppingRankService
 
         $isUrl = (bool) preg_match('#^https?://#i', $input) || str_contains($input, 'naver.com');
         if (! $isUrl) {
-            // URL 이 아니면 업체명으로 취급
-            $out['mall_name'] = $input;
+            // URL 이 아니면 업체명으로 취급 (컬럼 mall_name varchar(150) 초과 방지)
+            $out['mall_name'] = mb_substr($input, 0, 150);
 
             return $out;
         }
 
-        $out['url'] = $input;
-        $path = explode('?', $input)[0];
+        // 검색결과에서 복사한 URL 은 NaPm 등 추적 파라미터로 수백 자가 된다 —
+        // 매칭에 쓰는 건 경로뿐이므로 쿼리스트링·프래그먼트는 버리고 저장한다.
+        $path = explode('?', explode('#', $input)[0])[0];
+        $out['url'] = $path;
         $seg = explode('/', $path);
 
         if (str_contains($input, 'smartstore') || str_contains($input, 'brand.naver')) {
@@ -59,7 +61,7 @@ class NaverShoppingRankService
 
         $out['type'] = $out['product_id'] !== '' ? 'product' : 'mall';
         if ($out['type'] === 'mall') {
-            $out['mall_name'] = $input; // productId 파싱 실패 → 입력을 업체명 후보로
+            $out['mall_name'] = mb_substr($input, 0, 150); // productId 파싱 실패 → 입력을 업체명 후보로
         }
 
         return $out;

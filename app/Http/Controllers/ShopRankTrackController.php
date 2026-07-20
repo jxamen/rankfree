@@ -118,8 +118,13 @@ class ShopRankTrackController extends Controller
             return back()->withErrors(['target' => $e->getMessage()])->withInput();
         }
 
-        // 생성 직후 첫 순위 1회 실행(실패 허용)
+        // 생성 직후 첫 순위 1회 실행(실패 허용) — 키워드가 많으면 20초 예산까지만(게이트웨이 타임아웃 방지),
+        // 나머지는 매시간 자동 수집이 처리한다.
+        $t0 = microtime(true);
         foreach ($res['created'] as $slot) {
+            if (microtime(true) - $t0 > 20) {
+                break;
+            }
             try {
                 $this->service->run($slot);
             } catch (\Throwable) {
