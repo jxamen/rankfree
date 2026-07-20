@@ -224,4 +224,14 @@ return [
         // 글밥 전환 시 댓글 최소 길이(이보다 짧은 댓글은 글밥으로 안 씀)
         'seed_min_comment_length' => (int) env('CAFE_CRAWL_SEED_MIN_COMMENT', 8),
     ],
+
+    // 저품질 키워드 가지치기 — 남은 키워드 조회수 확인 후 월 <=10 삭제(발행분 유지). 10분마다 청크.
+    'keyword_prune' => [
+        'schedule_enabled' => (bool) env('KEYWORD_PRUNE_SCHEDULE_ENABLED', true),
+    ],
+
+    // 플레이스 좌표 백필 — >10 발행문서 SERP 재수집으로 업체 좌표 적재(지리 추천). 20분마다 청크.
+    'place_coords' => [
+        'schedule_enabled' => (bool) env('PLACE_COORDS_SCHEDULE_ENABLED', true),
+    ],
 ];

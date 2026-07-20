@@ -76,6 +76,21 @@ Schedule::command('hub:auto-publish')->everyMinute()->withoutOverlapping()->runI
 // 수집은 발굴 스케줄과 무관하게(확장 업로드·관리자 탐색) 일어나므로 발굴 게이트 밖에서 항상 실행. 멱등·경량.
 Schedule::command('hub:partition-rotate')->timezone('Asia/Seoul')->dailyAt('05:50')->withoutOverlapping()->runInBackground();
 
+// ── 대량 백필: 저품질 키워드 가지치기 + 플레이스 좌표 수집 (한도 내 청크로 자동 완주) ──
+// 남은(미조회) 키워드의 네이버 조회수 확인 → 월 <=10(의미없음) 삭제, >10 보존(발행분은 유지).
+// 10분마다 청크 처리. searchad 일일 한도 소진 시 무응답으로 넘기고 다음 실행에서 재시도(멱등).
+if (config('rankfree.keyword_prune.schedule_enabled', true)) {
+    Schedule::command('keywords:prune-low-volume --type=place --limit=500 --batch=25 --sleep=1')
+        ->everyTenMinutes()->withoutOverlapping(15)->runInBackground();
+}
+
+// 플레이스 좌표 백필 — >10 발행문서 SERP 재수집으로 업체 좌표 적재(지리 "주변 추천"). 20분마다 청크.
+// nCaptcha 토큰 의존(searchadweb/토큰 크론). 연속 차단 시 커맨드가 자동 중단, 다음 주기에 재개.
+if (config('rankfree.place_coords.schedule_enabled', true)) {
+    Schedule::command('place:backfill-coords --limit=100 --days=30 --sleep=3 --top=40')
+        ->cron('*/20 * * * *')->withoutOverlapping(25)->runInBackground();
+}
+
 // 키워드 허브 발굴·갱신 — 후보 수집/발굴/갱신. 기본 off(.env HUB_SCHEDULE_ENABLED=true 로 활성) — 검색광고 쿼터 보호.
 if (config('rankfree.hub.schedule_enabled', false)) {
     Schedule::command('hub:collect')->timezone('Asia/Seoul')->dailyAt('06:10')->withoutOverlapping()->runInBackground();
