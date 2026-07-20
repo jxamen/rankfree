@@ -38,6 +38,9 @@ class PlaceSerpStore
                 'place_id' => $pid,
                 'name' => mb_substr((string) ($i['name'] ?? ''), 0, 191),
                 'address' => mb_substr((string) ($i['address'] ?? ''), 0, 191) ?: null,
+                'x' => $i['x'] ?? null,
+                'y' => $i['y'] ?? null,
+                'common_address' => mb_substr((string) ($i['common_address'] ?? ''), 0, 120) ?: null,
                 'visitor_cnt' => $i['visitor_cnt'] ?? null,
                 'blog_cnt' => $i['blog_cnt'] ?? null,
                 'booking_cnt' => $i['booking_cnt'] ?? null,
@@ -55,7 +58,7 @@ class PlaceSerpStore
         }
         foreach (array_chunk(array_values($biz), 200) as $chunk) {
             DB::table('place_businesses')->upsert($chunk, ['place_id'], [
-                'name', 'address', 'visitor_cnt', 'blog_cnt', 'booking_cnt', 'save_cnt', 'img_cnt',
+                'name', 'address', 'x', 'y', 'common_address', 'visitor_cnt', 'blog_cnt', 'booking_cnt', 'save_cnt', 'img_cnt',
                 'review_score', 'place_plus', 'new_opening', 'talktalk_id', 'talktalk_url', 'seen_at', 'updated_at',
             ]);
         }

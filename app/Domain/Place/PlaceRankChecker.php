@@ -683,6 +683,10 @@ class PlaceRankChecker
                 ? (preg_match('#talk\.naver\.com/([^?/]+)#', $tt, $mm) ? $mm[1] : '')
                 : '',
             'tags' => $tags, 'address' => (string) ($g('address') ?: $g('roadAddress')),
+            // 업체 좌표(경도 x·위도 y) + 공통주소 — pcmap 목록 항목에 그대로 온다(지리 추천용).
+            'x' => (($xx = $g('x')) !== null && $xx !== '') ? (float) $xx : null,
+            'y' => (($yy = $g('y')) !== null && $yy !== '') ? (float) $yy : null,
+            'common_address' => (string) ($g('commonAddress') ?: ''),
         ];
     }
 
