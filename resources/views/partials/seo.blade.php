@@ -10,9 +10,15 @@
     $__robots = trim($__env->yieldContent('robots'));
     $__ogImageCustom = trim($__env->yieldContent('og-image'));
     $__ogImage = $__ogImageCustom !== '' ? $__ogImageCustom : asset('og-image.png');
+    // 구글 서치 콘솔 HTML 소유확인 — 토큰만 넣어도, 전체 <meta ...> 태그를 붙여넣어도 동작한다.
+    $__gVerify = trim((string) config('services.google.site_verification', ''));
+    if ($__gVerify !== '' && preg_match('/content=["\']([^"\']+)["\']/', $__gVerify, $__gm)) {
+        $__gVerify = $__gm[1];
+    }
 @endphp
 <link rel="canonical" href="{{ $__canonical }}">
 @if ($__robots !== '')<meta name="robots" content="{{ $__robots }}">@endif
+@if ($__gVerify !== '')<meta name="google-site-verification" content="{{ $__gVerify }}">@endif
 <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
 <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">

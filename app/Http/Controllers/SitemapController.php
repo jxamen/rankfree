@@ -142,18 +142,24 @@ class SitemapController extends Controller
     private function pageEntries(): array
     {
         $e = [];
-        $add = function (string $loc, string $freq, string $priority) use (&$e) {
-            $e[] = ['loc' => $loc, 'lastmod' => null, 'freq' => $freq, 'priority' => $priority];
+        $add = function (string $loc, string $freq, string $priority, ?string $lastmod = null) use (&$e) {
+            $e[] = ['loc' => $loc, 'lastmod' => $lastmod, 'freq' => $freq, 'priority' => $priority];
         };
-        $add(route('home'), 'daily', '1.0');
+        // 홈·커뮤니티는 콘텐츠 최신일을 lastmod 로 실어 재크롤 신호를 준다(정적 페이지는 생략).
+        $communityFresh = $this->safeDate((string) CommunityPost::max('updated_at'));
+        $homeFresh = $this->safeDate((string) max(
+            (string) CommunityPost::max('updated_at'),
+            (string) KeywordSearch::where('origin', 'hub')->max('refreshed_at'),
+        ));
+        $add(route('home'), 'daily', '1.0', $homeFresh);
         $add(route('self-marketing'), 'weekly', '0.7');
-        $add(route('community'), 'hourly', '0.8');
+        $add(route('community'), 'hourly', '0.8', $communityFresh);
         $add(route('support'), 'monthly', '0.6');
         $add(url('/developers'), 'monthly', '0.6');
         $add(url('/privacy'), 'yearly', '0.3');
         $add(route('register'), 'monthly', '0.5');
         foreach (CommunityCategory::where('is_active', true)->orderBy('sort_order')->get() as $cat) {
-            $add(route('community', ['cat' => $cat->slug]), 'daily', '0.6');
+            $add(route('community', ['cat' => $cat->slug]), 'daily', '0.6', $communityFresh);
         }
 
         return $e;
@@ -194,34 +200,16 @@ class SitemapController extends Controller
             return [];
         }
 
-        $e = [['loc' => route('keywords.index'), 'lastmod' => null, 'freq' => 'daily', 'priority' => '0.7']];
+        // /keywords 인덱스만 색인 대상 — 타입/카테고리 하위(/keywords/{type}·{slug})는 noindex,follow 라
+        //   사이트맵에서 제외한다(사이트맵엔 색인 가능한 정규 URL만. 개별 문서는 sitemap-keyword.xml 에 있음).
+        $last = KeywordSearch::where('origin', 'hub')->max('refreshed_at');
 
-        // 타입 홈(카테고리 메뉴) — 해당 타입 발행 문서가 있을 때만(빈 목록 색인 방지)
-        foreach (['place', 'shopping'] as $t) {
-            $typeCats = $cats->where('type', $t);
-            if ($typeCats->isEmpty()) {
-                continue;
-            }
-            $last = KeywordSearch::where('origin', 'hub')->whereIn('category_id', $typeCats->pluck('id'))->max('refreshed_at');
-            $e[] = [
-                'loc' => route('keywords.type', $t),
-                'lastmod' => $last ? Carbon::parse($last)->toDateString() : null,
-                'freq' => 'weekly',
-                'priority' => '0.7',
-            ];
-        }
-
-        foreach ($cats as $c) {
-            $last = KeywordSearch::where('origin', 'hub')->where('category_id', $c->id)->max('refreshed_at');
-            $e[] = [
-                'loc' => route('keywords.category', $c->slug),
-                'lastmod' => $last ? Carbon::parse($last)->toDateString() : null,
-                'freq' => 'weekly',
-                'priority' => '0.6',
-            ];
-        }
-
-        return $e;
+        return [[
+            'loc' => route('keywords.index'),
+            'lastmod' => $last ? Carbon::parse($last)->toDateString() : null,
+            'freq' => 'daily',
+            'priority' => '0.7',
+        ]];
     }
 
     private function keywordHubCategories()

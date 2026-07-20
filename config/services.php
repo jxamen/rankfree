@@ -54,7 +54,9 @@ return [
         'quiz_fallback_model' => env('GEMINI_QUIZ_FALLBACK_MODEL', 'gemini-flash-latest'),
         // 확장이 정답을 기다리는 시간(초) — 초과 시 요청 버리고 새로고침해 다른 캡차로 재시도.
         'quiz_timeout' => (int) env('GEMINI_QUIZ_TIMEOUT', 10),
-        // 추론(thinking) 사용 여부 — 기본 끔(비용 절감). '1'이면 켬(flash/lite 계열에 적용).
+        // 캡차 풀이 추론(thinking) 사용 여부 — 기본 끔(비용 절감). 'on'/'1'/'true'면 켬.
+        //   끄면 flash/lite 계열은 thinkingBudget=0 으로 추론 토큰이 사라져 건당 비용이 크게 준다.
+        //   (Pro 계열은 추론이 필요해 강제로 끄지 않는다.) Gemini 전용 — 다른 공급자는 무시.
         'quiz_thinking' => env('GEMINI_QUIZ_THINKING'),
     ],
     'openai' => [
@@ -80,6 +82,8 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+        // 서치 콘솔 HTML 소유확인 토큰(content 값). 설정(환경설정)에서 입력 → 공개 <head> 에 meta 출력.
+        'site_verification' => env('GOOGLE_SITE_VERIFICATION'),
     ],
     'kakao' => [
         'client_id' => env('KAKAO_CLIENT_ID'),

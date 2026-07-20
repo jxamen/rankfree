@@ -219,8 +219,11 @@ class PersonaContentGenerator
         if ($json) {
             $gen['responseMimeType'] = 'application/json';
         }
-        if (str_contains($model, '2.5')) {
-            $gen['thinkingConfig'] = ['thinkingBudget' => 0]; // 짧은 재작성엔 사고 불필요 — 속도·비용 절감
+        // 짧은 재작성엔 사고(thinking) 불필요 — flash/lite/2.5 계열은 기본으로 끈다(속도·비용 절감).
+        //   설정에서 'on'/'1'/'true' 로 켜면 유지. (Pro 계열은 강제로 끄지 않는다.)
+        $thinkingOn = in_array((string) config('rankfree.community.rewrite.thinking'), ['1', 'true', 'on'], true);
+        if (! $thinkingOn && (str_contains($model, 'flash') || str_contains($model, 'lite') || str_contains($model, '2.5'))) {
+            $gen['thinkingConfig'] = ['thinkingBudget' => 0];
         }
         $body = [
             'system_instruction' => ['parts' => [['text' => $this->systemPrompt($persona)]]],

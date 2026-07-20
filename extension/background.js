@@ -82,6 +82,31 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 탭/창 닫기 — 사용자가 탭을 드래그 중이면 크롬이 "Tabs cannot be edited right now
+// (user may be dragging a tab)" 로 프로미스를 '거부'한다. 콜백 없이 부르면 try/catch 로는
+// 못 잡아 'Uncaught (in promise)' 로 샌다. 거부를 삼키고, 드래그가 끝나면 잠시 뒤 재시도해
+// 수집 탭이 남지 않게 한다.
+function removeTab(id, tries) {
+  if (id == null) return;
+  tries = tries == null ? 4 : tries;
+  let p;
+  try { p = chrome.tabs.remove(id); } catch (e) { return; }
+  if (p && typeof p.catch === 'function') {
+    p.catch((e) => {
+      if (tries > 0 && /dragging|cannot be edited/i.test(String((e && e.message) || e))) {
+        setTimeout(() => removeTab(id, tries - 1), 600);
+      }
+    });
+  }
+}
+
+function removeWindow(id) {
+  if (id == null) return;
+  let p;
+  try { p = chrome.windows.remove(id); } catch (e) { return; }
+  if (p && typeof p.catch === 'function') p.catch(() => { /* noop */ });
+}
+
 // 서비스워커가 새로 뜨면(확장 리로드·브라우저 재시작) 이전 수집 루프는 이미 죽어 있다.
 // running 플래그만 남아 "이미 수집이 진행 중입니다"로 영구히 막히는 것을 막는다.
 (async () => {
@@ -430,7 +455,7 @@ const handlers = {
         clearTimeout(to);
         clearInterval(stopTimer);
         chrome.runtime.onMessage.removeListener(onMsg);
-        if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        removeTab(tabId);
         resolve(res);
       }
       function onMsg(msg, sender) {
@@ -496,9 +521,9 @@ const handlers = {
         chrome.runtime.onMessage.removeListener(onMsg);
         if (!keepOpen) {
           if (windowId != null) {
-            try { chrome.windows.remove(windowId); } catch (e) { /* noop */ }
+            removeWindow(windowId);
           } else if (tabId != null) {
-            try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ }
+            removeTab(tabId);
           }
         }
         resolve(res);
@@ -533,7 +558,7 @@ const handlers = {
           tabId = tab.id;
           sellerCaptchaTabs.add(tabId);   // 이 탭에서만 콘텐츠 스크립트의 캡차 분석 허용
           if (done && !keepOpen && tabId != null) {
-            try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ }
+            removeTab(tabId);
           }
         });
       } catch (e) {
@@ -701,7 +726,7 @@ const handlers = {
         done = true;
         clearTimeout(to);
         chrome.runtime.onMessage.removeListener(onMsg);
-        if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        removeTab(tabId);
         setJob({ status: 'done', ok: !!res.ok, html: res.html || '', name: res.name || '', message: res.message || '', id: res.id || null, share_token: res.share_token || null, finishedAt: Date.now() });
         resolve(res);
       }
@@ -1049,7 +1074,7 @@ const handlers = {
         clearTimeout(to);
         clearTimeout(alive);
         chrome.runtime.onMessage.removeListener(onMsg);
-        if (tabId != null) { try { chrome.tabs.remove(tabId); } catch (e) { /* noop */ } }
+        removeTab(tabId);
         resolve(res);
       }
       function onMsg(msg, sender) {
@@ -1147,7 +1172,7 @@ const handlers = {
     const id = sender && sender.tab ? sender.tab.id : null;
     if (id != null) {
       sellerCaptchaTabs.delete(id);
-      try { chrome.tabs.remove(id); } catch (e) { /* noop */ }
+      removeTab(id);
     }
     return { ok: true };
   },

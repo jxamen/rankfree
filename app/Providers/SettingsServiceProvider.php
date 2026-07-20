@@ -98,6 +98,10 @@ class SettingsServiceProvider extends ServiceProvider
         if ($v !== '') {
             config(['rankfree.community.rewrite.fallback' => $v === '1']);
         }
+        $v = (string) ($m['community.rewrite_thinking'] ?? '');
+        if ($v !== '') {
+            config(['rankfree.community.rewrite.thinking' => $v]);   // 재작성 추론(thinking) on/off
+        }
 
         // 6) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
         //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS · 서울 열린데이터광장(신규 개업 수집)
@@ -111,6 +115,7 @@ class SettingsServiceProvider extends ServiceProvider
             'aligo.user_id' => 'services.aligo.user_id',
             'aligo.api_key' => 'services.aligo.key',
             'aligo.sender' => 'services.aligo.sender',
+            'google.site_verification' => 'services.google.site_verification',   // 서치 콘솔 HTML 소유확인 토큰
             'seoul.openapi_key' => 'rankfree.newbiz.seoul_key',   // 24 — 신규 개업(인허가) 수집
             'quiz.model' => 'rankfree.quiz.model',                // 캡차(퀴즈) 분석 모델(멀티 공급자)
             'quiz.solve_timeout' => 'services.gemini.quiz_timeout', // 확장 정답 대기 시간(초)

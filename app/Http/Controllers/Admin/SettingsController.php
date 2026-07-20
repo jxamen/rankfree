@@ -61,14 +61,20 @@ class SettingsController extends Controller
             'rewriteProvider' => (string) config('rankfree.community.rewrite.provider', 'auto'),
             'rewriteModel' => (string) config('rankfree.community.rewrite.model', ''),
             'rewriteFallback' => (bool) config('rankfree.community.rewrite.fallback', true),
+            // 재작성 추론(thinking) — 기본 끔(비용 절감). on/1/true 만 켬.
+            'rewriteThinking' => in_array(strtolower((string) config('rankfree.community.rewrite.thinking')), ['1', 'true', 'on'], true),
             // 캡차(퀴즈) 분석 모델 — 멀티 공급자(Gemini/OpenAI/Claude/Grok). 비우면 기본(gemini-pro-latest)
             'quizModel' => (string) AppSetting::read('quiz.model'),
             'quizModelLive' => (string) (config('rankfree.quiz.model') ?: 'gemini-pro-latest'),
             'quizSolveTimeout' => (int) (config('services.gemini.quiz_timeout') ?: 10),
+            // 캡차 풀이 추론(thinking) — 기본 끔(비용 절감). on/1/true 만 켬. 뷰엔 'on'/'off'로 정규화.
+            'quizThinking' => in_array(strtolower((string) (AppSetting::read('quiz.thinking') ?: config('services.gemini.quiz_thinking'))), ['1', 'true', 'on'], true) ? 'on' : 'off',
             'quizThinking' => AppSetting::read('quiz.thinking') === '1',
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
             'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
+            // 구글 서치 콘솔 — HTML 소유확인 토큰(공개 <head> 메타로 출력)
+            'googleSiteVerification' => (string) AppSetting::read('google.site_verification'),
             // 구글 서치 콘솔 — 속성 + 서비스 계정 안내
             'gscProperty' => AppSetting::read('gsc.property') ?: 'sc-domain:rankfree.kr',
             'gscServiceEmail' => \App\Support\GoogleServiceAccount::clientEmail(),
@@ -94,11 +100,13 @@ class SettingsController extends Controller
         'aligo.user_id' => 'aligo_user_id',
         'aligo.api_key' => 'aligo_api_key',
         'aligo.sender' => 'aligo_sender',
+        'google.site_verification' => 'google_site_verification',   // 서치 콘솔 HTML 소유확인 토큰 → services.google.site_verification
         'gsc.property' => 'gsc_property',
         'ga.property_id' => 'ga_property_id',
         'seoul.openapi_key' => 'seoul_openapi_key',
         'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
         'quiz.solve_timeout' => 'quiz_solve_timeout',   // 확장 정답 대기 시간(초) → services.gemini.quiz_timeout
+        'quiz.thinking' => 'quiz_thinking',   // 캡차 풀이 추론(thinking) on/off → services.gemini.quiz_thinking
     ];
 
     public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)
@@ -129,6 +137,7 @@ class SettingsController extends Controller
         AppSetting::write('community.rewrite_provider', in_array($provider, ['auto', 'gemini', 'anthropic', 'openai', 'xai', 'off'], true) ? $provider : 'auto');
         AppSetting::write('community.rewrite_model', trim((string) $request->input('community_rewrite_model', '')));
         AppSetting::write('community.rewrite_fallback', $request->boolean('community_rewrite_fallback') ? '1' : '0');
+        AppSetting::write('community.rewrite_thinking', $request->boolean('community_rewrite_thinking') ? '1' : '0');
 
         // 캡차 퀴즈 추론(thinking) 사용 여부 — 끄면 비용 대폭 절감
         AppSetting::write('quiz.thinking', $request->boolean('quiz_thinking') ? '1' : '0');

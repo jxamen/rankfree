@@ -133,6 +133,11 @@
                 <input type="checkbox" name="community_rewrite_fallback" value="1" @checked($rewriteFallback)>
                 AI 호출 실패 시 글밥 원문을 가볍게 변형해 사용 <span class="text-muted-soft">(끄면 재작성 실패 시 글밥을 쓰지 않고 일반 문장 생성)</span>
             </label>
+            {{-- 재작성 추론(thinking) — 끄면 flash/lite 계열은 thinkingBudget=0 으로 추론 토큰이 사라져 비용 대폭 절감(기본 꺼짐) --}}
+            <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:var(--fs-xs);color:var(--color-muted);cursor:pointer;">
+                <input type="checkbox" name="community_rewrite_thinking" value="1" @checked($rewriteThinking)>
+                추론(thinking) 사용 <span class="text-muted-soft">정확도↑·비용↑ — 끄면 flash/lite 계열 재작성 토큰이 대폭 줄어듭니다(기본 꺼짐 권장). Pro 계열은 항상 추론</span>
+            </label>
         </div>
 
         {{-- 캡차(퀴즈) 이미지 분석 모델 — 판매자정보 영수증 퀴즈 풀이(멀티 공급자 비전) --}}
@@ -189,19 +194,14 @@
                 </select>
             </div>
             <div style="margin-top:12px;">
-                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;white-space:nowrap;">추론(thinking) <span class="text-muted-soft" style="font-weight:400;">Flash·Lite 계열은 <b>끄면</b> 추론 토큰이 사라져 건당 비용이 대폭 절감(권장). 정확도가 아쉬우면 켜기 (Pro 계열은 항상 추론 사용)</span></label>
-                <select name="quiz_thinking" class="input" style="width:100%;max-width:320px;font-size:var(--fs-xs);">
-                    <option value="off" @selected($quizThinking !== 'on')>끄기 — 비용 최소 (thinkingBudget=0)</option>
-                    <option value="on" @selected($quizThinking === 'on')>켜기 — 정확도 우선 (모델 기본 추론)</option>
-                </select>
-            </div>
-            <div style="margin-top:12px;">
                 <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;display:block;margin-bottom:5px;white-space:nowrap;">풀이 대기 시간(초) <span class="text-muted-soft" style="font-weight:400;">이 시간 안에 정답이 안 오면 요청을 버리고 새로고침해 다른 캡차로 재시도 (기본 10, 3~60)</span></label>
                 <input type="number" name="quiz_solve_timeout" value="{{ $quizSolveTimeout }}" min="3" max="60" step="1" class="input" style="width:120px;font-size:var(--fs-xs);">
             </div>
+            {{-- 추론(thinking) — 끄면 flash/lite 계열은 thinkingBudget=0 으로 추론 토큰이 사라져 건당 비용 대폭 절감(기본 꺼짐) --}}
             <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:var(--fs-xs);color:var(--color-muted);cursor:pointer;">
-                <input type="checkbox" name="quiz_thinking" value="1" @checked($quizThinking)>
-                추론(thinking) 사용 <span class="text-muted-soft">정확도↑·비용↑ — 끄면 flash/lite 계열 건당 토큰이 대폭 줄어듭니다(기본 꺼짐)</span>
+                <input type="hidden" name="quiz_thinking" value="off">
+                <input type="checkbox" name="quiz_thinking" value="on" @checked($quizThinking === 'on')>
+                추론(thinking) 사용 <span class="text-muted-soft">정확도↑·비용↑ — 끄면 flash/lite 계열 건당 토큰이 대폭 줄어듭니다(기본 꺼짐 권장). Pro 계열은 항상 추론 사용</span>
             </label>
         </div>
     </div>
@@ -278,6 +278,10 @@
                 수집: 매일 04:00 자동 · 수동 <code>php artisan gsc:collect --days=480</code>(최초 적재).
             </p>
             @include('admin.settings._simplefield', ['name' => 'gsc_property', 'label' => '속성 (도메인: sc-domain:rankfree.kr · URL 접두어: https://rankfree.kr/)', 'value' => $gscProperty, 'secret' => false, 'placeholder' => 'sc-domain:rankfree.kr'])
+            <div class="mt-3">
+                @include('admin.settings._simplefield', ['name' => 'google_site_verification', 'label' => 'HTML 소유확인 토큰 (Search Console → 소유권 확인 → HTML 태그의 content 값. 전체 <meta> 태그를 붙여넣어도 됩니다)', 'value' => $googleSiteVerification, 'secret' => false, 'placeholder' => 'abcd1234... 또는 <meta name="google-site-verification" content="...">'])
+                <p class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">저장하면 모든 공개 페이지 <code>&lt;head&gt;</code>에 확인 메타가 출력됩니다 → GSC에서 "HTML 태그" 방식으로 소유확인 가능.</p>
+            </div>
         </div>
 
         {{-- 구글 애널리틱스(GA4) --}}
