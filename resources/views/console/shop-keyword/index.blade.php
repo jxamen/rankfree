@@ -28,30 +28,19 @@
         <div style="width:130px;">
             <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">조합 수</label>
             <select name="target_combos" class="input">
-                @foreach ([30, 50, 80, 100] as $n)
+                @foreach ([30, 50, 100, 200, 500] as $n)
                     <option value="{{ $n }}" @selected((int) old('target_combos', $defaultCombos) === $n)>{{ $n }}개</option>
                 @endforeach
             </select>
         </div>
     </div>
 
-    <div class="mb-3">
-        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">추가 어미/수식어 <span class="text-muted-soft">(선택 · 콤마 또는 줄바꿈 구분)</span></label>
-        <input name="suffixes" class="input" value="{{ old('suffixes') }}" placeholder="예: 추천, 인기, 무료배송, 정품, 가성비 …">
-        <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">기본 어미(추천·인기·무료배송·정품·최저가·가성비 등 {{ count((array) config('rankfree.shopping.exposure.suffixes', [])) }}개)에 여기 입력한 어미가 더해져 <b>“{핵심} {어미}”</b> 조합을 만듭니다.</div>
+    <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
+        브랜드·상품속성·연관·자동완성·어미 조합을 <b>자동으로</b> 만들어 확인합니다 — 따로 입력할 것이 없습니다.
     </div>
 
-    <details class="mb-3">
-        <summary class="text-muted" style="font-size:var(--fs-xs);cursor:pointer;">쇼핑 필터 HTML 붙여넣기 (선택) — 브랜드·키워드추천·상품속성 추출</summary>
-        <div class="text-muted-soft mt-2 mb-2" style="font-size:var(--fs-xs);">
-            네이버 쇼핑 검색결과 페이지의 브랜드/키워드추천/속성 영역 HTML을 붙여넣으면 그 값들도 조합 후보에 넣어 노출을 확인합니다.
-            (서버가 쇼핑 페이지를 직접 못 읽어 붙여넣기로 받습니다 — 없어도 자동완성·연관·함께 많이 찾는은 자동 추출됩니다.)
-        </div>
-        <textarea name="filter_html" class="input" rows="4" placeholder="<ul class=&quot;basicTypeFilter_...&quot;>… 또는 <div class=&quot;product_detail_box__...&quot;>…" style="font-family:var(--font-mono);font-size:var(--fs-xs);">{{ old('filter_html') }}</textarea>
-    </details>
-
     <div class="flex items-center justify-between flex-wrap gap-2">
-        <span class="text-muted-soft" style="font-size:var(--fs-xs);">순위는 네이버 쇼핑 검색(sort=sim) 기준 <b>추정치</b>입니다. 조합이 많으면 시간이 걸릴 수 있어요.</span>
+        <span class="text-muted-soft" style="font-size:var(--fs-xs);">순위는 <b>네이버 모바일 검색 가격비교(광고 제외) 노출 위치</b>입니다. 조합이 많으면 순위를 채우는 데 시간이 걸릴 수 있어요.</span>
         <button type="submit" class="btn btn-primary">분석하기</button>
     </div>
 </form>

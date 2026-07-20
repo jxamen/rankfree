@@ -25,7 +25,8 @@ class NaverShoppingRankService
     public function resolveTarget(string $input): array
     {
         $input = trim($input);
-        $out = ['type' => 'mall', 'product_id' => '', 'mall_name' => '', 'url' => ''];
+        // id_kind: 노출 매칭 종류 — 'channel'(스마트스토어 channelProductId) / 'nvmid'(가격비교 catalog nvMid)
+        $out = ['type' => 'mall', 'product_id' => '', 'mall_name' => '', 'url' => '', 'id_kind' => 'channel'];
 
         if ($input === '') {
             return $out;
@@ -41,12 +42,17 @@ class NaverShoppingRankService
 
         // 검색결과에서 복사한 URL 은 NaPm 등 추적 파라미터로 수백 자가 된다 —
         // 매칭에 쓰는 건 경로뿐이므로 쿼리스트링·프래그먼트는 버리고 저장한다.
+        // url 로 저장·링크되는 값은 http(s) 스킴만 허용(javascript: 등 스킴 저장/렌더 XSS 방지).
         $path = explode('?', explode('#', $input)[0])[0];
-        $out['url'] = $path;
+        $out['url'] = preg_match('#^https?://#i', $input) ? $path : '';
         $seg = explode('/', $path);
 
         if (str_contains($input, 'smartstore') || str_contains($input, 'brand.naver')) {
             $out['product_id'] = isset($seg[5]) ? preg_replace('/\D/', '', $seg[5]) : '';
+        } elseif (str_contains($input, '/catalog/')) {
+            // 가격비교 카탈로그(search.shopping.naver.com/catalog/{nvMid}) — nvMid 로 매칭
+            $out['product_id'] = isset($seg[4]) ? preg_replace('/\D/', '', $seg[4]) : '';
+            $out['id_kind'] = 'nvmid';
         } elseif (str_contains($input, 'search.shopping.naver.com')) {
             $out['product_id'] = isset($seg[4]) ? preg_replace('/\D/', '', $seg[4]) : '';
         } else {
@@ -103,7 +109,7 @@ class NaverShoppingRankService
         $display = (int) ($opts['display'] ?? $cfg['display'] ?? 100);
         $maxPages = (int) ($opts['max_pages'] ?? $cfg['max_pages'] ?? 10);
         $delayMs = (int) ($cfg['page_delay_ms'] ?? 200);
-        $timeout = (int) ($cfg['timeout'] ?? 15);
+        $timeout = (int) ($opts['timeout'] ?? $cfg['timeout'] ?? 15);
 
         // 키를 순차 시도: 429 만나면 다음 키로 처음부터 재스캔
         foreach ($keys as $key) {

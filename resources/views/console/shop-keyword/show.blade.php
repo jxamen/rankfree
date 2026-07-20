@@ -5,11 +5,10 @@
 @php
     $srcLabel = ['autocomplete' => '자동완성', 'related' => '연관(검색광고)', 'together' => '함께 많이 찾는', 'brand' => '브랜드', 'keyword_rec' => '키워드추천', 'attribute' => '상품속성', 'modifier' => '수식어(추출)', 'suffix' => '어미/수식어'];
     $th = $analysis->threshold;
-    $shopUrl = fn ($kw) => 'https://search.shopping.naver.com/search/all?query='.urlencode($kw);
+    $shopUrl = fn ($kw) => 'https://m.search.naver.com/search.naver?where=m&query='.urlencode($kw);
     $rankCell = function ($rank) use ($th) {
         if ($rank === null) return ['미확인', 'text-muted-soft'];
-        if ($rank === -1) return ['차단', 'text-error'];
-        if ($rank === 0) return ['100위 밖', 'text-muted-soft'];
+        if ($rank <= 0) return ['미노출', 'text-muted-soft'];   // 가격비교 오가닉에 없음
         if ($rank <= $th) return [$rank.'위', 'text-success font-semibold'];
         return [$rank.'위', 'text-muted'];
     };
@@ -21,8 +20,8 @@
 
 <div class="flex items-center gap-2 mb-4 flex-wrap">
     <a href="{{ route('console.shop-keyword') }}" class="btn btn-ghost btn-sm">← 목록</a>
-    @if ($analysis->product_url)
-        <a href="{{ $analysis->product_url }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">상품 페이지</a>
+    @if ($analysis->product_url && \Illuminate\Support\Str::startsWith($analysis->product_url, ['http://', 'https://']))
+        <a href="{{ $analysis->product_url }}" target="_blank" rel="noopener nofollow" class="btn btn-secondary btn-sm">상품 페이지</a>
     @endif
     <form method="POST" action="{{ route('console.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;">
         @csrf @method('DELETE')
@@ -64,7 +63,7 @@
         <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="border-bottom:1px solid var(--color-hairline);">
                 <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">키워드</th>
-                <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">추정 순위</th>
+                <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">노출 순위</th>
                 <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">월 검색량</th>
                 <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;"></th>
             </tr></thead>
@@ -72,10 +71,15 @@
             @foreach ($exposed as $c)
                 @php [$rt, $rc] = $rankCell($c->rank); @endphp
                 <tr style="border-bottom:1px solid var(--color-hairline-soft);">
-                    <td class="py-2 text-ink" style="font-size:var(--fs-sm);">{{ $c->keyword }}</td>
+                    <td class="py-2 text-ink" style="font-size:var(--fs-sm);">{{ $c->keyword }}
+                        @if ($c->ad_exposed)<span class="badge" style="font-size:var(--fs-xs);color:var(--color-muted);" title="이 키워드에서 내 상품이 광고로도 노출 중">광고</span>@endif
+                    </td>
                     <td class="py-2 text-right {{ $rc }} font-mono" style="font-size:var(--fs-sm);">{{ $rt }}</td>
                     <td class="py-2 text-right text-muted font-mono" style="font-size:var(--fs-xs);">{{ $c->monthly_total !== null ? number_format($c->monthly_total) : '—' }}</td>
-                    <td class="py-2 text-right"><a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener" class="text-muted-soft" style="font-size:var(--fs-xs);">쇼핑에서 보기 ↗</a></td>
+                    <td class="py-2 text-right" style="white-space:nowrap;">
+                        <a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);">검색 ↗</a>
+                        <button type="button" class="sk-del" data-item="{{ $c->id }}" data-kind="combo" title="삭제" style="margin-left:8px;">✕</button>
+                    </td>
                 </tr>
             @endforeach
             </tbody>
@@ -83,26 +87,36 @@
     @endif
 </div>
 
-{{-- 전체 조합 순위 --}}
+{{-- 전체 조합 순위 (클릭=모바일 검색 열기, ✕=조합 삭제) --}}
 <div class="card p-5 mb-4">
-    <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">전체 조합 순위 <span class="text-muted-soft font-normal">({{ $combos->count() }})</span></div>
+    <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">전체 조합 순위 <span class="text-muted-soft font-normal">({{ $combos->count() }})</span>
+        <span class="text-muted-soft font-normal" style="font-size:var(--fs-xs);">· 조합 클릭 시 네이버 모바일 검색이 열립니다</span>
+    </div>
     <div class="flex flex-wrap gap-2">
         @foreach ($combos as $c)
             @php [$rt, $rc] = $rankCell($c->rank); @endphp
-            <span class="badge" style="font-size:var(--fs-xs);">{{ $c->keyword }} <span class="{{ $rc }} font-mono">{{ $rt }}</span></span>
+            <span class="badge sk-badge" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;">
+                <a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener nofollow" class="text-ink" style="text-decoration:none;">{{ $c->keyword }}</a>
+                <span class="{{ $rc }} font-mono">{{ $rt }}</span>
+                @if ($c->ad_exposed)<span class="text-muted-soft" title="광고로도 노출">광고</span>@endif
+                <button type="button" class="sk-del" data-item="{{ $c->id }}" data-kind="combo" title="이 조합 삭제">✕</button>
+            </span>
         @endforeach
     </div>
 </div>
 
-{{-- 추출 키워드(소스별) --}}
+{{-- 추출 키워드(소스별) — ✕ 삭제 시 그 단어를 쓴 조합도 함께 사라집니다 --}}
 <div class="card p-5">
-    <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">추출된 키워드 <span class="text-muted-soft font-normal">(소스별)</span></div>
+    <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">추출된 키워드 <span class="text-muted-soft font-normal">(소스별)</span></div>
+    <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">쓸모없는 키워드는 ✕로 지우세요 — 그 단어가 들어간 조합도 함께 제거됩니다.</div>
     @forelse ($tokens as $source => $list)
         <div class="mb-3">
             <div class="text-muted mb-1" style="font-size:var(--fs-xs);">{{ $srcLabel[$source] ?? $source }} <span class="text-muted-soft">({{ count($list) }})</span></div>
             <div class="flex flex-wrap gap-1">
                 @foreach ($list as $it)
-                    <span class="badge" style="font-size:var(--fs-xs);">{{ $it->keyword }}</span>
+                    <span class="badge sk-badge" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;">{{ $it->keyword }}
+                        <button type="button" class="sk-del" data-item="{{ $it->id }}" data-kind="token" title="이 키워드·관련 조합 삭제">✕</button>
+                    </span>
                 @endforeach
             </div>
         </div>
@@ -110,6 +124,23 @@
         <div class="text-muted-soft" style="font-size:var(--fs-xs);">추출된 키워드가 없습니다.</div>
     @endforelse
 </div>
+
+<style>.sk-del{border:0;background:none;cursor:pointer;color:var(--color-muted-soft);line-height:1;padding:0 1px;}.sk-del:hover{color:var(--color-error);}</style>
+<script>
+(function () {
+    const base = "{{ url('console/shop-keyword/'.$analysis->id.'/item') }}";
+    const csrf = '{{ csrf_token() }}';
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.sk-del');
+        if (!btn) return;
+        btn.disabled = true;
+        fetch(base + '/' + btn.dataset.item, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } })
+            .then((r) => r.ok ? r.json() : Promise.reject())
+            .then(() => { if (btn.dataset.kind === 'token') location.reload(); else { const el = btn.closest('.sk-badge') || btn.closest('tr'); if (el) el.remove(); } })
+            .catch(() => { btn.disabled = false; alert('삭제에 실패했습니다.'); });
+    });
+})();
+</script>
 
 <script>
 (function () {
@@ -121,29 +152,48 @@
     const label = document.getElementById('sk-prog-label');
     const resume = document.getElementById('sk-resume');
     let stopped = false;
+    let errCount = 0;
+
+    function halt(msg, showResume) {
+        stopped = true;
+        label.textContent = msg;
+        if (showResume) resume.classList.remove('hidden');
+    }
+    function retry() {
+        if (++errCount > 6) { halt('연결/서버 오류로 중단 — 새로고침 해주세요', false); return; }
+        setTimeout(poll, Math.min(8000, 1000 * errCount)); // 지수 백오프
+    }
 
     async function poll() {
         if (stopped) return;
+        let r;
         try {
-            const r = await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } });
-            if (!r.ok) throw new Error('http ' + r.status);
-            const d = await r.json();
-            const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
-            fill.style.width = pct + '%';
-            label.textContent = `순위 확인 ${d.checked}/${d.total} · 상위 노출 ${d.exposed}`;
-            if (d.remaining <= 0) { location.reload(); return; }
-            if (d.blocked) {
-                stopped = true;
-                label.textContent = `쇼핑 API 한도로 중단 — 확인 ${d.checked}/${d.total} · 잠시 후 이어서 확인하세요`;
-                resume.classList.remove('hidden');
-                return;
-            }
-            setTimeout(poll, 400);
-        } catch (e) {
-            setTimeout(poll, 2500); // 일시 오류 재시도
+            r = await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } });
+        } catch (e) { retry(); return; }
+
+        // 영구 오류(세션 만료·삭제·권한)는 즉시 중단 — 무한 재시도 금지
+        if (r.status === 419 || r.status === 401 || r.status === 403 || r.status === 404) {
+            halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false);
+            return;
         }
+        if (r.status === 429) { retry(); return; }   // 요청 과다 — 백오프
+        if (!r.ok) { retry(); return; }
+
+        let d;
+        try { d = await r.json(); } catch (e) { retry(); return; }
+        errCount = 0;
+
+        const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
+        fill.style.width = pct + '%';
+        label.textContent = `순위 확인 ${d.checked}/${d.total} · 상위 노출 ${d.exposed}`;
+        if (d.remaining <= 0) { location.reload(); return; }
+        if (d.blocked) {
+            halt(`쇼핑 API 한도/오류로 중단 — 확인 ${d.checked}/${d.total} · 잠시 후 이어서 확인하세요`, true);
+            return;
+        }
+        setTimeout(poll, 500);
     }
-    if (resume) resume.addEventListener('click', function () { stopped = false; resume.classList.add('hidden'); poll(); });
+    if (resume) resume.addEventListener('click', function () { stopped = false; errCount = 0; resume.classList.add('hidden'); poll(); });
     poll();
 })();
 </script>

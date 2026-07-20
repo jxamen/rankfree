@@ -26,11 +26,18 @@
 | 브랜드·키워드추천·상품속성 | `ShopFilterHtmlParser` | **붙여넣은 쇼핑 HTML**(서버 418) |
 | 수식어(파생) | `deriveModifiers` — 추출 키워드에서 핵심어 제거 | 서버(속성 빈약 상품 대응) |
 | 어미/수식어 | config `exposure.suffixes` + 입력창 | "{핵심} {어미}"(2단어) |
-| 상품 URL 파싱 | `NaverShoppingRankService::resolveTarget` | 서버 |
-| 순위체크 | `NaverShoppingRankService::checkRank($kw,$target,['max_pages'=>1])` | 서버(shop.json, sort=sim) |
+| 상품 URL 파싱 | `NaverShoppingRankService::resolveTarget` (+ `id_kind`) | 서버 |
+| **노출 순위** | `NaverShopExposureService::exposure($kw,$target)` | 서버(m.search.naver.com 가격비교) |
 
-- **순위는 shop.json(sort=sim) 추정치** — 실제 웹 순위와 다를 수 있어 "추정"으로 표기. 정확한 웹 순위는 확장 DOM 연동 여지.
-- **쿼터 보호**: 조합당 shop.json 1콜(상위 100). 다중키 429 로테이션은 checkRank가 담당.
+### 노출 순위 = 모바일 검색 가격비교 오가닉(광고 제외)
+
+- `https://m.search.naver.com/search.naver?where=m&query={kw}` 서버 fetch → 페이지에 박힌
+  `newshopping["shopping"]._INITIAL_STATE`(initProps.pagedSlot[].slots[].data) 파싱(`NaverShopExposureService`).
+  JS 리터럴 → JSON 정리(`undefined`·`new Date(...)` 제거) 후 중괄호 균형 추출.
+- **순위 = `sourceType==="AD"`(광고) 슬롯 제외한 문서상 노출 위치**(1,2,3…). shop.json(sort=sim)이 아니다.
+- **동일 상품이 광고 슬롯에도 있으면 `ad_exposed=true`**(조합별 저장·"광고" 배지).
+- **매칭**: 스마트스토어/브랜드 상품 = `channelProductId`(`id_kind=channel`), 가격비교 카탈로그(`/catalog/{nvMid}`) = `nvMid`(`id_kind=nvmid`), 그 외 = 업체명. `resolveTarget`이 URL로 `id_kind` 판별.
+- **openapi 키 쿼터를 쓰지 않는다**(HTML 파싱) — 대신 IP rate 보호로 배치 폴링·throttle·analysis 단위 락.
 
 ## 조합 생성 (`buildCombos`) — 2~5단어 롱테일
 

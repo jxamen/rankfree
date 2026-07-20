@@ -7,8 +7,8 @@ use App\Domain\Keyword\NaverAutocompleteService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Domain\Keyword\NaverSerpService;
 use App\Models\ShopKeywordAnalysis;
-use App\Models\ShopKeywordAnalysisItem;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -39,6 +39,7 @@ class ShopKeywordExposureAnalyzer
 
     public function __construct(
         private NaverShoppingRankService $shop,
+        private NaverShopExposureService $exposure,
         private NaverAutocompleteService $ac,
         private NaverKeywordService $keyword,
         private NaverSerpService $serp,
@@ -55,7 +56,7 @@ class ShopKeywordExposureAnalyzer
         $core = trim($coreKeyword);
         $cfg = (array) config('rankfree.shopping.exposure');
         $threshold = max(1, (int) ($opts['threshold'] ?? $cfg['top'] ?? 5));
-        $maxCombos = max(10, min(200, (int) ($opts['max_combos'] ?? $cfg['max_combos'] ?? 80)));
+        $maxCombos = max(10, min(500, (int) ($opts['max_combos'] ?? $cfg['max_combos'] ?? 100)));
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
 
         $target = $this->shop->resolveTarget(trim($productInput));
@@ -114,62 +115,91 @@ class ShopKeywordExposureAnalyzer
         $scanPages = max(1, (int) ($cfg['scan_pages'] ?? 1));
         $threshold = (int) $analysis->threshold;
 
-        $type = $analysis->product_id ? 'product' : 'mall';
-        $target = ['type' => $type, 'product_id' => (string) $analysis->product_id,
-            'mall_name' => (string) $analysis->mall_name, 'url' => (string) $analysis->product_url];
+        $httpTimeout = (int) config('rankfree.shopping.timeout', 15);
 
-        $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
-        $t0 = microtime(true);
-        $blocked = false;
-        $newlyExposed = [];
+        // analysis 단위 락 — 동시 폴링(여러 탭)이 같은 미확인 조합을 중복 체크해 쿼터를 배로 태우는 것을 막는다.
+        $lock = Cache::lock("shop-exposure:{$analysis->id}", (int) ceil($budget) + 20);
+        if (! $lock->get()) {
+            return $this->progress($analysis);   // 다른 폴링 진행 중 — 현재 상태만 반환
+        }
 
-        foreach ($pending as $item) {
-            if (microtime(true) - $t0 > $budget) {
-                break;
-            }
-            try {
-                $res = $this->shop->checkRank($item->keyword, $target, ['max_pages' => $scanPages]);
-            } catch (Throwable) {
-                $item->rank = 0;
+        try {
+            $type = $analysis->product_id ? 'product' : 'mall';
+            $idKind = str_contains((string) $analysis->product_url, '/catalog/') ? 'nvmid' : 'channel';
+            $target = ['type' => $type, 'product_id' => (string) $analysis->product_id,
+                'mall_name' => (string) $analysis->mall_name, 'url' => (string) $analysis->product_url, 'id_kind' => $idKind];
+
+            $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
+            $t0 = microtime(true);
+            $stopped = false;
+            $newlyExposed = [];
+
+            foreach ($pending as $item) {
+                $elapsed = microtime(true) - $t0;
+                if ($elapsed > $budget) {
+                    break;
+                }
+                try {
+                    // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
+                    $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
+                } catch (Throwable) {
+                    $stopped = true;   // 일시 오류 — rank 오기록 대신 중단(재시도 가능)
+                    break;
+                }
+                // fetch 실패/차단 → rank 저장 안 함(미확인 유지, 재시도 가능)
+                if (! empty($res['error']) || ! empty($res['blocked'])) {
+                    $stopped = true;
+                    break;
+                }
+                $item->rank = (int) ($res['rank'] ?? 0);
+                $item->ad_exposed = ! empty($res['ad']);
                 $item->checked_at = now();
                 $item->save();
-
-                continue;
-            }
-            if (! empty($res['blocked']) && empty($res['found'])) {
-                $blocked = true;   // 전 키 429 — 남은 건 건드리지 않고 중단
-                break;
-            }
-            $item->rank = (int) ($res['rank'] ?? 0);
-            $item->checked_at = now();
-            $item->save();
-            if ($item->rank >= 1 && $item->rank <= $threshold) {
-                $newlyExposed[] = $item;
-            }
-        }
-
-        // 새로 노출된 조합의 월 검색량(best-effort)
-        if ($newlyExposed) {
-            try {
-                $vols = $this->keyword->volumes(array_map(fn ($i) => $i->keyword, $newlyExposed));
-                foreach ($newlyExposed as $i) {
-                    if (isset($vols[$i->keyword]['monthly_total'])) {
-                        $i->monthly_total = $vols[$i->keyword]['monthly_total'];
-                        $i->save();
-                    }
+                if ($item->rank >= 1 && $item->rank <= $threshold) {
+                    $newlyExposed[] = $item;
                 }
-            } catch (Throwable) {
             }
+
+            // 노출 조합의 월 검색량(best-effort) — 예산이 남았을 때만(초과 시 다음 폴링에서 보충)
+            if ($newlyExposed && (microtime(true) - $t0) < $budget) {
+                try {
+                    $vols = $this->keyword->volumes(array_map(fn ($i) => $i->keyword, $newlyExposed));
+                    foreach ($newlyExposed as $i) {
+                        if (isset($vols[$i->keyword]['monthly_total'])) {
+                            $i->monthly_total = $vols[$i->keyword]['monthly_total'];
+                            $i->save();
+                        }
+                    }
+                } catch (Throwable) {
+                }
+            }
+
+            $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
+            $exposed = (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count();
+            $remaining = (int) $analysis->combos()->whereNull('rank')->count();
+            $status = $remaining > 0 ? ($stopped ? 'blocked' : 'checking') : 'done';
+            $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
+
+            return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
+                'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status];
+        } finally {
+            $lock->release();
         }
+    }
 
-        $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
-        $exposed = (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count();
-        $remaining = (int) $analysis->combos()->whereNull('rank')->count();
-        $status = $remaining > 0 ? ($blocked ? 'blocked' : 'checking') : 'done';
-        $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
+    /** 순위체크 없이 현재 진행상황만 반환(락 미획득 시). */
+    private function progress(ShopKeywordAnalysis $analysis): array
+    {
+        $threshold = (int) $analysis->threshold;
 
-        return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
-            'total' => (int) $analysis->combo_count, 'blocked' => $blocked, 'status' => $status];
+        return [
+            'remaining' => (int) $analysis->combos()->whereNull('rank')->count(),
+            'checked' => (int) $analysis->combos()->whereNotNull('rank')->count(),
+            'exposed' => (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count(),
+            'total' => (int) $analysis->combo_count,
+            'blocked' => $analysis->status === 'blocked',
+            'status' => (string) $analysis->status,
+        ];
     }
 
     /**
@@ -205,6 +235,7 @@ class ShopKeywordExposureAnalyzer
         } catch (Throwable) {
         }
 
+        // 함께 많이 찾는(통합검색 SERP) — 캐시(24h) 있어 대개 빠름. 실패해도 best-effort.
         if ($opts['include_together'] ?? true) {
             try {
                 $sec = $this->serp->sections($core);
@@ -214,10 +245,22 @@ class ShopKeywordExposureAnalyzer
             }
         }
 
-        $parsed = $this->filterParser->parse($filterHtml);
-        $t['brand'] = array_slice($this->cleanLoose($parsed['brands']), 0, self::PER_SOURCE['brand']);
+        $parsed = $this->filterParser->parse($filterHtml);   // (선택) 붙여넣은 HTML — API/확장 경로
+        $t['brand'] = $this->cleanLoose($parsed['brands']);
         $t['keyword_rec'] = array_slice($this->clean($parsed['keyword_recs']), 0, self::PER_SOURCE['keyword_rec']);
-        $t['attribute'] = array_slice($this->cleanLoose($parsed['attributes']), 0, self::PER_SOURCE['attribute']);
+        $t['attribute'] = $this->cleanLoose($parsed['attributes']);
+
+        // 자동: core 키워드 모바일 검색 가격비교 결과에서 브랜드(판매몰)·속성(상품명 빈출어) 추출.
+        try {
+            $sig = $this->exposure->keywordSignals($core);
+            $brands = array_map(fn ($m) => $this->cleanBrand($m), $sig['brands']);
+            $t['brand'] = array_slice($this->cleanLoose(array_merge($t['brand'], $brands)), 0, self::PER_SOURCE['brand']);
+            $prodAttrs = $this->attrsFromProductNames($core, $t['brand'], $sig['product_names']);
+            $t['attribute'] = array_slice($this->cleanLoose(array_merge($t['attribute'], $prodAttrs)), 0, self::PER_SOURCE['attribute']);
+        } catch (Throwable) {
+            $t['brand'] = array_slice($t['brand'], 0, self::PER_SOURCE['brand']);
+            $t['attribute'] = array_slice($t['attribute'], 0, self::PER_SOURCE['attribute']);
+        }
 
         // 수식어 — 추출 키워드에서 핵심어를 뗀 조각(속성이 빈약한 상품도 롱테일 조합을 만들 수 있게).
         // 예: "무선이어폰 블루투스" → "블루투스", "고함량비타민c" → "고함량"
@@ -227,6 +270,57 @@ class ShopKeywordExposureAnalyzer
         );
 
         return $t;
+    }
+
+    /** 판매몰명 → 브랜드 정리(공식스토어/공식/스토어 등 접미 제거). */
+    private function cleanBrand(string $mall): string
+    {
+        $b = trim(preg_replace('/\s*(공식\s*스토어|공식몰|공식|브랜드\s*스토어|스토어|공식판매처)$/u', '', trim($mall)));
+
+        return $b !== '' ? $b : trim($mall);
+    }
+
+    /**
+     * 상품명들에서 카테고리 속성 후보를 뽑는다 — 2개 이상 상품에 공통 등장한 토큰(핵심어·브랜드·순수 수량 제외).
+     *
+     * @param  list<string>  $brands
+     * @param  list<string>  $names
+     * @return list<string>
+     */
+    private function attrsFromProductNames(string $core, array $brands, array $names): array
+    {
+        $normCore = $this->norm($core);
+        $brandNorms = array_map(fn ($b) => $this->norm($b), $brands);
+        $freq = [];
+        $display = [];
+        foreach ($names as $name) {
+            $seen = [];
+            foreach (preg_split('/[\s,\/()\[\]·]+/u', trim($name)) ?: [] as $w) {
+                $w = trim($w);
+                $nw = $this->norm($w);
+                if ($nw === '' || isset($seen[$nw]) || mb_strlen($w, 'UTF-8') < 2) {
+                    continue;
+                }
+                $seen[$nw] = true;
+                if (str_contains($nw, $normCore) || str_contains($normCore, $nw) || in_array($nw, $brandNorms, true)) {
+                    continue;   // 핵심어·브랜드 제외
+                }
+                if (preg_match('/^\d+(개|포|정|박스|병|매|입|월|개월|스틱|캡슐|g|kg|mg|ml|l)$/u', $nw)) {
+                    continue;   // 순수 수량 토큰 제외(30포·12개·30정)
+                }
+                $freq[$nw] = ($freq[$nw] ?? 0) + 1;
+                $display[$nw] ??= $w;
+            }
+        }
+        arsort($freq);
+        $out = [];
+        foreach ($freq as $nw => $c) {
+            if ($c >= 2) {
+                $out[] = $display[$nw];   // 2개 이상 상품 공통 = 카테고리 속성
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -250,11 +344,15 @@ class ShopKeywordExposureAnalyzer
                         }
                     }
                 } else {
+                    // 단일어(복합어)에서 핵심어 위치를 잘라 앞/뒤 조각을 각각 수식어로 —
+                    // 무관한 앞뒤를 이어 붙이지 않는다(예: "풋사과즙"/core 사과 → "풋"·"즙" 각 1자라 탈락, 쓰레기 방지).
                     $nw = $this->norm($kw);
                     if ($nw !== $normCore && $normCore !== '' && str_contains($nw, $normCore)) {
-                        $rem = trim(str_replace($normCore, ' ', $nw));
-                        if ($rem !== '' && mb_strlen($rem, 'UTF-8') >= 2) {
-                            $mods[] = $rem;
+                        foreach (explode('|', str_replace($normCore, '|', $nw)) as $piece) {
+                            $piece = trim($piece);
+                            if (mb_strlen($piece, 'UTF-8') >= 2) {
+                                $mods[] = $piece;
+                            }
                         }
                     }
                 }
@@ -280,10 +378,11 @@ class ShopKeywordExposureAnalyzer
         $cfg = (array) config('rankfree.shopping.exposure');
         $attrPool = max(0, (int) ($cfg['attr_pool'] ?? 10));
 
-        // 조합 재료 = 상품 속성(우선) + 추출 수식어. 속성이 빈약한 상품도 수식어로 롱테일을 만든다.
+        // 롱테일 스택 재료 = **실제 상품 속성만**(1000mg·고함량·리포좀 등). 수식어·어미는 스택하지 않는다
+        // — 스택하면 "비타민c 과다복용 추천 효능 천연" 같은 쓰레기 조합이 나온다(2단어로만 붙임).
         $components = [];
         $seenComp = [];
-        foreach (array_merge($tokens['attribute'], $tokens['modifier']) as $c) {
+        foreach ($tokens['attribute'] as $c) {
             $k = $this->norm($c);
             if ($k !== '' && $k !== $normCore && ! isset($seenComp[$k])) {
                 $seenComp[$k] = true;
@@ -292,51 +391,63 @@ class ShopKeywordExposureAnalyzer
         }
         $attrs = array_slice($components, 0, $attrPool);
         $brandOpts = array_merge([null], array_slice($tokens['brand'], 0, 5));
-        $suffixes = $tokens['suffix'];
+        // 2단어로만 붙일 것들: 어미 + 수식어(핵심 포함 완결어는 C 경로에서 그대로)
+        $pairWords = array_values(array_unique(array_merge($tokens['suffix'], $tokens['modifier'])));
         $perTierCap = max(20, $max);
-        $genCap = $max * 4;
+        $genCap = $max * 5;
 
-        // 길이(단어수) => [정규화키 => 문구]
+        // 실단어수 => [정규화키 => 문구]
         $tiers = [];
-        $count = fn () => array_sum(array_map('count', $tiers));
-        $push = function (array $parts, int $minLen = 2) use (&$tiers, $normCore, $maxTokens, $perTierCap) {
-            $parts = array_values(array_filter(array_map(fn ($p) => trim((string) $p), $parts), fn ($p) => $p !== ''));
-            $len = count($parts);
+        $seen = [];   // 전역 중복 방지(tier 를 넘나드는 동일 문구)
+        $total = 0;
+        $push = function (array $parts, int $minLen = 2) use (&$tiers, &$seen, &$total, $normCore, $maxTokens, $perTierCap, $genCap) {
+            if ($total >= $genCap) {
+                return;
+            }
+            // 다단어 컴포넌트(공백 포함 브랜드·속성)도 실제 단어 수로 세도록 문구를 단어로 재분해
+            $cand = preg_replace('/\s+/u', ' ', trim(implode(' ', array_map(fn ($p) => trim((string) $p), $parts))));
+            if ($cand === '') {
+                return;
+            }
+            $words = preg_split('/\s+/u', $cand) ?: [];
+            $len = count($words);
             if ($len < $minLen || $len > $maxTokens) {
                 return;
             }
-            $cand = preg_replace('/\s+/u', ' ', implode(' ', $parts));
             $nc = $this->norm($cand);
-            if ($nc === $normCore || ! str_contains($nc, $normCore) || ! KeywordHubCollector::acceptableKeyword($cand)) {
+            if ($nc === $normCore || isset($seen[$nc]) || ! $this->containsCore($words, $normCore) || ! KeywordHubCollector::acceptableKeyword($cand)) {
                 return;
             }
             $tiers[$len] ??= [];
-            if (! isset($tiers[$len][$nc]) && count($tiers[$len]) < $perTierCap) {
-                $tiers[$len][$nc] = $cand;
+            if (count($tiers[$len]) >= $perTierCap) {
+                return;
             }
+            $seen[$nc] = true;
+            $tiers[$len][$nc] = $cand;
+            $total++;
         };
 
-        // A) 상품 특이 조합(최우선): [브랜드?] + 핵심 + 속성/수식어 부분집합(크기 0..maxTokens-1).
-        //    각 tier 의 앞자리를 차지해 라운드로빈에서 살아남게 한다.
+        // A) 상품 특이 조합: 각 부분집합마다 [무브랜드·브랜드] 변형을 인터리브 —
+        //    브랜드 루프를 안쪽에 둬 '브랜드×핵심×속성' 롱테일이 cap 선착순에 밀리지 않게 한다.
         $subsets = array_merge([[]], $this->attrSubsets($attrs, $maxTokens - 1, $genCap));
-        foreach ($brandOpts as $b) {
-            foreach ($subsets as $sub) {
+        foreach ($subsets as $sub) {
+            foreach ($brandOpts as $b) {
                 $push(array_merge($b !== null ? [$b] : [], [$core], $sub));
-                if ($count() >= $genCap) {
-                    break 2;
-                }
+            }
+            if ($total >= $genCap) {
+                break;
             }
         }
 
-        // B) 어미는 2단어(핵심+어미)로만 — 3단어 이상으로 곱하면 tier 가 저품질 어미조합으로 넘쳐 특이조합을 밀어낸다.
-        foreach ($suffixes as $sf) {
-            $push([$core, $sf]);
+        // B) 어미·수식어는 2단어(핵심+단어)로만 — 스택하면 "핵심 과다복용 추천 효능" 같은 쓰레기가 나온다.
+        foreach ($pairWords as $w) {
+            $push([$core, $w]);
         }
 
         // C) 완결 검색어(키워드추천/자동완성/연관/함께많이찾는) — 1단어여도 완결된 검색어라 그대로 후보
         foreach (['keyword_rec', 'autocomplete', 'related', 'together'] as $src) {
             foreach ($tokens[$src] as $kw) {
-                $push(preg_split('/\s+/u', trim($kw)) ?: [], 1);
+                $push([$kw], 1);
             }
         }
 
@@ -360,6 +471,39 @@ class ShopKeywordExposureAnalyzer
         }
 
         return array_slice($out, 0, $max);
+    }
+
+    /**
+     * 단어 배열에 핵심어가 존재하는가 — 단어 경계 넘는 오탐 방지.
+     * (a) 한 단어(복합어) 안에 핵심어가 substring 으로 있거나, (b) 연속 단어들이 핵심어로 정확히 이어지면 통과.
+     * "대구 미니선풍기"(공백 제거 substring "구미")처럼 단어 경계를 넘어 우연히 겹치는 건 제외한다.
+     */
+    private function containsCore(array $words, string $normCore): bool
+    {
+        if ($normCore === '') {
+            return false;
+        }
+        $coreLen = mb_strlen($normCore, 'UTF-8');
+        foreach ($words as $w) {
+            if (str_contains($this->norm($w), $normCore)) {
+                return true; // (a) 단어 내부 복합어
+            }
+        }
+        $n = count($words);
+        for ($i = 0; $i < $n; $i++) {   // (b) 연속 단어 = 핵심어(띄어쓴 핵심어)
+            $acc = '';
+            for ($j = $i; $j < $n; $j++) {
+                $acc .= $this->norm($words[$j]);
+                if ($acc === $normCore) {
+                    return true;
+                }
+                if (mb_strlen($acc, 'UTF-8') >= $coreLen) {
+                    break;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -427,7 +571,7 @@ class ShopKeywordExposureAnalyzer
         $seen = [];
         foreach ($list as $kw) {
             $kw = preg_replace('/\s+/u', ' ', trim((string) $kw));
-            if ($kw === '' || ! KeywordHubCollector::acceptableKeyword($kw)) {
+            if ($kw === '' || $this->hasNegative($kw) || ! KeywordHubCollector::acceptableKeyword($kw)) {
                 continue;
             }
             $k = $this->norm($kw);
@@ -439,6 +583,20 @@ class ShopKeywordExposureAnalyzer
         }
 
         return $out;
+    }
+
+    /** 부정적 단어(과다복용·부작용 등)를 포함하면 조합 금지. config rankfree.shopping.exposure.negatives. */
+    private function hasNegative(string $s): bool
+    {
+        $n = $this->norm($s);
+        foreach ((array) config('rankfree.shopping.exposure.negatives', []) as $neg) {
+            $neg = $this->norm((string) $neg);
+            if ($neg !== '' && str_contains($n, $neg)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -455,7 +613,7 @@ class ShopKeywordExposureAnalyzer
         foreach ($list as $kw) {
             $kw = preg_replace('/\s+/u', ' ', trim((string) $kw));
             $len = mb_strlen($kw, 'UTF-8');
-            if ($kw === '' || $len < 1 || $len > 40 || preg_match('/[^\p{Hangul}a-zA-Z0-9\s]/u', $kw)) {
+            if ($kw === '' || $len < 1 || $len > 40 || $this->hasNegative($kw) || preg_match('/[^\p{Hangul}a-zA-Z0-9\s]/u', $kw)) {
                 continue;
             }
             $k = $this->norm($kw);

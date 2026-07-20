@@ -237,9 +237,10 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
 
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25)
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');
-    Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->name('shop-keyword.store');
+    Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->middleware('throttle:30,1')->name('shop-keyword.store');
     Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
-    Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->name('shop-keyword.check');
+    Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->middleware('throttle:240,1')->name('shop-keyword.check');
+    Route::delete('/shop-keyword/{analysis}/item/{item}', [ShopKeywordExposureController::class, 'deleteItem'])->name('shop-keyword.item');
     Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
 
     // 마케팅 키워드 분석 (검색량·성별/연령·트렌드·연관키워드)

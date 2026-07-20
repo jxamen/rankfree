@@ -97,7 +97,11 @@ return [
         // 노출 키워드 분석(25) — 조합 후보를 순위체크할 때의 상한(쿼터 보호)
         'exposure' => [
             'top' => (int) env('SHOP_EXPOSURE_TOP', 5),           // 이 순위 이내면 "노출"로 본다
-            'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 50), // 기본 조합 수(입력창 select 로 30~100 조절)
+            'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 100), // 기본 조합 수(입력창 select 로 30~500 조절)
+            // 부정적 단어(명백한 것만 — 나머지는 결과에서 개별 삭제). 이 조각 포함 키워드/조합은 만들지 않는다.
+            'negatives' => [
+                '과다복용', '부작용', '후유증', '독성', '리콜', '소송', '고발', '가짜', '짝퉁', '허위', '과대광고',
+            ],
             'max_tokens' => (int) env('SHOP_EXPOSURE_MAX_TOKENS', 5),  // 조합 최대 단어 수(2~5) — 속성 많을수록 롱테일 top5
             'attr_pool' => (int) env('SHOP_EXPOSURE_ATTR_POOL', 10),   // 조합 재료(속성+수식어) 풀 크기(부분집합 폭발 방지)
             'scan_pages' => (int) env('SHOP_EXPOSURE_SCAN_PAGES', 1),  // 조합당 shop.json 페이지 수(1=상위 100, 조합당 1콜)
