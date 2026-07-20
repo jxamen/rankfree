@@ -69,6 +69,31 @@ class RankTrackFixesTest extends TestCase
         ]);
     }
 
+    public function test_not_found_after_key_rotation_is_not_blocked(): void
+    {
+        config(['rankfree.shopping.api_keys' => [['id' => 'a', 'secret' => 'b'], ['id' => 'c', 'secret' => 'd']],
+            'rankfree.shopping.display' => 2]);
+
+        // 첫 키는 429, 두 번째 키는 정상 — 대상은 결과에 없음(순위권 밖)
+        Http::fake(function ($request) {
+            if ($request->header('X-Naver-Client-Id')[0] === 'a') {
+                return Http::response(['errorMessage' => 'quota'], 429);
+            }
+
+            return Http::response(['total' => 1, 'items' => [
+                ['productId' => '111', 'title' => 'A', 'mallName' => 'm', 'lprice' => '1', 'link' => 'x', 'image' => ''],
+            ]], 200);
+        });
+
+        $res = app(NaverShoppingRankService::class)
+            ->checkRank('킹크랩', ['type' => 'product', 'product_id' => '999', 'mall_name' => '', 'url' => '']);
+
+        // 두 번째 키로 전 범위 확인 완료 — 차단(-1)이 아니라 '순위권 밖'(rank 0)
+        $this->assertFalse($res['blocked']);
+        $this->assertFalse($res['found']);
+        $this->assertSame(0, $res['rank']);
+    }
+
     public function test_shop_blocked_keeps_todays_valid_record(): void
     {
         Http::fake(['*/v1/search/shop.json*' => Http::response(['errorMessage' => 'quota'], 429)]);

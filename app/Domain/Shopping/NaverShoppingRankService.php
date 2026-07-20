@@ -160,7 +160,9 @@ class NaverShoppingRankService
             }
 
             if (! $blocked) {
-                // 429 없이 전 범위 스캔 완료(미발견) → 키 로테이션 불필요
+                // 429 없이 전 범위 스캔 완료(미발견) — 앞 키가 429 였어도 이 키로 확인을
+                // 마쳤으므로 차단 아님(잔존 blocked 로 '순위권 밖'이 -1 차단으로 오판되던 결함).
+                $result['blocked'] = false;
                 break;
             }
             $result['blocked'] = true; // 이 키는 막힘 — 다음 키 시도
