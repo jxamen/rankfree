@@ -25,6 +25,9 @@ class BackfillPlaceCoords extends Command
 
     protected $description = '플레이스 키워드 SERP 재수집으로 업체 좌표(x/y)를 적재(지리 추천용).';
 
+    /** 이 미만 월 조회수 키워드는 수집하지 않는다(검색 수요 없음). */
+    private const MIN_VOLUME = 10;
+
     public function handle(PlaceRankChecker $checker, PlaceSerpStore $store): int
     {
         $limit = max(1, (int) $this->option('limit'));
@@ -33,10 +36,12 @@ class BackfillPlaceCoords extends Command
         $top = min(100, max(10, (int) $this->option('top')));
 
         // 대상: 플레이스 타입 허브 문서 키워드(검색량 큰 순). 스킵을 감안해 넉넉히 받는다.
+        // ★ 월 조회수 10 미만은 아예 수집하지 않는다(검색 수요가 없는 키워드는 제외).
         $keywords = KeywordSearch::query()
             ->where('keyword_searches.origin', 'hub')
             ->join('keyword_categories as kc', 'kc.id', '=', 'keyword_searches.category_id')
             ->where('kc.type', 'place')
+            ->where('keyword_searches.monthly_total', '>=', self::MIN_VOLUME)
             ->orderByDesc('keyword_searches.monthly_total')
             ->limit($limit * 4)
             ->pluck('keyword_searches.keyword')
