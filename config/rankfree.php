@@ -94,6 +94,21 @@ return [
         'max_pages' => (int) env('NAVER_SHOPPING_MAX_PAGES', 10),  // 100×10 = 1000위까지
         'page_delay_ms' => (int) env('NAVER_SHOPPING_PAGE_DELAY_MS', 200),
         'timeout' => (int) env('NAVER_SHOPPING_TIMEOUT', 15),
+        // 노출 키워드 분석(25) — 조합 후보를 순위체크할 때의 상한(쿼터 보호)
+        'exposure' => [
+            'top' => (int) env('SHOP_EXPOSURE_TOP', 5),           // 이 순위 이내면 "노출"로 본다
+            'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 50), // 기본 조합 수(입력창 select 로 30~100 조절)
+            'max_tokens' => (int) env('SHOP_EXPOSURE_MAX_TOKENS', 5),  // 조합 최대 단어 수(2~5) — 속성 많을수록 롱테일 top5
+            'attr_pool' => (int) env('SHOP_EXPOSURE_ATTR_POOL', 10),   // 조합 재료(속성+수식어) 풀 크기(부분집합 폭발 방지)
+            'scan_pages' => (int) env('SHOP_EXPOSURE_SCAN_PAGES', 1),  // 조합당 shop.json 페이지 수(1=상위 100, 조합당 1콜)
+            'batch_size' => (int) env('SHOP_EXPOSURE_BATCH_SIZE', 15), // 폴링 1회에 순위체크할 조합 수
+            'batch_sec' => (int) env('SHOP_EXPOSURE_BATCH_SEC', 12),   // 폴링 1회 시간예산(초) — 게이트웨이 타임아웃 방지
+            // 어미/수식어 — "{핵심} {어미}" 조합을 대량 생성한다. 관리자·사용자가 추가 가능(입력창).
+            'suffixes' => [
+                '추천', '인기', '순위', '무료배송', '정품', '최저가', '가성비', '할인', '세일', '특가',
+                '베스트', '신상', '내돈내산', '후기', '리뷰', '비교', '당일발송', '오늘출발', '기획전', '선물',
+            ],
+        ],
     ],
 
     /*

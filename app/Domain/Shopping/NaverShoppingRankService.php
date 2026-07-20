@@ -73,7 +73,7 @@ class NaverShoppingRankService
      * @param  array  $target  resolveTarget() 결과
      * @return array{blocked:bool, found:bool, rank:int, total:int, product_id:string, title:string, mall_name:string, price:int, link:string, image:string, error?:string}
      */
-    public function checkRank(string $keyword, array $target): array
+    public function checkRank(string $keyword, array $target, array $opts = []): array
     {
         $cfg = (array) config('rankfree.shopping');
         $keys = (array) ($cfg['api_keys'] ?? []);
@@ -99,8 +99,9 @@ class NaverShoppingRankService
             return $result;
         }
 
-        $display = (int) ($cfg['display'] ?? 100);
-        $maxPages = (int) ($cfg['max_pages'] ?? 10);
+        // opts 로 노출 체크처럼 "상위 N위 안인지"만 볼 때 페이지 수를 낮춰 쿼터를 아낀다(조합당 1콜).
+        $display = (int) ($opts['display'] ?? $cfg['display'] ?? 100);
+        $maxPages = (int) ($opts['max_pages'] ?? $cfg['max_pages'] ?? 10);
         $delayMs = (int) ($cfg['page_delay_ms'] ?? 200);
         $timeout = (int) ($cfg['timeout'] ?? 15);
 

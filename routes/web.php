@@ -38,6 +38,7 @@ use App\Http\Controllers\RankCheckController;
 use App\Http\Controllers\RankTrackController;
 use App\Http\Controllers\SelfMarketingController;
 use App\Http\Controllers\SellerPowerController;
+use App\Http\Controllers\ShopKeywordExposureController;
 use App\Http\Controllers\ShopRankTrackController;
 use App\Http\Controllers\SmartplaceController;
 use App\Http\Controllers\TalkContactController;
@@ -233,6 +234,13 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::post('/shop-rank/{slot}/run', [ShopRankTrackController::class, 'run'])->name('shop-rank.run');
     Route::put('/shop-rank/{slot}', [ShopRankTrackController::class, 'update'])->name('shop-rank.update');
     Route::delete('/shop-rank/{slot}', [ShopRankTrackController::class, 'destroy'])->name('shop-rank.destroy');
+
+    // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25)
+    Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');
+    Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->name('shop-keyword.store');
+    Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
+    Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->name('shop-keyword.check');
+    Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
 
     // 마케팅 키워드 분석 (검색량·성별/연령·트렌드·연관키워드)
     Route::get('/keyword', [KeywordAnalysisController::class, 'index'])->name('keyword');

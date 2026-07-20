@@ -85,5 +85,7 @@
 | [21_SEO_SLUG_SITEMAP.md](./21_SEO_SLUG_SITEMAP.md) | SEO 공유 슬러그(/keyword/여름브라)·robots·사이트맵(인덱스+섹션, 추적 슬롯 제외) |
 | [22_KEYWORD_CONTENT_HUB.md](./22_KEYWORD_CONTENT_HUB.md) | 키워드 콘텐츠 허브 — 카테고리→키워드 수집(시드·지역조합·데이터랩·GSC)·승인·발행→허브 페이지(/keywords)·AEO 문서·AI 인사이트·상호 추천(Phase 0~3 + 대량 시드 구현) |
 | [23_GA4_INSIGHTS_PACKAGE.md](./23_GA4_INSIGHTS_PACKAGE.md) | GA4 상세 분석 대시보드(/admin/traffic-stats) — 이식형 패키지 jcurve/ga4-insights(유입·랜딩/이탈·기기·이벤트·실시간, 기간대비) |
+| [24_NEW_BUSINESS.md](./24_NEW_BUSINESS.md) | 신규 개업 — 지방행정 인허가 공공데이터 수집 + 네이버 플레이스 등록 여부(관리자 **열람 전용**, 광고 발송 금지) |
+| [25_SHOPPING_KEYWORD_EXPOSURE.md](./25_SHOPPING_KEYWORD_EXPOSURE.md) | 쇼핑 노출 키워드 분석(/console/shop-keyword) — 핵심 키워드+상품 → 키워드 추출·2~5단어 조합 → 쇼핑 상위 N위 노출 판정(비동기 배치 폴링). **유입 조작·회전 리다이렉트는 범위 밖** |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |
