@@ -65,8 +65,6 @@ class ExtKeywordShopSerpController extends Controller
      */
     private function queueByCategory(int $limit, int $days)
     {
-        $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
-
         // 방금 내준 키워드는 잠시 제외한다 — 수집(수십 초) 중에 다시 요청이 오면 같은 걸 또 주게 되고,
         // 확장이 그걸 걸러내면 큐가 비어 재요청 → 같은 키워드만 반복되는 루프가 된다(실측: '제시뉴욕원피스' 3회).
         $lease = \Illuminate\Support\Facades\Cache::get('shop_queue_lease', []);
@@ -89,37 +87,72 @@ class ExtKeywordShopSerpController extends Controller
             return $out;
         });
 
-        $doneCats = 0;
-        foreach ($order as $c) {
-            $kws = \App\Models\KeywordCandidate::where('category_id', $c['id'])
-                ->whereNotIn('keyword', $fresh)
-                ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))   // 내준 것 제외
-                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
-                ->distinct()->limit($limit)->pluck('keyword')->values();
+        // ① 아직 '한 번도' 수집 안 된 키워드를 먼저 준다(스냅샷 자체가 없는 것) — 전 분류 소진 전엔 재수집 안 함.
+        $never = fn ($q) => $q->whereNotExists(fn ($s) => $s->selectRaw('1')
+            ->from('keyword_shop_serps')->whereColumn('keyword_shop_serps.keyword', 'keyword_candidates.keyword'));
+        $r = $this->pickCategoryQueue($order, $lease, $limit, $never, 'new');
+        if ($r !== null) {
+            return $r;
+        }
 
-            if ($kws->isNotEmpty()) {
-                // 5분간 재발급 금지 — 수집이 끝나 스냅샷이 생기면 어차피 $fresh 로 걸러진다
-                foreach ($kws as $k) {
-                    $lease[$k] = time() + 300;
-                }
-                \Illuminate\Support\Facades\Cache::put('shop_queue_lease', $lease, 600);
-
-                return response()->json(['data' => [
-                    'keywords' => $kws,
-                    'category' => $c['path'],                       // 지금 수집 중인 분류(화면 표시)
-                    'category_index' => $doneCats + 1,
-                    'category_total' => count($order),
-                    'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', collect($order)->pluck('id'))
-                        ->whereNotIn('keyword', $fresh)->distinct()->count('keyword'),
-                ]]);
-            }
-            $doneCats++;
+        // ② 전부 최소 1회 수집됨 → days(기본 1일) 지난 것부터 재수집.
+        $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
+        $stale = fn ($q) => $q->whereNotIn('keyword', $fresh);
+        $r = $this->pickCategoryQueue($order, $lease, $limit, $stale, 'refresh');
+        if ($r !== null) {
+            return $r;
         }
 
         return response()->json(['data' => [
             'keywords' => [], 'category' => null,
             'category_index' => count($order), 'category_total' => count($order), 'remaining' => 0,
         ]]);
+    }
+
+    /**
+     * DFS 순서로 첫 '남은 키워드가 있는 분류'에서 $limit 개를 내준다($filter 로 대상 한정).
+     * 못 찾으면 null(다음 단계로).
+     */
+    private function pickCategoryQueue(array $order, array &$lease, int $limit, callable $filter, string $phase)
+    {
+        $allCatIds = collect($order)->pluck('id');
+        $doneCats = 0;
+        foreach ($order as $c) {
+            $query = \App\Models\KeywordCandidate::where('category_id', $c['id']);
+            $filter($query);   // whereNotExists(미수집) 또는 whereNotIn(오래된 것) — 쿼리를 직접 변형
+            $kws = $query
+                ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))   // 내준 것 제외
+                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
+                ->distinct()->limit($limit)->pluck('keyword')->values();
+
+            if ($kws->isNotEmpty()) {
+                foreach ($kws as $k) {
+                    $lease[$k] = time() + 300;   // 5분간 재발급 금지
+                }
+                \Illuminate\Support\Facades\Cache::put('shop_queue_lease', $lease, 600);
+
+                // 남은 수는 표시용 — 무거우니 짧게 캐시(정확도보다 응답 속도)
+                $remaining = \Illuminate\Support\Facades\Cache::remember("shop_queue_remaining:{$phase}", 180,
+                    function () use ($allCatIds, $filter) {
+                        $q = \App\Models\KeywordCandidate::whereIn('category_id', $allCatIds);
+                        $filter($q);
+
+                        return $q->distinct()->count('keyword');
+                    });
+
+                return response()->json(['data' => [
+                    'keywords' => $kws,
+                    'category' => $c['path'],                       // 지금 수집 중인 분류(화면 표시)
+                    'category_index' => $doneCats + 1,
+                    'category_total' => count($order),
+                    'phase' => $phase === 'new' ? '미수집 우선' : '재수집',
+                    'remaining' => $remaining,
+                ]]);
+            }
+            $doneCats++;
+        }
+
+        return null;
     }
 
     public function store(Request $request)
