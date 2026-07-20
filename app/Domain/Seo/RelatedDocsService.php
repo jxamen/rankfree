@@ -82,6 +82,7 @@ class RelatedDocsService
         [$catId, $catName, $excludeId] = $this->resolveCategory($doc);
         if ($catId) {
             $catDocs = KeywordSearch::where('origin', 'hub')
+                ->whereNull('retired_at')
                 ->where('category_id', $catId)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->orderByDesc('monthly_total')->limit(12)->get();
@@ -99,6 +100,7 @@ class RelatedDocsService
             $isSelf = $prefix === $self;
 
             $matched = $cls::query()->latest('id')
+                ->when($cls === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at'))
                 ->when($doc instanceof $cls, fn ($q) => $q->where($doc->getKeyName(), '!=', $doc->getKey()))
                 ->where(function ($w) use ($cols, $terms, $extras) {
                     foreach ($cols as $col) {
@@ -120,6 +122,7 @@ class RelatedDocsService
                 if ($matched->count() < 3) {
                     // 같은 타입은 인기/최신 문서로 채워 빈 섹션을 방지(교차 타입은 매칭분만)
                     $pad = ($prefix === 'keyword' ? $cls::query()->orderByDesc('monthly_total') : $cls::query()->latest('id'))
+                        ->when($cls === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at'))
                         ->when($doc instanceof $cls, fn ($q) => $q->where($doc->getKeyName(), '!=', $doc->getKey()))
                         ->limit(12)->get();
                     $matched = $matched->concat($pad);
@@ -245,6 +248,7 @@ class RelatedDocsService
         $dLng = $km / (111.0 * max(0.15, cos(deg2rad($lat))));   // 위도에 따른 경도 1도 거리 보정
 
         $cands = KeywordSearch::where('origin', 'hub')
+            ->whereNull('retired_at')
             ->where('id', '!=', $doc->getKey())
             ->whereNotNull('place_x')->whereNotNull('place_y')
             ->whereBetween('place_x', [$lng - $dLng, $lng + $dLng])

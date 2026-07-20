@@ -17,7 +17,7 @@ class KeywordSearch extends Model
 
     protected $fillable = [
         'slug', 'user_id', 'category_id', 'region', 'region_type', 'origin', 'keyword', 'monthly_total', 'monthly_pc', 'monthly_mobile',
-        'comp_idx', 'grade', 'share_token', 'snapshot', 'refreshed_at',
+        'comp_idx', 'grade', 'share_token', 'snapshot', 'refreshed_at', 'retired_at',
     ];
 
     public function shareSlugBasis(): string
@@ -36,6 +36,7 @@ class KeywordSearch extends Model
         'monthly_mobile' => 'integer',
         'snapshot' => 'array',
         'refreshed_at' => 'datetime',
+        'retired_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

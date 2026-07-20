@@ -135,6 +135,15 @@ class KeywordAnalysisController extends Controller
     {
         $record = KeywordSearch::findByShareKey($slug);
         abort_if(! $record, 404);
+        // 폐기(저품질) 문서는 카테고리 허브로 301 — 색인에서 정리되도록(사이트맵 제외+IndexNow는 폐기 시 처리).
+        if ($record->retired_at) {
+            $record->loadMissing('category');
+            $to = $record->category?->slug
+                ? route('keywords.category', $record->category->slug)
+                : route('keywords.index');
+
+            return redirect()->to($to, 301);
+        }
         $result = $builder->build($record->keyword);
         abort_if($result['vm'] === null || ! ($result['vm']['has_data'] ?? false), 404);
         // 관련 문서 추천 — 연관 키워드(vm.related)도 정확 일치 후보로 넘긴다

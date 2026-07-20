@@ -230,7 +230,7 @@ class KeywordInsightTest extends TestCase
         $this->assertStringNotContainsString('sitemap-keywords', $this->get('/sitemap.xml')->assertOk()->getContent());
     }
 
-    public function test_sitemap_keywords_section_lists_category_urls(): void
+    public function test_sitemap_keywords_section_lists_only_indexable_index(): void
     {
         [$parent, $child] = $this->tree();
 
@@ -238,16 +238,15 @@ class KeywordInsightTest extends TestCase
         $this->assertStringContainsString('/sitemap-keywords.xml', $index);
 
         $xml = $this->get('/sitemap-keywords.xml')->assertOk()->getContent();
+        // /keywords 인덱스만 색인 대상 — noindex 인 카테고리/타입 하위는 사이트맵에서 제외한다.
         $this->assertStringContainsString(route('keywords.index'), $xml);
-        $this->assertStringContainsString(route('keywords.category', $parent->slug), $xml);
-        $this->assertStringContainsString(route('keywords.category', $child->slug), $xml);
-        $this->assertNotFalse(simplexml_load_string($xml));
-
-        // 타입 홈 — 문서 있는 타입만 노출(쇼핑만 발행된 상태), 검색·자동완성은 절대 미포함
-        $this->assertStringContainsString(route('keywords.type', 'shopping'), $xml);
+        $this->assertStringNotContainsString(route('keywords.category', $parent->slug), $xml);
+        $this->assertStringNotContainsString(route('keywords.category', $child->slug), $xml);
+        $this->assertStringNotContainsString(route('keywords.type', 'shopping'), $xml);
         $this->assertStringNotContainsString(route('keywords.type', 'place'), $xml);
         $this->assertStringNotContainsString('/keywords/search', $xml);
         $this->assertStringNotContainsString('suggest', $xml);
+        $this->assertNotFalse(simplexml_load_string($xml));
     }
 
     /** 발행 문서 없는 타입 홈은 색인 대상이 아니다(빈 목록·도어웨이 방지). */

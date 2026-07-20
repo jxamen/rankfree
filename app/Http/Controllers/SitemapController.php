@@ -234,7 +234,9 @@ class SitemapController extends Controller
                 'prefix' => (new $model)->shareSlugPrefix(),
                 'freq' => $c['freq'],
                 'priority' => $c['priority'],
-                'query' => fn () => $model::whereNotNull('slug'),
+                // 폐기(retired) 문서는 사이트맵에서 제외 — KeywordSearch 만 해당 컬럼 보유
+                'query' => fn () => $model::whereNotNull('slug')
+                    ->when($model === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at')),
             ];
         }
 
