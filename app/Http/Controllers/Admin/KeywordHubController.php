@@ -18,6 +18,7 @@ use App\Models\KeywordSearch;
 use App\Models\MarketAnalysis;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * 키워드 자동 분석 관리 — 후보 생성과 분석 발행을 운영한다.
@@ -28,16 +29,21 @@ class KeywordHubController extends Controller
     /** 첫 화면 — 현황 요약·병렬 자동 분석·최근 발행. 후보 큐·수집은 candidates 로 분리. */
     public function index()
     {
-        return view('admin.keyword-hub.index', [
+        // 후보 카운팅은 120만 행 집계(유형×상태 조인 실측 ~7초)라 60초 캐시 — 페이지 로딩이 이것 때문에
+        // 수 초씩 걸렸다. 진행 실시간 표시는 가벼운 autoStatus 폴링이 담당하므로 대시보드 집계는 1분 지연 허용.
+        $agg = Cache::remember('hub:admin-agg', 60, fn () => [
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
             'candidateTypeCounts' => $this->candidateTypeCounts(),
+            'publishedCounts' => $this->publishedCounts(),
+            'categoryBreakdown' => $this->publishedCategoryBreakdown(),
+            'collectTargets' => $this->collectTargetSummary(),
+        ]);
+
+        return view('admin.keyword-hub.index', $agg + [
             'hubDocsByType' => [
                 'place' => $this->recentHubDocs('place'),
                 'shopping' => $this->recentHubDocs('shopping'),
             ],
-            'publishedCounts' => $this->publishedCounts(),
-            'categoryBreakdown' => $this->publishedCategoryBreakdown(),
-            'collectTargets' => $this->collectTargetSummary(),
             'collectionRuns' => KeywordHubRun::with('items')->latest('id')->limit(5)->get(),
             'collectionControl' => KeywordHubCollectionControl::state(),
             'auto' => $this->autoPayload(),   // 자동 분석 초기 상태(새로고침·재방문 복원용)

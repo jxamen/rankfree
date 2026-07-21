@@ -71,6 +71,7 @@ class HubAutoRun
                 'shopping_done' => 0, 'shopping_held' => 0,
                 'shopping_remaining' => $type === 'place' ? 0 : self::query('shopping')->count(),
                 'started_at' => now()->timestamp, 'last_at' => now()->timestamp,
+                'counted_at' => now()->timestamp,   // 남은 수 실측 시각 — progress() 재계산 스로틀 기준
             ];
             self::save($s);
 
@@ -96,20 +97,41 @@ class HubAutoRun
         return (bool) (self::state()['running'] ?? false);
     }
 
-    /** 크론 배치 후 진행 갱신(누적 done/held, 남은 재계산, 하트비트). 다 드레인되면 자동 종료. */
+    /**
+     * 크론 배치 후 진행 갱신(누적 done/held, 남은 갱신, 하트비트). 다 드레인되면 자동 종료.
+     * 남은 수 실측 카운트는 120만 행 기준 3~4초짜리 쿼리 3개라 **60초에 1번만** 실측하고,
+     * 그 사이엔 처리분만큼 차감한 근사치를 쓴다(0 도달 시엔 실측으로 재확인 후 종료).
+     */
     public static function progress(int $addDone, int $addHeld, ?string $type = null): array
     {
         return self::locked(function () use ($addDone, $addHeld, $type) {
             $s = self::state();
             $s['done'] = (int) $s['done'] + $addDone;
             $s['held'] = (int) $s['held'] + $addHeld;
-            $s['remaining'] = self::query($s['type'] ?? null)->count();
             if (in_array($type, ['place', 'shopping'], true)) {
                 $s[$type.'_done'] = (int) ($s[$type.'_done'] ?? 0) + $addDone;
                 $s[$type.'_held'] = (int) ($s[$type.'_held'] ?? 0) + $addHeld;
             }
-            $s['place_remaining'] = ($s['type'] ?? null) === 'shopping' ? 0 : self::query('place')->count();
-            $s['shopping_remaining'] = ($s['type'] ?? null) === 'place' ? 0 : self::query('shopping')->count();
+
+            $recount = function () use (&$s): void {
+                $s['remaining'] = self::query($s['type'] ?? null)->count();
+                $s['place_remaining'] = ($s['type'] ?? null) === 'shopping' ? 0 : self::query('place')->count();
+                $s['shopping_remaining'] = ($s['type'] ?? null) === 'place' ? 0 : self::query('shopping')->count();
+                $s['counted_at'] = now()->timestamp;
+            };
+
+            if (now()->timestamp - (int) ($s['counted_at'] ?? 0) >= 60) {
+                $recount();
+            } else {
+                $s['remaining'] = max(0, (int) $s['remaining'] - $addDone - $addHeld);
+                if (in_array($type, ['place', 'shopping'], true)) {
+                    $s[$type.'_remaining'] = max(0, (int) ($s[$type.'_remaining'] ?? 0) - $addDone - $addHeld);
+                }
+                if ($s['remaining'] === 0) {
+                    $recount();   // 근사치 0 — 실측으로 재확인해야 종료 판단이 정확하다
+                }
+            }
+
             $s['last_at'] = now()->timestamp;
             if ($s['remaining'] === 0) {
                 $s['running'] = false;   // 다 드레인 → 자동 종료
