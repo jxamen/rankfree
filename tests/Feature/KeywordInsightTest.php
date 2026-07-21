@@ -50,6 +50,20 @@ class KeywordInsightTest extends TestCase
         $this->assertStringNotContainsString('noindex', $html);
     }
 
+    /** 쇼핑 키워드는 같은 키워드의 시장분석(/market)이 있으면 허브 링크·라벨이 그걸 가리킨다(없으면 키워드 문서 폴백). */
+    public function test_shopping_hub_doc_links_to_market_analysis_when_exists(): void
+    {
+        $this->tree();
+        $u = User::create(['name' => 's', 'email' => 'sys@rf.kr', 'password' => 'x1234567']);
+        $m = \App\Models\MarketAnalysis::create(['user_id' => $u->id, 'keyword' => '캠핑의자', 'snapshot' => ['top_products' => []]]);
+
+        // 대분류(아웃도어) 페이지에 두 문서가 함께 — 캠핑의자는 /market, 등산화(시장분석 없음)는 키워드 문서 유지
+        $html = $this->get('/keywords/'.rawurlencode('아웃도어'))->assertOk()->getContent();
+        $this->assertStringContainsString(route('market.shared', $m->slug), $html);
+        $this->assertStringContainsString('캠핑의자 시장 분석', $html);
+        $this->assertStringContainsString('등산화 키워드 분석', $html);
+    }
+
     /** 타입 홈 = 카테고리 메뉴. 타입별로 나열 방식이 다르고 서로 섞이지 않는다. */
     public function test_type_home_lists_categories_by_type(): void
     {

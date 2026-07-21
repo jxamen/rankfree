@@ -9,7 +9,7 @@
 @section('canonical', route('keywords.search', array_filter(['type' => $type, 'q' => $q !== '' ? $q : null])))
 
 @section('title', ($q !== '' ? "‘{$q}’ 검색 결과" : '키워드 검색').' · 키워드 인사이트 · 랭크프리')
-@section('description', ($q !== '' ? "‘{$q}’" : '키워드').' 네이버 검색량·경쟁·트렌드 분석 리포트 검색 결과입니다.')
+@section('description', ($q !== '' ? "‘{$q}’" : '키워드').' 검색량·경쟁·트렌드 분석 리포트 검색 결과입니다.')
 
 @section('content')
 <section class="container-page" style="padding-top:48px;padding-bottom:80px;">
@@ -48,11 +48,11 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style="margin-top:24px;">
         @forelse ($docs as $d)
-            <a href="{{ $d->shareUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
+            <a href="{{ $d->publicUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
                 @if ($d->category)
                     <span class="badge border border-hairline" style="font-size:var(--fs-xs);">{{ $d->category->type === 'place' ? '플레이스' : '쇼핑' }}</span>
                 @endif
-                <div class="text-ink font-semibold" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.45;">{{ $d->keyword }} 키워드 분석</div>
+                <div class="text-ink font-semibold" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.45;">{{ $d->keyword }} {{ $d->publicLabel() }}</div>
                 <div class="text-muted font-mono" style="margin-top:4px;font-size:var(--fs-xs);">
                     월 {{ number_format((int) $d->monthly_total) }}회{{ $d->comp_idx ? ' · 경쟁 '.$d->comp_idx : '' }}{{ $d->grade ? ' · '.$d->grade.'등급' : '' }}
                 </div>
@@ -77,8 +77,8 @@
             <h2 class="font-display text-ink" style="font-size:var(--fs-lg);line-height:1.3;">인기 키워드 리포트</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style="margin-top:12px;">
                 @foreach ($fallbackDocs as $d)
-                    <a href="{{ $d->shareUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
-                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $d->keyword }} 키워드 분석</div>
+                    <a href="{{ $d->publicUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
+                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $d->keyword }} {{ $d->publicLabel() }}</div>
                         <div class="text-muted font-mono" style="margin-top:4px;font-size:var(--fs-xs);">월 {{ number_format((int) $d->monthly_total) }}회</div>
                     </a>
                 @endforeach

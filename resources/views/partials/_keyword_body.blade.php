@@ -80,7 +80,7 @@ window.rfCopyKw = window.rfCopyKw || function (containerId, btn, mode) {
 @if (! empty($autocomplete))
     <div class="card p-5 mb-4">
         <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
-            <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">자동완성 <span class="text-muted-soft" style="font-size:var(--fs-xs);font-weight:400;">네이버 검색 자동완성</span></span>
+            <span class="text-ink font-semibold" style="font-size:var(--fs-xs);">자동완성 <span class="text-muted-soft" style="font-size:var(--fs-xs);font-weight:400;">검색 자동완성</span></span>
             <div class="flex items-center gap-1">
                 <button type="button" class="btn btn-ghost btn-sm" style="height:30px;" onclick="rfCopyKw('kw-autocomplete', this, 'lines')" title="줄바꿈으로 구분해 전체 복사">복사 ↵</button>
                 <button type="button" class="btn btn-ghost btn-sm" style="height:30px;" onclick="rfCopyKw('kw-autocomplete', this, 'comma')" title="쉼표로 구분해 전체 복사">복사 ,</button>
@@ -416,4 +416,4 @@ window.rfCopyKw = window.rfCopyKw || function (containerId, btn, mode) {
     </style>
 @endif
 
-<p class="text-muted-soft mt-4" style="font-size:var(--fs-xs);">* 등급·상업성·포화 지수·예상 검색량은 관측 신호 기반 자체 추정치이며 네이버 공식 값이 아닙니다. 누적 발행량은 openapi 전체 문서 수(월간 발행량 아님).</p>
+<p class="text-muted-soft mt-4" style="font-size:var(--fs-xs);">* 등급·상업성·포화 지수·예상 검색량은 관측 신호 기반 자체 추정치입니다. 누적 발행량은 openapi 전체 문서 수(월간 발행량 아님).</p>

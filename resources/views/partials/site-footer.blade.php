@@ -18,7 +18,7 @@
                     <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-canvas text-ink font-display" style="font-size:var(--fs-sm);">R</span>
                     <span class="font-display text-on-dark" style="font-size:var(--fs-lg);">랭크프리</span>
                 </div>
-                <p style="font-size:var(--fs-xs);line-height:1.6;max-width:280px;">네이버 플레이스·쇼핑·키워드·블로그 순위와 경쟁사를 무료로 분석하고, 필요한 마케팅까지 한 곳에서.</p>
+                <p style="font-size:var(--fs-xs);line-height:1.6;max-width:280px;">플레이스·쇼핑·키워드·블로그 순위와 경쟁사를 무료로 분석하고, 필요한 마케팅까지 한 곳에서.</p>
             </div>
 
             {{-- 플레이스 --}}
@@ -78,7 +78,7 @@
                 </div>
                 {{-- SNS (채널 개설 시 href 교체) --}}
                 <div class="flex items-center gap-2 shrink-0">
-                    <a href="#" target="_blank" rel="noopener" aria-label="네이버 블로그" title="네이버 블로그"
+                    <a href="#" target="_blank" rel="noopener" aria-label="블로그" title="블로그"
                        class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-on-dark-soft hover:text-on-dark transition">
                         <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z"/></svg>
                     </a>
@@ -98,7 +98,7 @@
             </div>
             <div class="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <span>© {{ date('Y') }} 랭크프리. All rights reserved.</span>
-                <span>네이버 순위·점수는 자체 추정치이며 네이버 공식 지표가 아닙니다.</span>
+                <span>순위·점수는 자체 추정치이며 공식 지표가 아닙니다.</span>
             </div>
         </div>
     </div>

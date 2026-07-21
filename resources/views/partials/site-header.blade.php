@@ -31,7 +31,7 @@
                         <div>
                             <div class="text-accent font-semibold" style="font-size:var(--fs-lg);">분석 도구</div>
                             <p class="mt-3 text-muted" style="font-size:var(--fs-sm);line-height:1.6;">
-                                플레이스·쇼핑·키워드·블로그까지, 네이버 마케팅 데이터를 한곳에서. 대부분 무료로 시작합니다.
+                                플레이스·쇼핑·키워드·블로그까지, 마케팅 데이터를 한곳에서. 대부분 무료로 시작합니다.
                             </p>
                             <a href="{{ route('register') }}" class="btn btn-accent btn-sm mt-5">무료로 시작</a>
                         </div>

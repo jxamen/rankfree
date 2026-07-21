@@ -4,8 +4,8 @@
 @php
     $__isPlace = $type === 'place';
     $__desc = $__isPlace
-        ? 'pcmap 업종별 지역 키워드(맛집·병원·헤어·숙박)의 네이버 검색량·경쟁·트렌드 분석 리포트 '.number_format($typeDocCount).'건.'
-        : '네이버 데이터랩 분야별 인기 검색어의 검색량·경쟁·트렌드 분석 리포트 '.number_format($typeDocCount).'건.';
+        ? 'pcmap 업종별 지역 키워드(맛집·병원·헤어·숙박)의 검색량·경쟁·트렌드 분석 리포트 '.number_format($typeDocCount).'건.'
+        : '데이터랩 분야별 인기 검색어의 검색량·경쟁·트렌드 분석 리포트 '.number_format($typeDocCount).'건.';
     $__f = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 @endphp
 
@@ -132,7 +132,7 @@
                             @forelse ($docs as $d)
                                 <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                                     <td style="padding:11px 8px;">
-                                        <a href="{{ $d->shareUrl() }}" class="text-ink font-semibold" style="text-decoration:none;">{{ $d->keyword }}</a>
+                                        <a href="{{ $d->publicUrl() }}" class="text-ink font-semibold" style="text-decoration:none;">{{ $d->keyword }}</a>
                                     </td>
                                     <td class="text-muted" style="padding:11px 8px;font-size:var(--fs-xs);">{{ $d->region ?: '—' }}</td>
                                     <td style="padding:11px 8px;text-align:right;" class="font-mono text-body">{{ number_format((int) $d->monthly_total) }}</td>
@@ -192,8 +192,8 @@
             <h2 class="font-display text-ink" style="font-size:var(--fs-lg);line-height:1.3;">{{ $typeLabel }} 인기 리포트</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style="margin-top:12px;">
                 @foreach ($topDocs as $d)
-                    <a href="{{ $d->shareUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
-                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $d->keyword }} 키워드 분석</div>
+                    <a href="{{ $d->publicUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
+                        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $d->keyword }} {{ $d->publicLabel() }}</div>
                         <div class="text-muted font-mono" style="margin-top:4px;font-size:var(--fs-xs);">월 {{ number_format((int) $d->monthly_total) }}회{{ $d->comp_idx ? ' · 경쟁 '.$d->comp_idx : '' }}</div>
                     </a>
                 @endforeach

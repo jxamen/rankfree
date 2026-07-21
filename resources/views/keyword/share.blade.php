@@ -7,7 +7,7 @@
     $__total = $vm['total'] ?? null;
     $__grade = $vm['grade'] ?? null;
     $__volTxt = $__total !== null ? '월 '.number_format($__total).'회' : '집계중';
-    $__summary = "‘{$__kw}’ 네이버 키워드 검색량 {$__volTxt}"
+    $__summary = "‘{$__kw}’ 키워드 검색량 {$__volTxt}"
         .($__grade ? " · 경쟁강도 {$__grade}" : '')
         .' — 성별·연령·검색 트렌드·콘텐츠 포화도까지 무료 분석 리포트.';
 
@@ -62,7 +62,7 @@
     <div class="flex items-center gap-3 flex-wrap">
         <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $__kw }} 키워드 분석</h1>
         <a href="https://search.naver.com/search.naver?query={{ urlencode($__kw) }}" target="_blank" rel="noopener"
-           class="btn btn-secondary btn-sm inline-flex items-center gap-1" title="「{{ $__kw }}」 네이버 통합검색 (새 창)">
+           class="btn btn-secondary btn-sm inline-flex items-center gap-1" title="「{{ $__kw }}」 통합검색 (새 창)">
             <span style="color:#03c75a;font-weight:800;font-size:var(--fs-xs);">N</span> 통합검색
         </a>
     </div>
@@ -73,7 +73,7 @@
         <div class="text-muted-soft" style="font-size:var(--fs-xs);font-weight:600;">요약 답변</div>
         <p class="text-ink" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.75;">{{ $__aeo['summary'] }}</p>
         <p class="text-muted-soft" style="margin-top:10px;font-size:var(--fs-xs);line-height:1.6;">
-            출처: 네이버 검색광고·데이터랩 데이터 기반 랭크프리 자체 집계{{ $__date ? ' · '.$__date->format('Y년 n월 j일').' 기준' : '' }} · 등급·상업성 등 파생 지표는 자체 추정치입니다.
+            출처: 검색광고·데이터랩 데이터 기반 랭크프리 자체 집계{{ $__date ? ' · '.$__date->format('Y년 n월 j일').' 기준' : '' }} · 등급·상업성 등 파생 지표는 자체 추정치입니다.
         </p>
     </div>
 

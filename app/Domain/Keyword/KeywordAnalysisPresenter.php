@@ -317,11 +317,11 @@ class KeywordAnalysisPresenter
         $hasVolume = ! empty($vm['has_volume']) && $total > 0;
         $comp = isset($vm['comp_idx']) ? (string) $vm['comp_idx'] : null;
         $grade = isset($vm['grade']) ? (string) $vm['grade'] : null;
-        $volLine = '네이버 기준 월 약 '.number_format($total).'회입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).';
+        $volLine = '월 약 '.number_format($total).'회입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).';
 
         // 요약 — ① 검색량 ② 경쟁·등급 ③ 타겟·시즌(insights 요약 문장 재사용)
         $s1 = $hasVolume
-            ? "'{$kw}'는 네이버에서 월 약 ".number_format($total).'회 검색되는 키워드입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).'
+            ? "'{$kw}'는 월 약 ".number_format($total).'회 검색되는 키워드입니다(PC '.number_format((int) ($vm['pc'] ?? 0)).' · 모바일 '.number_format((int) ($vm['mobile'] ?? 0)).'회).'
             : "'{$kw}' 키워드의 검색량 데이터를 집계 중입니다.";
         $p = [];
         if ($comp !== null && $comp !== '') {
@@ -348,7 +348,7 @@ class KeywordAnalysisPresenter
                 'q' => "'{$kw}'는 언제 가장 많이 검색되나요?",
                 'a' => "최근 12개월 기준 검색이 가장 많은 달은 {$peak}"
                     .($low !== '' ? ", 가장 적은 달은 {$low}입니다" : '입니다')
-                    .' (네이버 월별 검색 추이 기반 자체 집계).',
+                    .' (월별 검색 추이 기반 자체 집계).',
             ];
         }
 
@@ -366,8 +366,8 @@ class KeywordAnalysisPresenter
         if (($comp !== null && $comp !== '') || $grade) {
             $faq[] = [
                 'q' => "'{$kw}' 경쟁강도는 어느 정도인가요?",
-                'a' => trim(($comp !== null && $comp !== '' ? "네이버 검색광고 경쟁강도는 '{$comp}'입니다. " : '')
-                    .($grade ? "월간 검색량 등급은 {$grade}입니다(검색량 기반 자체 추정, 네이버 공식 등급 아님)." : '')),
+                'a' => trim(($comp !== null && $comp !== '' ? "검색광고 경쟁강도는 '{$comp}'입니다. " : '')
+                    .($grade ? "월간 검색량 등급은 {$grade}입니다(검색량 기반 자체 추정 등급)." : '')),
             ];
         }
 

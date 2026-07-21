@@ -52,7 +52,8 @@ class KeywordInsightController extends Controller
             ->withCount(['searches as docs_count' => fn ($q) => $q->where('origin', 'hub')])
             ->orderBy('sort')->orderBy('id')->get();
         $ids = $cats->pluck('id');
-        $docs = fn () => KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids);
+        // category eager load — publicUrl() 이 타입을 보고 쇼핑이면 시장분석(/market)으로 연결한다
+        $docs = fn () => KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids)->with('category:id,type,name');
 
         $data = [
             'type' => $type,
@@ -72,7 +73,7 @@ class KeywordInsightController extends Controller
         $catSlug = trim((string) $request->query('cat', ''));
         $activeCat = $catSlug !== '' ? $cats->firstWhere('slug', $catSlug) : null;
         $scoped = fn () => KeywordSearch::where('origin', 'hub')
-            ->whereIn('category_id', $activeCat ? [$activeCat->id] : $ids);
+            ->whereIn('category_id', $activeCat ? [$activeCat->id] : $ids)->with('category:id,type,name');
 
         // 업종 필터가 걸린 상태의 지역 분포 → 3단계로 접는다
         $grouped = $tree->group(
@@ -143,6 +144,7 @@ class KeywordInsightController extends Controller
             'fallbackDocs' => $docs->total() === 0
                 ? KeywordSearch::where('origin', 'hub')
                     ->when($type, fn ($x) => $x->whereHas('category', fn ($c) => $c->where('type', $type)))
+                    ->with('category:id,type,name')
                     ->orderByDesc('monthly_total')->limit(6)->get()
                 : collect(),
         ]);
@@ -161,8 +163,8 @@ class KeywordInsightController extends Controller
         $ids = collect([$cat->id])->merge($childIds)
             ->merge(KeywordCategory::whereIn('parent_id', $childIds)->where('is_active', true)->pluck('id'))
             ->unique()->values();
-        // 지역·검색 필터가 걸린 문서 쿼리(집계·목록 공통)
-        $docs = fn () => KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids)
+        // 지역·검색 필터가 걸린 문서 쿼리(집계·목록 공통) — category 는 publicUrl() 분기용
+        $docs = fn () => KeywordSearch::where('origin', 'hub')->whereIn('category_id', $ids)->with('category:id,type,name')
             ->when($region !== '', fn ($x) => $x->where('region', $region))
             ->when($q !== '', fn ($x) => $x->where('keyword', 'like', '%'.addcslashes($q, '\\%_').'%'));
 

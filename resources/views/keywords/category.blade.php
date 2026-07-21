@@ -2,7 +2,7 @@
 @section('follow-theme', '1')
 
 @php
-    $__desc = "'{$cat->name}' 카테고리 네이버 키워드 분석 리포트 ".number_format($docTotal).'건 — 검색량·경쟁강도·성별연령·트렌드를 무료로 확인하세요.'
+    $__desc = "'{$cat->name}' 카테고리 키워드 분석 리포트 ".number_format($docTotal).'건 — 검색량·경쟁강도·성별연령·트렌드를 무료로 확인하세요.'
         .($cat->description ? ' '.$cat->description : '');
     $__f = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
     $__crumbs = [
@@ -40,7 +40,7 @@
         '@type' => 'ItemList',
         'numberOfItems' => $docTotal,
         'itemListElement' => $docs->take(20)->values()->map(fn ($d, $i) => [
-            '@type' => 'ListItem', 'position' => $i + 1, 'name' => $d->keyword.' 키워드 분석', 'url' => $d->shareUrl(),
+            '@type' => 'ListItem', 'position' => $i + 1, 'name' => $d->keyword.' '.$d->publicLabel(), 'url' => $d->publicUrl(),
         ])->all(),
     ],
 ], $__f) !!}</script>
@@ -68,7 +68,7 @@
         {{ $region !== '' ? $region.' ' : '' }}{{ $cat->name }} 키워드 인사이트
     </h1>
     <p class="text-muted" style="margin-top:6px;font-size:var(--fs-sm);line-height:1.6;">
-        {{ $cat->description ?: '네이버 검색량·경쟁강도·성별·연령·트렌드를 담은 무료 분석 리포트입니다.' }}
+        {{ $cat->description ?: '검색량·경쟁강도·성별·연령·트렌드를 담은 무료 분석 리포트입니다.' }}
     </p>
 
     {{-- 하위/형제 카테고리 --}}
@@ -108,8 +108,8 @@
     {{-- 키워드 문서 목록 (검색량순) --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style="margin-top:28px;">
         @forelse ($docs as $d)
-            <a href="{{ $d->shareUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);line-height:1.45;">{{ $d->keyword }} 키워드 분석</div>
+            <a href="{{ $d->publicUrl() }}" class="card p-4" style="display:block;text-decoration:none;">
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);line-height:1.45;">{{ $d->keyword }} {{ $d->publicLabel() }}</div>
                 <div class="text-muted font-mono" style="margin-top:4px;font-size:var(--fs-xs);">
                     월 {{ number_format((int) $d->monthly_total) }}회{{ $d->comp_idx ? ' · 경쟁 '.$d->comp_idx : '' }}{{ $d->grade ? ' · '.$d->grade.'등급' : '' }}
                 </div>

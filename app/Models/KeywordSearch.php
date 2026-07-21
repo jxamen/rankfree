@@ -76,4 +76,35 @@ class KeywordSearch extends Model
 
         return $this->share_token;
     }
+
+    /**
+     * 허브 목록에서 여는 공개 문서 URL — 쇼핑 키워드는 같은 키워드의 **시장분석(/market)** 을 우선 연다
+     * (없으면 키워드 문서 폴백). 조회는 6h 캐시 — 백필 커맨드가 발행 시 키를 지워 즉시 반영된다.
+     */
+    public function publicUrl(): string
+    {
+        if ($this->category?->type === 'shopping') {
+            $slug = \Illuminate\Support\Facades\Cache::remember(
+                self::marketSlugCacheKey($this->keyword),
+                now()->addHours(6),
+                fn () => (string) MarketAnalysis::where('keyword', $this->keyword)->orderByDesc('id')->value('slug'),
+            );
+            if ($slug !== '') {
+                return route('market.shared', $slug);
+            }
+        }
+
+        return $this->shareUrl();
+    }
+
+    public static function marketSlugCacheKey(string $keyword): string
+    {
+        return 'hub:market-slug:'.md5($keyword);
+    }
+
+    /** 허브 목록 카드 라벨 — publicUrl() 이 시장분석으로 연결되면 '시장 분석'. */
+    public function publicLabel(): string
+    {
+        return str_contains($this->publicUrl(), '/market/') ? '시장 분석' : '키워드 분석';
+    }
 }
