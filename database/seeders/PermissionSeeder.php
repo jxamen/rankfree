@@ -41,6 +41,7 @@ class PermissionSeeder extends Seeder
             ['name' => '순위 추적', 'route' => 'console.rank', 'icon' => '📈'],
             ['name' => '쇼핑 순위추적', 'route' => 'console.shop-rank', 'icon' => '🛒'],
             ['name' => '경쟁 분석', 'route' => 'console.compete', 'icon' => '📊'],
+            ['name' => '플레이스 개별 분석', 'route' => 'console.place-store', 'icon' => 'fa-solid fa-chart-line'],
             ['name' => '스마트플레이스', 'route' => 'console.smartplace', 'icon' => '🏪'],
             ['name' => '키워드 분석', 'route' => 'console.keyword', 'icon' => '🔍'],
             ['name' => '키워드 추천', 'route' => 'console.keyword-recommend', 'icon' => '💡'],

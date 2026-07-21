@@ -125,6 +125,15 @@ class PlaceSeoAnalyzer
             return null;
         }
         $items = $serp['items'];
+        $topCompetitors = array_slice($items, 0, 10);
+        $avg = function (array $rows, string $key): ?float {
+            $vals = array_values(array_filter(array_map(fn ($i) => $i[$key] ?? null, $rows), fn ($v) => $v !== null));
+            if (! count($vals)) {
+                return null;
+            }
+
+            return round(array_sum($vals) / count($vals), 1);
+        };
 
         $visArr = array_map(fn ($i) => $i['visitor_cnt'], $items);
         $blogArr = array_map(fn ($i) => $i['blog_cnt'], $items);
@@ -170,6 +179,22 @@ class PlaceSeoAnalyzer
             'rnk' => $target['rnk'], 'name' => $name,
             'visitor_cnt' => $target['visitor_cnt'], 'blog_cnt' => $target['blog_cnt'], 'save_cnt' => $target['save_cnt'],
             'category' => (string) ($detail['category'] ?? ''),
+            'benchmark' => [
+                'total' => (int) ($serp['total'] ?? 0),
+                'top_count' => count($topCompetitors),
+                'visitor_avg' => $avg($topCompetitors, 'visitor_cnt'),
+                'blog_avg' => $avg($topCompetitors, 'blog_cnt'),
+                'save_avg' => $avg($topCompetitors, 'save_cnt'),
+                'review_score_avg' => $avg($topCompetitors, 'review_score'),
+            ],
+            'competitors' => array_map(fn ($it) => [
+                'rnk' => $it['rnk'] ?? null,
+                'place_id' => $it['place_id'] ?? null,
+                'name' => $it['name'] ?? '',
+                'visitor_cnt' => $it['visitor_cnt'] ?? null,
+                'blog_cnt' => $it['blog_cnt'] ?? null,
+                'save_cnt' => $it['save_cnt'] ?? null,
+            ], $topCompetitors),
             'rep_keywords' => is_array($tags) ? array_values($tags) : [],
             'kc' => $kc,
             'seo' => $seo,

@@ -33,6 +33,7 @@ use App\Http\Controllers\KeywordInsightController;
 use App\Http\Controllers\MarketAnalysisController;
 use App\Http\Controllers\MarketingLeadController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PlaceStoreAnalysisController;
 use App\Http\Controllers\ProductAnalysisController;
 use App\Http\Controllers\RankCheckController;
 use App\Http\Controllers\RankTrackController;
@@ -278,6 +279,11 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/compete/{slot}/explain/{place}', [CompeteController::class, 'explain'])->name('compete.explain');
     Route::get('/compete/{slot}/history/{place}', [CompeteController::class, 'history'])->name('compete.history');
     Route::post('/compete/{slot}/analyze', [CompeteController::class, 'analyze'])->name('compete.analyze');
+
+    Route::get('/place-store', [PlaceStoreAnalysisController::class, 'index'])->name('place-store');
+    Route::post('/place-store', [PlaceStoreAnalysisController::class, 'store'])->name('place-store.store');
+    Route::get('/place-store/{analysis}', [PlaceStoreAnalysisController::class, 'show'])->name('place-store.show');
+    Route::delete('/place-store/{analysis}', [PlaceStoreAnalysisController::class, 'destroy'])->name('place-store.destroy');
 
     // 셀러력 — 쇼핑 상품 SEO·지수 경쟁 비교 (확장 수집분)
     Route::get('/seller-power', [SellerPowerController::class, 'index'])->name('seller-power');

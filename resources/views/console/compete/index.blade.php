@@ -3,6 +3,10 @@
 
 @section('console-content')
 <div>
+    <div class="flex items-center gap-2 mb-4">
+        <a href="{{ route('console.compete') }}" class="btn btn-primary btn-sm">경쟁 분석</a>
+        <a href="{{ route('console.place-store') }}" class="btn btn-secondary btn-sm">개별 분석</a>
+    </div>
     <x-console.page-head title="경쟁 분석" desc="순위추적 중인 <b>키워드 × 플레이스</b>의 SEO 경쟁력 분석 · 같은 키워드 상위 경쟁사와 비교해 <b>N1 유사도·N2 관련성·N3 랭킹</b> 점수를 산출합니다" />
 
     @if ($errors->any())
