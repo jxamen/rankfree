@@ -537,6 +537,104 @@ class ShopKeywordExposureTest extends TestCase
             ->assertSee('1,234');
     }
 
+    public function test_called_short_links_are_not_deleted_by_regenerate(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create([
+            'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
+            'product_url' => 'https://smartstore.naver.com/x/products/111', 'status' => 'done',
+        ]);
+        ShopKeywordAnalysisItem::create([
+            'analysis_id' => $a->id,
+            'kind' => 'combo',
+            'source' => 'combo',
+            'keyword' => '비타민c 고함량',
+            'rank' => 1,
+            'checked_at' => now(),
+        ]);
+        ShopKeywordShortLink::create([
+            'analysis_id' => $a->id,
+            'token' => 'called00001',
+            'group_no' => 1,
+            'group_count' => 1,
+            'keywords' => ['기존 키워드'],
+            'hit_count' => 1,
+        ]);
+
+        $this->actingAs($u)
+            ->from(route('admin.shop-keyword.show', $a))
+            ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 1])
+            ->assertRedirect(route('admin.shop-keyword.show', $a))
+            ->assertSessionHasErrors('short_links');
+
+        $this->assertSame(1, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
+        $this->assertDatabaseHas('shop_keyword_short_links', [
+            'analysis_id' => $a->id,
+            'token' => 'called00001',
+            'hit_count' => 1,
+        ]);
+    }
+
+    public function test_short_link_reassign_preserves_urls_and_call_counts(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create([
+            'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
+            'product_url' => 'https://smartstore.naver.com/x/products/111', 'status' => 'done',
+        ]);
+        foreach ([
+            ['비타민c 고함량', 1],
+            ['비타민c 리포좀', 2],
+            ['비타민c 1000', 3],
+        ] as [$kw, $rank]) {
+            ShopKeywordAnalysisItem::create([
+                'analysis_id' => $a->id,
+                'kind' => 'combo',
+                'source' => 'combo',
+                'keyword' => $kw,
+                'rank' => $rank,
+                'checked_at' => now()->addSeconds($rank),
+            ]);
+        }
+        ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'together', 'keyword' => '비타민c 효능']);
+        ShopKeywordShortLink::create([
+            'analysis_id' => $a->id,
+            'token' => 'called00001',
+            'group_no' => 1,
+            'group_count' => 2,
+            'keywords' => ['기존 1'],
+            'reference_keywords' => ['기존 참고'],
+            'cursor' => 5,
+            'hit_count' => 12,
+        ]);
+        ShopKeywordShortLink::create([
+            'analysis_id' => $a->id,
+            'token' => 'called00002',
+            'group_no' => 2,
+            'group_count' => 2,
+            'keywords' => ['기존 2'],
+            'cursor' => 3,
+            'hit_count' => 0,
+        ]);
+
+        $this->actingAs($u)
+            ->post(route('admin.shop-keyword.short-links.reassign', $a))
+            ->assertRedirect(route('admin.shop-keyword.show', $a));
+
+        $links = ShopKeywordShortLink::where('analysis_id', $a->id)->orderBy('group_no')->get();
+        $this->assertCount(2, $links);
+        $this->assertSame('called00001', $links[0]->token);
+        $this->assertSame('called00002', $links[1]->token);
+        $this->assertSame(12, $links[0]->hit_count);
+        $this->assertSame(0, $links[1]->hit_count);
+        $this->assertSame(0, $links[0]->cursor);
+        $this->assertSame(0, $links[1]->cursor);
+        $this->assertSame(['비타민c 고함량', '비타민c 1000'], $links[0]->keywords);
+        $this->assertSame(['비타민c 리포좀'], $links[1]->keywords);
+        $this->assertSame(['비타민c 효능'], $links[0]->reference_keywords);
+        $this->assertSame(['비타민c 효능'], $links[1]->reference_keywords);
+    }
+
     public function test_short_link_count_cannot_exceed_exposed_keyword_count(): void
     {
         $u = User::factory()->create(['role' => 'operator']);

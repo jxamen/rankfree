@@ -344,6 +344,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/shop-keyword/{analysis}/regenerate', [ShopKeywordExposureController::class, 'regenerate'])->middleware('throttle:30,1')->name('shop-keyword.regenerate');
     Route::post('/shop-keyword/{analysis}/recheck-exposed', [ShopKeywordExposureController::class, 'recheckExposed'])->middleware('throttle:30,1')->name('shop-keyword.recheck-exposed');
     Route::post('/shop-keyword/{analysis}/short-links', [ShopKeywordExposureController::class, 'storeShortLinks'])->name('shop-keyword.short-links.store');
+    Route::post('/shop-keyword/{analysis}/short-links/reassign', [ShopKeywordExposureController::class, 'reassignShortLinks'])->name('shop-keyword.short-links.reassign');
     Route::delete('/shop-keyword/{analysis}/item/{item}', [ShopKeywordExposureController::class, 'deleteItem'])->name('shop-keyword.item');
     Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
 

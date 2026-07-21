@@ -99,13 +99,23 @@
     $exposed = $combos->filter(fn ($c) => $c->rank !== null && $c->rank >= 1 && $c->rank <= $th)
         ->sortBy(fn ($c) => [($c->checked_at?->getTimestamp() ?? 0), $c->id])->values();
     $adKeywords = $combos->filter(fn ($c) => $c->ad_exposed)->values();
+    $shortLinks = $shortLinks ?? collect();
+    $shortLinksLocked = $shortLinks->contains(fn ($link) => (int) $link->hit_count > 0);
 @endphp
 
 {{-- 노출 키워드(핵심 결과) --}}
 <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1">
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">상위 {{ $th }}위 노출 키워드</div>
-        <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $exposed->isEmpty() ? 'hidden' : '' }}" data-copy="exposed">전체 복사</button>
+        <div class="flex items-center gap-2">
+            @if ($shortLinks->isNotEmpty())
+                <form method="POST" action="{{ route('admin.shop-keyword.short-links.reassign', $analysis) }}">
+                    @csrf
+                    <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>Short URL 재배정</button>
+                </form>
+            @endif
+            <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $exposed->isEmpty() ? 'hidden' : '' }}" data-copy="exposed">전체 복사</button>
+        </div>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">이 검색어들에서 내 상품이 강합니다 — 순위 확인 중 발견되면 실시간으로 추가됩니다.</div>
     {{-- padding-right: 스크롤바가 행 우측 ✕ 버튼을 덮지 않게 --}}
@@ -147,7 +157,7 @@
         <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
             @csrf
             <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
-            <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>{{ ($shortLinks ?? collect())->isEmpty() ? '생성' : '다시 생성' }}</button>
+            <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty() || $shortLinksLocked)>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
         </form>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
@@ -156,8 +166,14 @@
     @error('group_count')
         <div class="text-error mb-3" style="font-size:var(--fs-xs);">{{ $message }}</div>
     @enderror
+    @error('short_links')
+        <div class="text-error mb-3" style="font-size:var(--fs-xs);">{{ $message }}</div>
+    @enderror
+    @if ($shortLinksLocked)
+        <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">호출된 Short URL은 다시 생성하지 않고, 기존 URL을 유지한 채 재배정합니다.</div>
+    @endif
 
-    @if (($shortLinks ?? collect())->isNotEmpty())
+    @if ($shortLinks->isNotEmpty())
         <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;">
                 <thead><tr style="border-bottom:1px solid var(--color-hairline);">
@@ -165,7 +181,7 @@
                     <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">Short URL</th>
                     <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:92px;">키워드</th>
                     <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:92px;">호출</th>
-                    <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">배정 키워드</th>
+                    <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;padding-left:20px;">배정 키워드</th>
                 </tr></thead>
                 <tbody>
                 @foreach ($shortLinks as $link)
@@ -183,7 +199,7 @@
                         </td>
                         <td class="py-2 text-right text-muted font-mono" style="font-size:var(--fs-sm);">{{ number_format($assigned->count()) }}</td>
                         <td class="py-2 text-right text-muted font-mono" style="font-size:var(--fs-sm);">{{ number_format($link->hit_count) }}</td>
-                        <td class="py-2" style="font-size:var(--fs-xs);min-width:260px;">
+                        <td class="py-2" style="font-size:var(--fs-xs);min-width:260px;padding-left:20px;">
                             <div class="flex flex-wrap gap-1">
                                 @foreach ($assigned->take(8) as $kw)
                                     <span class="badge" style="font-size:var(--fs-xs);">{{ $kw }}</span>

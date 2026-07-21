@@ -233,16 +233,16 @@ class ShopKeywordExposureController extends Controller
         if ($groupCount > count($keywords)) {
             return back()->withErrors(['group_count' => 'Short URL 개수는 상위 노출 키워드 수보다 많을 수 없습니다.']);
         }
+        if ($analysis->shortLinks()->where('hit_count', '>', 0)->exists()) {
+            return back()->withErrors(['short_links' => '이미 호출된 Short URL이 있어 다시 생성할 수 없습니다.']);
+        }
 
         $references = $this->referenceKeywords($analysis);
         $domains = $this->secondaryDomains();
-        DB::transaction(function () use ($analysis, $keywords, $references, $groupCount, $domains): void {
-            $analysis->shortLinks()->delete();
+        $groups = $this->shortLinkKeywordGroups($keywords, $groupCount);
 
-            $groups = array_fill(0, $groupCount, []);
-            foreach ($keywords as $idx => $keyword) {
-                $groups[$idx % $groupCount][] = $keyword;
-            }
+        DB::transaction(function () use ($analysis, $references, $groupCount, $domains, $groups): void {
+            $analysis->shortLinks()->delete();
 
             for ($groupNo = 1; $groupNo <= $groupCount; $groupNo++) {
                 ShopKeywordShortLink::create([
@@ -258,6 +258,42 @@ class ShopKeywordExposureController extends Controller
         });
 
         return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
+    }
+
+    public function reassignShortLinks(Request $request, ShopKeywordAnalysis $analysis): RedirectResponse
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+
+        $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->get();
+        if ($links->isEmpty()) {
+            return back()->withErrors(['short_links' => '재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.']);
+        }
+
+        $keywords = $this->exposedKeywords($analysis);
+        $groupCount = $links->count();
+        if ($keywords === []) {
+            return back()->withErrors(['short_links' => '상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.']);
+        }
+        if ($groupCount > count($keywords)) {
+            return back()->withErrors(['short_links' => 'Short URL 수가 상위 노출 키워드 수보다 많아 재배정할 수 없습니다.']);
+        }
+
+        $references = $this->referenceKeywords($analysis);
+        $groups = $this->shortLinkKeywordGroups($keywords, $groupCount);
+
+        DB::transaction(function () use ($links, $references, $groupCount, $groups): void {
+            foreach ($links->values() as $idx => $link) {
+                $link->update([
+                    'group_no' => $idx + 1,
+                    'group_count' => $groupCount,
+                    'keywords' => $groups[$idx],
+                    'reference_keywords' => $references,
+                    'cursor' => 0,
+                ]);
+            }
+        });
+
+        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개에 키워드를 재배정했습니다.");
     }
 
     public function short(string $token): RedirectResponse
@@ -404,6 +440,16 @@ class ShopKeywordExposureController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function shortLinkKeywordGroups(array $keywords, int $groupCount): array
+    {
+        $groups = array_fill(0, $groupCount, []);
+        foreach ($keywords as $idx => $keyword) {
+            $groups[$idx % $groupCount][] = $keyword;
+        }
+
+        return $groups;
     }
 
     private function referenceKeywords(ShopKeywordAnalysis $analysis): array
