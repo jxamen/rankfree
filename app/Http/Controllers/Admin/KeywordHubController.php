@@ -31,11 +31,13 @@ class KeywordHubController extends Controller
     {
         // 후보 카운팅은 120만 행 집계(유형×상태 조인 실측 ~7초)라 60초 캐시 — 페이지 로딩이 이것 때문에
         // 수 초씩 걸렸다. 진행 실시간 표시는 가벼운 autoStatus 폴링이 담당하므로 대시보드 집계는 1분 지연 허용.
+        // ⚠️ database 캐시는 객체(Collection)가 왕복에서 __PHP_Incomplete_Class 로 깨진다(실측 500) — 순수 배열만 저장.
         $agg = Cache::remember('hub:admin-agg', 60, fn () => [
-            'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
+            'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all(),
             'candidateTypeCounts' => $this->candidateTypeCounts(),
             'publishedCounts' => $this->publishedCounts(),
-            'categoryBreakdown' => $this->publishedCategoryBreakdown(),
+            'categoryBreakdown' => collect($this->publishedCategoryBreakdown())
+                ->map(fn ($rows) => collect($rows)->values()->all())->all(),
             'collectTargets' => $this->collectTargetSummary(),
         ]);
 
