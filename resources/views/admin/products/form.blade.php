@@ -95,10 +95,20 @@
                 <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">기본 이행률(%)</label>
                 <input type="number" step="any" name="default_fulfillment" value="{{ old('default_fulfillment', $product->default_fulfillment ?? 100) }}" class="input mt-1 text-right" style="width:100%;">
             </div>
+            <div>
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">고정 수량 <span class="text-muted-soft">(패키지 판매)</span></label>
+                <input type="number" min="1" name="fixed_quantity" value="{{ old('fixed_quantity', $product->fixed_quantity) }}" placeholder="비우면 직접 입력" class="input mt-1 text-right" style="width:100%;">
+            </div>
+            <div>
+                <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">고정 기간(일) <span class="text-muted-soft">(일수량×기간만)</span></label>
+                <input type="number" min="1" name="fixed_days" value="{{ old('fixed_days', $product->fixed_days) }}" placeholder="비우면 직접 입력" class="input mt-1 text-right" style="width:100%;">
+            </div>
         </div>
         <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
             과금 방식 · <b class="text-muted">일수량 × 기간(리워드)</b>: 금액 = 단가 × 일수량 × 진행일수 (예: 일 100회 × 14일 = 1,400회).
             <b class="text-muted">전체 수량(체험단)</b>: 금액 = 단가 × 수량 (예: 100명 모집 = 100명 비용, 기간과 무관).
+            <br><b class="text-muted">고정 수량·기간</b>을 넣으면 고객이 바꿀 수 없이 그 값 그대로 주문됩니다("이 키워드는 이 상품"식 패키지).
+            기간이 고정되면 고객은 시작일만 고르고 종료일은 자동 계산됩니다.
         </p>
     </div>
 

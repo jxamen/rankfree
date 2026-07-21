@@ -14,6 +14,7 @@
     <meta name="twitter:title" content="{{ $slot->keyword }} — {{ $slot->place_name ?: '플레이스' }} 경쟁 분석">
     <meta name="twitter:image" content="{{ asset('og-image.png') }}">
     <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-96.png') }}" sizes="96x96" type="image/png">
     <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32" type="image/png">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     {{-- 공유 리포트 — 사용자의 콘솔 테마 선택(localStorage)을 따라 다크/라이트 렌더 --}}

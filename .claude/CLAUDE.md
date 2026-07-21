@@ -86,6 +86,8 @@
 | [22_KEYWORD_CONTENT_HUB.md](./22_KEYWORD_CONTENT_HUB.md) | 키워드 콘텐츠 허브 — 카테고리→키워드 수집(시드·지역조합·데이터랩·GSC)·승인·발행→허브 페이지(/keywords)·AEO 문서·AI 인사이트·상호 추천(Phase 0~3 + 대량 시드 구현) |
 | [23_GA4_INSIGHTS_PACKAGE.md](./23_GA4_INSIGHTS_PACKAGE.md) | GA4 상세 분석 대시보드(/admin/traffic-stats) — 이식형 패키지 jcurve/ga4-insights(유입·랜딩/이탈·기기·이벤트·실시간, 기간대비) |
 | [24_NEW_BUSINESS.md](./24_NEW_BUSINESS.md) | 신규 개업 — 지방행정 인허가 공공데이터 수집 + 네이버 플레이스 등록 여부(관리자 **열람 전용**, 광고 발송 금지) |
-| [25_SHOPPING_KEYWORD_EXPOSURE.md](./25_SHOPPING_KEYWORD_EXPOSURE.md) | 쇼핑 노출 키워드 분석(/console/shop-keyword) — 핵심 키워드+상품 → 키워드 추출·2~5단어 조합 → 쇼핑 상위 N위 노출 판정(비동기 배치 폴링). **유입 조작·회전 리다이렉트는 범위 밖** |
+| [25_SHOPPING_KEYWORD_EXPOSURE.md](./25_SHOPPING_KEYWORD_EXPOSURE.md) | 쇼핑 노출 키워드 분석(/admin/shop-keyword — 운영자 전용, 2026-07-21 콘솔에서 이동) — 핵심 키워드+상품 → 키워드 추출·2~5단어 조합 → 쇼핑 상위 N위 노출 판정(비동기 배치 폴링). **유입 조작·회전 리다이렉트는 범위 밖** |
+| [26_COUPON.md](./26_COUPON.md) | 쿠폰 — 정액/정률 할인, 관리자 발행·전체 발급·마이페이지 다운로드(콘솔 메뉴 없음), 셀프마케팅 주문 적용·취소 복원. **라우트는 routes/coupon.php 별도 파일** |
+| [27_PRODUCT_PACKAGE.md](./27_PRODUCT_PACKAGE.md) | 마케팅 상품 — 고정 수량·기간 패키지(고객은 그대로 주문, 서버 강제) + 상품 복제(필드·배분 포함, 비활성 시작) |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

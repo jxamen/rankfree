@@ -43,7 +43,7 @@
     'datePublished' => $__iso,
     'dateModified' => $__iso,
     'author' => ['@type' => 'Organization', 'name' => '랭크프리', 'url' => url('/')],
-    'publisher' => ['@type' => 'Organization', 'name' => '랭크프리', 'logo' => ['@type' => 'ImageObject', 'url' => asset('favicon-32.png')]],
+    'publisher' => ['@type' => 'Organization', 'name' => '랭크프리', 'logo' => ['@type' => 'ImageObject', 'url' => asset('icon-512.png')]],
     'image' => asset('og-image.png'),
     'isAccessibleForFree' => true,
 ], fn ($v) => $v !== null && $v !== ''), $__f) !!}</script>

@@ -16,6 +16,14 @@ class ConsoleController extends Controller
     {
         $user = $request->user();
 
+        // 쿠폰(26) — 별도 메뉴 없이 마이페이지에서 확인·다운로드(2026-07-22 운영 요청 "메뉴가 너무 많아")
+        $downloadable = \App\Models\Coupon::where('is_active', true)->where('is_downloadable', true)
+            ->whereDoesntHave('userCoupons', fn ($q) => $q->where('user_id', $user->id))
+            ->latest()->get()
+            ->filter(fn ($c) => $c->inPeriod() && ($c->remainingIssuance() === null || $c->remainingIssuance() > 0))
+            ->values();
+        $myCoupons = $user->userCoupons()->with(['coupon', 'order'])->latest()->get();
+
         return view('console.me', [
             'user' => $user,
             'referralUrl' => route('register').'?ref='.$user->referralCode(),
@@ -23,6 +31,13 @@ class ConsoleController extends Controller
             'bonusSlots' => (int) $user->referral_bonus_slots,
             'bonusPer' => \App\Domain\Member\ReferralService::bonusPer(),
             'bonusMax' => \App\Domain\Member\ReferralService::bonusMax(),
+            'downloadable' => $downloadable,
+            'myCoupons' => $myCoupons,
+            'couponProductTitles' => \App\Models\MarketingProduct::whereIn(
+                'id',
+                $downloadable->concat($myCoupons->pluck('coupon'))->filter()
+                    ->flatMap(fn ($c) => $c->product_ids ?? [])->unique()->values()
+            )->pluck('title', 'id'),
         ]);
     }
 

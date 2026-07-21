@@ -20,6 +20,8 @@
 @if ($__robots !== '')<meta name="robots" content="{{ $__robots }}">@endif
 @if ($__gVerify !== '')<meta name="google-site-verification" content="{{ $__gVerify }}">@endif
 <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+{{-- 96px = 구글 검색결과 파비콘 요건(48px 배수) — https://developers.google.com/search/docs/appearance/favicon-in-search --}}
+<link rel="icon" href="{{ asset('favicon-96.png') }}" sizes="96x96" type="image/png">
 <link rel="icon" href="{{ asset('favicon-32.png') }}" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 <meta property="og:site_name" content="랭크프리">

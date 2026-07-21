@@ -21,12 +21,13 @@ class MarketingOrder extends Model
     protected $fillable = [
         'order_no', 'product_id', 'user_id', 'quantity', 'days', 'field_values',
         'unit_price', 'total_price', 'status', 'orderer_name', 'orderer_contact',
+        'user_coupon_id', 'discount_amount',
     ];
 
     protected $casts = [
         'field_values' => 'array',
         'quantity' => 'integer', 'days' => 'integer',
-        'unit_price' => 'decimal:2', 'total_price' => 'decimal:2',
+        'unit_price' => 'decimal:2', 'total_price' => 'decimal:2', 'discount_amount' => 'decimal:2',
     ];
 
     protected static function booted(): void
@@ -51,5 +52,19 @@ class MarketingOrder extends Model
     public function dispatches(): HasMany
     {
         return $this->hasMany(OrderDispatch::class, 'order_id');
+    }
+
+    /** 사용된 쿠폰 발급분(할인 적용 시). */
+    public function userCoupon(): BelongsTo
+    {
+        return $this->belongsTo(UserCoupon::class, 'user_coupon_id');
+    }
+
+    /** 주문 취소·삭제 시 쿠폰 복원 — 사용 이력을 지워 다시 쓸 수 있게(만료됐으면 만료 상태로 돌아감). */
+    public function restoreCoupon(): void
+    {
+        if ($this->user_coupon_id && $this->userCoupon) {
+            $this->userCoupon->update(['used_at' => null, 'order_id' => null]);
+        }
     }
 }

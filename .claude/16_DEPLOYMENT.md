@@ -21,7 +21,7 @@
 ### 확정 파라미터 / 진행 상태 (2026-07-13)
 - **배포 완료(0~6단계) — rankfree.kr 공개 라이브** 🎉. 외부에서 `HTTP 200 OK`, `X-Powered-By: PHP/8.3.32`(php83-fpm), HTTP/2, Laravel 세션 정상. crm·실사용 도메인 전부 무영향. DNS `rankfree.kr`·`www` → 서버 IP `49.247.13.187`. 프로덕션 캐시(config/route/view) 적용.
 - 서버 IP: `49.247.13.187`. **서버에서 `curl https://rankfree.kr`가 빈 응답인 건 NAT 헤어핀(자기 공인IP 루프백 미지원)일 뿐 정상** — 외부/로컬 `--resolve 127.0.0.1` 테스트는 200. `.env` 변경 시 `php83 artisan config:cache` 재실행 필요.
-- 스케줄러: **jcurve crontab에 `* * * * * cd /www/jcurve/rankfree && php83 artisan schedule:run` 등록·가동 중**(2026-07-15 실행 확인). 스케줄 목록은 routes/console.php — 플레이스 순위 일 2회(11:30·16:30 KST)·쇼핑 매시간·스마트플레이스 03:00·searchadweb 세션 매시간. 큐 워커는 미사용. 확장 기본 서버 = `https://rankfree.kr`(코드 기본값, 로그인 폼에 프리필).
+- 스케줄러: **jcurve crontab에 `* * * * * cd /www/jcurve/rankfree && php83 artisan schedule:run` 등록·가동 중**(2026-07-15 실행 확인). 스케줄 목록은 routes/console.php — 플레이스 순위 일 2회(11:30·16:30 KST)·쇼핑 매시간·스마트플레이스 03:00·searchadweb 세션 매시간. **큐 워커: supervisor(jcurve 유저 레벨)로 가동 중**(2026-07-21 구축 — 9) 참조). 확장 기본 서버 = `https://rankfree.kr`(코드 기본값, 로그인 폼에 프리필).
 
 ### 기능 활성화 — 운영 .env·Playwright·세션 (필수)
 > `.env`는 시크릿이라 git으로 안 옮김. 아래를 운영 `.env`에 채워야 각 기능이 동작. **`.env` 변경 시 반드시 `php83 artisan config:cache`**(config 캐시 상태라 안 하면 반영 안 됨).
@@ -209,20 +209,48 @@ chown -R <사이트유저>:apache /home/.../rankfree/storage /home/.../rankfree/
 chmod -R 775 storage bootstrap/cache
 ```
 
-### 8) HTTPS 인증서 (Let's Encrypt, 수동 Apache)
+### 8) HTTPS 인증서 — 와일드카드(*.rankfree.co.kr) 자동 발급·갱신 (2026-07-21 구축)
+
+> **rankfree.co.kr**(별도 보유 도메인, A→49.247.13.187 기존재)로 서브도메인을 운용(사용자 확정) —
+> self.rankfree.co.kr 등 **서브도메인 생성 시 무작업 자동 적용** + 자동 갱신.
+> **rankfree.kr 본 도메인·GoGetSSL 인증서·기존 vhost 는 일절 무변경**(더 안전).
+> 와일드카드는 DNS-01 검증 필수인데 hosting.kr(현 NS)은 acme 자동화 API 미지원 →
+> **rankfree.co.kr DNS 를 Cloudflare(무료, DNS only=회색 구름 — 트래픽 경로 무변화)로 이전**이 전제.
+
+- **구성**: acme.sh v3.1.5(**jcurve 유저 레벨**, `~/.acme.sh`, 루트 불필요) + Let's Encrypt + `dns_cf`(CF API 토큰).
+  - 발급: `CF_Token=... ~/.acme.sh/acme.sh --issue --dns dns_cf -d rankfree.co.kr -d '*.rankfree.co.kr' --keylength 2048`
+  - 설치: `--install-cert -d rankfree.co.kr --fullchain-file /www/jcurve/ssl/rankfree.co.kr/fullchain.pem --key-file /www/jcurve/ssl/rankfree.co.kr/rankfree.co.kr.key --reloadcmd "sudo /usr/local/apache/bin/httpd -k graceful"`
+  - 자동 갱신: acme.sh 크론(jcurve, 일 4회) → 만료 30일 전 재발급 → install-cert 경로 갱신 → graceful.
+    sudoers 드롭인(`/etc/sudoers.d/rankfree-ssl`)이 jcurve 에게 `httpd -t`·`httpd -k graceful` 만 NOPASSWD 허용.
+  - 키 권한: 인증서는 jcurve 소유(600 가능) — Apache 마스터는 root 로 conf 파싱 시 읽으므로 문제없음.
+- **DNS(Cloudflare)**: `A rankfree.co.kr`·`A www`·**`A *`** → 49.247.13.187 (전부 **DNS only 회색** — 프록시 끔).
+- **vhost(신규 추가만)**: :80 `rankfree.co.kr`+`*.rankfree.co.kr` → `https://%{HTTP_HOST}%{REQUEST_URI}` 리다이렉트(호스트 유지),
+  :443 `ServerName rankfree.co.kr` + `ServerAlias *.rankfree.co.kr` — 같은 Laravel(public)·php83-fpm·LE 와일드카드 인증서.
+  신규 서브도메인은 DNS `*`·vhost alias·와일드카드 인증서로 **무작업 즉시 동작**.
+- **1회 루트 스크립트**: `~jcurve/wildcard-ssl-root.sh`(`sudo bash`) — conf 백업 → sudoers → vhost 추가 →
+  `httpd -t` 게이트 → graceful → **보호 도메인 13개 + 신규 3종 전수 응답 검증, 실패 시 자동 복원**.
+
+### 9) 스케줄러 / 큐
+
 ```bash
-# webroot 방식 — DocumentRoot(public) 기준
-certbot certonly --webroot -w /home/.../rankfree/public -d rankfree.kr
-# 갱신 후 httpd -k graceful (deploy-hook 등록 권장)
+# 크론(스케줄러) — jcurve crontab 가동 중
+* * * * * cd /www/jcurve/rankfree && php83 artisan schedule:run >> /dev/null 2>&1
 ```
 
-### 9) 스케줄러 / 큐 (사용 시)
-```bash
-# 크론(스케줄러)
-* * * * * cd /home/.../rankfree && php83 artisan schedule:run >> /dev/null 2>&1
-# 큐 워커(QUEUE_CONNECTION=database 사용 시) — systemd 서비스로:
-#   ExecStart=/opt/remi/php83/root/usr/bin/php artisan queue:work --sleep=3 --tries=3
-```
+**큐 워커 — supervisor(jcurve 유저 레벨, 2026-07-21 구축·가동 중)**
+> root SSH 불가(sudo는 httpd 명령만 NOPASSWD) → acme.sh 와 같은 **jcurve 유저 레벨** 패턴.
+> `pip3 install --user supervisor`(4.3.0, `~/.local/bin/`) — 시스템 패키지·systemd 미사용, crm 무변경.
+
+- 설정: `~/.supervisor/supervisord.conf` — `[program:rankfree-worker]` =
+  `/usr/bin/php83 /www/jcurve/rankfree/artisan queue:work --queue=hub-publish,hub-place,hub-shopping,default --sleep=3 --tries=3 --max-time=3600`
+  (운영 `QUEUE_CONNECTION=database` 기존값 사용. `--max-time`으로 매시간 자가 재기동 — 메모리 누수 예방)
+  ⚠️ **잡이 named queue 를 쓰면 여기 `--queue=` 에 반드시 추가** — 키워드 허브 잡(hub-publish·hub-place·hub-shopping)이 default 만 듣던 워커에 안 잡혀 "발행 0" 이 났던 실사고(2026-07-22). 새 큐 추가 시 sed 로 conf 수정 후 `supervisorctl reread && update`
+- 로그: `storage/logs/worker.log`(stderr 포함, 10MB×3 로테이션). supervisord 자체 로그는 `~/.supervisor/`
+- 제어: `~/.local/bin/supervisorctl -c ~/.supervisor/supervisord.conf status|restart rankfree-worker`
+- 지속성(jcurve crontab): `@reboot` 기동 + 10분 감시(`pgrep -f '[.]local/bin/supervisord' || supervisord ...` —
+  대괄호 패턴은 크론 명령 자기 자신 매칭 방지). crontab 백업 `~/crontab.bak.*`
+- **배포 연동**: deploy.sh 마지막에 `supervisorctl restart rankfree-worker` — 워커가 구 코드를 물고 있지 않게
+- 검증(2026-07-21): DB 큐 테스트 잡 적재→워커 처리(laravel.log 기록, jobs=0/failed=0), 워커 kill→supervisor 자동 재기동(새 PID) 확인
 
 ---
 

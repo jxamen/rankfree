@@ -164,6 +164,18 @@ class User extends Authenticatable
         return $this->hasMany(SellerPowerAnalysis::class);
     }
 
+    public function userCoupons(): HasMany
+    {
+        return $this->hasMany(UserCoupon::class);
+    }
+
+    /** 지금 주문에 쓸 수 있는 쿠폰 발급분(미사용·미만료 + 쿠폰 활성·기간 내). */
+    public function usableCoupons(): \Illuminate\Support\Collection
+    {
+        return $this->userCoupons()->with('coupon')->unused()->latest()->get()
+            ->filter(fn (UserCoupon $uc) => $uc->isUsable())->values();
+    }
+
     /** 최상위 관리자 — role=super / 운영자레벨 is_super / config 이메일 목록. */
     public function isSuperAdmin(): bool
     {

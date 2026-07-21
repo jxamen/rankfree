@@ -6,13 +6,16 @@ use App\Domain\Place\PlaceRankChecker;
 use App\Models\MarketingOrder;
 use App\Models\MarketingProduct;
 use App\Models\ProductType;
+use App\Models\UserCoupon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /** 마케팅 상품 주문 — 콘솔 내 회원 전용 주문 페이지(order_token 기반). */
 class OrderController extends Controller
 {
-    public function show(string $token)
+    public function show(Request $request, string $token)
     {
         $product = MarketingProduct::where('order_token', $token)->where('is_active', true)->firstOrFail();
         $product->load('fields', 'fieldGroups');
@@ -45,6 +48,9 @@ class OrderController extends Controller
             'infoFields' => $infoFields,
             'infoGroups' => $infoGroups,
             'stepMode' => $product->field_render_mode === 'step',
+            // 이 상품에 지금 쓸 수 있는 쿠폰(미사용·미만료·활성·기간 내·상품 적용 가능)
+            'coupons' => $request->user()->usableCoupons()
+                ->filter(fn (UserCoupon $uc) => $uc->coupon->appliesTo($product->id))->values(),
         ]);
     }
 
@@ -100,16 +106,35 @@ class OrderController extends Controller
             $values[$f->field_key] = $val;
         }
 
-        // 수량: 일수량 필드가 있으면 그 값, 없으면 기본 quantity 입력
-        $qty = (int) ($sched['qty'] ? ($values[$sched['qty']->field_key] ?? 0) : $request->input('quantity'));
-        if ($qty < $product->min_quantity || $qty > $product->max_quantity) {
-            return back()->withInput()->withErrors(['quantity' => "수량은 {$product->min_quantity}~{$product->max_quantity} 사이여야 합니다."]);
+        // 수량: 고정 수량 상품이면 화면 입력과 무관하게 그 값 그대로(패키지 판매), 아니면 입력값 + 범위 검증
+        if ($product->fixed_quantity) {
+            $qty = $product->fixed_quantity;
+            if ($sched['qty']) {
+                $values[$sched['qty']->field_key] = (string) $qty;   // 저장되는 입력값도 고정값으로 통일
+            }
+        } else {
+            $qty = (int) ($sched['qty'] ? ($values[$sched['qty']->field_key] ?? 0) : $request->input('quantity'));
+            if ($qty < $product->min_quantity || $qty > $product->max_quantity) {
+                return back()->withInput()->withErrors(['quantity' => "수량은 {$product->min_quantity}~{$product->max_quantity} 사이여야 합니다."]);
+            }
         }
 
-        // 기간: 시작일·종료일 필드가 있으면 그 일수, 없으면 기본 days(일)
+        // 기간: 고정 기간 상품이면 시작일만 받고 종료일·일수는 서버가 확정, 아니면 기존 입력 방식
         $days = 1;
         if ($product->quantity_mode === 'daily') {
-            if ($sched['start'] && $sched['end']) {
+            if ($product->fixed_days) {
+                $days = $product->fixed_days;
+                if ($sched['start']) {
+                    $s = $values[$sched['start']->field_key] ?? null;
+                    if (! $s) {
+                        return back()->withInput()->withErrors(['days' => '시작일을 선택하세요.']);
+                    }
+                    if ($sched['end']) {
+                        // 종료일은 제출값을 믿지 않고 시작일 + 고정기간 - 1 로 재계산
+                        $values[$sched['end']->field_key] = Carbon::parse($s)->addDays($days - 1)->toDateString();
+                    }
+                }
+            } elseif ($sched['start'] && $sched['end']) {
                 $s = $values[$sched['start']->field_key] ?? null;
                 $e = $values[$sched['end']->field_key] ?? null;
                 if (! $s || ! $e) {
@@ -122,26 +147,58 @@ class OrderController extends Controller
             } else {
                 $days = (int) $request->input('days', $product->min_days);
             }
-            if ($days < $product->min_days) {
+            if (! $product->fixed_days && $days < $product->min_days) {
                 return back()->withInput()->withErrors(['days' => "기간은 최소 {$product->min_days}일 이상이어야 합니다."]);
             }
         }
 
         $unit = (float) $product->min_price;
-        $total = $unit * $qty * $days;
+        $gross = $unit * $qty * $days;
 
-        $order = MarketingOrder::create([
-            'product_id' => $product->id,
-            'user_id' => $user->id,
-            'quantity' => $qty,
-            'days' => $product->quantity_mode === 'daily' ? $days : null,
-            'field_values' => $values,
-            'unit_price' => $unit,
-            'total_price' => $total,
-            'status' => 'pending',
-            'orderer_name' => $user->name,
-            'orderer_contact' => $user->email,
-        ]);
+        // 쿠폰 — 본인 발급분·사용 가능·상품 적용 가능 검증 후 서버에서 할인 재계산(화면 값은 신뢰하지 않음)
+        $userCoupon = null;
+        $discount = 0;
+        if ($ucId = $request->input('user_coupon_id')) {
+            $userCoupon = UserCoupon::with('coupon')->whereKey($ucId)->where('user_id', $user->id)->first();
+            if (! $userCoupon || ! $userCoupon->isUsable()) {
+                return back()->withInput()->withErrors(['user_coupon_id' => '사용할 수 없는 쿠폰입니다(만료·사용됨·중지).']);
+            }
+            if (! $userCoupon->coupon->appliesTo($product->id)) {
+                return back()->withInput()->withErrors(['user_coupon_id' => '이 상품에는 사용할 수 없는 쿠폰입니다.']);
+            }
+            $discount = $userCoupon->coupon->discountFor($gross);
+            if ($discount < 1) {
+                return back()->withInput()->withErrors(['user_coupon_id' => '최소 주문 금액('.number_format((float) $userCoupon->coupon->min_order_amount).'원) 이상부터 사용할 수 있는 쿠폰입니다.']);
+            }
+        }
+
+        $order = DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon) {
+            // 동시 제출로 같은 쿠폰이 두 번 쓰이지 않게 잠금 후 미사용 재확인
+            if ($userCoupon) {
+                $locked = UserCoupon::whereKey($userCoupon->id)->whereNull('used_at')->lockForUpdate()->first();
+                if (! $locked) {
+                    throw ValidationException::withMessages(['user_coupon_id' => '이미 사용된 쿠폰입니다.']);
+                }
+            }
+
+            $order = MarketingOrder::create([
+                'product_id' => $product->id,
+                'user_id' => $user->id,
+                'quantity' => $qty,
+                'days' => $product->quantity_mode === 'daily' ? $days : null,
+                'field_values' => $values,
+                'unit_price' => $unit,
+                'total_price' => max(0, $gross - $discount),
+                'status' => 'pending',
+                'orderer_name' => $user->name,
+                'orderer_contact' => $user->email,
+                'user_coupon_id' => $userCoupon?->id,
+                'discount_amount' => $discount,
+            ]);
+            $userCoupon?->update(['used_at' => now(), 'order_id' => $order->id]);
+
+            return $order;
+        });
 
         return redirect()->route('order.show', $token)->with('order_done', $order->order_no);
     }

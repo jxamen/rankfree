@@ -70,6 +70,40 @@ class MarketingProductController extends Controller
         return back();
     }
 
+    /** 상품 복제 — 필드·단계·업체 배분까지 통째로. 새 주문 URL 발급, 실수 노출 방지로 비활성 시작. */
+    public function duplicate(Request $request, MarketingProduct $product)
+    {
+        $product->load('fields', 'fieldGroups', 'vendorAllocations');
+
+        $copy = $product->replicate(['order_token']);
+        $copy->title = $product->title.' (복사)';
+        $copy->is_active = false;
+        $copy->created_by = $request->user()->id;
+        $copy->save();   // creating 훅이 새 order_token 발급
+
+        $groupMap = [];
+        foreach ($product->fieldGroups as $g) {
+            $ng = $g->replicate();
+            $ng->product_id = $copy->id;
+            $ng->save();
+            $groupMap[$g->id] = $ng->id;
+        }
+        foreach ($product->fields as $f) {
+            $nf = $f->replicate();
+            $nf->product_id = $copy->id;
+            $nf->group_id = $f->group_id ? ($groupMap[$f->group_id] ?? null) : null;
+            $nf->save();
+        }
+        foreach ($product->vendorAllocations as $pv) {
+            $npv = $pv->replicate();
+            $npv->product_id = $copy->id;
+            $npv->save();
+        }
+
+        return redirect()->route('admin.products.edit', $copy)
+            ->with('status', "'{$product->title}' 상품을 복제했습니다. 내용 확인 후 활성화하세요(현재 비활성).");
+    }
+
     public function destroy(MarketingProduct $product)
     {
         $product->delete();
@@ -132,6 +166,9 @@ class MarketingProductController extends Controller
             'min_quantity' => ['required', 'integer', 'min:1'],
             'max_quantity' => ['required', 'integer', 'min:1'],
             'min_days' => ['required', 'integer', 'min:1'],
+            // 고정 수량·기간 — 값이 있으면 고객이 바꿀 수 없이 그대로 주문(비우면 직접 입력)
+            'fixed_quantity' => ['nullable', 'integer', 'min:1'],
+            'fixed_days' => ['nullable', 'integer', 'min:1'],
             'quantity_mode' => ['required', 'in:daily,total'],
             'min_daily_quantity' => ['nullable', 'integer', 'min:0'],
             'field_render_mode' => ['required', 'in:inline,step'],

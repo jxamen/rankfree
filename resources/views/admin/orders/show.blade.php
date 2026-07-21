@@ -29,12 +29,15 @@
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                @foreach ([
+                @foreach (array_filter([
                     ['상품', $order->product?->title ?? '(삭제됨)'],
                     ['수량', number_format($order->quantity).($order->days ? ' × '.$order->days.'일' : '')],
                     ['단가', number_format($order->unit_price).'원'],
+                    (float) $order->discount_amount > 0
+                        ? ['쿠폰 할인', '-'.number_format($order->discount_amount).'원'.($order->userCoupon?->coupon ? ' · '.$order->userCoupon->coupon->name : '')]
+                        : null,
                     ['합계', number_format($order->total_price).'원'],
-                ] as [$lab, $val])
+                ]) as [$lab, $val])
                     <div>
                         <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
                         <div class="text-ink mt-0.5" style="font-size:var(--fs-sm);">{{ $val }}</div>

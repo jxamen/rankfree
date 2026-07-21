@@ -21,7 +21,7 @@
             'name' => '랭크프리',
             'legalName' => '(주)제이커브인터렉티브',
             'url' => url('/'),
-            'logo' => asset('apple-touch-icon.png'),
+            'logo' => asset('icon-512.png'),
             'email' => 'jcurve19@gmail.com',
             'telephone' => '+82-1668-2612',
             'vatID' => '753-88-01488',

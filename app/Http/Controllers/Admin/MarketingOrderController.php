@@ -81,6 +81,10 @@ class MarketingOrderController extends Controller
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', array_keys(MarketingOrder::STATUSES))],
         ]);
+        // 취소 전환 시 쿠폰 복원(취소를 다시 되돌려도 쿠폰은 재사용되지 않음 — 필요하면 재발행)
+        if ($data['status'] === 'canceled' && $order->status !== 'canceled') {
+            $order->restoreCoupon();
+        }
         $order->update($data);
 
         return back()->with('status', "주문 {$order->order_no} 상태를 '".MarketingOrder::STATUSES[$data['status']]."'(으)로 변경했습니다.");
@@ -89,6 +93,7 @@ class MarketingOrderController extends Controller
     public function destroy(MarketingOrder $order)
     {
         $no = $order->order_no;
+        $order->restoreCoupon();   // 삭제 주문에 묶인 쿠폰은 되돌려준다
         $order->delete();
 
         return redirect()->route('admin.orders')->with('status', "주문 {$no} 을(를) 삭제했습니다.");

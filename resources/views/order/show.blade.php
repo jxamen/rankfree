@@ -42,7 +42,8 @@
 
     <form method="POST" action="{{ route('order.store', $product->order_token) }}" enctype="multipart/form-data" id="order-form"
           data-step-mode="{{ $stepMode ? '1' : '0' }}" data-mode="{{ $product->quantity_mode }}"
-          data-unit="{{ $product->min_price }}" data-qty="{{ $qtyName }}" data-start="{{ $startName }}" data-end="{{ $endName }}" data-days="{{ $daysName }}">
+          data-unit="{{ $product->min_price }}" data-qty="{{ $qtyName }}" data-start="{{ $startName }}" data-end="{{ $endName }}" data-days="{{ $daysName }}"
+          data-fixed-days="{{ $product->quantity_mode === 'daily' ? ($product->fixed_days ?? '') : '' }}">
         @csrf
 
         {{-- 스텝 1: 상품 정보 + 수량 · 기간 (같은 카드) --}}
@@ -56,11 +57,21 @@
                 @endif
                 <div class="text-ink font-display mt-3" style="font-size:var(--fs-lg);">{{ number_format($product->min_price) }}<span class="text-muted-soft" style="font-size:var(--fs-xs);">원 / 단가</span></div>
             </div>
+            @php
+                // 고정 수량·기간 상품 — 고객은 그 값 그대로 주문(입력 잠금, 서버도 강제)
+                $fixedQty = $product->fixed_quantity;
+                $fixedDays = $product->quantity_mode === 'daily' ? $product->fixed_days : null;
+                $lockStyle = 'background:var(--color-surface-soft);color:var(--color-muted);pointer-events:none;';
+            @endphp
             <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">수량 · 기간</div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div data-required="1">
-                    <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $qtyField->label ?? '수량' }} <span class="text-muted-soft">({{ number_format($product->min_quantity) }}~{{ number_format($product->max_quantity) }})</span></label>
-                    <input type="number" name="{{ $qtyName }}" min="{{ $product->min_quantity }}" max="{{ $product->max_quantity }}" value="{{ old($qtyName, $product->min_quantity) }}" class="input mt-1 text-right" style="width:100%;">
+                    <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $qtyField->label ?? '수량' }}
+                        <span class="text-muted-soft">{{ $fixedQty ? '(고정)' : '('.number_format($product->min_quantity).'~'.number_format($product->max_quantity).')' }}</span></label>
+                    <input type="number" name="{{ $qtyName }}" min="{{ $product->min_quantity }}" max="{{ $product->max_quantity }}"
+                           value="{{ $fixedQty ?? old($qtyName, $product->min_quantity) }}"
+                           @if ($fixedQty) readonly tabindex="-1" @endif
+                           class="input mt-1 text-right" style="width:100%;{{ $fixedQty ? $lockStyle : '' }}">
                 </div>
 
                 @if ($startField || $endField)
@@ -72,19 +83,27 @@
                     @endif
                     @if ($endField)
                         <div data-required="1">
-                            <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $endField->label }}</label>
-                            <input type="date" name="{{ $endName }}" value="{{ old($endName) }}" min="{{ $minDate }}" class="input mt-1" style="width:100%;">
+                            <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $endField->label }}{{ $fixedDays ? ' (자동)' : '' }}</label>
+                            <input type="date" name="{{ $endName }}" value="{{ old($endName) }}" min="{{ $minDate }}"
+                                   @if ($fixedDays) readonly tabindex="-1" @endif
+                                   class="input mt-1" style="width:100%;{{ $fixedDays ? $lockStyle : '' }}">
                         </div>
                     @endif
                 @elseif ($product->quantity_mode === 'daily')
                     <div data-required="1">
-                        <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">기간(일) <span class="text-muted-soft">(최소 {{ $product->min_days }})</span></label>
-                        <input type="number" name="days" min="{{ $product->min_days }}" value="{{ old('days', $product->min_days) }}" class="input mt-1 text-right" style="width:100%;">
+                        <label class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">기간(일)
+                            <span class="text-muted-soft">{{ $fixedDays ? '(고정)' : '(최소 '.$product->min_days.')' }}</span></label>
+                        <input type="number" name="days" min="{{ $product->min_days }}" value="{{ $fixedDays ?? old('days', $product->min_days) }}"
+                               @if ($fixedDays) readonly tabindex="-1" @endif
+                               class="input mt-1 text-right" style="width:100%;{{ $fixedDays ? $lockStyle : '' }}">
                     </div>
                 @endif
             </div>
             @if ($startField || $endField)
-                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">가장 빠른 시작일: {{ $minDate }} · 금액은 일수량 × 진행일수로 계산됩니다.</div>
+                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">가장 빠른 시작일: {{ $minDate }} ·
+                    {{ $fixedDays ? '기간 '.$fixedDays.'일 고정 — 시작일을 고르면 종료일이 자동 계산됩니다.' : '금액은 일수량 × 진행일수로 계산됩니다.' }}</div>
+            @elseif ($fixedQty || $fixedDays)
+                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">이 상품은 {{ $fixedQty ? '수량' : '' }}{{ $fixedQty && $fixedDays ? '·' : '' }}{{ $fixedDays ? '기간' : '' }}이 고정된 패키지 상품입니다 — 그대로 주문하시면 됩니다.</div>
             @endif
 
             {{-- 비스텝 모드: 입력 정보 · 주문자 · 예상 금액 · 주문까지 같은 카드에.
@@ -104,9 +123,11 @@
                         <span class="text-ink font-medium">{{ auth()->user()->name }}</span>
                         <span class="text-muted-soft">{{ auth()->user()->email }}</span>
                     </div>
+                    @include('order._coupon')
                     <div class="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
+                            <div id="o-discount-row" style="font-size:var(--fs-xs);color:var(--color-success);display:none;">쿠폰 할인 -<span id="o-discount">0</span>원</div>
                             <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
                         </div>
                         <button type="submit" class="btn btn-primary" style="height:46px;padding:0 30px;">주문하기</button>
@@ -138,16 +159,20 @@
             </div>
 
             {{-- 합계 + 스텝 네비/제출 — 모든 스텝에서 보여야 하므로 별도 카드 유지 --}}
-            <div class="card p-5 flex items-center justify-between flex-wrap gap-3">
-                <div>
-                    <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
-                    <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span id="o-stepind" class="text-muted-soft" style="font-size:var(--fs-xs);margin-right:4px;"></span>
-                    <button type="button" id="o-prev" class="btn btn-secondary" style="display:none;">이전</button>
-                    <button type="button" id="o-next" class="btn btn-primary">다음</button>
-                    <button type="submit" id="o-submit" class="btn btn-primary" style="display:none;height:46px;padding:0 30px;">주문하기</button>
+            <div class="card p-5">
+                @include('order._coupon')
+                <div class="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
+                        <div id="o-discount-row" style="font-size:var(--fs-xs);color:var(--color-success);display:none;">쿠폰 할인 -<span id="o-discount">0</span>원</div>
+                        <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="o-stepind" class="text-muted-soft" style="font-size:var(--fs-xs);margin-right:4px;"></span>
+                        <button type="button" id="o-prev" class="btn btn-secondary" style="display:none;">이전</button>
+                        <button type="button" id="o-next" class="btn btn-primary">다음</button>
+                        <button type="submit" id="o-submit" class="btn btn-primary" style="display:none;height:46px;padding:0 30px;">주문하기</button>
+                    </div>
                 </div>
             </div>
         @endif
@@ -172,9 +197,16 @@
     var endEl = form.dataset.end ? form.querySelector('[name="' + form.dataset.end + '"]') : null;
     var daysEl = form.dataset.days ? form.querySelector('[name="' + form.dataset.days + '"]') : null;
     var out = document.getElementById('o-total');
+    var couponEl = document.getElementById('o-coupon');
+    var dcRow = document.getElementById('o-discount-row');
+    var dcOut = document.getElementById('o-discount');
+    var dcNote = document.getElementById('o-coupon-note');
+
+    var fixedDays = parseInt(form.dataset.fixedDays, 10) || 0;   // 기간 고정 상품 — 종료일 자동, 일수는 항상 고정값
 
     function spanDays() {
         if (!daily) return 1;   // 전체 수량 과금(total): 기간과 무관하게 단가 × 수량
+        if (fixedDays) return fixedDays;
         if (startEl && endEl && startEl.value && endEl.value) {
             var s = new Date(startEl.value), e = new Date(endEl.value);
             var d = Math.floor((e - s) / 86400000) + 1;
@@ -183,11 +215,46 @@
         if (daysEl) return parseInt(daysEl.value, 10) || 1;
         return 1;
     }
+    // 기간 고정 + 시작/종료일 필드 — 시작일 선택 시 종료일 자동(시작 + 고정일 - 1)
+    if (fixedDays && startEl && endEl) {
+        startEl.addEventListener('input', function () {
+            if (!startEl.value) { endEl.value = ''; return; }
+            var d = new Date(startEl.value);
+            d.setDate(d.getDate() + fixedDays - 1);
+            endEl.value = d.toISOString().slice(0, 10);
+            calc();
+        });
+    }
+    // 쿠폰 할인 미리보기 — 서버 Coupon::discountFor 와 동일 규칙(최종 금액은 서버가 재계산)
+    //   반환 -1 = 최소 주문 금액 미달(할인 0 + 경고 표시)
+    function couponDiscount(gross) {
+        if (!couponEl || !couponEl.value) return 0;
+        var o = couponEl.options[couponEl.selectedIndex];
+        var min = parseFloat(o.dataset.min) || 0;
+        if (gross <= 0 || gross < min) return -1;
+        var d;
+        if (o.dataset.type === 'percent') {
+            d = gross * ((parseFloat(o.dataset.value) || 0) / 100);
+            var mx = parseFloat(o.dataset.max);
+            if (!isNaN(mx) && mx > 0) d = Math.min(d, mx);
+        } else {
+            d = parseFloat(o.dataset.value) || 0;
+        }
+        return Math.min(Math.floor(d), Math.floor(gross));
+    }
     function calc() {
         var q = parseInt(qtyEl && qtyEl.value, 10) || 0;
-        out.textContent = (unit * q * spanDays()).toLocaleString('ko-KR');
+        var gross = unit * q * spanDays();
+        var d = couponDiscount(gross);
+        var short = d === -1;
+        if (short) d = 0;
+        if (dcRow) dcRow.style.display = d > 0 ? '' : 'none';
+        if (dcOut) dcOut.textContent = d.toLocaleString('ko-KR');
+        if (dcNote) dcNote.style.display = short ? '' : 'none';
+        out.textContent = (gross - d).toLocaleString('ko-KR');
     }
-    [qtyEl, startEl, endEl, daysEl].forEach(function (el) { if (el) el.addEventListener('input', calc); });
+    [qtyEl, startEl, endEl, daysEl, couponEl].forEach(function (el) { if (el) el.addEventListener('input', calc); });
+    if (couponEl) couponEl.addEventListener('change', calc);
     calc();
 
     // ── 스텝 마법사 ──

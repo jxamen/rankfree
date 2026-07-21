@@ -361,6 +361,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/products/{product}/edit', [MarketingProductController::class, 'edit'])->name('products.edit');
     Route::put('/products/{product}', [MarketingProductController::class, 'update'])->name('products.update');
     Route::post('/products/{product}/toggle', [MarketingProductController::class, 'toggle'])->name('products.toggle');
+    Route::post('/products/{product}/duplicate', [MarketingProductController::class, 'duplicate'])->name('products.duplicate');
     Route::delete('/products/{product}', [MarketingProductController::class, 'destroy'])->name('products.destroy');
 
     // 주문 관리 (목록·상세·상태 변경 · 승인=외부 발주)

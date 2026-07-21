@@ -65,6 +65,9 @@
                             <div class="flex items-center justify-end gap-1" style="white-space:nowrap;">
                                 <button type="button" class="btn btn-ghost btn-sm rf-copy" data-url="{{ url($p->orderUrl()) }}" title="주문 URL 복사">URL복사</button>
                                 <a href="{{ route('admin.products.edit', $p) }}" class="btn btn-secondary btn-sm">수정</a>
+                                <form method="POST" action="{{ route('admin.products.duplicate', $p) }}" class="inline">@csrf
+                                    <button type="submit" class="btn btn-ghost btn-sm" title="필드·단계·업체 배분까지 복제(비활성으로 시작)">복제</button>
+                                </form>
                                 <form method="POST" action="{{ route('admin.products.destroy', $p) }}" class="inline" data-confirm="이 상품을 삭제할까요?" data-confirm-text="주문 내역도 함께 삭제됩니다.">@csrf @method('DELETE')
                                     <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button>
                                 </form>
