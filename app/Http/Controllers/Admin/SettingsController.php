@@ -181,6 +181,11 @@ class SettingsController extends Controller
                 ->withInput()
                 ->withErrors(['cloudflare' => 'Cloudflare API token is required.']);
         }
+        if (self::looksLikeCloudflareGlobalApiKey($token)) {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'cfk_로 시작하는 값은 Global API Key입니다. 여기에는 Cloudflare API Token 값을 넣어야 합니다. 사용자 API Token은 보통 cfut_, 계정 API Token은 cfat_로 시작합니다.']);
+        }
 
         $zoneDomain = self::normalizeDomain((string) $request->input('zone_domain'));
         $zones = self::normalizeCloudflareZones(AppSetting::readJson(self::CLOUDFLARE_ZONES_KEY));
@@ -339,6 +344,11 @@ class SettingsController extends Controller
         $value = preg_replace('/\s+/', '', $value) ?? '';
 
         return preg_replace('/^bearer/i', '', $value) ?? '';
+    }
+
+    private static function looksLikeCloudflareGlobalApiKey(string $value): bool
+    {
+        return str_starts_with(strtolower(trim($value)), 'cfk_');
     }
 
     private static function normalizeCloudflareZones(array $values): array
@@ -567,7 +577,11 @@ class SettingsController extends Controller
         $payload = is_array($payload) ? $payload : [];
 
         if (! $response->successful() || ! (bool) ($payload['success'] ?? false)) {
-            throw new \RuntimeException(self::cloudflareErrorMessage($payload) ?: $response->body() ?: 'Cloudflare API request failed.');
+            $message = self::cloudflareErrorMessage($payload) ?: $response->body() ?: 'Cloudflare API request failed.';
+            if (str_contains($message, '9109')) {
+                $message .= ' API Token 생성 완료 화면에서 복사한 cfut_/cfat_ 토큰을 입력하세요. cfk_ Global API Key는 Bearer 토큰으로 사용할 수 없습니다.';
+            }
+            throw new \RuntimeException($message);
         }
 
         return $payload;

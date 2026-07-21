@@ -562,6 +562,7 @@
     var cfCreate = document.getElementById('rf-cf-create-btn');
     if (cfCreate) {
         cfCreate.addEventListener('click', function () {
+            if (cfCreate.disabled) return;
             var form = document.getElementById('rf-cf-create');
             var zone = document.getElementById('rf-cf-zone');
             var subdomain = document.getElementById('rf-cf-subdomain');
@@ -572,6 +573,10 @@
             document.getElementById('rf-cf-create-subdomain').value = subdomain ? subdomain.value : '';
             document.getElementById('rf-cf-create-target').value = target ? target.value : '';
             document.getElementById('rf-cf-create-count').value = count ? count.value : '1';
+            cfCreate.dataset.originalText = cfCreate.innerHTML;
+            cfCreate.disabled = true;
+            cfCreate.setAttribute('aria-busy', 'true');
+            cfCreate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 생성 중...';
             form.submit();
         });
     }

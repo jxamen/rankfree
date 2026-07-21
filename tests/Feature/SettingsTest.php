@@ -214,6 +214,24 @@ class SettingsTest extends TestCase
             && $request['proxied'] === true);
     }
 
+    public function test_cloudflare_global_api_key_is_rejected_before_api_call(): void
+    {
+        $super = $this->super();
+        AppSetting::write('cloudflare.api_token', 'cfk_abcdefghijklmnopqrstuvwxyz1234567890abcd');
+        AppSetting::write('cloudflare.dns_target', 'rankfree.kr');
+        AppSetting::write('cloudflare.zones', json_encode([['domain' => 'rankfree.kr', 'zone_id' => 'zone-123', 'proxied' => true]]));
+
+        Http::fake();
+
+        $this->actingAs($super)->post(route('admin.settings.secondary-domain.create'), [
+            'zone_domain' => 'rankfree.kr',
+            'subdomain' => '',
+            'count' => 1,
+        ])->assertSessionHasErrors('cloudflare');
+
+        Http::assertNothingSent();
+    }
+
     public function test_ai_keys_save_and_override_services_config(): void
     {
         // 공급자별 고정칸 — ai_key[{provider}]. 알 수 없는 공급자·빈 값은 저장 안 됨.
