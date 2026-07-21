@@ -292,7 +292,11 @@ class KeywordHubController extends Controller
             $docs = $systemUserId
                 ? MarketAnalysis::with('category.parent.parent')
                     ->where('user_id', $systemUserId)
-                    ->when($categoryIds, fn ($q) => $q->whereIn('category_id', $categoryIds))
+                    ->when(
+                        $categoryIds,
+                        fn ($q) => $q->whereIn('category_id', $categoryIds),
+                        fn ($q) => $q->whereHas('category', fn ($c) => $c->where('type', 'shopping')),
+                    )
                     ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
                     ->orderByDesc('id')
                     ->paginate(50)->withQueryString()
@@ -300,7 +304,11 @@ class KeywordHubController extends Controller
         } else {
             $docs = KeywordSearch::with('category.parent.parent')
                 ->where('origin', 'hub')
-                ->when($categoryIds, fn ($q) => $q->whereIn('category_id', $categoryIds))
+                ->when(
+                    $categoryIds,
+                    fn ($q) => $q->whereIn('category_id', $categoryIds),
+                    fn ($q) => $q->whereHas('category', fn ($c) => $c->where('type', 'place')),
+                )
                 ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
                 ->orderByDesc('monthly_total')
                 ->orderByDesc('id')

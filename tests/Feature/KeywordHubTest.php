@@ -319,6 +319,12 @@ class KeywordHubTest extends TestCase
             'revenue_6m' => 1200000,
             'snapshot' => ['top_products' => []],
         ]);
+        KeywordSearch::create([
+            'origin' => 'hub',
+            'category_id' => $shopChild->id,
+            'keyword' => '여름이불',
+            'monthly_total' => 5000,
+        ]);
 
         $this->actingAs($admin)->get('/admin/keyword-hub')
             ->assertOk()
@@ -331,6 +337,11 @@ class KeywordHubTest extends TestCase
             ->assertOk()
             ->assertSee('강남 한식')
             ->assertSee($keywordDoc->shareUrl(), false)
+            ->assertDontSee('여름이불');
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/published/place')
+            ->assertOk()
+            ->assertSee('강남 한식')
             ->assertDontSee('여름이불');
 
         $this->actingAs($admin)->get('/admin/keyword-hub/published/shopping/'.$shopRoot->id)
