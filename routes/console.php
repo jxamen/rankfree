@@ -62,14 +62,14 @@ if (config('rankfree.newbiz.schedule_enabled', false)) {
     Schedule::command('newbiz:place-match')->timezone('Asia/Seoul')->dailyAt('08:20')->withoutOverlapping()->runInBackground();
 }
 
-// 키워드 콘텐츠 허브(22) — 승인 후보 자동 발행. 발굴과 분리(관리자 승인분만 처리 → 쿼터/도어웨이 리스크 없음).
+// 키워드 자동 분석 — 승인/대기 후보 자동 발행. 플레이스는 키워드 분석, 쇼핑은 시장 분석.
 // 기본 on: publish_interval(분)마다 승인 후보 ≤publish_per_run 발행. 승인 큐가 빌 때까지 자동으로 계속 드레인, 없으면 idle.
 if (config('rankfree.hub.publish_enabled', true)) {
     $__hubPublishItv = max(1, min(60, (int) config('rankfree.hub.publish_interval', 10)));
     Schedule::command('hub:publish')->cron("*/{$__hubPublishItv} * * * *")->withoutOverlapping()->runInBackground();
 }
 
-// 키워드 허브 자동 발행(관리자 토글) — 켜져 있을 때만 쌓인 후보를 유형별로 매분 배치 발행. 꺼져 있으면 즉시 no-op.
+// 키워드 자동 분석(관리자 토글) — 켜져 있을 때만 쌓인 후보를 매분 큐에 넣는다. 실제 처리는 Supervisor 워커가 병렬 수행.
 Schedule::command('hub:auto-publish')->everyMinute()->withoutOverlapping()->runInBackground();
 
 // 키워드 허브 순위 매핑 월 파티션 로테이션 — 이번 달~2개월 뒤 선생성 + 보존기간(기본 13개월) 지난 월 파기.

@@ -22,7 +22,7 @@ class KeywordReportBuilder
         private BlogIndexAnalyzer $blog,
     ) {}
 
-    /** @return array{vm:?array,saturation:?array,popular:array,weekday:?array,autocomplete:array} */
+    /** @return array{vm:?array,detail:?array,saturation:?array,popular:array,weekday:?array,autocomplete:array} */
     public function build(string $keyword): array
     {
         $autocomplete = $this->ac->suggest($keyword);
@@ -75,6 +75,7 @@ class KeywordReportBuilder
 
         return [
             'vm' => $vm,
+            'detail' => $detail,
             'saturation' => $saturation,
             'popular' => $popular,
             'weekday' => $weekday,

@@ -7,7 +7,7 @@
 @endphp
 
 @section('admin-content')
-<x-console.page-head title="키워드 탐색" desc="수집된 키워드를 분야별로 봅니다 — 상위를 고르면 하위 분류가 채워지고, 고르지 않으면 전체 키워드가 나옵니다. 승인·발행은 키워드 콘텐츠 허브에서." />
+<x-console.page-head title="키워드 탐색" desc="수집된 키워드를 분야별로 봅니다 — 상위를 고르면 하위 분류가 채워지고, 고르지 않으면 전체 키워드가 나옵니다. 승인·발행은 키워드 자동 분석에서 처리합니다." />
 
 {{-- 타입 --}}
 <div class="flex items-center gap-2 mb-4">

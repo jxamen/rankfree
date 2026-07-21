@@ -59,7 +59,7 @@ class KeywordHubPhase3Test extends TestCase
 
     public function test_publisher_stores_ai_insight_in_snapshot(): void
     {
-        $cat = $this->category();
+        $cat = KeywordCategory::create(['type' => 'place', 'name' => '캠핑장', 'slug' => '캠핑장', 'is_active' => true]);
         $c = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑의자', 'status' => 'approved']);
         $this->mock(KeywordReportBuilder::class, function ($m) {
             $m->shouldReceive('build')->andReturn(['vm' => $this->vm('캠핑의자'), 'saturation' => null, 'popular' => [], 'weekday' => null, 'autocomplete' => []]);

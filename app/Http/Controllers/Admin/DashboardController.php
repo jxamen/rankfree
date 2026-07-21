@@ -8,6 +8,7 @@ use App\Models\GaStat;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordSearch;
 use App\Models\MarketingOrder;
+use App\Models\MarketAnalysis;
 use App\Models\PlaceRankSlot;
 use App\Models\Qna;
 use App\Models\ShopRankSlot;
@@ -30,13 +31,13 @@ class DashboardController extends Controller
             ->where(fn ($q) => $q->whereNull('subscription_expires_at')->orWhere('subscription_expires_at', '>', now()))
             ->count();
 
-        // 허브 발행 문서 — 카테고리 종류(플레이스/쇼핑)로 분리. created_at 은 조인 후 모호하므로 테이블 지정.
-        $hubType = fn ($from = null) => KeywordSearch::where('origin', 'hub')
-            ->leftJoin('keyword_categories', 'keyword_searches.category_id', '=', 'keyword_categories.id')
-            ->when($from, fn ($x) => $x->where('keyword_searches.created_at', '>=', $from))
-            ->selectRaw('keyword_categories.type as t, count(*) as c')->groupBy('t')->pluck('c', 't');
-        $hubAll = $hubType();
-        $hub7t = $hubType($d7);
+        $systemUserId = User::where('email', (string) config('rankfree.hub.system_user_email', 'hub-system@rankfree.kr'))->value('id');
+        $placeDocs = fn ($from = null) => KeywordSearch::where('origin', 'hub')
+            ->whereHas('category', fn ($q) => $q->where('type', 'place'))
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from));
+        $shoppingDocs = fn ($from = null) => MarketAnalysis::query()
+            ->when($systemUserId, fn ($q) => $q->where('user_id', $systemUserId), fn ($q) => $q->whereRaw('1 = 0'))
+            ->when($from, fn ($q) => $q->where('created_at', '>=', $from));
 
         $kpi = [
             'users' => User::count(),
@@ -50,13 +51,13 @@ class DashboardController extends Controller
             'posts' => CommunityPost::count(),
             'postsUser' => CommunityPost::where('author_type', 'user')->count(),
             'posts7' => CommunityPost::where('created_at', '>=', $d7)->count(),
-            'hubDocs' => KeywordSearch::where('origin', 'hub')->count(),
-            'hubToday' => KeywordSearch::where('origin', 'hub')->where('created_at', '>=', $todayStart)->count(),
-            'hub7' => KeywordSearch::where('origin', 'hub')->where('created_at', '>=', $d7)->count(),
-            'hubPlace' => (int) ($hubAll['place'] ?? 0),
-            'hubShopping' => (int) ($hubAll['shopping'] ?? 0),
-            'hubPlace7' => (int) ($hub7t['place'] ?? 0),
-            'hubShopping7' => (int) ($hub7t['shopping'] ?? 0),
+            'hubDocs' => $placeDocs()->count() + $shoppingDocs()->count(),
+            'hubToday' => $placeDocs($todayStart)->count() + $shoppingDocs($todayStart)->count(),
+            'hub7' => $placeDocs($d7)->count() + $shoppingDocs($d7)->count(),
+            'hubPlace' => $placeDocs()->count(),
+            'hubShopping' => $shoppingDocs()->count(),
+            'hubPlace7' => $placeDocs($d7)->count(),
+            'hubShopping7' => $shoppingDocs($d7)->count(),
             'qnaOpen' => Qna::where('status', '!=', 'answered')->count(),
             'qnaTotal' => Qna::count(),
             'orders' => MarketingOrder::count(),

@@ -55,8 +55,8 @@
             ['유료 구독중', $kpi['paid'], '전체의 '.($kpi['users'] ? round($kpi['paid'] / $kpi['users'] * 100, 1) : 0).'%', route('admin.subscriptions')],
             ['플레이스 추적', $kpi['placeSlots'], '활성 '.$fmt($kpi['placeActive']).'개', route('admin.place-tracking')],
             ['쇼핑 추적', $kpi['shopSlots'], '활성 '.$fmt($kpi['shopActive']).'개', route('admin.shop-tracking')],
-            ['플레이스 발행', $kpi['hubPlace'], '7일 +'.$fmt($kpi['hubPlace7']).'건', route('admin.keyword-hub')],
-            ['쇼핑 발행', $kpi['hubShopping'], '7일 +'.$fmt($kpi['hubShopping7']).'건', route('admin.keyword-hub')],
+            ['플레이스 분석', $kpi['hubPlace'], '7일 +'.$fmt($kpi['hubPlace7']).'건', route('admin.keyword-hub')],
+            ['쇼핑 시장 분석', $kpi['hubShopping'], '7일 +'.$fmt($kpi['hubShopping7']).'건', route('admin.keyword-hub')],
             ['커뮤니티 글', $kpi['posts'], '실사용자 '.$fmt($kpi['postsUser']).' · 7일 +'.$fmt($kpi['posts7']), route('community')],
             ['미답변 문의', $kpi['qnaOpen'], '전체 '.$fmt($kpi['qnaTotal']).'건', route('admin.qnas'), $kpi['qnaOpen'] > 0],
             ['주문', $kpi['orders'], '접수대기 '.$fmt($kpi['ordersPending']).'건', route('admin.orders'), $kpi['ordersPending'] > 0],
@@ -101,16 +101,16 @@
             @endif
         </div>
 
-        {{-- 키워드 콘텐츠 허브 --}}
+        {{-- 키워드 자동 분석 --}}
         <div class="card p-5" style="margin-top:14px;">
-            <div class="dash-h"><span>키워드 콘텐츠 허브</span><a href="{{ route('admin.keyword-hub') }}">관리 →</a></div>
+            <div class="dash-h"><span>키워드 자동 분석</span><a href="{{ route('admin.keyword-hub') }}">관리 →</a></div>
             <div class="dash-mini">
-                <div><div class="n">{{ $fmt($kpi['hubPlace']) }}</div><div class="k">플레이스 발행</div></div>
-                <div><div class="n">{{ $fmt($kpi['hubShopping']) }}</div><div class="k">쇼핑 발행</div></div>
+                <div><div class="n">{{ $fmt($kpi['hubPlace']) }}</div><div class="k">플레이스 키워드 분석</div></div>
+                <div><div class="n">{{ $fmt($kpi['hubShopping']) }}</div><div class="k">쇼핑 시장 분석</div></div>
                 <div><div class="n">{{ $fmt($kpi['candApproved']) }}</div><div class="k">승인 대기</div></div>
                 <div><div class="n">{{ $fmt($kpi['candPending']) }}</div><div class="k">검토 후보</div></div>
             </div>
-            <div class="text-muted-soft" style="font-size:var(--fs-xs);margin-top:10px;">발행 문서 {{ $fmt($kpi['hubDocs']) }}건 · 오늘 {{ $fmt($kpi['hubToday']) }}건 · 승인분은 자동 발행됩니다</div>
+            <div class="text-muted-soft" style="font-size:var(--fs-xs);margin-top:10px;">발행 문서 {{ $fmt($kpi['hubDocs']) }}건 · 오늘 {{ $fmt($kpi['hubToday']) }}건 · 쇼핑과 플레이스가 병렬 처리됩니다</div>
         </div>
     </div>
 </div>

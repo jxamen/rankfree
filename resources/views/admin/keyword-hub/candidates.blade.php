@@ -6,183 +6,110 @@
     $srcLabel = ['seed' => '시드', 'related' => '연관', 'autocomplete' => '자동완성', 'user' => '사용자', 'gsc' => '검색유입', 'datalab' => '데이터랩', 'combo' => '지역조합'];
     $stLabel = ['pending' => '대기', 'approved' => '승인', 'rejected' => '거부', 'published' => '발행됨'];
     $rtLabel = ['hotplace' => '핫플', 'district' => '구', 'city' => '시', 'dong' => '동', 'travel' => '여행지'];
+    $typeLabel = ['place' => '플레이스', 'shopping' => '쇼핑'];
 @endphp
 
 @section('admin-content')
-<x-console.page-head title="후보·수집 관리" desc="카테고리 시드에서 키워드 후보를 수집하고 승인/거부로 발행 큐를 만듭니다 — 발행은 키워드 콘텐츠 허브에서 (설계 .claude/22)" />
+<x-console.page-head title="후보·수집 관리" desc="플레이스 지역·업종 조합 후보와 쇼핑 데이터랩 후보를 확인하고 상태를 관리합니다. 발행은 키워드 자동 분석에서 처리합니다." />
 
 {{-- 플래시(status)는 admin.layout 이 전역 표시 — 여기서는 검증 오류만 --}}
 @if ($errors->any())
     <div class="card-soft px-4 py-3 mb-4" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif
 
-{{-- 현황 + 수집 --}}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-    <div class="card p-5">
-        <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">후보 현황</div>
-        <div class="flex flex-wrap gap-2">
-            @foreach ($stLabel as $k => $label)
-                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $k]) }}" class="badge border border-hairline" style="font-size:var(--fs-xs);{{ $status === $k ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">
-                    {{ $label }} <b class="font-mono">{{ number_format($counts[$k] ?? 0) }}</b>
+<div class="card p-5 mb-5">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div class="flex items-center gap-1 p-1" style="border:1px solid var(--color-hairline);border-radius:10px;background:var(--color-canvas-muted);">
+            @foreach ($typeLabel as $k => $label)
+                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'type' => $k, 'q' => $q ?: null]) }}"
+                   class="px-3 py-1.5 font-semibold" style="border-radius:8px;font-size:var(--fs-xs);text-decoration:none;{{ $type === $k ? 'background:var(--color-ink);color:var(--color-canvas);' : 'color:var(--color-muted);' }}">
+                    {{ $label }} 후보
                 </a>
             @endforeach
         </div>
-        {{-- 출처별 후보 수(현재 상태 기준) — 시딩(지역조합) 결과를 바로 확인. 클릭 시 해당 출처로 필터 --}}
-        @if (!empty($sourceCounts) && count($sourceCounts))
-            <div class="flex flex-wrap gap-1.5 mt-3 pt-3" style="border-top:1px solid var(--color-hairline-soft);">
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">출처</span>
-                @foreach ($srcLabel as $k => $label)
-                    @isset($sourceCounts[$k])
-                        <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'source' => $k, 'category' => $catId ?: null]) }}"
-                           class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($source ?? '') === $k ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">
-                            {{ $label }} <b class="font-mono">{{ number_format($sourceCounts[$k]) }}</b>
-                        </a>
-                    @endisset
-                @endforeach
-            </div>
-        @endif
+        <div class="text-muted-soft" style="font-size:var(--fs-xs);">
+            {{ $type === 'place' ? '지역 기준 + 업종 조합 후보' : '데이터랩 쇼핑 카테고리 후보' }}
+        </div>
     </div>
 
-    <div class="card p-5">
-        <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">지금 수집</div>
-        <form method="POST" action="{{ route('admin.keyword-hub.collect') }}" class="flex items-end gap-2">
-            @csrf
-            <div class="flex-1">
-                <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">카테고리(비우면 로테이션 순서)</label>
-                <select name="category_id" class="input">
-                    <option value="">— 자동(오래된 순) —</option>
-                    @foreach ($seedCategories as $c)
-                        <option value="{{ $c->id }}">{{ $c->parent ? $c->parent->name.' › ' : '' }}{{ $c->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <button type="submit" class="btn btn-secondary btn-sm" style="height:40px;">수집 실행</button>
-        </form>
-        <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">시드 → 검색광고 연관 + 자동완성 → 후보(대기). 월 {{ number_format((int) config('rankfree.hub.min_volume')) }}회 미만은 자동 제외.</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        @foreach ($stLabel as $k => $label)
+            <a href="{{ route('admin.keyword-hub.candidates', ['status' => $k, 'type' => $type]) }}" class="card-soft px-3 py-2" style="display:block;text-decoration:none;{{ $status === $k ? 'outline:2px solid var(--color-ink);' : '' }}">
+                <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $label }}</div>
+                <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($typeCounts[$k][$type] ?? 0) }}</div>
+            </a>
+        @endforeach
     </div>
+
+    @if (!empty($sourceCounts) && count($sourceCounts))
+        <div class="flex flex-wrap gap-1.5 mt-3 pt-3" style="border-top:1px solid var(--color-hairline-soft);">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">출처</span>
+            @foreach ($srcLabel as $k => $label)
+                @isset($sourceCounts[$k])
+                    <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'type' => $type, 'source' => $k, 'category' => $catId ?: null]) }}"
+                       class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($source ?? '') === $k ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">
+                        {{ $label }} <b class="font-mono">{{ number_format($sourceCounts[$k]) }}</b>
+                    </a>
+                @endisset
+            @endforeach
+        </div>
+    @endif
 </div>
 
-{{-- 카테고리 관리 --}}
-<div class="card p-5 mb-5">
-    <div class="flex items-baseline gap-2 mb-3">
-        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">카테고리 · 시드 키워드</div>
-        <span class="text-muted-soft" style="font-size:var(--fs-xs);">수동 카테고리만 표시 — 데이터랩 쇼핑 분류(1~3차)는 자동 동기화되며 <a href="{{ route('admin.keyword-browse') }}" class="text-muted">키워드 탐색</a>에서 조회</span>
-    </div>
-
-    <form method="POST" action="{{ route('admin.keyword-hub.categories.store') }}" class="grid grid-cols-1 sm:grid-cols-[110px_180px_1fr_auto] gap-3 items-end mb-4">
-        @csrf
-        <div>
-            <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">유형</label>
-            <select name="type" class="input">
-                <option value="shopping">쇼핑</option>
-                <option value="place">플레이스</option>
-            </select>
-        </div>
-        <div>
-            <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">상위 카테고리(선택)</label>
-            <select name="parent_id" class="input">
-                <option value="">— 대분류 —</option>
-                @foreach ($seedCategories->whereNull('parent_id') as $c)
-                    <option value="{{ $c->id }}">{{ $c->name }}</option>
+<div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+    <form method="GET" action="{{ route('admin.keyword-hub.candidates') }}" class="flex items-center gap-2 flex-wrap">
+        <input type="hidden" name="status" value="{{ $status }}">
+        <input type="hidden" name="type" value="{{ $type }}">
+        <select name="source" class="input" style="height:36px;width:140px;" onchange="this.form.submit()" title="출처 필터">
+            <option value="">전체 출처</option>
+            @foreach ($srcLabel as $k => $label)
+                <option value="{{ $k }}" @selected(($source ?? '') === $k)>{{ $label }}@isset($sourceCounts[$k]) ({{ number_format($sourceCounts[$k]) }})@endisset</option>
+            @endforeach
+        </select>
+        <select name="category" class="input" style="height:36px;width:260px;" onchange="this.form.submit()">
+            <option value="">전체 {{ $type === 'shopping' ? '쇼핑 카테고리' : '플레이스 업종' }}</option>
+            @foreach ($categories as $c)
+                @php
+                    $catName = collect([$c->parent?->parent?->name, $c->parent?->name, $c->name])->filter()->implode(' › ');
+                @endphp
+                <option value="{{ $c->id }}" @selected($catId === $c->id)>{{ $catName }}</option>
+            @endforeach
+        </select>
+        @if ($type === 'place' && !empty($regionCounts) && count($regionCounts))
+            <select name="region" class="input" style="height:36px;width:170px;" onchange="this.form.submit()" title="지역 필터(플레이스)">
+                <option value="">전체 지역</option>
+                @foreach ($regionCounts as $rg => $cnt)
+                    <option value="{{ $rg }}" @selected(($region ?? '') === (string) $rg)>{{ $rg }} ({{ number_format($cnt) }})</option>
                 @endforeach
             </select>
-        </div>
-        <div>
-            <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">이름 · 시드 키워드(콤마/줄바꿈)</label>
-            <div class="grid grid-cols-[180px_1fr] gap-2">
-                <input name="name" class="input" maxlength="80" placeholder="예: 캠핑용품" required value="{{ old('name') }}">
-                <input name="seed_keywords" class="input" maxlength="3000" placeholder="예: 캠핑의자, 캠핑테이블" value="{{ old('seed_keywords') }}">
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm" style="height:40px;">＋ 추가</button>
+        @endif
+        <input type="search" name="q" class="input" style="height:36px;width:180px;" placeholder="키워드 검색" value="{{ $q ?? '' }}">
+        <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
+        @if (($q ?? '') !== '' || ($region ?? '') !== '' || ($source ?? '') !== '' || $catId)
+            <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'type' => $type]) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
+        @endif
     </form>
 
-    <div class="flex flex-col gap-2">
-        @forelse ($seedCategories as $cat)
-            <div class="card-soft p-3" style="{{ $cat->is_active ? '' : 'opacity:.55;' }}">
-                <form method="POST" action="{{ route('admin.keyword-hub.categories.update', $cat) }}" class="grid grid-cols-1 sm:grid-cols-[90px_180px_1fr_70px_auto] gap-2 items-center">
-                    @csrf @method('PUT')
-                    <div class="flex items-center gap-1">
-                        <span class="badge" style="font-size:var(--fs-xs);">{{ $cat->type === 'place' ? '플레이스' : '쇼핑' }}</span>
-                    </div>
-                    <input name="name" class="input" maxlength="80" value="{{ $cat->name }}" required title="{{ $cat->parent ? '상위: '.$cat->parent->name : '대분류' }}">
-                    <input name="seed_keywords" class="input" maxlength="3000" value="{{ implode(', ', $cat->seedList()) }}" placeholder="시드 키워드(콤마 구분)" style="font-size:var(--fs-xs);">
-                    <input name="sort" type="number" class="input" min="0" max="9999" value="{{ $cat->sort }}" title="정렬">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                        <button type="submit" class="btn btn-secondary btn-sm">저장</button>
-                        <span class="badge" style="font-size:var(--fs-xs);" title="대기/승인/발행">
-                            <span class="font-mono">{{ $cat->pending_count }}</span>/<span class="font-mono">{{ $cat->approved_count }}</span>/<span class="font-mono">{{ $cat->published_count }}</span>
-                        </span>
-                    </div>
-                    <div class="sm:col-span-5 flex items-center gap-2">
-                        <input name="description" class="input" maxlength="300" placeholder="설명(선택 — Phase 2 허브 페이지 소개문)" value="{{ $cat->description }}" style="font-size:var(--fs-xs);flex:1;">
-                    </div>
-                </form>
-                <div class="flex items-center gap-2 mt-2 pt-2" style="border-top:1px solid var(--color-hairline-soft);">
-                    <form method="POST" action="{{ route('admin.keyword-hub.categories.toggle', $cat) }}">
-                        @csrf
-                        <button type="submit" class="badge" style="font-size:var(--fs-xs);padding:2px 10px;cursor:pointer;{{ $cat->is_active ? 'background:color-mix(in srgb,var(--color-success) 14%,var(--color-canvas));color:var(--color-success);' : '' }}">{{ $cat->is_active ? 'ON · 수집대상' : 'OFF · 제외' }}</button>
-                    </form>
-                    <span class="text-muted-soft font-mono" style="font-size:var(--fs-xs);">/keywords/{{ $cat->slug }}</span>
-                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $cat->collected_at ? '마지막 수집 '.$cat->collected_at->format('m-d H:i') : '수집 전' }}</span>
-                    <form method="POST" action="{{ route('admin.keyword-hub.categories.destroy', $cat) }}" class="ml-auto" data-confirm="'{{ $cat->name }}' 카테고리를 삭제할까요?" data-confirm-text="후보는 함께 삭제되고, 이미 발행된 문서는 유지됩니다.">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="text-muted-soft hover:text-error" style="font-size:var(--fs-xs);background:none;border:0;cursor:pointer;">삭제</button>
-                    </form>
-                </div>
-            </div>
-        @empty
-            <div class="text-muted-soft text-center" style="padding:24px;font-size:var(--fs-xs);">카테고리가 없습니다. 위에서 추가하고 시드 키워드를 넣은 뒤 '수집 실행'을 누르세요.</div>
-        @endforelse
-    </div>
+    @if ($candidates->total() > 0)
+        <form method="POST" action="{{ route('admin.keyword-hub.candidates.bulk-all') }}" class="flex items-center gap-2 flex-wrap">
+            @csrf
+            <input type="hidden" name="status" value="{{ $status }}">
+            <input type="hidden" name="type" value="{{ $type }}">
+            <input type="hidden" name="category" value="{{ $catId ?: '' }}">
+            <input type="hidden" name="source" value="{{ $source ?? '' }}">
+            <input type="hidden" name="q" value="{{ $q ?? '' }}">
+            <input type="hidden" name="region" value="{{ $region ?? '' }}">
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">필터 전체 <b class="font-mono text-ink">{{ number_format($candidates->total()) }}</b>건</span>
+            <button type="submit" name="action" value="approve" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 승인할까요?" data-confirm-text="승인된 후보는 자동 분석 발행에서 처리됩니다.">전체 승인</button>
+            <button type="submit" name="action" value="reject" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 거부할까요?">전체 거부</button>
+            <button type="submit" name="action" value="delete" class="btn btn-ghost btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 삭제할까요?" data-confirm-text="삭제는 되돌릴 수 없습니다.">전체 삭제</button>
+        </form>
+    @endif
 </div>
 
 {{-- 후보 승인 큐 --}}
 <div class="card p-5 mb-5">
-    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">후보 큐 — {{ $stLabel[$status] }} <span class="font-mono text-muted">{{ number_format($candidates->total()) }}</span></div>
-        <form method="GET" action="{{ route('admin.keyword-hub.candidates') }}" class="flex items-center gap-2">
-            <input type="hidden" name="status" value="{{ $status }}">
-            <select name="source" class="input" style="height:36px;" onchange="this.form.submit()" title="출처 필터">
-                <option value="">전체 출처</option>
-                @foreach ($srcLabel as $k => $label)
-                    <option value="{{ $k }}" @selected(($source ?? '') === $k)>{{ $label }}@isset($sourceCounts[$k]) ({{ number_format($sourceCounts[$k]) }})@endisset</option>
-                @endforeach
-            </select>
-            <select name="category" class="input" style="height:36px;" onchange="this.form.submit()">
-                <option value="">전체 카테고리</option>
-                @foreach ($categories as $c)
-                    <option value="{{ $c->id }}" @selected($catId === $c->id)>{{ $c->parent ? $c->parent->name.' › ' : '' }}{{ $c->name }}</option>
-                @endforeach
-            </select>
-            @if (!empty($regionCounts) && count($regionCounts))
-                <select name="region" class="input" style="height:36px;max-width:170px;" onchange="this.form.submit()" title="지역 필터(플레이스)">
-                    <option value="">전체 지역</option>
-                    @foreach ($regionCounts as $rg => $cnt)
-                        <option value="{{ $rg }}" @selected(($region ?? '') === (string) $rg)>{{ $rg }} ({{ number_format($cnt) }})</option>
-                    @endforeach
-                </select>
-            @endif
-            <input type="search" name="q" class="input" style="height:36px;width:160px;" placeholder="키워드 검색" value="{{ $q ?? '' }}">
-            <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
-            @if (($q ?? '') !== '' || ($region ?? '') !== '' || ($source ?? '') !== '' || $catId)
-                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status]) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
-            @endif
-        </form>
-    </div>
-
-    {{-- 지역별 후보 수(현재 상태·카테고리·출처 기준) — 지역으로 키워드 훑기 --}}
-    @if (!empty($regionCounts) && count($regionCounts))
-        <div class="flex flex-wrap items-center gap-1.5 mb-3 pb-3" style="border-bottom:1px solid var(--color-hairline-soft);">
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);">지역 {{ count($regionCounts) }}곳</span>
-            <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'category' => $catId ?: null, 'source' => $source ?: null, 'q' => $q ?: null]) }}"
-               class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($region ?? '') === '' ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">전체</a>
-            @foreach ($regionCounts as $rg => $cnt)
-                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $status, 'category' => $catId ?: null, 'source' => $source ?: null, 'q' => $q ?: null, 'region' => $rg]) }}"
-                   class="badge border border-hairline" style="font-size:var(--fs-xs);{{ ($region ?? '') === (string) $rg ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">{{ $rg }} <b class="font-mono">{{ number_format($cnt) }}</b></a>
-            @endforeach
-        </div>
-    @endif
+    <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">{{ $typeLabel[$type] ?? $type }} 후보 큐 — {{ $stLabel[$status] }} <span class="font-mono text-muted">{{ number_format($candidates->total()) }}</span></div>
 
     <form method="POST" action="{{ route('admin.keyword-hub.candidates.bulk') }}" id="kh-bulk">
         @csrf
@@ -192,8 +119,10 @@
                     <tr class="text-muted-soft" style="text-align:left;border-bottom:1px solid var(--color-hairline);">
                         <th style="padding:8px 6px;width:34px;"><input type="checkbox" id="kh-all" title="전체 선택"></th>
                         <th style="padding:8px 6px;">키워드</th>
-                        <th style="padding:8px 6px;">카테고리</th>
-                        <th style="padding:8px 6px;">지역</th>
+                        <th style="padding:8px 6px;">{{ $type === 'shopping' ? '쇼핑 카테고리' : '플레이스 업종' }}</th>
+                        @if ($type === 'place')
+                            <th style="padding:8px 6px;">지역 기준</th>
+                        @endif
                         <th style="padding:8px 6px;">출처</th>
                         <th style="padding:8px 6px;text-align:right;">월 검색량</th>
                         <th style="padding:8px 6px;">경쟁</th>
@@ -205,15 +134,21 @@
                         <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                             <td style="padding:7px 6px;"><input type="checkbox" name="ids[]" value="{{ $c->id }}" class="kh-ck"></td>
                             <td style="padding:7px 6px;" class="text-ink font-semibold">{{ $c->keyword }}</td>
-                            <td style="padding:7px 6px;" class="text-muted">{{ $c->category?->name ?? '—' }}</td>
-                            <td style="padding:7px 6px;" class="text-muted">{{ $c->region ? $c->region.($c->region_type ? ' · '.($rtLabel[$c->region_type] ?? $c->region_type) : '') : '—' }}</td>
+                            @php
+                                $cat = $c->category;
+                                $catName = $cat ? collect([$cat->parent?->parent?->name, $cat->parent?->name, $cat->name])->filter()->implode(' › ') : '—';
+                            @endphp
+                            <td style="padding:7px 6px;" class="text-muted">{{ $catName }}</td>
+                            @if ($type === 'place')
+                                <td style="padding:7px 6px;" class="text-muted">{{ $c->region ? $c->region.($c->region_type ? ' · '.($rtLabel[$c->region_type] ?? $c->region_type) : '') : '—' }}</td>
+                            @endif
                             <td style="padding:7px 6px;"><span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ $srcLabel[$c->source] ?? $c->source }}</span></td>
                             <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $c->monthly_total === null ? '미상' : number_format($c->monthly_total) }}</td>
                             <td style="padding:7px 6px;" class="text-muted">{{ $c->comp_idx ?? '—' }}</td>
                             <td style="padding:7px 6px;" class="text-muted-soft">{{ $c->note }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-muted-soft text-center" style="padding:28px;">'{{ $stLabel[$status] }}' 상태의 후보가 없습니다.</td></tr>
+                        <tr><td colspan="{{ $type === 'place' ? 8 : 7 }}" class="text-muted-soft text-center" style="padding:28px;">'{{ $stLabel[$status] }}' 상태의 {{ $typeLabel[$type] ?? $type }} 후보가 없습니다.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -225,26 +160,10 @@
                 <button type="submit" name="action" value="reject" class="btn btn-secondary btn-sm">선택 거부</button>
                 <button type="submit" name="action" value="pending" class="btn btn-secondary btn-sm">대기로</button>
                 <button type="submit" name="action" value="delete" class="btn btn-ghost btn-sm" data-confirm="선택한 후보를 삭제할까요?">선택 삭제</button>
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">승인한 후보는 키워드 콘텐츠 허브의 '발행 실행' 또는 hub:publish 크론이 문서로 발행합니다.</span>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">승인 또는 대기 후보는 키워드 자동 분석에서 플레이스 키워드 분석·쇼핑 시장 분석 문서로 발행됩니다.</span>
             </div>
         @endif
     </form>
-
-    {{-- 필터 전체 일괄 처리 — 페이지 선택이 아니라 현재 필터(상태·카테고리·출처·검색어) 전체에 적용(대량 시딩 운영용) --}}
-    @if ($candidates->total() > 0)
-        <form method="POST" action="{{ route('admin.keyword-hub.candidates.bulk-all') }}" class="flex items-center gap-2 mt-3 pt-3 flex-wrap" style="border-top:1px solid var(--color-hairline-soft);">
-            @csrf
-            <input type="hidden" name="status" value="{{ $status }}">
-            <input type="hidden" name="category" value="{{ $catId ?: '' }}">
-            <input type="hidden" name="source" value="{{ $source ?? '' }}">
-            <input type="hidden" name="q" value="{{ $q ?? '' }}">
-            <input type="hidden" name="region" value="{{ $region ?? '' }}">
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);">필터 전체 <b class="font-mono">{{ number_format($candidates->total()) }}</b>건 일괄:</span>
-            <button type="submit" name="action" value="approve" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 승인할까요?" data-confirm-text="승인된 후보는 hub:publish 크론이 검색량 큰 순으로 발행합니다.">전체 승인</button>
-            <button type="submit" name="action" value="reject" class="btn btn-secondary btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 거부할까요?">전체 거부</button>
-            <button type="submit" name="action" value="delete" class="btn btn-ghost btn-sm" data-confirm="현재 필터의 {{ number_format($candidates->total()) }}건을 모두 삭제할까요?" data-confirm-text="삭제는 되돌릴 수 없습니다.">전체 삭제</button>
-        </form>
-    @endif
 
     <div class="mt-3">{{ $candidates->links() }}</div>
 </div>

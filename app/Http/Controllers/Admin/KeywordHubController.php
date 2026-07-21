@@ -15,25 +15,32 @@ use App\Models\KeywordCategory;
 use App\Models\KeywordHubRun;
 use App\Models\KeywordHubRunItem;
 use App\Models\KeywordSearch;
+use App\Models\MarketAnalysis;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 /**
- * 키워드 콘텐츠 허브 관리(22) — 카테고리·시드 관리, 후보 승인 큐(대량), 수집/발행 수동 실행.
- * 파이프라인: hub:collect(수집) → 승인 → hub:publish(발행 /keyword/슬러그) → hub:refresh(갱신).
+ * 키워드 자동 분석 관리 — 후보 생성과 분석 발행을 운영한다.
+ * 플레이스 후보는 키워드 분석, 쇼핑 후보는 쇼핑 시장 분석으로 발행한다.
  */
 class KeywordHubController extends Controller
 {
-    /** 허브 첫 화면 — 발행 전용(현황 요약·발행 실행·최근 발행). 후보 큐·카테고리 시드·수집은 candidates 로 분리. */
+    /** 첫 화면 — 현황 요약·병렬 자동 분석·최근 발행. 후보 큐·수집은 candidates 로 분리. */
     public function index()
     {
         return view('admin.keyword-hub.index', [
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
-            'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
-            'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
+            'candidateTypeCounts' => $this->candidateTypeCounts(),
+            'hubDocsByType' => [
+                'place' => $this->recentHubDocs('place'),
+                'shopping' => $this->recentHubDocs('shopping'),
+            ],
+            'publishedCounts' => $this->publishedCounts(),
+            'categoryBreakdown' => $this->publishedCategoryBreakdown(),
             'collectTargets' => $this->collectTargetSummary(),
             'collectionRuns' => KeywordHubRun::with('items')->latest('id')->limit(5)->get(),
             'collectionControl' => KeywordHubCollectionControl::state(),
-            'auto' => $this->autoPayload(),   // 자동 발행 초기 상태(새로고침·재방문 복원용)
+            'auto' => $this->autoPayload(),   // 자동 분석 초기 상태(새로고침·재방문 복원용)
         ]);
     }
 
@@ -153,7 +160,7 @@ class KeywordHubController extends Controller
         return back()->with('status', '백그라운드 수집 작업 '.$run->total_jobs.'개를 큐에 등록했습니다.');
     }
 
-    /** 자동 발행 on/off 토글 — {on: bool, type: shopping|place}. 서버 크론(hub:auto-publish)이 실제 발행을 이어간다. */
+    /** 자동 분석 on/off 토글 — type 미지정이면 쇼핑+플레이스 동시 처리. 서버 크론이 큐를 채운다. */
     public function autoToggle(Request $request)
     {
         $state = $request->boolean('on')
@@ -164,7 +171,7 @@ class KeywordHubController extends Controller
             ->header('Cache-Control', 'no-store, max-age=0');
     }
 
-    /** 자동 발행 상태 → 화면/폴링 페이로드. */
+    /** 자동 분석 상태 → 화면/폴링 페이로드. */
     private function autoPayload(?array $s = null): array
     {
         $s = $s ?? HubAutoRun::state();
@@ -194,46 +201,102 @@ class KeywordHubController extends Controller
         ];
     }
 
-    /** 후보·수집 관리 — 후보 큐(필터·일괄 처리)·카테고리 시드·수동 수집. 발행은 index 에서. */
+    /** 후보·수집 관리 — 후보 큐(필터·일괄 처리)·수동 수집. 발행은 index 에서. */
     public function candidates(Request $request)
     {
         $status = in_array($request->query('status'), KeywordCandidate::STATUSES, true) ? $request->query('status') : 'pending';
+        $type = in_array($request->query('type'), ['place', 'shopping'], true) ? $request->query('type') : 'place';
         $catId = (int) $request->query('category', 0);
         $source = (string) $request->query('source', ''); // 출처 필터(combo=지역조합/seed/related/autocomplete/gsc/datalab)
         $kw = trim((string) $request->query('q', ''));    // 키워드 검색(대량 후보 탐색용)
         $region = trim((string) $request->query('region', '')); // 지역 필터(플레이스 — 강남역·망원동…)
+        if ($type !== 'place') {
+            $region = '';
+        }
+        if ($catId && ! KeywordCategory::whereKey($catId)->where('type', $type)->exists()) {
+            $catId = 0;
+        }
 
         return view('admin.keyword-hub.candidates', [
-            // 후보 필터 select 용 전체 목록(카운트 불필요 — 2천여 데이터랩 분류 포함)
-            'categories' => KeywordCategory::with('parent')->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
-            // 시드 관리 대상 = 수동 카테고리만. 데이터랩 트리(naver_cid 보유, 쇼핑 1~3분류 2천여 개)는
-            // hub:shopping-collect 가 자동 관리하므로 시드 카드 목록에 펼치지 않는다(화면 폭주 방지).
-            'seedCategories' => KeywordCategory::with('parent')->whereNull('naver_cid')->withCount([
+            // 선택한 유형만 표시한다. 지역 후보와 쇼핑 데이터랩 카테고리가 한 목록에 섞이지 않게 한다.
+            'categories' => KeywordCategory::with('parent.parent')
+                ->where('type', $type)
+                ->orderByRaw('parent_id is null desc')
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->get(),
+            // 지금 수집 대상도 현재 유형의 수동 카테고리만 표시한다.
+            'seedCategories' => KeywordCategory::with('parent')
+                ->where('type', $type)
+                ->whereNull('naver_cid')
+                ->withCount([
                 'candidates as pending_count' => fn ($q) => $q->where('status', 'pending'),
                 'candidates as approved_count' => fn ($q) => $q->where('status', 'approved'),
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
             ])->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
-            'candidates' => $this->filteredCandidates($status, $catId, $source, $kw, $region)
-                ->with('category')
+            'candidates' => $this->filteredCandidates($status, $type, $catId, $source, $kw, $region)
+                ->with('category.parent.parent')
                 ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
                 ->paginate(50)->withQueryString(),
             'status' => $status,
+            'type' => $type,
             'catId' => $catId,
             'source' => $source,
             'q' => $kw,
             'region' => $region,
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
+            'typeCounts' => $this->candidateTypeCounts(),
             // 출처별 후보 수(현 status 기준) — 시딩(지역조합) 결과를 화면에서 바로 확인
             'sourceCounts' => KeywordCandidate::where('status', $status)
+                ->whereHas('category', fn ($q) => $q->where('type', $type))
                 ->when($catId, fn ($q) => $q->where('category_id', $catId))
                 ->selectRaw('source, count(*) as c')->groupBy('source')->pluck('c', 'source'),
             // 지역별 후보 수(현 status·카테고리·출처 기준) — 플레이스를 지역으로 훑기
-            'regionCounts' => KeywordCandidate::where('status', $status)
-                ->when($catId, fn ($q) => $q->where('category_id', $catId))
-                ->when($source !== '', fn ($q) => $q->where('source', $source))
-                ->whereNotNull('region')
-                ->selectRaw('region, count(*) as c')->groupBy('region')->orderByDesc('c')->orderBy('region')
-                ->limit(200)->pluck('c', 'region'),
+            'regionCounts' => $type === 'place'
+                ? KeywordCandidate::where('status', $status)
+                    ->whereHas('category', fn ($q) => $q->where('type', 'place'))
+                    ->when($catId, fn ($q) => $q->where('category_id', $catId))
+                    ->when($source !== '', fn ($q) => $q->where('source', $source))
+                    ->whereNotNull('region')
+                    ->selectRaw('region, count(*) as c')->groupBy('region')->orderByDesc('c')->orderBy('region')
+                    ->limit(200)->pluck('c', 'region')
+                : collect(),
+        ]);
+    }
+
+    /** 카테고리별 발행 문서 목록 — 플레이스는 키워드 분석, 쇼핑은 시장 분석 링크로 연다. */
+    public function published(Request $request, string $type, KeywordCategory $category)
+    {
+        abort_unless(in_array($type, ['place', 'shopping'], true) && $category->type === $type, 404);
+
+        $kw = trim((string) $request->query('q', ''));
+        $categoryIds = $this->categoryDescendantIds($category);
+
+        if ($type === 'shopping') {
+            $systemUserId = $this->systemUserId();
+            $docs = $systemUserId
+                ? MarketAnalysis::with('category.parent.parent')
+                    ->where('user_id', $systemUserId)
+                    ->whereIn('category_id', $categoryIds)
+                    ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
+                    ->orderByDesc('id')
+                    ->paginate(50)->withQueryString()
+                : MarketAnalysis::whereRaw('1 = 0')->paginate(50)->withQueryString();
+        } else {
+            $docs = KeywordSearch::with('category.parent.parent')
+                ->where('origin', 'hub')
+                ->whereIn('category_id', $categoryIds)
+                ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
+                ->orderByDesc('monthly_total')
+                ->orderByDesc('id')
+                ->paginate(50)->withQueryString();
+        }
+
+        return view('admin.keyword-hub.published', [
+            'type' => $type,
+            'category' => $category->loadMissing('parent.parent'),
+            'docs' => $docs,
+            'q' => $kw,
         ]);
     }
 
@@ -324,13 +387,21 @@ class KeywordHubController extends Controller
         $data = $request->validate([
             'action' => 'required|in:approve,reject,pending,delete',
             'status' => 'required|in:'.implode(',', KeywordCandidate::STATUSES),
+            'type' => 'nullable|in:place,shopping',
             'category' => 'nullable|integer',
             'source' => 'nullable|string|max:20',
             'q' => 'nullable|string|max:120',
             'region' => 'nullable|string|max:60',
         ]);
 
-        $query = $this->filteredCandidates($data['status'], (int) ($data['category'] ?? 0), (string) ($data['source'] ?? ''), trim((string) ($data['q'] ?? '')), trim((string) ($data['region'] ?? '')));
+        $query = $this->filteredCandidates(
+            $data['status'],
+            $data['type'] ?? 'place',
+            (int) ($data['category'] ?? 0),
+            (string) ($data['source'] ?? ''),
+            trim((string) ($data['q'] ?? '')),
+            trim((string) ($data['region'] ?? '')),
+        );
 
         if ($data['action'] === 'delete') {
             $n = $query->delete();
@@ -345,13 +416,14 @@ class KeywordHubController extends Controller
     }
 
     /** 승인 큐 공통 필터(목록·전체 일괄 처리가 동일 조건을 쓰도록 단일화). */
-    private function filteredCandidates(string $status, int $catId, string $source, string $kw, string $region = '')
+    private function filteredCandidates(string $status, string $type, int $catId, string $source, string $kw, string $region = '')
     {
         return KeywordCandidate::query()
             ->where('status', $status)
+            ->whereHas('category', fn ($q) => $q->where('type', $type))
             ->when($catId, fn ($q) => $q->where('category_id', $catId))
             ->when($source !== '', fn ($q) => $q->where('source', $source))
-            ->when($region !== '', fn ($q) => $q->where('region', $region))
+            ->when($type === 'place' && $region !== '', fn ($q) => $q->where('region', $region))
             ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'));
     }
 
@@ -359,10 +431,11 @@ class KeywordHubController extends Controller
     public function collect(Request $request, KeywordHubCollector $collector)
     {
         $catId = (int) $request->input('category_id', 0);
+        $type = in_array($request->input('type'), ['place', 'shopping'], true) ? $request->input('type') : 'place';
         $cat = $catId
             ? KeywordCategory::findOrFail($catId)
             // 자동 로테이션은 수동(시드) 카테고리만 — 데이터랩 분류는 시드가 없어 헛돈다(hub:shopping-collect 담당)
-            : KeywordCategory::where('is_active', true)->whereNull('naver_cid')
+            : KeywordCategory::where('type', $type)->where('is_active', true)->whereNull('naver_cid')
                 ->orderByRaw('collected_at is null desc')->orderBy('collected_at')->first();
 
         if (! $cat) {
@@ -455,6 +528,111 @@ class KeywordHubController extends Controller
             'place_categories' => $this->placeCollectCategories(100000)->count(),
             'shopping_roots' => $this->shoppingRootCategories()->count(),
         ];
+    }
+
+    private function candidateTypeCounts(): array
+    {
+        $rows = KeywordCandidate::query()
+            ->join('keyword_categories', 'keyword_categories.id', '=', 'keyword_candidates.category_id')
+            ->selectRaw('keyword_candidates.status, keyword_categories.type, count(*) as c')
+            ->groupBy('keyword_candidates.status', 'keyword_categories.type')
+            ->get();
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(string) $row->status][(string) $row->type] = (int) $row->c;
+        }
+
+        return $counts;
+    }
+
+    private function recentHubDocs(string $type)
+    {
+        if ($type === 'shopping') {
+            $systemUserId = $this->systemUserId();
+            if (! $systemUserId) {
+                return collect();
+            }
+
+            return MarketAnalysis::latest('id')
+                ->where('user_id', $systemUserId)
+                ->limit(10)
+                ->get();
+        }
+
+        return KeywordSearch::with('category')
+            ->where('origin', 'hub')
+            ->whereHas('category', fn ($q) => $q->where('type', $type))
+            ->latest('id')
+            ->limit(10)
+            ->get();
+    }
+
+    private function publishedCounts(): array
+    {
+        $systemUserId = $this->systemUserId();
+
+        return [
+            'place' => KeywordSearch::where('origin', 'hub')
+                ->whereHas('category', fn ($q) => $q->where('type', 'place'))
+                ->count(),
+            'shopping' => $systemUserId
+                ? MarketAnalysis::where('user_id', $systemUserId)->count()
+                : 0,
+        ];
+    }
+
+    private function publishedCategoryBreakdown(): array
+    {
+        $systemUserId = $this->systemUserId();
+
+        return [
+            'place' => KeywordCategory::where('type', 'place')
+                ->whereNull('parent_id')
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (KeywordCategory $category) => [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'count' => KeywordSearch::where('origin', 'hub')
+                        ->whereIn('category_id', $this->categoryDescendantIds($category))
+                        ->count(),
+                ])
+                ->values(),
+            'shopping' => KeywordCategory::where('type', 'shopping')
+                ->whereNull('parent_id')
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (KeywordCategory $category) => [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'count' => $systemUserId
+                        ? MarketAnalysis::where('user_id', $systemUserId)
+                            ->whereIn('category_id', $this->categoryDescendantIds($category))
+                            ->count()
+                        : 0,
+                ])
+                ->values(),
+        ];
+    }
+
+    private function categoryDescendantIds(KeywordCategory $category): array
+    {
+        $childIds = KeywordCategory::where('parent_id', $category->id)->pluck('id');
+
+        return collect([$category->id])
+            ->merge($childIds)
+            ->merge(KeywordCategory::whereIn('parent_id', $childIds)->pluck('id'))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function systemUserId(): ?int
+    {
+        return User::where('email', (string) config('rankfree.hub.system_user_email', 'hub-system@rankfree.kr'))->value('id');
     }
 
     private function placeCollectCategories(int $limit)

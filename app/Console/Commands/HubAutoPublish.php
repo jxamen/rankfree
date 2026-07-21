@@ -3,67 +3,67 @@
 namespace App\Console\Commands;
 
 use App\Domain\Keyword\HubAutoRun;
-use App\Domain\Keyword\KeywordHubPublisher;
-use App\Domain\Seo\SearchEnginePing;
+use App\Jobs\KeywordHubPublishCandidateJob;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 
-/**
- * 키워드 허브 자동 발행 — 관리자 토글(HubAutoRun)이 켜져 있을 때만,
- * 쌓인 후보(pending·approved)를 유형별로 검색량 큰 순 배치 분석·발행한다(매분 크론).
- * 브라우저와 무관하게 서버가 계속 드레인하고, 다 비면 스스로 멈춘다.
- */
 class HubAutoPublish extends Command
 {
     protected $signature = 'hub:auto-publish
-        {--limit= : 이번 실행 발행 상한(기본 config rankfree.hub.auto_per_run)}
-        {--seconds= : 이번 실행 시간 예산(초, 기본 45 — withoutOverlapping 과 함께 1분 넘김 방지)}';
+        {--limit= : Number of candidates to queue this run}
+        {--seconds= : Kept for backward compatibility; jobs now run in queue workers}';
 
-    protected $description = '키워드 허브 — 자동 발행이 켜져 있으면 쌓인 후보를 유형별로 배치 분석·발행(22)';
+    protected $description = 'Queue keyword auto analysis jobs when the admin toggle is enabled';
 
-    public function handle(KeywordHubPublisher $publisher): int
+    public function handle(): int
     {
         if (! HubAutoRun::isRunning()) {
-            return self::SUCCESS;   // 꺼져 있음 — 즉시 no-op
+            return self::SUCCESS;
         }
 
-        $limit = (int) ($this->option('limit') ?: config('rankfree.hub.auto_per_run', 15));
-        $budget = (int) ($this->option('seconds') ?: 45);
-        $deadline = microtime(true) + max(5, $budget);
+        $limit = max(1, (int) ($this->option('limit') ?: config('rankfree.hub.auto_per_run', 15)));
         $type = HubAutoRun::state()['type'] ?? null;
 
-        $ok = $hold = 0;
-        $published = collect();
-        for ($i = 0; $i < $limit; $i++) {
-            if (microtime(true) >= $deadline) {
-                break;                       // 시간 예산 소진 — 다음 분 크론이 이어서
-            }
-            if (! HubAutoRun::isRunning()) {
-                break;                       // 관리자가 중간에 껐다 → 즉시 멈춤
-            }
-            $c = HubAutoRun::query($type)
-                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderBy('id')
-                ->first();
-            if (! $c) {
-                break;                       // 다 드레인
-            }
-            if ($i > 0) {
-                usleep(300_000);             // 외부 API 부담 완화
-            }
-            $doc = $publisher->publish($c);
-            if ($doc) {
-                $ok++;
-                $published->push($doc);
-            } else {
-                $hold++;
-            }
+        $candidates = $this->candidates($type, $limit);
+
+        foreach ($candidates as $candidate) {
+            KeywordHubPublishCandidateJob::dispatch($candidate->id);
         }
 
-        HubAutoRun::progress($ok, $hold);
-        if ($note = app(SearchEnginePing::class)->afterHubPublish($published)) {
-            $this->line($note);
-        }
-        $this->info("자동 발행 — 발행 {$ok} · 보류 {$hold}");
+        $this->info('Queued keyword hub publish jobs: '.$candidates->count());
 
         return self::SUCCESS;
+    }
+
+    private function candidates(?string $type, int $limit): Collection
+    {
+        if ($type) {
+            return $this->candidateQuery($type)->limit($limit)->get();
+        }
+
+        $perType = max(1, (int) floor($limit / 2));
+        $picked = collect(['shopping', 'place'])
+            ->flatMap(fn (string $type) => $this->candidateQuery($type)->limit($perType)->get())
+            ->unique('id')
+            ->values();
+
+        if ($picked->count() >= $limit) {
+            return $picked->take($limit)->values();
+        }
+
+        $extra = $this->candidateQuery(null)
+            ->when($picked->isNotEmpty(), fn ($q) => $q->whereNotIn('id', $picked->pluck('id')->all()))
+            ->limit($limit - $picked->count())
+            ->get();
+
+        return $picked->concat($extra)->unique('id')->take($limit)->values();
+    }
+
+    private function candidateQuery(?string $type)
+    {
+        return HubAutoRun::query($type)
+            ->orderByRaw('monthly_total is null')
+            ->orderByDesc('monthly_total')
+            ->orderBy('id');
     }
 }

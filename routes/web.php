@@ -309,6 +309,10 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/product/{analysis}', [ProductAnalysisController::class, 'show'])->name('product.show');
     Route::delete('/product/{analysis}', [ProductAnalysisController::class, 'destroy'])->name('product.destroy');
 
+    // 쿠폰함 (26) — 보유 쿠폰 확인·다운로드 쿠폰 받기. 사용은 셀프마케팅 주문 페이지에서
+    Route::get('/coupons', [\App\Http\Controllers\CouponController::class, 'index'])->name('coupons');
+    Route::post('/coupons/{coupon}/download', [\App\Http\Controllers\CouponController::class, 'download'])->name('coupons.download');
+
     // API 키 관리 (발급·허용기간·일일 한도·허용 IP)
     Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys');
     Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
@@ -371,6 +375,17 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
 
+    // 쿠폰 관리 (26) — 쿠폰 CRUD + 발급(특정 회원·전체 회원)·회수·사용 내역
+    Route::get('/coupons', [\App\Http\Controllers\Admin\CouponController::class, 'index'])->name('coupons');
+    Route::post('/coupons', [\App\Http\Controllers\Admin\CouponController::class, 'store'])->name('coupons.store');
+    Route::delete('/coupons/user-coupons/{userCoupon}', [\App\Http\Controllers\Admin\CouponController::class, 'revoke'])->name('coupons.revoke');
+    Route::get('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'show'])->name('coupons.show');
+    Route::put('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'update'])->name('coupons.update');
+    Route::post('/coupons/{coupon}/toggle', [\App\Http\Controllers\Admin\CouponController::class, 'toggle'])->name('coupons.toggle');
+    Route::post('/coupons/{coupon}/issue', [\App\Http\Controllers\Admin\CouponController::class, 'issue'])->name('coupons.issue');
+    Route::post('/coupons/{coupon}/issue-all', [\App\Http\Controllers\Admin\CouponController::class, 'issueAll'])->name('coupons.issue-all');
+    Route::delete('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'destroy'])->name('coupons.destroy');
+
     // 구글 계정 OAuth 연동 (서치 콘솔·GA4 공용)
     Route::get('/google-connect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'redirect'])->name('google-connect');
     Route::get('/google-connect/callback', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'callback'])->name('google-connect.callback');
@@ -388,9 +403,10 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 판매자정보 — 캡차 통과 후 수집된 사업자 정보만 별도 목록(업체명·대표자·톡톡·전화·스토어)
     Route::get('/seller-infos', [\App\Http\Controllers\Admin\SellerInfoController::class, 'index'])->name('seller-infos');
 
-    // 키워드 콘텐츠 허브(22) — 카테고리·시드, 후보 승인 큐, 수집/발행 수동 실행
+    // 키워드 자동 분석 — 후보 관리, 플레이스 키워드 분석·쇼핑 시장 분석 병렬 발행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
     Route::get('/keyword-hub/candidates', [\App\Http\Controllers\Admin\KeywordHubController::class, 'candidates'])->name('keyword-hub.candidates');
+    Route::get('/keyword-hub/published/{type}/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'published'])->name('keyword-hub.published');
     Route::post('/keyword-hub/categories', [\App\Http\Controllers\Admin\KeywordHubController::class, 'storeCategory'])->name('keyword-hub.categories.store');
     Route::put('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'updateCategory'])->name('keyword-hub.categories.update');
     Route::post('/keyword-hub/categories/{category}/toggle', [\App\Http\Controllers\Admin\KeywordHubController::class, 'toggleCategory'])->name('keyword-hub.categories.toggle');

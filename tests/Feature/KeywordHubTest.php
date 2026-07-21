@@ -11,16 +11,18 @@ use App\Domain\Keyword\NaverAutocompleteService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Jobs\KeywordHubCollectCategoryJob;
 use App\Jobs\KeywordHubCollectShoppingRootJob;
+use App\Jobs\KeywordHubPublishCandidateJob;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
 use App\Models\KeywordHubRun;
 use App\Models\KeywordSearch;
+use App\Models\MarketAnalysis;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
-/** 키워드 콘텐츠 허브(22 Phase 1) — 수집(필터)·발행(thin 보류)·크론·관리자 승인 큐. */
+/** 키워드 자동 분석 — 후보 수집·플레이스 키워드 분석·쇼핑 시장 분석·병렬 큐. */
 class KeywordHubTest extends TestCase
 {
     use RefreshDatabase;
@@ -46,7 +48,7 @@ class KeywordHubTest extends TestCase
                 'comp_idx' => '높음',
                 'related' => [
                     ['keyword' => '접이식 캠핑의자', 'monthly_total' => 3000, 'comp_idx' => '중간'],
-                    ['keyword' => '저볼륨키워드', 'monthly_total' => 10, 'comp_idx' => '낮음'],
+                    ['keyword' => '저볼륨키워드', 'monthly_total' => 5, 'comp_idx' => '낮음'],
                 ],
             ]);
         });
@@ -67,7 +69,7 @@ class KeywordHubTest extends TestCase
         $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'source' => 'seed', 'monthly_total' => 5000, 'status' => 'pending']);
         $this->assertDatabaseHas('keyword_candidates', ['keyword' => '접이식 캠핑의자', 'source' => 'related', 'monthly_total' => 3000]);
         $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자 경량', 'source' => 'autocomplete', 'monthly_total' => null]);
-        // 최소 검색량(기본 1,000) 미만 연관어는 자동 제외
+        // 최소 검색량(기본 10회) 미만 연관어는 자동 제외
         $this->assertDatabaseMissing('keyword_candidates', ['keyword' => '저볼륨키워드']);
         $this->assertNotNull($cat->fresh()->collected_at);
     }
@@ -110,7 +112,7 @@ class KeywordHubTest extends TestCase
     public function test_publisher_creates_system_owned_hub_doc(): void
     {
         $this->mockBuilder(['캠핑의자' => $this->vm('캠핑의자', 5000)]);
-        $cat = $this->category();
+        $cat = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집']);
         $c = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑의자', 'source' => 'seed', 'monthly_total' => 5000, 'status' => 'approved']);
 
         $doc = app(KeywordHubPublisher::class)->publish($c);
@@ -129,6 +131,34 @@ class KeywordHubTest extends TestCase
         $c->update(['status' => 'approved']);
         app(KeywordHubPublisher::class)->publish($c);
         $this->assertSame(1, KeywordSearch::where('origin', 'hub')->where('keyword', '캠핑의자')->count());
+    }
+
+    public function test_publisher_creates_shopping_market_analysis_for_shopping_candidate(): void
+    {
+        $cat = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구']);
+        $candidate = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '여름이불', 'source' => 'datalab', 'monthly_total' => 12000, 'status' => 'approved']);
+        $sourceUser = User::create(['name' => 'u', 'email' => 'market-source@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create([
+            'user_id' => $sourceUser->id,
+            'keyword' => '여름이불',
+            'total_count' => 1000,
+            'item_count' => 80,
+            'sales_6m' => 500,
+            'revenue_6m' => 15000000,
+            'avg_price' => 30000,
+            'median_price' => 28000,
+            'top10_share' => 42.5,
+            'monthly_search' => 12000,
+            'comp_idx' => '중간',
+            'snapshot' => ['top_products' => [['title' => '시원한 여름이불', 'price' => 30000, 'purchase6m' => 50]]],
+        ]);
+
+        $doc = app(KeywordHubPublisher::class)->publish($candidate);
+
+        $this->assertInstanceOf(MarketAnalysis::class, $doc);
+        $this->assertStringContainsString('/market/', $doc->shareUrl());
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '여름이불', 'status' => 'published']);
+        $this->assertDatabaseMissing('keyword_searches', ['origin' => 'hub', 'keyword' => '여름이불']);
     }
 
     public function test_publisher_holds_thin_candidates(): void
@@ -151,7 +181,7 @@ class KeywordHubTest extends TestCase
             '캠핑의자' => $this->vm('캠핑의자', 5000),
             '캠핑테이블' => $this->vm('캠핑테이블', 2000),
         ]);
-        $cat = $this->category();
+        $cat = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집']);
         KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑테이블', 'monthly_total' => 2000, 'status' => 'approved']);
         KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'approved']);
 
@@ -193,10 +223,10 @@ class KeywordHubTest extends TestCase
         $this->assertSame('approved', $c2->fresh()->status);
 
         // 화면 렌더 — 후보 큐는 별도 관리 페이지(candidates)의 승인 탭에 표시(허브 첫 화면은 발행 전용)
-        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=approved')
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=approved&type=shopping')
             ->assertOk()->assertSee('캠핑의자')->assertSee('후보 큐');
         $this->actingAs($admin)->get('/admin/keyword-hub')
-            ->assertOk()->assertDontSee('후보 큐')->assertSee('자동 분석·발행');
+            ->assertOk()->assertDontSee('후보 큐')->assertSee('키워드 자동 분석');
     }
 
     public function test_admin_page_shows_source_counts_and_filters_by_source(): void
@@ -217,6 +247,80 @@ class KeywordHubTest extends TestCase
         // source=combo 필터 — 지역조합만 남고 다른 출처(autocomplete)는 후보 큐에서 빠진다
         $this->actingAs($admin)->get('/admin/keyword-hub/candidates?source=combo')
             ->assertOk()->assertSee('강남 맛집')->assertDontSee('자동완성후보어');
+    }
+
+    public function test_candidate_page_separates_place_and_shopping_candidates(): void
+    {
+        $admin = $this->admin();
+        $place = $this->category(['type' => 'place', 'name' => '맛집', 'slug' => '맛집', 'seed_keywords' => []]);
+        $shopping = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구', 'seed_keywords' => []]);
+
+        KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'source' => 'combo', 'region' => '강남', 'status' => 'pending']);
+        KeywordCandidate::create(['category_id' => $shopping->id, 'keyword' => '여름이불', 'source' => 'datalab', 'status' => 'pending']);
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=pending')
+            ->assertOk()
+            ->assertSee('플레이스 후보 큐')
+            ->assertSee('강남 맛집')
+            ->assertDontSee('여름이불');
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=pending&type=shopping')
+            ->assertOk()
+            ->assertSee('쇼핑 후보 큐')
+            ->assertSee('여름이불')
+            ->assertDontSee('강남 맛집')
+            ->assertDontSee('전체 지역');
+    }
+
+    public function test_published_category_cards_open_document_lists_with_analysis_links(): void
+    {
+        $admin = $this->admin();
+        $system = User::create([
+            'name' => 'hub',
+            'email' => config('rankfree.hub.system_user_email', 'hub-system@rankfree.kr'),
+            'password' => 'x1234567',
+            'role' => 'super',
+        ]);
+
+        $placeRoot = KeywordCategory::create(['type' => 'place', 'name' => '플레이스 맛집', 'slug' => '플레이스-맛집', 'is_active' => true]);
+        $placeChild = KeywordCategory::create(['type' => 'place', 'parent_id' => $placeRoot->id, 'name' => '한식', 'slug' => '한식', 'is_active' => true]);
+        $shopRoot = KeywordCategory::create(['type' => 'shopping', 'name' => '생활건강', 'slug' => '생활건강', 'naver_cid' => 50000008, 'is_active' => true]);
+        $shopChild = KeywordCategory::create(['type' => 'shopping', 'parent_id' => $shopRoot->id, 'name' => '침구', 'slug' => '침구', 'naver_cid' => 50000100, 'is_active' => true]);
+
+        $keywordDoc = KeywordSearch::create([
+            'origin' => 'hub',
+            'category_id' => $placeChild->id,
+            'keyword' => '강남 한식',
+            'region' => '강남',
+            'monthly_total' => 8000,
+        ]);
+        $marketDoc = MarketAnalysis::create([
+            'user_id' => $system->id,
+            'category_id' => $shopChild->id,
+            'keyword' => '여름이불',
+            'total_count' => 1000,
+            'item_count' => 80,
+            'monthly_search' => 5000,
+            'revenue_6m' => 1200000,
+            'snapshot' => ['top_products' => []],
+        ]);
+
+        $this->actingAs($admin)->get('/admin/keyword-hub')
+            ->assertOk()
+            ->assertSee(route('admin.keyword-hub.published', ['type' => 'place', 'category' => $placeRoot->id]), false)
+            ->assertSee(route('admin.keyword-hub.published', ['type' => 'shopping', 'category' => $shopRoot->id]), false);
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/published/place/'.$placeRoot->id)
+            ->assertOk()
+            ->assertSee('강남 한식')
+            ->assertSee($keywordDoc->shareUrl(), false)
+            ->assertDontSee('여름이불');
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/published/shopping/'.$shopRoot->id)
+            ->assertOk()
+            ->assertSee('여름이불')
+            ->assertSee($marketDoc->shareUrl(), false)
+            ->assertDontSee('강남 한식');
     }
 
     public function test_publish_batch_publishes_one_and_reports_remaining(): void
@@ -291,17 +395,17 @@ class KeywordHubTest extends TestCase
         $shop = $this->category(['seed_keywords' => []]);
         KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
 
-        // 시작 — running·유형·남은 수 반영
-        $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1, 'type' => 'shopping'])
+        // 시작 — 유형 미지정이면 쇼핑+플레이스 전체를 동시에 처리한다
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1])
             ->assertOk()
             ->assertJsonPath('data.running', true)
-            ->assertJsonPath('data.type', 'shopping')
+            ->assertJsonPath('data.type', null)
             ->assertJsonPath('data.remaining', 1);
         $this->assertTrue(HubAutoRun::isRunning());
 
         // 상태 폴링
         $this->actingAs($admin)->getJson('/admin/keyword-hub/auto-status')
-            ->assertOk()->assertJsonPath('data.running', true)->assertJsonPath('data.type', 'shopping');
+            ->assertOk()->assertJsonPath('data.running', true)->assertJsonPath('data.type', null);
 
         // 중단
         $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 0])
@@ -328,16 +432,18 @@ class KeywordHubTest extends TestCase
         $this->artisan('hub:auto-publish')->assertSuccessful();
         $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'pending']);
 
-        // 쇼핑으로 켜고 실행 → 쇼핑 pending 만 발행(승인 없이), 플레이스는 격리. 다 드레인되면 자동 종료.
+        // 쇼핑으로 켜고 실행 → 큐 워커가 실제 분석을 병렬 처리한다.
+        Queue::fake();
         HubAutoRun::start('shopping');
         $this->artisan('hub:auto-publish')->assertSuccessful();
 
-        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'published']);
+        Queue::assertPushed(KeywordHubPublishCandidateJob::class, 1);
+        $this->assertDatabaseHas('keyword_candidates', ['keyword' => '캠핑의자', 'status' => 'pending']);
         $this->assertDatabaseHas('keyword_candidates', ['keyword' => '강남 맛집', 'status' => 'pending']);
         $s = HubAutoRun::state();
-        $this->assertSame(1, $s['done']);
-        $this->assertSame(0, $s['remaining']);
-        $this->assertFalse($s['running']); // 쇼핑 소진 → 자동 종료
+        $this->assertSame(0, $s['done']);
+        $this->assertSame(1, $s['remaining']);
+        $this->assertTrue($s['running']);
     }
 
     public function test_admin_seed_list_hides_datalab_tree_categories(): void
@@ -351,8 +457,8 @@ class KeywordHubTest extends TestCase
 
         $res = $this->actingAs($admin)->get('/admin/keyword-hub/candidates')->assertOk();
 
-        // 시드 카드(카테고리 수정 폼)는 수동 카테고리만 — 데이터랩 분류는 카드로 안 펼친다(화면 폭주 방지)
-        $res->assertSee('keyword-hub/categories/'.$manual->id, false);
+        // 카테고리 수정 폼은 후보 화면에서 제거했다. 데이터랩 분류도 카드로 펼치지 않는다.
+        $res->assertDontSee('keyword-hub/categories/'.$manual->id, false);
         $res->assertDontSee('keyword-hub/categories/'.$datalab->id, false);
     }
 

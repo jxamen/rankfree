@@ -4,7 +4,9 @@ namespace App\Domain\Seo;
 
 use App\Console\Commands\SitemapRefresh;
 use App\Models\KeywordCategory;
+use App\Models\KeywordSearch;
 use App\Support\GoogleToken;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -30,21 +32,23 @@ class SearchEnginePing
      * IndexNow 로 문서·허브 페이지 URL 을 보내고, 구글엔 사이트맵을 재제출한다.
      * (hub:refresh 갱신은 사이트맵 lastmod 로 충분해 알리지 않는다 — 대량 반복 제출 방지)
      *
-     * @param  \Illuminate\Support\Collection<int,\App\Models\KeywordSearch>|array  $docs
+     * @param  \Illuminate\Support\Collection<int,Model>|array  $docs
      * @return string 요약 메시지(관리자 플래시·콘솔 출력용). 비활성/대상 없음이면 빈 문자열.
      */
     public function afterHubPublish($docs): string
     {
-        $docs = collect($docs)->filter(fn ($d) => $d && $d->exists); // 미저장 모델 방어(shareUrl 이 저장을 유발)
+        $docs = collect($docs)->filter(fn ($d) => $d instanceof Model && $d->exists); // 미저장 모델 방어(shareUrl 이 저장을 유발)
         if (! self::enabled() || $docs->isEmpty()) {
             return '';
         }
 
         $this->bumpSitemapVersion();
 
-        $urls = $docs->map(fn ($d) => $d->shareUrl())->all();
+        $urls = $docs->filter(fn ($d) => method_exists($d, 'shareUrl'))->map(fn ($d) => $d->shareUrl())->all();
         $urls[] = route('keywords.index');
-        $catIds = $docs->pluck('category_id')->filter()->unique()->values();
+        $catIds = $docs
+            ->filter(fn ($d) => $d instanceof KeywordSearch)
+            ->pluck('category_id')->filter()->unique()->values();
         if ($catIds->isNotEmpty()) {
             foreach (KeywordCategory::whereIn('id', $catIds)->pluck('slug') as $slug) {
                 $urls[] = route('keywords.category', $slug);

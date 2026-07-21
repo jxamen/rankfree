@@ -97,7 +97,7 @@ class KeywordHubCollector
             return false;
         }
 
-        return $isSeed || $volume === null || $volume >= (int) config('rankfree.hub.min_volume', 1000);
+        return $isSeed || $volume === null || $volume >= (int) config('rankfree.hub.min_volume', 10);
     }
 
     /** 키워드 형태 필터(길이 2~60자 + 특수문자 제외 + 금지 패턴) — hub:discover 등 다른 유입 경로도 공용. */

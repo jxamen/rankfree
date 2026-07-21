@@ -129,6 +129,8 @@ return [
     | 발굴과 분리해 기본 on — 승인 큐가 빌 때까지 자동으로 계속 드레인한다(회당 ≤publish_per_run).
     */
     'hub' => [
+        // 자동 분석이 생성하는 쇼핑 시장 분석 문서를 소유할 시스템 계정.
+        'system_user_email' => env('HUB_SYSTEM_USER_EMAIL', 'hub-system@rankfree.kr'),
         // 발굴(hub:collect/discover/refresh/shopping-collect) 자동 실행 — 쿼터·도어웨이 보호로 기본 off
         'schedule_enabled' => (bool) env('HUB_SCHEDULE_ENABLED', false),
         // 승인 후보 자동 발행 — 발굴과 분리(관리자 승인분만 처리). 기본 on: 승인분을 자동으로 계속 발행
@@ -136,13 +138,13 @@ return [
         // hub:publish 자동 실행 간격(분, 1~60) — 이 주기마다 승인 후보 ≤publish_per_run 발행(없으면 idle)
         'publish_interval' => (int) env('HUB_PUBLISH_INTERVAL', 10),
         // 후보 자동 필터: 이 미만 월간 검색량은 후보에서 제외(자동완성 등 볼륨 미상은 pending 유지)
-        'min_volume' => (int) env('HUB_MIN_VOLUME', 1000),
+        'min_volume' => (int) env('HUB_MIN_VOLUME', 10),
         // hub:collect 1회에 처리할 카테고리 수(collected_at 오래된 순 로테이션)
         'collect_categories' => (int) env('HUB_COLLECT_CATEGORIES', 3),
         // hub:publish 1회 발행 상한(검색광고 쿼터 보호 — 도어웨이 대량 발행 방지)
         'publish_per_run' => (int) env('HUB_PUBLISH_PER_RUN', 10),
-        // hub:auto-publish(관리자 토글, 매분) 1회 발행 상한 — 시간 예산(45초) 안에서 이 개수까지
-        'auto_per_run' => (int) env('HUB_AUTO_PER_RUN', 15),
+        // hub:auto-publish(관리자 토글, 매분) 1회 큐 적재 상한. Supervisor 워커 수보다 넉넉히 둔다.
+        'auto_per_run' => (int) env('HUB_AUTO_PER_RUN', 60),
         // hub:refresh 1회 재수집 상한(refreshed_at 오래된 순)
         'refresh_per_run' => (int) env('HUB_REFRESH_PER_RUN', 20),
         // 발행 문서 재수집 주기(일) — 이보다 어린 문서는 갱신하지 않음
