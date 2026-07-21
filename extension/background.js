@@ -1190,6 +1190,13 @@ const handlers = {
       storeId: String(p.storeId || ''), // 스토어 핸들(smartstore/brand) — 서버가 스마트스토어만 저장한다
       reviewCount: Number(p.reviewCount) || 0,
       isCatalog: !!p.isCatalog,         // 가격비교는 저장하지 않는다(서버에서도 한 번 더 막는다)
+      // 시장분석 산출용(0.3.7) — 서버가 C1 산식으로 판매량·매출·시장분석 문서를 만든다
+      purchase6m: Number(p.purchase6m) || 0,
+      revenue6m: p.revenue6m != null && Number.isFinite(+p.revenue6m) ? Math.round(+p.revenue6m) : null,
+      mallCount: Number(p.mallCount) || 0,
+      sellerCount: Number(p.sellerCount) || 0,
+      mallGrade: String(p.mallGrade || ''),
+      category: String(p.category || ''),
     })).filter((p) => p.title);
 
     const { ok, json } = await apiFetch('/api/ext/keyword-shop-serp', {

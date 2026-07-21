@@ -181,6 +181,13 @@ class ExtKeywordShopSerpController extends Controller
             'products.*.channelNo' => 'nullable|integer|min:0',
             'products.*.reviewCount' => 'nullable|integer|min:0',   // 가격비교 판매처는 리뷰 있는 것만 받는다
             'products.*.isCatalog' => 'nullable|boolean',           // 가격비교 자체는 저장하지 않는다
+            // 시장분석 산출용(확장 v0.3.7+) — 6개월 구매건수·카탈로그 보강 매출·몰 등급·카테고리
+            'products.*.purchase6m' => 'nullable|integer|min:0',
+            'products.*.revenue6m' => 'nullable|integer|min:0',
+            'products.*.mallCount' => 'nullable|integer|min:0',
+            'products.*.sellerCount' => 'nullable|integer|min:0',
+            'products.*.mallGrade' => 'nullable|string|max:40',
+            'products.*.category' => 'nullable|string|max:191',
             'related_tags' => 'nullable|array|max:50',
         ]);
 
@@ -211,6 +218,26 @@ class ExtKeywordShopSerpController extends Controller
             ],
         );
 
-        return response()->json(['data' => ['saved' => $row->item_count, 'collected_at' => $row->collected_at->toDateTimeString()]]);
+        // 구매건수가 실린 수집(확장 v0.3.7+)이면 시장분석도 함께 생성 — "쇼핑 시장 분석은 확장 플로만"의
+        // 대량 경로. 수집 유저 소유 문서로 저장돼 허브 발행이 이를 복제한다. purchase6m 필드 자체가 없으면
+        // 구버전 확장 수집이므로 만들지 않는다(전부 0인 껍데기 방지).
+        $market = null;
+        $hasPurchaseField = collect($items)->contains(fn ($p) => array_key_exists('purchase6m', $p));
+        if ($hasPurchaseField) {
+            $market = app(\App\Domain\Shopping\MarketAnalysisFromSerp::class)->save(
+                $request->user(),
+                $keyword,
+                array_map(fn ($p) => $p + ['purchase6m' => 0, 'revenue6m' => null], $items),
+                (int) ($data['total'] ?? 0),
+                (array) ($data['related_tags'] ?? []),
+            );
+        }
+
+        return response()->json(['data' => [
+            'saved' => $row->item_count,
+            'collected_at' => $row->collected_at->toDateTimeString(),
+            'market_id' => $market?->id,
+            'market_sales_6m' => $market?->sales_6m,
+        ]]);
     }
 }
