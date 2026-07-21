@@ -175,7 +175,7 @@ class SettingsController extends Controller
             'count' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
 
-        $token = trim((string) AppSetting::read(self::CLOUDFLARE_API_TOKEN_KEY));
+        $token = self::normalizeCloudflareApiToken((string) AppSetting::read(self::CLOUDFLARE_API_TOKEN_KEY));
         if ($token === '') {
             return back()
                 ->withInput()
@@ -253,7 +253,7 @@ class SettingsController extends Controller
 
     private function saveCloudflareSettings(Request $request): void
     {
-        AppSetting::write(self::CLOUDFLARE_API_TOKEN_KEY, trim((string) $request->input('cloudflare_api_token', '')));
+        AppSetting::write(self::CLOUDFLARE_API_TOKEN_KEY, self::normalizeCloudflareApiToken((string) $request->input('cloudflare_api_token', '')));
         AppSetting::write(
             self::CLOUDFLARE_DNS_TARGET_KEY,
             self::normalizeDnsTarget((string) $request->input('cloudflare_dns_target', '')) ?? ''
@@ -330,6 +330,15 @@ class SettingsController extends Controller
         }
 
         return self::normalizeCloudflareZones($rows);
+    }
+
+    private static function normalizeCloudflareApiToken(string $value): string
+    {
+        $value = trim($value);
+        $value = trim($value, "\"'");
+        $value = preg_replace('/\s+/', '', $value) ?? '';
+
+        return preg_replace('/^bearer/i', '', $value) ?? '';
     }
 
     private static function normalizeCloudflareZones(array $values): array

@@ -163,7 +163,7 @@ class SettingsTest extends TestCase
     {
         $this->actingAs($this->super())->put('/admin/settings', [
             'tab' => 'domains',
-            'cloudflare_api_token' => 'cf-token',
+            'cloudflare_api_token' => 'Bearer cf-token',
             'cloudflare_dns_target' => 'https://rankfree.kr/app',
             'cloudflare_zone_domain' => ['https://rankfree.kr', 'bad value', 'rankfree.kr'],
             'cloudflare_zone_id' => ['', 'ignored', 'zone-123'],
