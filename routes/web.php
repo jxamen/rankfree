@@ -239,22 +239,6 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::put('/shop-rank/{slot}', [ShopRankTrackController::class, 'update'])->name('shop-rank.update');
     Route::delete('/shop-rank/{slot}', [ShopRankTrackController::class, 'destroy'])->name('shop-rank.destroy');
 
-    // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25)
-    Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');
-    Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->middleware('throttle:30,1')->name('shop-keyword.store');
-    Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
-    Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->middleware('throttle:240,1')->name('shop-keyword.check');
-    Route::get('/shop-keyword/{analysis}/pending', [ShopKeywordExposureController::class, 'pending'])->middleware('throttle:240,1')->name('shop-keyword.pending');
-    Route::post('/shop-keyword/{analysis}/check-html', [ShopKeywordExposureController::class, 'checkHtml'])->middleware('throttle:240,1')->name('shop-keyword.check-html');
-    Route::post('/shop-keyword/{analysis}/supplement', [ShopKeywordExposureController::class, 'supplement'])->middleware('throttle:30,1')->name('shop-keyword.supplement');
-    Route::post('/shop-keyword/{analysis}/product-info', [ShopKeywordExposureController::class, 'refreshProductInfo'])->middleware('throttle:30,1')->name('shop-keyword.product-info');
-    Route::post('/shop-keyword/{analysis}/pause', [ShopKeywordExposureController::class, 'pause'])->middleware('throttle:60,1')->name('shop-keyword.pause');
-    Route::post('/shop-keyword/{analysis}/regenerate', [ShopKeywordExposureController::class, 'regenerate'])->middleware('throttle:30,1')->name('shop-keyword.regenerate');
-    Route::post('/shop-keyword/{analysis}/recheck-exposed', [ShopKeywordExposureController::class, 'recheckExposed'])->middleware('throttle:30,1')->name('shop-keyword.recheck-exposed');
-    Route::post('/shop-keyword/{analysis}/short-links', [ShopKeywordExposureController::class, 'storeShortLinks'])->name('shop-keyword.short-links.store');
-    Route::delete('/shop-keyword/{analysis}/item/{item}', [ShopKeywordExposureController::class, 'deleteItem'])->name('shop-keyword.item');
-    Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
-
     // 마케팅 키워드 분석 (검색량·성별/연령·트렌드·연관키워드)
     Route::get('/keyword', [KeywordAnalysisController::class, 'index'])->name('keyword');
     // 통합검색 PC/모바일 섹션 배치 순서 (Playwright 수집 — 비동기 lazy 로드)
@@ -346,6 +330,22 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 순위추적 관리 — 전 회원의 플레이스·쇼핑 순위추적 슬롯 열람
     Route::get('/place-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'place'])->name('place-tracking');
     Route::get('/shop-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'shop'])->name('shop-tracking');
+
+    // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
+    Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');
+    Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->middleware('throttle:30,1')->name('shop-keyword.store');
+    Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
+    Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->middleware('throttle:240,1')->name('shop-keyword.check');
+    Route::get('/shop-keyword/{analysis}/pending', [ShopKeywordExposureController::class, 'pending'])->middleware('throttle:240,1')->name('shop-keyword.pending');
+    Route::post('/shop-keyword/{analysis}/check-html', [ShopKeywordExposureController::class, 'checkHtml'])->middleware('throttle:240,1')->name('shop-keyword.check-html');
+    Route::post('/shop-keyword/{analysis}/supplement', [ShopKeywordExposureController::class, 'supplement'])->middleware('throttle:30,1')->name('shop-keyword.supplement');
+    Route::post('/shop-keyword/{analysis}/product-info', [ShopKeywordExposureController::class, 'refreshProductInfo'])->middleware('throttle:30,1')->name('shop-keyword.product-info');
+    Route::post('/shop-keyword/{analysis}/pause', [ShopKeywordExposureController::class, 'pause'])->middleware('throttle:60,1')->name('shop-keyword.pause');
+    Route::post('/shop-keyword/{analysis}/regenerate', [ShopKeywordExposureController::class, 'regenerate'])->middleware('throttle:30,1')->name('shop-keyword.regenerate');
+    Route::post('/shop-keyword/{analysis}/recheck-exposed', [ShopKeywordExposureController::class, 'recheckExposed'])->middleware('throttle:30,1')->name('shop-keyword.recheck-exposed');
+    Route::post('/shop-keyword/{analysis}/short-links', [ShopKeywordExposureController::class, 'storeShortLinks'])->name('shop-keyword.short-links.store');
+    Route::delete('/shop-keyword/{analysis}/item/{item}', [ShopKeywordExposureController::class, 'deleteItem'])->name('shop-keyword.item');
+    Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
 
     // 마케팅 상품 관리 (폼 빌더 + 주문 URL 발급)
     Route::get('/products', [MarketingProductController::class, 'index'])->name('products');

@@ -65,7 +65,7 @@ class ShopKeywordExposureTest extends TestCase
 
     private function store(User $user, array $override = []): ShopKeywordAnalysis
     {
-        $this->actingAs($user)->post(route('console.shop-keyword.store'), array_merge([
+        $this->actingAs($user)->post(route('admin.shop-keyword.store'), array_merge([
             'core_keyword' => '비타민c',
             'product' => 'https://smartstore.naver.com/x/products/111',
             'threshold' => 5,
@@ -77,7 +77,7 @@ class ShopKeywordExposureTest extends TestCase
     private function runChecks(User $user, ShopKeywordAnalysis $a): void
     {
         for ($i = 0; $i < 10; $i++) {
-            if ((int) $this->actingAs($user)->post(route('console.shop-keyword.check', $a))->json('remaining') <= 0) {
+            if ((int) $this->actingAs($user)->post(route('admin.shop-keyword.check', $a))->json('remaining') <= 0) {
                 break;
             }
         }
@@ -98,12 +98,12 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_index_renders(): void
     {
-        $this->actingAs(User::factory()->create())->get(route('console.shop-keyword'))->assertOk()->assertSee('쇼핑 노출 키워드');
+        $this->actingAs(User::factory()->create(['role' => 'operator']))->get(route('admin.shop-keyword'))->assertOk()->assertSee('쇼핑 노출 키워드');
     }
 
     public function test_index_shows_exposed_keyword_and_url_totals(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/1', 'status' => 'done']);
         $b = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
@@ -115,7 +115,7 @@ class ShopKeywordExposureTest extends TestCase
         ShopKeywordShortLink::create(['analysis_id' => $a->id, 'token' => 'abc123abc12', 'group_no' => 1, 'group_count' => 2, 'keywords' => ['비타민c 고함량']]);
         ShopKeywordShortLink::create(['analysis_id' => $a->id, 'token' => 'def456def45', 'group_no' => 2, 'group_count' => 2, 'keywords' => ['비타민c 1000']]);
 
-        $r = $this->actingAs($u)->get(route('console.shop-keyword'))->assertOk();
+        $r = $this->actingAs($u)->get(route('admin.shop-keyword'))->assertOk();
         $r->assertDontSee('상위 5위 이내 노출 키워드');
         $r->assertDontSee('단축 URL 수');
         $r->assertSee('단축 URL 2');
@@ -123,7 +123,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_captures_product_info_and_builds_title_combos(): void
     {
-        $a = $this->store(User::factory()->create());
+        $a = $this->store(User::factory()->create(['role' => 'operator']));
 
         // 내 상품정보(제목·브랜드·가격) 캡처
         $this->assertSame('종근당 비타민c 고함량 1000 리포좀 분말 스틱 고용량', $a->product_title);
@@ -141,7 +141,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_reference_sources_not_used_in_combos(): void
     {
-        $a = $this->store(User::factory()->create());
+        $a = $this->store(User::factory()->create(['role' => 'operator']));
         // 참고 소스(자동완성/경쟁브랜드)는 조합(kind=combo)에 as-is 로 안 들어간다
         $this->assertDatabaseMissing('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '고려은단']);
         // 자동완성 원문은 참고 토큰으로만
@@ -150,7 +150,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_exposure_rank_from_mobile_organic(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $this->runChecks($u, $a);
         $a->refresh();
@@ -162,7 +162,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_negative_words_excluded(): void
     {
-        $a = $this->store(User::factory()->create());
+        $a = $this->store(User::factory()->create(['role' => 'operator']));
         foreach ($a->items()->pluck('keyword') as $kw) {
             $this->assertStringNotContainsString('과다복용', $kw);
         }
@@ -171,13 +171,13 @@ class ShopKeywordExposureTest extends TestCase
     public function test_regenerate_hides_nonexposed_and_adds_new(): void
     {
         // "고함량" 조합만 노출, 나머지 미노출 → regenerate 가 미노출을 감추고 새 조합 추가
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $this->runChecks($u, $a);
         $a->refresh();
         $this->assertGreaterThan(0, $a->combos()->where('rank', '<=', 0)->count());   // 미노출 존재
 
-        $r = $this->actingAs($u)->post(route('console.shop-keyword.regenerate', $a))->assertOk();
+        $r = $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
         $this->assertGreaterThan(0, (int) $r->json('added'));
         $a->refresh();
         $this->assertGreaterThan(0, $a->allCombos()->where('hidden', true)->count());   // 미노출 감춰짐
@@ -186,13 +186,13 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_delete_token_cascades_and_bans(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $title = ShopKeywordAnalysisItem::where('analysis_id', $a->id)->where('source', 'title')->where('keyword', '고함량')->first();
         $this->assertNotNull($title);
         $this->assertGreaterThan(0, $a->allCombos()->where('keyword', 'like', '%고함량%')->count());
 
-        $this->actingAs($u)->delete(route('console.shop-keyword.item', [$a, $title]))->assertOk();
+        $this->actingAs($u)->delete(route('admin.shop-keyword.item', [$a, $title]))->assertOk();
 
         $this->assertSame(0, $a->allCombos()->where('keyword', 'like', '%고함량%')->count());
         $this->assertContains('고함량', (array) $a->fresh()->banned);   // 삭제어 기록
@@ -200,7 +200,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_extension_product_info_feeds_title_and_seller_tag_combos(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'operator']);
         [, $plain] = ExtToken::issue($user);
 
         // 확장이 상품 페이지에서 수집한 상품정보 업로드
@@ -233,17 +233,17 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_extension_check_html_sets_rank_and_clears_blocked(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $a->update(['status' => 'blocked']);   // 서버 fetch 가 한도에 걸렸던 상태
 
         // pending 배치 — 미확인 조합 id·keyword 목록
-        $p = $this->actingAs($u)->get(route('console.shop-keyword.pending', $a))->assertOk()->json('data');
+        $p = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->assertOk()->json('data');
         $this->assertNotEmpty($p['items']);
         $item = $p['items'][0];
 
         // 확장(브라우저)이 가져온 HTML 로 판정 — 111 포함 → 오가닉 1위(광고 제외)
-        $r = $this->actingAs($u)->postJson(route('console.shop-keyword.check-html', $a), [
+        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
             'item_id' => $item['id'], 'html' => $this->htmlWith,
         ])->assertOk();
         $this->assertSame(1, (int) $r->json('rank'));
@@ -251,9 +251,9 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertContains($r->json('status'), ['checking', 'done']);   // blocked 해제
 
         // 빈 HTML(가격비교 미노출) → rank 0
-        $p2 = $this->actingAs($u)->get(route('console.shop-keyword.pending', $a))->json('data');
+        $p2 = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
         if (! empty($p2['items'])) {
-            $r2 = $this->actingAs($u)->postJson(route('console.shop-keyword.check-html', $a), [
+            $r2 = $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
                 'item_id' => $p2['items'][0]['id'], 'html' => '',
             ])->assertOk();
             $this->assertSame(0, (int) $r2->json('rank'));
@@ -262,39 +262,39 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_pause_persists_and_survives_late_check_and_reload(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $this->assertSame('checking', $a->status);
 
         // "중단" — 서버에 paused 저장
-        $this->actingAs($u)->postJson(route('console.shop-keyword.pause', $a), ['paused' => true])->assertOk();
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.pause', $a), ['paused' => true])->assertOk();
         $this->assertSame('paused', $a->refresh()->status);
 
         // 새로고침(show) — 중단 상태로 렌더(자동 재시작 안 함: paused=true + 중단 라벨)
-        $this->actingAs($u)->get(route('console.shop-keyword.show', $a))
+        $this->actingAs($u)->get(route('admin.shop-keyword.show', $a))
             ->assertOk()
             ->assertSee('순위 확인 중단됨')
             ->assertSee('paused: true', false);
 
         // 중단 직후 늦게 도착한 확장 판정 1건이 paused 를 checking 으로 덮어쓰지 않는다
-        $p = $this->actingAs($u)->get(route('console.shop-keyword.pending', $a))->json('data');
-        $this->actingAs($u)->postJson(route('console.shop-keyword.check-html', $a), [
+        $p = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
             'item_id' => $p['items'][0]['id'], 'html' => $this->htmlWith,
         ])->assertOk();
         $this->assertSame('paused', $a->refresh()->status);
 
         // "이어서 확인" — checking 으로 복귀
-        $this->actingAs($u)->postJson(route('console.shop-keyword.pause', $a), ['paused' => false])->assertOk();
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.pause', $a), ['paused' => false])->assertOk();
         $this->assertSame('checking', $a->refresh()->status);
 
         // 남이 내 분석을 중단시킬 수 없다
-        $this->actingAs(User::factory()->create())
-            ->postJson(route('console.shop-keyword.pause', $a), ['paused' => true])->assertForbidden();
+        $this->actingAs(User::factory()->create(['role' => 'operator']))
+            ->postJson(route('admin.shop-keyword.pause', $a), ['paused' => true])->assertForbidden();
     }
 
     public function test_check_html_backfills_product_title_from_matched_slot(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/111', 'product_id' => '111',
@@ -302,7 +302,7 @@ class ShopKeywordExposureTest extends TestCase
         ]);
         $item = ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => '비타민c 고함량']);
 
-        $this->actingAs($u)->postJson(route('console.shop-keyword.check-html', $a), [
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
             'item_id' => $item->id, 'html' => $this->htmlWith,
         ])->assertOk();
 
@@ -314,13 +314,13 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_supplement_merges_together_and_competitor_tokens(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/111', 'product_id' => '111', 'status' => 'done',
         ]);
 
-        $r = $this->actingAs($u)->postJson(route('console.shop-keyword.supplement', $a), [
+        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.supplement', $a), [
             'mshop_html' => $this->htmlWith,
             'related' => ['비타민c 효능', '비타민c 하루권장량', '메가도스'],
         ])->assertOk();
@@ -329,13 +329,13 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'competitor_brand', 'keyword' => '고려은단']);
 
         // 반복 병합 방지(10분 가드) — 두 번째 호출은 skipped
-        $r2 = $this->actingAs($u)->postJson(route('console.shop-keyword.supplement', $a), ['related' => ['다른키워드']])->assertOk();
+        $r2 = $this->actingAs($u)->postJson(route('admin.shop-keyword.supplement', $a), ['related' => ['다른키워드']])->assertOk();
         $this->assertTrue((bool) $r2->json('data.skipped'));
     }
 
     public function test_product_info_refresh_backfills_and_adds_tokens(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         \App\Models\ShopProductInfo::create([
             'user_id' => $u->id, 'channel_product_id' => '555',
             'title' => '고려은단 비타민C 1000 600정', 'brand' => '고려은단', 'price' => 50000,
@@ -346,7 +346,7 @@ class ShopKeywordExposureTest extends TestCase
             'product_url' => 'https://brand.naver.com/koreaeundan/products/555', 'product_id' => '555', 'status' => 'done',
         ]);
 
-        $r = $this->actingAs($u)->postJson(route('console.shop-keyword.product-info', $a))->assertOk();
+        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.product-info', $a))->assertOk();
         $this->assertTrue((bool) $r->json('data.found'));
         $a->refresh();
         $this->assertSame('고려은단 비타민C 1000 600정', $a->product_title);
@@ -358,13 +358,13 @@ class ShopKeywordExposureTest extends TestCase
     public function test_product_info_accepts_extension_payload_directly(): void
     {
         // 확장이 payload 를 페이지로 돌려주는 경로 — ShopProductInfo 없이도 저장·백필된다
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://brand.naver.com/koreaeundan/products/777', 'product_id' => '777', 'status' => 'done',
         ]);
 
-        $r = $this->actingAs($u)->postJson(route('console.shop-keyword.product-info', $a), [
+        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.product-info', $a), [
             'info' => [
                 'channel_product_id' => '777',
                 'title' => '고려은단 비타민C 1000 이지 120정',
@@ -387,7 +387,7 @@ class ShopKeywordExposureTest extends TestCase
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://brand.naver.com/x/products/888', 'product_id' => '888', 'status' => 'done',
         ]);
-        $this->actingAs($u)->postJson(route('console.shop-keyword.product-info', $b), [
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.product-info', $b), [
             'info' => ['channel_product_id' => '777', 'title' => '엉뚱한 상품'],
         ])->assertOk();
         $this->assertNull($b->fresh()->product_title);
@@ -396,7 +396,7 @@ class ShopKeywordExposureTest extends TestCase
     public function test_low_yield_tiers_removed_from_generation(): void
     {
         // 어미(suffix)·속성(attr) 티어는 패턴 실측(1/20·0/298)으로 생성에서 제거됐다
-        $a = $this->store(User::factory()->create());
+        $a = $this->store(User::factory()->create(['role' => 'operator']));
         $this->assertDatabaseMissing('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '비타민c 추천']);
         $this->assertSame(0, $a->allCombos()->whereIn('combo_tag', ['attr', 'suffix'])->count());
         // 속성·경쟁브랜드는 참고 토큰으로는 남는다
@@ -405,7 +405,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_regenerate_skips_pattern_failing_tags(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/111', 'product_id' => '111',
@@ -420,7 +420,7 @@ class ShopKeywordExposureTest extends TestCase
                 'keyword' => '실패태그'.$i, 'combo_tag' => 'tag', 'rank' => 0, 'checked_at' => now()]);
         }
 
-        $this->actingAs($u)->post(route('console.shop-keyword.regenerate', $a))->assertOk();
+        $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
 
         $this->assertGreaterThan(0, $a->combos()->whereNull('rank')->count());                                  // 새 조합은 생성
         $this->assertSame(0, $a->combos()->whereNull('rank')->where('combo_tag', 'tag')->count());              // 실패 유형은 스킵
@@ -430,7 +430,7 @@ class ShopKeywordExposureTest extends TestCase
     public function test_tail_combos_title_and_brand_with_attr_suffix(): void
     {
         // 속성·어미는 단독이 아니라 제목/브랜드 조합에 1개씩 덧붙는 tail 로만 생성된다(사용자 요청 4종)
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/111', 'product_id' => '111',
@@ -440,7 +440,7 @@ class ShopKeywordExposureTest extends TestCase
             ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'token', 'source' => $src, 'keyword' => $kw]);
         }
 
-        $this->actingAs($u)->post(route('console.shop-keyword.regenerate', $a))->assertOk();
+        $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
 
         foreach ([
             ['비타민c 고함량 분말', 'title_attr'],
@@ -457,7 +457,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_short_links_assign_exposed_keywords_round_robin_and_rotate_in_order(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
             'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
             'product_url' => 'https://smartstore.naver.com/x/products/111', 'status' => 'done',
@@ -478,8 +478,8 @@ class ShopKeywordExposureTest extends TestCase
         ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'keyword_rec', 'keyword' => '비타민c 하루권장량']);
 
         $this->actingAs($u)
-            ->post(route('console.shop-keyword.short-links.store', $a), ['group_count' => 2])
-            ->assertRedirect(route('console.shop-keyword.show', $a));
+            ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 2])
+            ->assertRedirect(route('admin.shop-keyword.show', $a));
 
         $links = ShopKeywordShortLink::where('analysis_id', $a->id)->orderBy('group_no')->get();
         $this->assertCount(2, $links);
@@ -517,7 +517,7 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_short_link_count_cannot_exceed_exposed_keyword_count(): void
     {
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done']);
         ShopKeywordAnalysisItem::create([
             'analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo',
@@ -525,9 +525,9 @@ class ShopKeywordExposureTest extends TestCase
         ]);
 
         $this->actingAs($u)
-            ->from(route('console.shop-keyword.show', $a))
-            ->post(route('console.shop-keyword.short-links.store', $a), ['group_count' => 2])
-            ->assertRedirect(route('console.shop-keyword.show', $a))
+            ->from(route('admin.shop-keyword.show', $a))
+            ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 2])
+            ->assertRedirect(route('admin.shop-keyword.show', $a))
             ->assertSessionHasErrors('group_count');
 
         $this->assertSame(0, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
@@ -536,7 +536,7 @@ class ShopKeywordExposureTest extends TestCase
     public function test_recheck_exposed_resets_only_exposed(): void
     {
         // 광고 판별 개선(슈퍼적립) 전에 오가닉으로 오판된 노출 기록 정정 — 노출분만 미확인으로 리셋
-        $u = User::factory()->create();
+        $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done', 'combo_count' => 3]);
         $mk = fn ($kw, $rank, $ad = false) => ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo',
             'source' => 'combo', 'keyword' => $kw, 'rank' => $rank, 'ad_exposed' => $ad, 'checked_at' => now()]);
@@ -544,7 +544,7 @@ class ShopKeywordExposureTest extends TestCase
         $outItem = $mk('비타민c 분말', 0);
         $farItem = $mk('비타민c 고용량', 9);
 
-        $r = $this->actingAs($u)->postJson(route('console.shop-keyword.recheck-exposed', $a))->assertOk();
+        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertOk();
 
         $this->assertSame(1, (int) $r->json('data.reset'));
         $this->assertNull($exposedItem->fresh()->rank);            // 노출분만 리셋
@@ -553,20 +553,20 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertSame(9, $farItem->fresh()->rank);             // 순위 밖 유지
         $this->assertSame('checking', $a->fresh()->status);
 
-        $other = User::factory()->create();
-        $this->actingAs($other)->postJson(route('console.shop-keyword.recheck-exposed', $a))->assertForbidden();
+        $other = User::factory()->create(['role' => 'operator']);
+        $this->actingAs($other)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertForbidden();
     }
 
     public function test_ownership_enforced(): void
     {
-        $owner = User::factory()->create();
-        $other = User::factory()->create();
+        $owner = User::factory()->create(['role' => 'operator']);
+        $other = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create(['user_id' => $owner->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done']);
-        $this->actingAs($other)->get(route('console.shop-keyword.show', $a))->assertForbidden();
-        $this->actingAs($other)->post(route('console.shop-keyword.regenerate', $a))->assertForbidden();
-        $this->actingAs($other)->get(route('console.shop-keyword.pending', $a))->assertForbidden();
-        $this->actingAs($other)->postJson(route('console.shop-keyword.check-html', $a), ['item_id' => 1])->assertForbidden();
-        $this->actingAs($other)->postJson(route('console.shop-keyword.supplement', $a))->assertForbidden();
-        $this->actingAs($other)->post(route('console.shop-keyword.short-links.store', $a), ['group_count' => 1])->assertForbidden();
+        $this->actingAs($other)->get(route('admin.shop-keyword.show', $a))->assertForbidden();
+        $this->actingAs($other)->post(route('admin.shop-keyword.regenerate', $a))->assertForbidden();
+        $this->actingAs($other)->get(route('admin.shop-keyword.pending', $a))->assertForbidden();
+        $this->actingAs($other)->postJson(route('admin.shop-keyword.check-html', $a), ['item_id' => 1])->assertForbidden();
+        $this->actingAs($other)->postJson(route('admin.shop-keyword.supplement', $a))->assertForbidden();
+        $this->actingAs($other)->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 1])->assertForbidden();
     }
 }

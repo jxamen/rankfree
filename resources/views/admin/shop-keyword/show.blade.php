@@ -1,7 +1,7 @@
-@extends('console.layout')
+@extends('admin.layout')
 @section('page-title', '쇼핑 노출 키워드 — '.$analysis->core_keyword)
 
-@section('console-content')
+@section('admin-content')
 @php
     // 조합 재료 소스 + 참고(조합 X) 소스 라벨
     $srcLabel = [
@@ -48,12 +48,12 @@
 </div>
 
 <div class="flex items-center gap-2 mb-4 flex-wrap">
-    <a href="{{ route('console.shop-keyword') }}" class="btn btn-ghost btn-sm">← 목록</a>
-    <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('console.shop-keyword.regenerate', $analysis) }}"
+    <a href="{{ route('admin.shop-keyword') }}" class="btn btn-ghost btn-sm">← 목록</a>
+    <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('admin.shop-keyword.regenerate', $analysis) }}"
         title="노출 안 된 조합을 접고 새 조합을 생성합니다(노출 키워드는 유지)">＋ 새로 조합</button>
-    <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('console.shop-keyword.recheck-exposed', $analysis) }}"
+    <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
         title="노출 판정된 조합만 미확인으로 되돌려 다시 확인합니다 — 광고(슈퍼적립) 오판 정정용">노출 재확인</button>
-    <form method="POST" action="{{ route('console.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;">
+    <form method="POST" action="{{ route('admin.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;">
         @csrf @method('DELETE')
         <button type="submit" class="btn btn-ghost btn-sm text-error" data-confirm="이 분석을 삭제할까요?">삭제</button>
     </form>
@@ -65,7 +65,7 @@
     $isPaused = $analysis->status === 'paused';
 @endphp
 @if ($remaining > 0)
-    <div id="sk-prog" class="card p-4 mb-4" data-url="{{ route('console.shop-keyword.check', $analysis) }}">
+    <div id="sk-prog" class="card p-4 mb-4" data-url="{{ route('admin.shop-keyword.check', $analysis) }}">
         <div class="flex items-center justify-between mb-2">
             <span id="sk-prog-label" class="text-ink" style="font-size:var(--fs-sm);">
                 @if ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서 확인"으로 재개합니다
@@ -144,7 +144,7 @@
 <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1 flex-wrap" style="gap:10px;">
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
-        <form method="POST" action="{{ route('console.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
+        <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
             @csrf
             <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
             <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>{{ ($shortLinks ?? collect())->isEmpty() ? '생성' : '다시 생성' }}</button>
@@ -359,18 +359,18 @@ window.__SK = {
     needSupplement: @json($needSupplement),
     paused: @json($analysis->status === 'paused'),
     urls: {
-        check: '{{ route('console.shop-keyword.check', $analysis) }}',
-        pause: '{{ route('console.shop-keyword.pause', $analysis) }}',
-        pending: '{{ route('console.shop-keyword.pending', $analysis) }}',
-        checkHtml: '{{ route('console.shop-keyword.check-html', $analysis) }}',
-        supplement: '{{ route('console.shop-keyword.supplement', $analysis) }}',
-        productInfo: '{{ route('console.shop-keyword.product-info', $analysis) }}',
+        check: '{{ route('admin.shop-keyword.check', $analysis) }}',
+        pause: '{{ route('admin.shop-keyword.pause', $analysis) }}',
+        pending: '{{ route('admin.shop-keyword.pending', $analysis) }}',
+        checkHtml: '{{ route('admin.shop-keyword.check-html', $analysis) }}',
+        supplement: '{{ route('admin.shop-keyword.supplement', $analysis) }}',
+        productInfo: '{{ route('admin.shop-keyword.product-info', $analysis) }}',
     },
 };
 </script>
 <script>
 (function () {
-    const base = "{{ url('console/shop-keyword/'.$analysis->id.'/item') }}";
+    const base = "{{ url('admin/shop-keyword/'.$analysis->id.'/item') }}";
     const csrf = '{{ csrf_token() }}';
 
     // 전체 복사(노출/광고 키워드) — 줄바꿈 구분. 실시간 확인 결과가 push 할 수 있게 전역 노출

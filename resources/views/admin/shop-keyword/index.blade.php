@@ -1,7 +1,7 @@
-@extends('console.layout')
+@extends('admin.layout')
 @section('page-title', '쇼핑 노출 키워드')
 
-@section('console-content')
+@section('admin-content')
 
 <x-console.page-head title="쇼핑 노출 키워드 분석">
     <x-slot:desc>핵심 키워드와 상품 URL로 키워드를 추출·조합해, <b>어떤 검색어에서 내 상품이 쇼핑 상위 {{ $top }}위에 노출되는지</b> 찾아 제품명·태그·상세페이지 SEO 개선 근거로 씁니다.</x-slot:desc>
@@ -10,7 +10,7 @@
 @error('core_keyword')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 @error('product')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 
-<form method="POST" action="{{ route('console.shop-keyword.store') }}" class="card p-5 mb-5">
+<form method="POST" action="{{ route('admin.shop-keyword.store') }}" class="card p-5 mb-5">
     @csrf
     <div class="flex gap-3 flex-wrap items-start mb-3">
         <div style="flex:1;min-width:220px;">
@@ -39,7 +39,7 @@
 
 <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-sm);">최근 분석</div>
 @forelse ($analyses as $a)
-    <a href="{{ route('console.shop-keyword.show', $a) }}" class="card p-4 mb-2 flex items-center gap-3" style="text-decoration:none;">
+    <a href="{{ route('admin.shop-keyword.show', $a) }}" class="card p-4 mb-2 flex items-center gap-3" style="text-decoration:none;">
         <div style="flex:1;min-width:0;">
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $a->core_keyword }}
                 <span class="text-muted-soft font-normal" style="font-size:var(--fs-xs);">· {{ $a->product_id ? '상품 '.$a->product_id : ($a->mall_name ?: '대상 미상') }}</span>

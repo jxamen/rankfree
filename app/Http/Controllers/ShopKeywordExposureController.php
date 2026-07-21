@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * 쇼핑 노출 키워드 분석(25) — 콘솔 `console.shop-keyword`.
+ * 쇼핑 노출 키워드 분석(25) — 관리자 `admin.shop-keyword`(운영자 전용, 2026-07-21 콘솔→관리자 이동).
  * 핵심 키워드 + 상품 URL → 키워드 자동 추출·조합 생성 후, 모바일 검색 가격비교 순위를 배치로
  * 채워가며(폴링) "상위 N위 노출" 키워드를 찾는다. 추출 키워드·조합은 개별 삭제 가능.
  */
@@ -29,7 +29,7 @@ class ShopKeywordExposureController extends Controller
             ->withCount('shortLinks')
             ->latest()->limit(30)->get();
 
-        return view('console.shop-keyword.index', [
+        return view('admin.shop-keyword.index', [
             'analyses' => $analyses,
             'top' => (int) config('rankfree.shopping.exposure.top', 5),
         ]);
@@ -52,7 +52,7 @@ class ShopKeywordExposureController extends Controller
             ['threshold' => $data['threshold'] ?? null],
         );
 
-        return redirect()->route('console.shop-keyword.show', $analysis);
+        return redirect()->route('admin.shop-keyword.show', $analysis);
     }
 
     /** 배치 순위체크(폴링) — 확장 미설치 폴백. 서버가 직접 fetch 해 일부를 체크하고 진행상황 JSON 반환. */
@@ -257,7 +257,7 @@ class ShopKeywordExposureController extends Controller
             }
         });
 
-        return redirect()->route('console.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
+        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
     }
 
     public function short(string $token): RedirectResponse
@@ -329,7 +329,7 @@ class ShopKeywordExposureController extends Controller
             ->sortByDesc(fn ($r) => ($r['checked'] ? $r['exposed'] / $r['checked'] : 0) * 1000 + $r['exposed'])
             ->values();
 
-        return view('console.shop-keyword.show', [
+        return view('admin.shop-keyword.show', [
             'analysis' => $analysis,
             'tokens' => $tokens,
             'combos' => $combos,
@@ -372,7 +372,7 @@ class ShopKeywordExposureController extends Controller
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $analysis->delete();
 
-        return redirect()->route('console.shop-keyword')->with('status', '분석을 삭제했습니다.');
+        return redirect()->route('admin.shop-keyword')->with('status', '분석을 삭제했습니다.');
     }
 
     private function escapeLike(string $s): string
