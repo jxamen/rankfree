@@ -515,6 +515,28 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertStringContainsString('"hit_count" = "hit_count" + 1', $queries[0]);
     }
 
+    public function test_short_link_table_shows_hit_count_before_assigned_keywords(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create([
+            'user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5,
+            'product_url' => 'https://smartstore.naver.com/x/products/111', 'status' => 'done',
+        ]);
+        ShopKeywordShortLink::create([
+            'analysis_id' => $a->id,
+            'token' => 'abc123abc12',
+            'group_no' => 1,
+            'group_count' => 1,
+            'keywords' => ['비타민c 고함량'],
+            'hit_count' => 1234,
+        ]);
+
+        $this->actingAs($u)->get(route('admin.shop-keyword.show', $a))
+            ->assertOk()
+            ->assertSeeInOrder(['키워드', '조회수', '배정 키워드'])
+            ->assertSee('1,234');
+    }
+
     public function test_short_link_count_cannot_exceed_exposed_keyword_count(): void
     {
         $u = User::factory()->create(['role' => 'operator']);
