@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 /**
  * 환경 설정 (운영자) — 네이버 API 자격증명 관리(모두 다중 등록/삭제).
@@ -13,6 +14,12 @@ use Illuminate\Support\Facades\Cache;
  */
 class SettingsController extends Controller
 {
+    private const SECONDARY_DOMAINS_KEY = 'secondary.domains';
+    private const CLOUDFLARE_API_TOKEN_KEY = 'cloudflare.api_token';
+    private const CLOUDFLARE_DNS_TARGET_KEY = 'cloudflare.dns_target';
+    private const CLOUDFLARE_ZONES_KEY = 'cloudflare.zones';
+    private const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
+
     /** 각 자격증명 그룹 정의: setting키 => [폼접두, 일반필드, 시크릿필드]. */
     private const GROUPS = [
         'searchad.accounts' => ['g' => 'searchad', 'plain' => ['api_key', 'customer_id'], 'secret' => 'secret_key'],
@@ -33,6 +40,10 @@ class SettingsController extends Controller
         return view('admin.settings.index', [
             // 플레이스 업종별 패턴(지역 × 패턴 조합 시딩에 사용) — 넣고 뺄 수 있게
             'placePatterns' => $patterns->all(),
+            'secondaryDomains' => self::normalizeDomains(AppSetting::readJson(self::SECONDARY_DOMAINS_KEY)),
+            'cloudflareApiToken' => AppSetting::read(self::CLOUDFLARE_API_TOKEN_KEY),
+            'cloudflareDnsTarget' => AppSetting::read(self::CLOUDFLARE_DNS_TARGET_KEY) ?: self::defaultDnsTarget(request()),
+            'cloudflareZones' => self::normalizeCloudflareZones(AppSetting::readJson(self::CLOUDFLARE_ZONES_KEY)),
             'searchadRows' => AppSetting::readJson('searchad.accounts'),
             'adsRows' => AppSetting::readJson('ads.logins'),
             'openapiRows' => AppSetting::readJson('openapi.keys'),
@@ -122,6 +133,9 @@ class SettingsController extends Controller
                 ->map(fn ($raw) => \App\Domain\Keyword\PlaceKeywordPatterns::parse((string) $raw))->all());
         }
 
+        $this->saveSecondaryDomains($request);
+        $this->saveCloudflareSettings($request);
+
         // 커스텀 head 코드(CSS·스크립트/HTML) 저장 + 캐시 무효화
         AppSetting::write('custom.head_css', (string) $request->input('custom_head_css', ''));
         AppSetting::write('custom.head_html', (string) $request->input('custom_head_html', ''));
@@ -147,9 +161,415 @@ class SettingsController extends Controller
         AppSetting::write('referral.bonus_max', (string) max(0, (int) $request->input('referral_bonus_max', 200)));
 
         // 저장 후에도 보던 탭 유지
-        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'custom'], true) ? $request->input('tab') : null;
+        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
 
         return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
+    }
+
+    public function createSecondaryDomain(Request $request)
+    {
+        $request->validate([
+            'zone_domain' => ['required', 'string', 'max:253'],
+            'subdomain' => ['nullable', 'string', 'max:253'],
+            'dns_target' => ['nullable', 'string', 'max:253'],
+            'count' => ['nullable', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        $token = trim((string) AppSetting::read(self::CLOUDFLARE_API_TOKEN_KEY));
+        if ($token === '') {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'Cloudflare API token is required.']);
+        }
+
+        $zoneDomain = self::normalizeDomain((string) $request->input('zone_domain'));
+        $zones = self::normalizeCloudflareZones(AppSetting::readJson(self::CLOUDFLARE_ZONES_KEY));
+        $zone = collect($zones)->firstWhere('domain', $zoneDomain);
+        if ($zoneDomain === null || ! $zone) {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'Register the Cloudflare connected domain first.']);
+        }
+
+        $count = max(1, min(50, (int) $request->input('count', 1)));
+        $prefix = (string) $request->input('subdomain', '');
+        $domains = $this->buildSecondaryDomains($prefix, $zoneDomain, $count);
+        if ($domains === []) {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'Enter a valid subdomain.']);
+        }
+
+        $target = self::normalizeDnsTarget(
+            (string) ($request->input('dns_target') ?: AppSetting::read(self::CLOUDFLARE_DNS_TARGET_KEY) ?: self::defaultDnsTarget($request))
+        );
+        if ($target === null) {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'Enter the server target host or IP for the DNS record.']);
+        }
+
+        try {
+            $zoneId = trim((string) ($zone['zone_id'] ?? ''));
+            if ($zoneId === '') {
+                $zoneId = $this->resolveCloudflareZoneId($token, $zoneDomain);
+                AppSetting::write(
+                    self::CLOUDFLARE_ZONES_KEY,
+                    json_encode(self::withCloudflareZoneId($zones, $zoneDomain, $zoneId), JSON_UNESCAPED_UNICODE)
+                );
+            }
+
+            foreach ($domains as $domain) {
+                $this->upsertCloudflareDnsRecord($token, $zoneId, $domain, $target, (bool) ($zone['proxied'] ?? true));
+            }
+        } catch (\Throwable $e) {
+            return back()
+                ->withInput()
+                ->withErrors(['cloudflare' => 'Cloudflare DNS create failed: '.$e->getMessage()]);
+        }
+
+        AppSetting::write(self::CLOUDFLARE_DNS_TARGET_KEY, $target);
+        AppSetting::write(
+            self::SECONDARY_DOMAINS_KEY,
+            json_encode(self::normalizeDomains([...AppSetting::readJson(self::SECONDARY_DOMAINS_KEY), ...$domains]), JSON_UNESCAPED_UNICODE)
+        );
+
+        $message = $count === 1
+            ? '2차 도메인을 생성했습니다: '.$domains[0]
+            : '2차 도메인 '.$count.'개를 생성했습니다: '.implode(', ', $domains);
+
+        return redirect()
+            ->route('admin.settings', ['tab' => 'domains'])
+            ->with('status', $message);
+    }
+
+    private function saveSecondaryDomains(Request $request): void
+    {
+        AppSetting::write(
+            self::SECONDARY_DOMAINS_KEY,
+            json_encode(self::normalizeDomains((array) $request->input('secondary_domains', [])), JSON_UNESCAPED_UNICODE)
+        );
+    }
+
+    private function saveCloudflareSettings(Request $request): void
+    {
+        AppSetting::write(self::CLOUDFLARE_API_TOKEN_KEY, trim((string) $request->input('cloudflare_api_token', '')));
+        AppSetting::write(
+            self::CLOUDFLARE_DNS_TARGET_KEY,
+            self::normalizeDnsTarget((string) $request->input('cloudflare_dns_target', '')) ?? ''
+        );
+        AppSetting::write(
+            self::CLOUDFLARE_ZONES_KEY,
+            json_encode(self::normalizeCloudflareZonesFromRequest($request), JSON_UNESCAPED_UNICODE)
+        );
+    }
+
+    private static function normalizeDomains(array $values): array
+    {
+        $domains = [];
+        foreach ($values as $value) {
+            if (is_array($value)) {
+                $value = $value['domain'] ?? '';
+            }
+            $domain = self::normalizeDomain((string) $value);
+            if ($domain !== null && ! in_array($domain, $domains, true)) {
+                $domains[] = $domain;
+            }
+        }
+
+        return $domains;
+    }
+
+    private static function normalizeDomain(string $value): ?string
+    {
+        $value = strtolower(trim($value));
+        $value = preg_replace('/\s+/', '', $value) ?? '';
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_starts_with($value, '//')) {
+            $host = parse_url('https:'.$value, PHP_URL_HOST);
+        } elseif (str_contains($value, '://')) {
+            $host = parse_url($value, PHP_URL_HOST);
+        } else {
+            $host = preg_split('/[\/?#]/', $value, 2)[0] ?? '';
+        }
+
+        $host = trim((string) $host, '.');
+        $host = preg_replace('/:\d+$/', '', $host) ?? '';
+        if ($host === '') {
+            return null;
+        }
+
+        if (function_exists('idn_to_ascii')) {
+            $ascii = idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+            if (is_string($ascii) && $ascii !== '') {
+                $host = strtolower($ascii);
+            }
+        }
+
+        return preg_match('/^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/', $host)
+            ? $host
+            : null;
+    }
+
+    private static function normalizeCloudflareZonesFromRequest(Request $request): array
+    {
+        $domains = (array) $request->input('cloudflare_zone_domain', []);
+        $zoneIds = (array) $request->input('cloudflare_zone_id', []);
+        $rows = [];
+        $count = max(count($domains), count($zoneIds));
+
+        for ($i = 0; $i < $count; $i++) {
+            $rows[] = [
+                'domain' => $domains[$i] ?? '',
+                'zone_id' => $zoneIds[$i] ?? '',
+                'proxied' => true,
+            ];
+        }
+
+        return self::normalizeCloudflareZones($rows);
+    }
+
+    private static function normalizeCloudflareZones(array $values): array
+    {
+        $zones = [];
+
+        foreach ($values as $value) {
+            $domain = self::normalizeDomain((string) (is_array($value) ? ($value['domain'] ?? '') : $value));
+            if ($domain === null) {
+                continue;
+            }
+
+            $zones[$domain] = [
+                'domain' => $domain,
+                'zone_id' => trim((string) (is_array($value) ? ($value['zone_id'] ?? '') : '')),
+                'proxied' => is_array($value) ? (bool) ($value['proxied'] ?? true) : true,
+            ];
+        }
+
+        return array_values($zones);
+    }
+
+    private static function withCloudflareZoneId(array $zones, string $domain, string $zoneId): array
+    {
+        foreach ($zones as &$zone) {
+            if (($zone['domain'] ?? null) === $domain) {
+                $zone['zone_id'] = $zoneId;
+                $zone['proxied'] = (bool) ($zone['proxied'] ?? true);
+            }
+        }
+        unset($zone);
+
+        return self::normalizeCloudflareZones($zones);
+    }
+
+    private function buildSecondaryDomains(string $value, string $zoneDomain, int $count): array
+    {
+        $value = strtolower(trim($value));
+
+        if ($count === 1 && $value !== '') {
+            $domain = self::normalizeSubdomain($value, $zoneDomain);
+
+            return $domain === null ? [] : [$domain];
+        }
+
+        $prefix = self::normalizeDnsLabel(str_ends_with($value, '.'.$zoneDomain)
+            ? substr($value, 0, -strlen('.'.$zoneDomain))
+            : $value);
+        $domains = [];
+        $used = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $label = $this->randomSubdomainLabel($prefix, $used);
+            $domain = self::normalizeDomain($label.'.'.$zoneDomain);
+            if ($domain !== null) {
+                $domains[] = $domain;
+            }
+        }
+
+        return $domains;
+    }
+
+    private static function normalizeDnsLabel(string $value): ?string
+    {
+        $value = strtolower(trim($value));
+        $value = preg_replace('/\s+/', '-', $value) ?? '';
+        $value = preg_replace('/[^a-z0-9-]+/', '-', $value) ?? '';
+        $value = trim($value, '-');
+        if ($value === '') {
+            return null;
+        }
+
+        $value = substr($value, 0, 40);
+        $value = trim($value, '-');
+
+        return preg_match('/^(?!-)[a-z0-9-]{1,63}(?<!-)$/', $value) ? $value : null;
+    }
+
+    private function randomSubdomainLabel(?string $prefix, array &$used): string
+    {
+        $words = [
+            'able', 'amber', 'atlas', 'beam', 'bright', 'calm', 'clear', 'core', 'daily', 'dawn',
+            'delta', 'easy', 'focus', 'fresh', 'glow', 'green', 'happy', 'harbor', 'kind', 'light',
+            'lucky', 'mint', 'nova', 'olive', 'orbit', 'prime', 'quiet', 'river', 'round', 'silver',
+            'smart', 'solid', 'spark', 'stone', 'sunny', 'swift', 'true', 'urban', 'vivid', 'wave',
+        ];
+
+        do {
+            $word = $words[random_int(0, count($words) - 1)];
+            $suffix = strtolower(substr(bin2hex(random_bytes(3)), 0, 5));
+            $base = $prefix ? substr($prefix, 0, max(1, 63 - strlen($word) - strlen($suffix) - 2)).'-' : '';
+            $label = trim($base.$word.'-'.$suffix, '-');
+        } while (isset($used[$label]));
+
+        $used[$label] = true;
+
+        return $label;
+    }
+
+    private static function normalizeSubdomain(string $value, string $zoneDomain): ?string
+    {
+        $value = strtolower(trim($value));
+        $value = preg_replace('/\s+/', '', $value) ?? '';
+        $value = trim($value, '.');
+        if ($value === '' || str_contains($value, '*')) {
+            return null;
+        }
+
+        $domain = self::normalizeDomain($value);
+        if ($domain !== null && str_ends_with($domain, '.'.$zoneDomain)) {
+            return $domain;
+        }
+
+        if (str_contains($value, '://') || str_contains($value, '/') || str_contains($value, '?')) {
+            return null;
+        }
+
+        return self::normalizeDomain($value.'.'.$zoneDomain);
+    }
+
+    private static function normalizeDnsTarget(string $value): ?string
+    {
+        $value = strtolower(trim($value));
+        $value = preg_replace('/\s+/', '', $value) ?? '';
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_starts_with($value, '//')) {
+            $host = parse_url('https:'.$value, PHP_URL_HOST);
+        } elseif (str_contains($value, '://')) {
+            $host = parse_url($value, PHP_URL_HOST);
+        } else {
+            $host = preg_split('/[\/?#]/', $value, 2)[0] ?? '';
+        }
+
+        $host = trim((string) $host, '.');
+        $host = preg_replace('/:\d+$/', '', $host) ?? '';
+        if ($host === '') {
+            return null;
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return $host;
+        }
+
+        return self::normalizeDomain($host);
+    }
+
+    private static function defaultDnsTarget(Request $request): string
+    {
+        $host = self::normalizeDnsTarget((string) config('app.url'));
+        if ($host !== null && ! in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+            return $host;
+        }
+
+        $host = self::normalizeDnsTarget($request->getHost());
+
+        return $host !== null && ! in_array($host, ['localhost', '127.0.0.1', '::1'], true) ? $host : '';
+    }
+
+    private static function dnsRecordType(string $target): string
+    {
+        if (filter_var($target, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return 'A';
+        }
+
+        if (filter_var($target, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return 'AAAA';
+        }
+
+        return 'CNAME';
+    }
+
+    private function resolveCloudflareZoneId(string $token, string $zoneDomain): string
+    {
+        $payload = $this->cloudflareRequest($token, 'GET', '/zones', [
+            'name' => $zoneDomain,
+            'status' => 'active',
+            'per_page' => 1,
+        ]);
+
+        $zone = collect($payload['result'] ?? [])->first(fn ($row) => ($row['name'] ?? null) === $zoneDomain);
+        $zoneId = trim((string) ($zone['id'] ?? ''));
+        if ($zoneId === '') {
+            throw new \RuntimeException('Cloudflare zone not found: '.$zoneDomain);
+        }
+
+        return $zoneId;
+    }
+
+    private function upsertCloudflareDnsRecord(string $token, string $zoneId, string $fqdn, string $target, bool $proxied): array
+    {
+        $record = [
+            'type' => self::dnsRecordType($target),
+            'name' => $fqdn,
+            'content' => $target,
+            'ttl' => 1,
+            'proxied' => $proxied,
+        ];
+
+        $existing = $this->cloudflareRequest($token, 'GET', '/zones/'.$zoneId.'/dns_records', [
+            'name' => $fqdn,
+            'per_page' => 20,
+        ]);
+        $existingRecord = collect($existing['result'] ?? [])->first();
+
+        if ($existingRecord && ! empty($existingRecord['id'])) {
+            return $this->cloudflareRequest($token, 'PATCH', '/zones/'.$zoneId.'/dns_records/'.$existingRecord['id'], $record);
+        }
+
+        return $this->cloudflareRequest($token, 'POST', '/zones/'.$zoneId.'/dns_records', $record);
+    }
+
+    private function cloudflareRequest(string $token, string $method, string $path, array $data = []): array
+    {
+        $client = Http::withToken($token)->acceptJson()->asJson()->timeout(20);
+        $url = self::CLOUDFLARE_API_BASE.$path;
+        $response = match (strtoupper($method)) {
+            'GET' => $client->get($url, $data),
+            'POST' => $client->post($url, $data),
+            'PATCH' => $client->patch($url, $data),
+            default => throw new \InvalidArgumentException('Unsupported Cloudflare method: '.$method),
+        };
+        $payload = $response->json();
+        $payload = is_array($payload) ? $payload : [];
+
+        if (! $response->successful() || ! (bool) ($payload['success'] ?? false)) {
+            throw new \RuntimeException(self::cloudflareErrorMessage($payload) ?: $response->body() ?: 'Cloudflare API request failed.');
+        }
+
+        return $payload;
+    }
+
+    private static function cloudflareErrorMessage(array $payload): string
+    {
+        return collect($payload['errors'] ?? [])
+            ->map(fn ($error) => trim(((string) ($error['code'] ?? '')).' '.((string) ($error['message'] ?? ''))))
+            ->filter()
+            ->implode(' / ');
     }
 
     /** AI 키 저장 — 공급자별 고정칸. 폼 필드: ai_key[{provider}]. 저장 포맷은 ai.keys=[{provider,api_key}] 유지. */

@@ -10,6 +10,7 @@ use App\Providers\SettingsServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /** 환경 설정 — 네이버 API 자격증명 다중 관리, 암호화 저장, config 런타임 오버라이드, 계정 로테이션. */
@@ -156,6 +157,61 @@ class SettingsTest extends TestCase
             'searchad_api_key' => ['AK'], 'searchad_customer_id' => ['11'], 'searchad_secret_key' => [''],
         ]);
         $this->assertCount(0, AppSetting::readJson('searchad.accounts'));
+    }
+
+    public function test_cloudflare_settings_are_saved(): void
+    {
+        $this->actingAs($this->super())->put('/admin/settings', [
+            'tab' => 'domains',
+            'cloudflare_api_token' => 'cf-token',
+            'cloudflare_dns_target' => 'https://rankfree.kr/app',
+            'cloudflare_zone_domain' => ['https://rankfree.kr', 'bad value', 'rankfree.kr'],
+            'cloudflare_zone_id' => ['', 'ignored', 'zone-123'],
+            'secondary_domains' => ['https://self.rankfree.kr/path'],
+        ])->assertRedirect(route('admin.settings', ['tab' => 'domains']));
+
+        $this->assertSame('cf-token', AppSetting::read('cloudflare.api_token'));
+        $this->assertSame('rankfree.kr', AppSetting::read('cloudflare.dns_target'));
+        $this->assertSame([['domain' => 'rankfree.kr', 'zone_id' => 'zone-123', 'proxied' => true]], AppSetting::readJson('cloudflare.zones'));
+        $this->assertSame(['self.rankfree.kr'], AppSetting::readJson('secondary.domains'));
+    }
+
+    public function test_admin_can_create_random_secondary_domains_through_cloudflare(): void
+    {
+        $super = $this->super();
+        AppSetting::write('cloudflare.api_token', 'cf-token');
+        AppSetting::write('cloudflare.dns_target', 'rankfree.kr');
+        AppSetting::write('cloudflare.zones', json_encode([['domain' => 'rankfree.kr', 'zone_id' => 'zone-123', 'proxied' => true]]));
+
+        Http::fake([
+            'https://api.cloudflare.com/client/v4/zones/zone-123/dns_records*' => function ($request) {
+                if ($request->method() === 'GET') {
+                    return Http::response(['success' => true, 'result' => []], 200);
+                }
+
+                return Http::response(['success' => true, 'result' => ['id' => 'dns-record']], 200);
+            },
+        ]);
+
+        $this->actingAs($super)->post(route('admin.settings.secondary-domain.create'), [
+            'zone_domain' => 'rankfree.kr',
+            'subdomain' => '',
+            'count' => 5,
+        ])->assertRedirect(route('admin.settings', ['tab' => 'domains']));
+
+        $domains = AppSetting::readJson('secondary.domains');
+        $this->assertCount(5, $domains);
+        $this->assertCount(5, array_unique($domains));
+        foreach ($domains as $domain) {
+            $this->assertMatchesRegularExpression('/^[a-z]+-[a-f0-9]{5}\.rankfree\.kr$/', $domain);
+        }
+
+        Http::assertSentCount(10);
+        Http::assertSent(fn ($request) => $request->method() === 'POST'
+            && $request->hasHeader('Authorization', 'Bearer cf-token')
+            && $request['type'] === 'CNAME'
+            && $request['content'] === 'rankfree.kr'
+            && $request['proxied'] === true);
     }
 
     public function test_ai_keys_save_and_override_services_config(): void

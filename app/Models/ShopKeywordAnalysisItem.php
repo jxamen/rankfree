@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ShopKeywordAnalysisItem extends Model
 {
     protected $fillable = [
-        'analysis_id', 'kind', 'source', 'keyword', 'rank', 'ad_exposed', 'hidden', 'monthly_total', 'checked_at',
+        'analysis_id', 'kind', 'source', 'keyword', 'combo_tag', 'rank', 'ad_exposed', 'hidden', 'monthly_total', 'checked_at',
     ];
 
     protected $casts = [

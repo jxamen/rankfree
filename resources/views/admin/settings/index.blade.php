@@ -14,7 +14,7 @@
 @section('admin-content')
 @php
     // 저장/리디렉션 후에도 보던 탭 유지 — ?tab= 파라미터로 초기 활성 탭 결정
-    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'place' => '플레이스 패턴', 'custom' => '커스텀 코드'];
+    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'place' => '플레이스 패턴', 'domains' => '2차 도메인', 'custom' => '커스텀 코드'];
     $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
 @endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
@@ -367,6 +367,104 @@
         </div>
     </div>
 
+    {{-- ── 2차 도메인: Short URL 호스트 풀 ─────────────────────────────── --}}
+    <div class="rf-tabpane" data-tab="domains" @if ($__active !== 'domains') hidden @endif>
+        @if ($errors->has('cloudflare'))
+            <div class="card-soft px-4 py-3 mb-4" style="font-size:var(--fs-xs);color:var(--color-error);">
+                {{ $errors->first('cloudflare') }}
+            </div>
+        @endif
+
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">Cloudflare DNS API</div>
+            <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);line-height:1.6;">
+                Cloudflare에 연결된 상위 도메인을 등록하고, 선택한 상위 도메인 아래에 2차 도메인을 자동 생성합니다.
+                DNS 대상이 IP면 A/AAAA, 호스트명이면 CNAME 레코드로 생성됩니다.
+            </p>
+
+            @include('admin.settings._simplefield', ['name' => 'cloudflare_api_token', 'label' => 'Cloudflare API 토큰', 'value' => $cloudflareApiToken, 'secret' => true, 'placeholder' => 'Zone DNS Edit 토큰'])
+            @include('admin.settings._simplefield', ['name' => 'cloudflare_dns_target', 'label' => 'DNS 대상 호스트/IP', 'value' => $cloudflareDnsTarget, 'secret' => false, 'placeholder' => 'rankfree.kr 또는 서버 IP'])
+
+            <div class="text-ink font-semibold mt-4 mb-2" style="font-size:var(--fs-xs);">Cloudflare 연결 도메인</div>
+            <div class="rf-zone-wrap">
+                @forelse ($cloudflareZones as $zone)
+                    <div class="flex items-center gap-2 mb-2 rf-zone-row flex-wrap">
+                        <input type="text" name="cloudflare_zone_domain[]" value="{{ $zone['domain'] }}" class="input" autocomplete="off" placeholder="rankfree.kr" style="max-width:260px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <input type="text" name="cloudflare_zone_id[]" value="{{ $zone['zone_id'] ?? '' }}" class="input" autocomplete="off" placeholder="Zone ID (비워두면 자동 조회)" style="max-width:360px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <button type="button" class="btn btn-ghost btn-sm rf-zone-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                @empty
+                    <div class="flex items-center gap-2 mb-2 rf-zone-row flex-wrap">
+                        <input type="text" name="cloudflare_zone_domain[]" value="" class="input" autocomplete="off" placeholder="rankfree.kr" style="max-width:260px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <input type="text" name="cloudflare_zone_id[]" value="" class="input" autocomplete="off" placeholder="Zone ID (비워두면 자동 조회)" style="max-width:360px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <button type="button" class="btn btn-ghost btn-sm rf-zone-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                @endforelse
+            </div>
+
+            <template id="rf-zone-tpl">
+                <div class="flex items-center gap-2 mb-2 rf-zone-row flex-wrap">
+                    <input type="text" name="cloudflare_zone_domain[]" value="" class="input" autocomplete="off" placeholder="rankfree.kr" style="max-width:260px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                    <input type="text" name="cloudflare_zone_id[]" value="" class="input" autocomplete="off" placeholder="Zone ID (비워두면 자동 조회)" style="max-width:360px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                    <button type="button" class="btn btn-ghost btn-sm rf-zone-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </template>
+
+            <button type="button" class="btn btn-secondary btn-sm rf-zone-add mt-1">＋ 연결 도메인 추가</button>
+
+            <div class="card-soft px-4 py-3 mt-5">
+                <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-xs);">2차 도메인 생성</div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <input type="text" id="rf-cf-subdomain" class="input" autocomplete="off" placeholder="self 또는 비워두면 랜덤" style="max-width:240px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                    <span class="text-muted-soft">.</span>
+                    <select id="rf-cf-zone" class="input" style="max-width:260px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        @forelse ($cloudflareZones as $zone)
+                            <option value="{{ $zone['domain'] }}">{{ $zone['domain'] }}</option>
+                        @empty
+                            <option value="">연결 도메인 저장 필요</option>
+                        @endforelse
+                    </select>
+                    <input type="number" id="rf-cf-count" class="input" value="1" min="1" max="50" step="1" style="width:96px;font-family:var(--font-mono);font-size:var(--fs-xs);" aria-label="생성 수량">
+                    <button type="button" id="rf-cf-create-btn" class="btn btn-primary btn-sm">생성하기</button>
+                </div>
+                <p class="text-muted-soft mt-2 mb-0" style="font-size:var(--fs-xs);line-height:1.6;">
+                    예: <code>self</code> + <code>rankfree.kr</code> = <code>self.rankfree.kr</code>. 생성된 도메인은 Short URL 도메인 목록에도 자동 추가됩니다.
+                </p>
+            </div>
+        </div>
+
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">2차 도메인</div>
+            <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
+                쇼핑 노출 키워드 Short URL 생성 시 사용할 도메인입니다. 여러 개를 등록하면 Short URL이 도메인별로 순서대로 배정됩니다.
+                프로토콜이나 경로를 붙여 넣어도 저장 시 도메인만 정리합니다.
+            </p>
+
+            <div class="rf-domain-wrap">
+                @forelse ($secondaryDomains as $domain)
+                    <div class="flex items-center gap-2 mb-2 rf-domain-row">
+                        <input type="text" name="secondary_domains[]" value="{{ $domain }}" class="input" autocomplete="off" placeholder="go.example.com" style="max-width:520px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <button type="button" class="btn btn-ghost btn-sm rf-domain-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                @empty
+                    <div class="flex items-center gap-2 mb-2 rf-domain-row">
+                        <input type="text" name="secondary_domains[]" value="" class="input" autocomplete="off" placeholder="go.example.com" style="max-width:520px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                        <button type="button" class="btn btn-ghost btn-sm rf-domain-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                @endforelse
+            </div>
+
+            <template id="rf-domain-tpl">
+                <div class="flex items-center gap-2 mb-2 rf-domain-row">
+                    <input type="text" name="secondary_domains[]" value="" class="input" autocomplete="off" placeholder="go.example.com" style="max-width:520px;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                    <button type="button" class="btn btn-ghost btn-sm rf-domain-del flex-none" title="삭제" aria-label="삭제" style="color:var(--color-error);"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </template>
+
+            <button type="button" class="btn btn-secondary btn-sm rf-domain-add mt-1">＋ 도메인 추가</button>
+        </div>
+    </div>
+
     <div class="rf-tabpane" data-tab="custom" @if ($__active !== 'custom') hidden @endif>
         <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
             아래 코드가 모든 공개 페이지(홈·콘솔)의 <code>&lt;head&gt;</code>에 삽입됩니다. 웹폰트·분석 스크립트(GA·GTM·메타 픽셀)·커스텀 CSS 등에 사용하세요.
@@ -400,6 +498,14 @@
 </form>
 @endif
 
+<form id="rf-cf-create" method="POST" action="{{ route('admin.settings.secondary-domain.create') }}" hidden>
+    @csrf
+    <input type="hidden" name="zone_domain" id="rf-cf-create-zone">
+    <input type="hidden" name="subdomain" id="rf-cf-create-subdomain">
+    <input type="hidden" name="dns_target" id="rf-cf-create-target">
+    <input type="hidden" name="count" id="rf-cf-create-count">
+</form>
+
 <script>
 (function () {
     // ── 탭 전환 (숨긴 탭 입력도 폼 전송됨) ──
@@ -426,11 +532,60 @@
         });
     });
 
+    var domainAdd = document.querySelector('.rf-domain-add');
+    if (domainAdd) {
+        domainAdd.addEventListener('click', function () {
+            var tpl = document.getElementById('rf-domain-tpl');
+            var wrap = document.querySelector('.rf-domain-wrap');
+            if (!tpl || !wrap) return;
+            var row = tpl.content.firstElementChild.cloneNode(true);
+            wrap.appendChild(row);
+            var input = row.querySelector('input');
+            if (input) input.focus();
+        });
+    }
+
     // ── 위임: 삭제(즉시) · 보기/가리기 · 복사 ──
+    var zoneAdd = document.querySelector('.rf-zone-add');
+    if (zoneAdd) {
+        zoneAdd.addEventListener('click', function () {
+            var tpl = document.getElementById('rf-zone-tpl');
+            var wrap = document.querySelector('.rf-zone-wrap');
+            if (!tpl || !wrap) return;
+            var row = tpl.content.firstElementChild.cloneNode(true);
+            wrap.appendChild(row);
+            var input = row.querySelector('input');
+            if (input) input.focus();
+        });
+    }
+
+    var cfCreate = document.getElementById('rf-cf-create-btn');
+    if (cfCreate) {
+        cfCreate.addEventListener('click', function () {
+            var form = document.getElementById('rf-cf-create');
+            var zone = document.getElementById('rf-cf-zone');
+            var subdomain = document.getElementById('rf-cf-subdomain');
+            var target = document.querySelector('input[name="cloudflare_dns_target"]');
+            var count = document.getElementById('rf-cf-count');
+            if (!form || !zone || !zone.value) return;
+            document.getElementById('rf-cf-create-zone').value = zone.value;
+            document.getElementById('rf-cf-create-subdomain').value = subdomain ? subdomain.value : '';
+            document.getElementById('rf-cf-create-target').value = target ? target.value : '';
+            document.getElementById('rf-cf-create-count').value = count ? count.value : '1';
+            form.submit();
+        });
+    }
+
     document.addEventListener('click', function (e) {
         // 즉시 삭제 — 클릭하면 라인이 바로 사라짐(저장 시 반영)
         var del = e.target.closest('.rf-cred-del');
         if (del) { var r = del.closest('.rf-cred-row'); if (r) r.remove(); return; }
+
+        var domainDel = e.target.closest('.rf-domain-del');
+        if (domainDel) { var dr = domainDel.closest('.rf-domain-row'); if (dr) dr.remove(); return; }
+
+        var zoneDel = e.target.closest('.rf-zone-del');
+        if (zoneDel) { var zr = zoneDel.closest('.rf-zone-row'); if (zr) zr.remove(); return; }
 
         // 보기/가리기 토글
         var show = e.target.closest('.rf-secret-show');

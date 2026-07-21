@@ -25,18 +25,10 @@
             <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">노출 기준(위)</label>
             <input type="number" name="threshold" class="input" value="{{ old('threshold', $top) }}" min="1" max="40">
         </div>
-        <div style="width:130px;">
-            <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">조합 수</label>
-            <select name="target_combos" class="input">
-                @foreach ([30, 50, 100, 200, 500] as $n)
-                    <option value="{{ $n }}" @selected((int) old('target_combos', $defaultCombos) === $n)>{{ $n }}개</option>
-                @endforeach
-            </select>
-        </div>
     </div>
 
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
-        브랜드·상품속성·연관·자동완성·어미 조합을 <b>자동으로</b> 만들어 확인합니다 — 따로 입력할 것이 없습니다.
+        브랜드·상품속성·연관·자동완성·어미 조합을 <b>자동으로 만들 수 있는 만큼 전부</b> 만들어 확인합니다 — 따로 입력할 것이 없습니다.
     </div>
 
     <div class="flex items-center justify-between flex-wrap gap-2">
@@ -52,8 +44,9 @@
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $a->core_keyword }}
                 <span class="text-muted-soft font-normal" style="font-size:var(--fs-xs);">· {{ $a->product_id ? '상품 '.$a->product_id : ($a->mall_name ?: '대상 미상') }}</span>
             </div>
-            <div class="text-muted" style="font-size:var(--fs-xs);">조합 {{ $a->combo_count }} · 확인 {{ $a->checked_count }} · <b class="text-ink">상위 {{ $a->threshold }}위 노출 {{ $a->exposed_count }}</b>
-                @if ($a->status === 'blocked')<span class="text-error">· API 한도로 일부 미확인</span>@endif
+            <div class="text-muted" style="font-size:var(--fs-xs);">조합 {{ $a->combo_count }} · 확인 {{ $a->checked_count }} · 단축 URL {{ $a->short_links_count }} · <b class="text-ink">상위 {{ $a->threshold }}위 노출 {{ $a->exposed_count }}</b>
+                @if ($a->status === 'blocked')<span class="text-error">· 일부 미확인(열면 이어서 확인)</span>
+                @elseif ($a->status === 'paused')<span class="text-muted">· 중단됨("이어서 확인"으로 재개)</span>@endif
             </div>
         </div>
         <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $a->created_at->timezone('Asia/Seoul')->format('m-d H:i') }}</span>

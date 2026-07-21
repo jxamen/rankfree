@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-  "version": "0.3.2",
+  "version": "0.3.5",
   "description": "네이버 쇼핑·플레이스·키워드·상품 리뷰 무료 분석 — 시장 규모·순위·키워드·셀러력·리뷰 감정분석. rankfree.kr 로그인 필요.",
   "icons": {
     "16": "icons/icon16.png",
@@ -15,6 +15,8 @@
     "http://localhost:8000/*",
     "https://search.shopping.naver.com/*",
     "https://search.naver.com/*",
+    "https://m.search.naver.com/*",
+    "https://s.search.naver.com/*",
     "https://smartstore.naver.com/*",
     "https://brand.naver.com/*",
     "https://shopping.naver.com/*",
@@ -45,6 +47,16 @@
         "http://localhost:8000/admin/*"
       ],
       "js": ["content/admin-bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "comment": "쇼핑 노출 키워드 콘솔 ↔ 확장 브릿지 — 순위체크용 m.search HTML·상품정보를 브라우저에서 대신 가져온다(서버는 IP 한도)",
+      "matches": [
+        "https://rankfree.kr/console/shop-keyword*",
+        "http://127.0.0.1:8000/console/shop-keyword*",
+        "http://localhost:8000/console/shop-keyword*"
+      ],
+      "js": ["content/console-bridge.js"],
       "run_at": "document_idle"
     },
     {

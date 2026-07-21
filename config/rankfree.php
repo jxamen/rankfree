@@ -13,6 +13,8 @@ return [
         'jcurve19@gmail.com',
     ],
 
+    'secondary_domains' => [],
+
     /*
     |--------------------------------------------------------------------------
     | 네이버 플레이스 순위체크 (A1) — crm ads/smartplace 이식
@@ -97,7 +99,8 @@ return [
         // 노출 키워드 분석(25) — 조합 후보를 순위체크할 때의 상한(쿼터 보호)
         'exposure' => [
             'top' => (int) env('SHOP_EXPOSURE_TOP', 5),           // 이 순위 이내면 "노출"로 본다
-            'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 100), // 기본 조합 수(입력창 select 로 30~500 조절)
+            'hard_cap' => (int) env('SHOP_EXPOSURE_HARD_CAP', 3000), // 조합 생성 안전 상한(사용자 선택 없음 — 만들 수 있는 만큼 전부)
+            'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 100), // (구) 기본 조합 수 — prepare 는 이제 hard_cap 까지 전부 생성
             // 부정적 단어(명백한 것만 — 나머지는 결과에서 개별 삭제). 이 조각 포함 키워드/조합은 만들지 않는다.
             'negatives' => [
                 '과다복용', '부작용', '후유증', '독성', '리콜', '소송', '고발', '가짜', '짝퉁', '허위', '과대광고',

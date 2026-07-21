@@ -34,6 +34,11 @@ class ShopKeywordAnalysis extends Model
         return $this->hasMany(ShopKeywordAnalysisItem::class, 'analysis_id');
     }
 
+    public function shortLinks(): HasMany
+    {
+        return $this->hasMany(ShopKeywordShortLink::class, 'analysis_id');
+    }
+
     public function tokens(): HasMany
     {
         return $this->items()->where('kind', 'token');

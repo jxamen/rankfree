@@ -30,6 +30,14 @@ class SettingsServiceProvider extends ServiceProvider
 
         $rows = fn (string $key) => json_decode($m[$key] ?? '[]', true) ?: [];
 
+        $secondaryDomains = array_values(array_filter(array_map(
+            fn ($domain) => is_string($domain) ? trim($domain) : null,
+            $rows('secondary.domains'),
+        )));
+        if ($secondaryDomains) {
+            config(['rankfree.secondary_domains' => $secondaryDomains]);
+        }
+
         // 1) 네이버 검색광고 공식 API (키워드 분석) — 다중 계정
         $accounts = array_values(array_filter(array_map(
             fn ($a) => (is_array($a) && ! empty($a['api_key']) && ! empty($a['secret_key']) && ! empty($a['customer_id']))

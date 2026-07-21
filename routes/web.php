@@ -85,6 +85,10 @@ Route::get('/place/{slug}', [RankTrackController::class, 'shared'])->name('rank.
 Route::get('/compete/{slug}', [CompeteController::class, 'shared'])->name('compete.shared');
 Route::get('/shopping/{slug}', [ShopRankTrackController::class, 'shared'])->name('shop-rank.shared');
 
+Route::get('/s/{token}', [ShopKeywordExposureController::class, 'short'])
+    ->where('token', '[A-Za-z0-9]+')
+    ->name('shop-keyword.short');
+
 // 구 토큰 공유 URL → 새 슬러그 URL 301(SEO 정규화 · 기존 배포 링크 유지)
 foreach ([
     'k' => [\App\Models\KeywordSearch::class, 'shareUrl'],
@@ -240,7 +244,14 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->middleware('throttle:30,1')->name('shop-keyword.store');
     Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
     Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->middleware('throttle:240,1')->name('shop-keyword.check');
+    Route::get('/shop-keyword/{analysis}/pending', [ShopKeywordExposureController::class, 'pending'])->middleware('throttle:240,1')->name('shop-keyword.pending');
+    Route::post('/shop-keyword/{analysis}/check-html', [ShopKeywordExposureController::class, 'checkHtml'])->middleware('throttle:240,1')->name('shop-keyword.check-html');
+    Route::post('/shop-keyword/{analysis}/supplement', [ShopKeywordExposureController::class, 'supplement'])->middleware('throttle:30,1')->name('shop-keyword.supplement');
+    Route::post('/shop-keyword/{analysis}/product-info', [ShopKeywordExposureController::class, 'refreshProductInfo'])->middleware('throttle:30,1')->name('shop-keyword.product-info');
+    Route::post('/shop-keyword/{analysis}/pause', [ShopKeywordExposureController::class, 'pause'])->middleware('throttle:60,1')->name('shop-keyword.pause');
     Route::post('/shop-keyword/{analysis}/regenerate', [ShopKeywordExposureController::class, 'regenerate'])->middleware('throttle:30,1')->name('shop-keyword.regenerate');
+    Route::post('/shop-keyword/{analysis}/recheck-exposed', [ShopKeywordExposureController::class, 'recheckExposed'])->middleware('throttle:30,1')->name('shop-keyword.recheck-exposed');
+    Route::post('/shop-keyword/{analysis}/short-links', [ShopKeywordExposureController::class, 'storeShortLinks'])->name('shop-keyword.short-links.store');
     Route::delete('/shop-keyword/{analysis}/item/{item}', [ShopKeywordExposureController::class, 'deleteItem'])->name('shop-keyword.item');
     Route::delete('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'destroy'])->name('shop-keyword.destroy');
 
@@ -485,6 +496,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 환경 설정 — 네이버 API 자격증명 관리
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::post('/settings/secondary-domain', [SettingsController::class, 'createSecondaryDomain'])->name('settings.secondary-domain.create');
 
     // 커뮤니티 카테고리 관리 (추가·이름/아이콘/정렬·사용 여부)
     Route::get('/community-categories', [CommunityCategoryController::class, 'index'])->name('community-categories');

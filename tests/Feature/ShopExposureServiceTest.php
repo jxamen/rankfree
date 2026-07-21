@@ -37,25 +37,39 @@ class ShopExposureServiceTest extends TestCase
     public function test_rank_is_position_excluding_ads(): void
     {
         $html = $this->html([
-            ['sourceType' => 'AD', 'channelProductId' => '999', 'rank' => 5],       // 광고(위치 카운트 제외)
-            ['sourceType' => 'AD', 'channelProductId' => '888', 'rank' => 7],       // 광고
-            ['sourceType' => 'SUPER_POINT', 'channelProductId' => '111', 'rank' => 1], // 오가닉 1위(내 상품)
-            ['sourceType' => 'SAS', 'channelProductId' => '222', 'rank' => 2],       // 오가닉 2위
+            ['sourceType' => 'AD', 'channelProductId' => '999', 'rank' => 5],          // 쇼핑검색광고(제외)
+            ['sourceType' => 'AD', 'channelProductId' => '888', 'rank' => 7],          // 광고
+            ['sourceType' => 'SUPER_POINT', 'channelProductId' => '777', 'rank' => 1], // 슈퍼적립(광고성 — 제외)
+            ['sourceType' => 'SAS', 'channelProductId' => '111', 'rank' => 2],          // 페이지 표기 2위(내 상품)
+            ['sourceType' => 'SAS', 'channelProductId' => '222', 'rank' => 3],
         ]);
 
         $r = $this->svc()->rankFromHtml($html, ['id_kind' => 'channel', 'product_id' => '111']);
         $this->assertTrue($r['found']);
-        $this->assertSame(1, $r['rank']);       // 광고 2개 제외 → 문서상 오가닉 1위
+        $this->assertSame(2, $r['rank']);        // 네이버 자체 rank 필드(슈퍼적립이 1을 차지) 그대로
         $this->assertFalse($r['ad']);
-        $this->assertSame(2, $r['total']);       // 오가닉 2개
+        $this->assertSame(2, $r['total']);       // 오가닉(SAS) 2개
     }
 
-    public function test_second_organic_rank(): void
+    public function test_super_point_is_ad_not_organic(): void
+    {
+        // 실측('비타민c 유유제약'): 내 상품이 슈퍼적립(SUPER_POINT) 1위로만 노출 → 광고 노출이지 오가닉 순위가 아니다
+        $html = $this->html([
+            ['sourceType' => 'SUPER_POINT', 'channelProductId' => '111', 'rank' => 1],
+            ['sourceType' => 'SAS', 'channelProductId' => '222', 'rank' => 2],
+        ]);
+        $r = $this->svc()->rankFromHtml($html, ['id_kind' => 'channel', 'product_id' => '111']);
+        $this->assertFalse($r['found']);
+        $this->assertSame(0, $r['rank']);
+        $this->assertTrue($r['ad']);
+    }
+
+    public function test_second_organic_rank_falls_back_to_position_without_rank_field(): void
     {
         $html = $this->html([
             ['sourceType' => 'AD', 'channelProductId' => '999', 'rank' => 3],
-            ['sourceType' => 'SAS', 'channelProductId' => '222', 'rank' => 1],       // 오가닉 1위
-            ['sourceType' => 'SAS', 'channelProductId' => '111', 'rank' => 2],       // 오가닉 2위(내 상품)
+            ['sourceType' => 'SAS', 'channelProductId' => '222', 'rank' => 0],       // rank 필드 없음 → 문서 위치
+            ['sourceType' => 'SAS', 'channelProductId' => '111', 'rank' => 0],
         ]);
         $r = $this->svc()->rankFromHtml($html, ['id_kind' => 'channel', 'product_id' => '111']);
         $this->assertSame(2, $r['rank']);

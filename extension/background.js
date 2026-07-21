@@ -107,6 +107,22 @@ function removeWindow(id) {
   if (p && typeof p.catch === 'function') p.catch(() => { /* noop */ });
 }
 
+// ── 쇼핑 노출 키워드(25) 화면단 순위체크 ──────────────────────────────────────
+// m.search HTML(수백 KB~MB)에서 가격비교 _INITIAL_STATE 가 든 <script> 조각만 추린다.
+// 서버 파서(NaverShopExposureService)는 _INITIAL_STATE 마커로 찾으므로 조각만 보내도 되고 전송량이 크게 준다.
+function pickInitialStateScripts(html) {
+  const out = [];
+  const re = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(String(html || ''))) !== null) {
+    if (m[1].indexOf('_INITIAL_STATE') !== -1 && m[1].indexOf('pagedSlot') !== -1) out.push(m[1]);
+  }
+  return out.join('\n');
+}
+
+// 상품페이지 백그라운드 수집 완료 대기 — product.js 의 saveProductInfo 도착으로 해소된다.
+const productInfoWaiters = new Map();
+
 // 서비스워커가 새로 뜨면(확장 리로드·브라우저 재시작) 이전 수집 루프는 이미 죽어 있다.
 // running 플래그만 남아 "이미 수집이 진행 중입니다"로 영구히 막히는 것을 막는다.
 (async () => {
@@ -347,15 +363,133 @@ const handlers = {
 
   /** 상품정보(제목·업체명·가격·SEO태그) 저장 — 노출 키워드 분석 조합 재료(25) */
   async saveProductInfo(payload) {
+    // collectProductPage 가 이 상품의 수집 완료를 기다리고 있으면 payload 째로 알려준다
+    // (콘솔 페이지가 자기 서버에 직접 저장 — 확장 로그인이 prod 를 보고 있어도 로컬 분석이 동작)
+    const notify = (r) => {
+      const w = productInfoWaiters.get(String((payload && payload.channel_product_id) || ''));
+      if (w) w(Object.assign({ payload }, r));
+      return r;
+    };
     const { token, apiBase } = await getStore();
-    if (!token) return { ok: false, loggedIn: false };
+    if (!token) return notify({ ok: false, loggedIn: false });
     const { ok, status, json } = await apiFetch('/api/ext/product-infos', {
       method: 'POST',
       body: payload,
       token,
       apiBase,
     });
-    return { ok, status, id: json && json.id, message: json && json.message };
+    return notify({ ok, status, id: json && json.id, message: json && json.message });
+  },
+
+  /**
+   * 쇼핑 노출 키워드(25) — m.search 모바일 검색 HTML 을 브라우저(사용자 IP)에서 가져온다.
+   * 서버 fetch 는 IP rate-limit(429)로 수십 건에서 멈추지만 브라우저는 한도가 없다.
+   * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
+   */
+  async fetchShopSerp({ keyword }) {
+    const kw = String(keyword || '').trim();
+    if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
+    let res;
+    try {
+      res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
+        credentials: 'include',
+        headers: { Accept: 'text/html,application/xhtml+xml' },
+      });
+    } catch (e) {
+      return { ok: false, status: 0, message: '네트워크 오류: ' + String((e && e.message) || e) };
+    }
+    if (!res.ok) return { ok: false, status: res.status, message: 'HTTP ' + res.status };
+    const html = await res.text();
+    const picked = pickInitialStateScripts(html);
+    if (!picked) {
+      // 가격비교 슬롯이 없는 경우: 진짜 미노출 키워드일 수도, **보안문자(캡차) 차단 페이지**일 수도 있다.
+      // 정상 SERP 에도 'captcha' 문자열(스크립트 자산 경로 등)이 있어 generic 매칭은 오탐한다(실측 — 분석 15).
+      // 차단 페이지만 잡는다: 캡차 URL 로 리다이렉트됐거나, 작은 페이지(정상 SERP 는 수백 KB)에 한국어 차단 문구.
+      const blockPage = /captcha/i.test(res.url || '')
+        || (html.length < 150000 && /(비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한)/.test(html));
+      if (blockPage) {
+        return { ok: false, captcha: true, status: res.status, message: '네이버 보안문자 감지 — 풀고 이어서 확인하세요.' };
+      }
+    }
+    return { ok: true, status: res.status, html: picked };
+  },
+
+  /**
+   * 코어 키워드 신호 수집(25 보충) — ① m.search 가격비교 HTML(경쟁 브랜드·속성·내 상품)
+   * ② "함께 많이 찾는"(qra) JSON 을 **모바일 + PC 합집합**으로. 부분 실패는 빈 값으로 넘어간다.
+   * qra 는 서버/curl 에선 503 — 실제 브라우저(확장) fetch 로만 안정적으로 받아진다(실측).
+   */
+  async fetchKeywordSignals({ keyword }) {
+    const kw = String(keyword || '').trim();
+    if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
+    const out = { ok: true, mshop_html: '', related: [] };
+    const seen = {};
+    const addRelated = (queries) => {
+      for (const q of queries) {
+        const k = String(q || '').trim();
+        if (k && !seen[k]) { seen[k] = 1; out.related.push(k); }
+      }
+    };
+    // SERP HTML 에 박힌 qra 모듈 API URL 을 뽑아 1회 호출 → "함께 많이 찾는" 키워드
+    const qraFrom = async (html) => {
+      const m = String(html || '').match(/https:\/\/s\.search\.naver\.com\/p\/qra\/[^"\\\s]*/);
+      if (!m) return [];
+      try {
+        const rq = await fetch(m[0].replace(/&amp;/g, '&'), { credentials: 'include' });
+        if (!rq.ok) return [];
+        const j = await rq.json();
+        return ((j && j.result && j.result.contents) || []).map((it) => String((it && it.query) || ''));
+      } catch (e) { return []; }
+    };
+    try {
+      const r = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
+        credentials: 'include',
+        headers: { Accept: 'text/html,application/xhtml+xml' },
+      });
+      if (r.ok) {
+        const html = await r.text();
+        out.mshop_html = pickInitialStateScripts(html);
+        addRelated(await qraFrom(html));   // 모바일 "함께 많이 찾는"
+      }
+    } catch (e) { /* 부분 실패 허용 */ }
+    try {
+      const r = await fetch('https://search.naver.com/search.naver?query=' + encodeURIComponent(kw), {
+        credentials: 'include',
+        headers: { Accept: 'text/html,application/xhtml+xml' },
+      });
+      if (r.ok) addRelated(await qraFrom(await r.text()));   // PC 합집합
+    } catch (e) { /* 부분 실패 허용 */ }
+    out.related = out.related.slice(0, 60);
+    return out;
+  },
+
+  /**
+   * 상품페이지를 백그라운드 탭으로 잠깐 열어 product.js 자동수집(saveProductInfo)을 기다린다(25).
+   * 서버는 상품페이지가 429 라 직접 못 가져오고, 단순 fetch 는 스토어 SPA 라 파싱이 안 된다 —
+   * 실제 페이지 로드 + 기존 수집 코드를 재사용하는 게 가장 정확하다.
+   */
+  async collectProductPage({ url }) {
+    const m = String(url || '').match(/^https:\/\/(?:smartstore|brand)\.naver\.com\/[^/]+\/products\/(\d+)/i);
+    if (!m) return { ok: false, message: '스마트스토어/브랜드 상품 URL이 아닙니다.' };
+    const pid = m[1];
+    if (productInfoWaiters.has(pid)) return { ok: false, message: '이미 수집 중입니다.' };
+
+    let tab = null;
+    try {
+      tab = await chrome.tabs.create({ url: m[0], active: false });
+    } catch (e) {
+      return { ok: false, message: '탭 열기 실패: ' + String((e && e.message) || e) };
+    }
+    const result = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 25000);
+      productInfoWaiters.set(pid, (r) => { clearTimeout(timer); resolve(r); });
+    });
+    productInfoWaiters.delete(pid);
+    removeTab(tab && tab.id);
+
+    if (!result) return { ok: false, product_id: pid, message: '상품정보 수집 시간 초과 — 상품 페이지를 한 번 직접 열어주세요.' };
+    // 수집 payload 를 페이지에 직접 돌려준다 — 페이지가 자기 서버에 저장(확장 로그인·apiBase 무관)
+    return { ok: !!(result.ok || result.payload), product_id: pid, info: result.payload || null, message: result.message || '' };
   },
 
   async listProductAnalyses({ limit } = {}) {

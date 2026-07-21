@@ -7,6 +7,8 @@ use App\Domain\Keyword\NaverAutocompleteService;
 use App\Domain\Keyword\NaverKeywordService;
 use App\Domain\Keyword\NaverSerpService;
 use App\Models\ShopKeywordAnalysis;
+use App\Models\ShopKeywordAnalysisItem;
+use App\Models\ShopProductInfo;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -18,18 +20,20 @@ use Throwable;
  *
  * 흐름:
  *  - prepare(): 추출·조합 생성 후 저장(순위 미확인 상태). 빠르게 끝나 리다이렉트.
- *  - checkBatch(): 미확인 조합을 배치로 순위체크(폴링). 100개도 타임아웃 없이, 429면 중단 후 재개.
+ *  - applyHtml(): **확장(브라우저)이 가져온 m.search HTML** 로 조합 1건 순위 확정 — 기본 경로.
+ *    서버 IP rate-limit 과 무관해 수백 조합도 끝까지 확인된다.
+ *  - checkBatch(): 확장이 없을 때의 폴백 — 서버가 직접 fetch 해 배치 순위체크(폴링). 한도(429)면 중단 후 재개.
  *
  * 조합은 상품 고유 속성·브랜드를 곱한 2~5단어 롱테일까지 생성 — 단어가 많을수록 경쟁이 얇아
- * 상위 5위 노출이 나온다. 순위는 openapi shop.json(sort=sim) 추정치.
+ * 상위 5위 노출이 나온다. 순위는 모바일 검색 가격비교(광고 제외) 문서상 노출 위치.
  */
 class ShopKeywordExposureAnalyzer
 {
     /** 소스별 토큰 추출 상한. */
     private const PER_SOURCE = [
         'title' => 24,          // 제목 단어(조합 핵심)
-        'attribute' => 24,
-        'suffix' => 40,
+        'attribute' => 24,      // tail 전용(제목/브랜드 조합에 1개씩 — 단독 결합은 패턴 실측 0/298로 제거)
+        'suffix' => 40,         // tail 전용(핵심+어미 2단어 단독은 1/20으로 제거)
         'seller_tag' => 40,
         'autocomplete' => 20,
         'searchad' => 30,
@@ -56,7 +60,9 @@ class ShopKeywordExposureAnalyzer
         $core = trim($coreKeyword);
         $cfg = (array) config('rankfree.shopping.exposure');
         $threshold = max(1, (int) ($opts['threshold'] ?? $cfg['top'] ?? 5));
-        $maxCombos = max(10, min(500, (int) ($opts['max_combos'] ?? $cfg['max_combos'] ?? 100)));
+        // 조합 수는 사용자가 고르지 않는다 — 만들 수 있는 조합을 전부 생성(hard_cap 은 폭발 방지 안전선).
+        $hardCap = max(100, (int) ($cfg['hard_cap'] ?? 3000));
+        $maxCombos = min($hardCap, max(10, (int) ($opts['max_combos'] ?? $hardCap)));
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
 
         $target = $this->shop->resolveTarget(trim($productInput));
@@ -101,13 +107,13 @@ class ShopKeywordExposureAnalyzer
             $rows = [];
             foreach ($tokenRows as $r) {
                 $rows[] = ['analysis_id' => $analysis->id, 'kind' => 'token', 'source' => $r['source'],
-                    'keyword' => $r['keyword'], 'rank' => null, 'monthly_total' => null, 'checked_at' => null,
-                    'created_at' => $now, 'updated_at' => $now];
+                    'keyword' => $r['keyword'], 'combo_tag' => null, 'rank' => null, 'monthly_total' => null,
+                    'checked_at' => null, 'created_at' => $now, 'updated_at' => $now];
             }
             foreach ($combos as $c) {
                 $rows[] = ['analysis_id' => $analysis->id, 'kind' => 'combo', 'source' => 'combo',
-                    'keyword' => $c, 'rank' => null, 'monthly_total' => null, 'checked_at' => null,
-                    'created_at' => $now, 'updated_at' => $now];
+                    'keyword' => $c['keyword'], 'combo_tag' => $c['tag'], 'rank' => null, 'monthly_total' => null,
+                    'checked_at' => null, 'created_at' => $now, 'updated_at' => $now];
             }
             foreach (array_chunk($rows, 200) as $chunk) {
                 DB::table('shop_keyword_analysis_items')->insert($chunk);
@@ -141,15 +147,11 @@ class ShopKeywordExposureAnalyzer
         }
 
         try {
-            $type = $analysis->product_id ? 'product' : 'mall';
-            $idKind = str_contains((string) $analysis->product_url, '/catalog/') ? 'nvmid' : 'channel';
-            $target = ['type' => $type, 'product_id' => (string) $analysis->product_id,
-                'mall_name' => (string) $analysis->mall_name, 'url' => (string) $analysis->product_url, 'id_kind' => $idKind];
+            $target = $this->targetOf($analysis);
 
             $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
             $t0 = microtime(true);
             $stopped = false;
-            $newlyExposed = [];
 
             foreach ($pending as $item) {
                 $elapsed = microtime(true) - $t0;
@@ -172,33 +174,18 @@ class ShopKeywordExposureAnalyzer
                 $item->ad_exposed = ! empty($res['ad']);
                 $item->checked_at = now();
                 $item->save();
-                if ($item->rank >= 1 && $item->rank <= $threshold) {
-                    $newlyExposed[] = $item;
-                }
                 // m.search 를 너무 빠르게 연속 호출하면 IP rate-limit(429)이 걸린다 — fetch 간 짧은 간격.
                 if ($delayMs > 0) {
                     usleep($delayMs * 1000);
                 }
             }
 
-            // 노출 조합의 월 검색량(best-effort) — 예산이 남았을 때만(초과 시 다음 폴링에서 보충)
-            if ($newlyExposed && (microtime(true) - $t0) < $budget) {
-                try {
-                    $vols = $this->keyword->volumes(array_map(fn ($i) => $i->keyword, $newlyExposed));
-                    foreach ($newlyExposed as $i) {
-                        if (isset($vols[$i->keyword]['monthly_total'])) {
-                            $i->monthly_total = $vols[$i->keyword]['monthly_total'];
-                            $i->save();
-                        }
-                    }
-                } catch (Throwable) {
-                }
-            }
-
             $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
             $exposed = (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count();
             $remaining = (int) $analysis->combos()->whereNull('rank')->count();
-            $status = $remaining > 0 ? ($stopped ? 'blocked' : 'checking') : 'done';
+            // 사용자가 "중단"을 누른 뒤 진행 중이던 배치가 늦게 끝나도 paused 를 덮어쓰지 않는다
+            $paused = $analysis->refresh()->status === 'paused';
+            $status = $remaining > 0 ? ($stopped ? 'blocked' : ($paused ? 'paused' : 'checking')) : 'done';
             $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
@@ -209,31 +196,224 @@ class ShopKeywordExposureAnalyzer
     }
 
     /**
-     * "새로 조합" — 노출 실패 조합을 감추고(재시도 기록 유지), 이미 만든 조합·삭제어를 제외한 새 조합을 추가한다.
+     * 확장(브라우저)이 가져온 m.search HTML 로 조합 1건 순위 확정 — 서버 IP 한도와 무관한 기본 경로.
+     * 매칭 슬롯을 만나면 분석 헤더의 제목·업체명·가격도 백필한다.
+     *
+     * @return array{remaining:int, checked:int, exposed:int, total:int, blocked:bool, status:string, rank:int, ad:bool}
+     */
+    public function applyHtml(ShopKeywordAnalysis $analysis, ShopKeywordAnalysisItem $item, string $html): array
+    {
+        $threshold = (int) $analysis->threshold;
+
+        $res = $this->exposure->rankFromHtml($html, $this->targetOf($analysis));
+        $item->rank = (int) ($res['rank'] ?? 0);
+        $item->ad_exposed = ! empty($res['ad']);
+        $item->checked_at = now();
+        $item->save();
+
+        $this->backfillMe($analysis, $res['me'] ?? null);
+
+        $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
+        $exposed = (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count();
+        $remaining = (int) $analysis->combos()->whereNull('rank')->count();
+        // 브라우저 경로는 한도가 없어 blocked 를 해제한다. 단 "중단" 직후 늦게 도착한 건이 paused 를 덮어쓰지 않게 유지
+        $status = $remaining > 0 ? ($analysis->refresh()->status === 'paused' ? 'paused' : 'checking') : 'done';
+        $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
+
+        return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
+            'total' => (int) $analysis->combo_count, 'blocked' => false, 'status' => $status,
+            'rank' => (int) $item->rank, 'ad' => (bool) $item->ad_exposed,
+            'combo_tag' => (string) $item->combo_tag];   // 패턴 카드 실시간 갱신용
+    }
+
+    /**
+     * 확장이 수집한 코어 키워드 신호를 토큰으로 병합 — 함께많이찾는(related)·경쟁브랜드·속성.
+     * 서버 fetch 실패로 빈약했던 참고/재료 키워드를 브라우저 수집분으로 보충한다.
+     *
+     * @param  list<string>  $related  "함께 많이 찾는"(qra) 키워드
+     * @return array{added:int}
+     */
+    public function supplement(ShopKeywordAnalysis $analysis, string $mshopHtml, array $related): array
+    {
+        $core = (string) $analysis->core_keyword;
+        $add = [];
+
+        if ($related !== []) {
+            $add['together'] = array_slice($this->clean(array_map('strval', $related)), 0, self::PER_SOURCE['together']);
+        }
+        if ($mshopHtml !== '') {
+            $sig = $this->exposure->signalsFromHtml($mshopHtml, $this->targetOf($analysis));
+            $this->backfillMe($analysis, $sig['me'] ?? null);
+            $add['competitor_brand'] = array_slice(
+                $this->cleanLoose(array_map(fn ($m) => $this->cleanBrand($m), $sig['competitor_malls'])),
+                0, self::PER_SOURCE['competitor_brand']);
+            // 속성 후보에서 경쟁 브랜드명 제외(extractTokens 와 동일 — 남의 브랜드가 조합 재료로 섞이는 것 방지)
+            $brandEx = array_merge([(string) $analysis->mall_name], $sig['competitor_malls'], $add['competitor_brand']);
+            $add['attribute'] = array_slice(
+                $this->cleanLoose($this->attrsFromProductNames($core, $brandEx, $sig['product_names'])),
+                0, self::PER_SOURCE['attribute']);
+        }
+
+        return ['added' => $this->addTokens($analysis, $add)];
+    }
+
+    /**
+     * 확장이 저장한 상품정보(ShopProductInfo)를 분석에 반영 — 제목·업체명·가격 백필 +
+     * 제목 단어·제목 구절·SEO태그 토큰 추가(이후 "새로 조합"의 재료가 된다).
+     *
+     * @return array{found:bool, added:int, title:?string, mall:?string, price:?int}
+     */
+    public function refreshProductInfo(ShopKeywordAnalysis $analysis): array
+    {
+        $pi = ShopProductInfo::where('user_id', $analysis->user_id)
+            ->where('channel_product_id', (string) $analysis->product_id)->first();
+        if (! $pi) {
+            return ['found' => false, 'added' => 0, 'title' => $analysis->product_title,
+                'mall' => $analysis->mall_name, 'price' => $analysis->product_price];
+        }
+
+        $this->backfillMe($analysis, [
+            'title' => (string) $pi->title,
+            'mall' => (string) ($pi->brand ?: $pi->mall_name),
+            'price' => (int) $pi->price,
+        ]);
+        $analysis->refresh();
+
+        $core = (string) $analysis->core_keyword;
+        $maxTokens = max(2, min(6, (int) config('rankfree.shopping.exposure.max_tokens', 5)));
+        $added = $this->addTokens($analysis, [
+            'title' => $this->titleWords($core, (string) $analysis->mall_name, (string) $analysis->product_title),
+            'title_phrase' => $this->titlePhrases((string) $analysis->product_title, $maxTokens),
+            'seller_tag' => $this->cleanLoose((array) $pi->seller_tags),
+        ]);
+
+        return ['found' => true, 'added' => $added, 'title' => $analysis->product_title,
+            'mall' => $analysis->mall_name, 'price' => $analysis->product_price];
+    }
+
+    /** 순위체크 대상 식별자(target) — 분석 레코드에서 복원. */
+    private function targetOf(ShopKeywordAnalysis $analysis): array
+    {
+        return [
+            'type' => $analysis->product_id ? 'product' : 'mall',
+            'product_id' => (string) $analysis->product_id,
+            'mall_name' => (string) $analysis->mall_name,
+            'url' => (string) $analysis->product_url,
+            'id_kind' => str_contains((string) $analysis->product_url, '/catalog/') ? 'nvmid' : 'channel',
+        ];
+    }
+
+    /** 검색결과 매칭 슬롯의 제목·업체명·가격으로 분석 헤더의 빈 필드만 채운다. */
+    private function backfillMe(ShopKeywordAnalysis $analysis, ?array $me): void
+    {
+        if (! $me) {
+            return;
+        }
+        $dirty = [];
+        if (! $analysis->product_title && trim((string) ($me['title'] ?? '')) !== '') {
+            $dirty['product_title'] = trim((string) $me['title']);
+        }
+        if (! $analysis->mall_name && trim((string) ($me['mall'] ?? '')) !== '') {
+            $dirty['mall_name'] = $this->cleanBrand((string) $me['mall']);
+        }
+        if (! $analysis->product_price && (int) ($me['price'] ?? 0) > 0) {
+            $dirty['product_price'] = (int) $me['price'];
+        }
+        if ($dirty) {
+            $analysis->update($dirty);
+        }
+    }
+
+    /**
+     * 토큰 추가 병합 — 같은 소스 안의 중복·삭제어(banned)만 제외하고 넣고 token_count 갱신.
+     * 소스 간 중복은 허용한다: "함께 많이 찾는"이 검색광고 추천에도 있다고 그 섹션에서 빠지면
+     * 실제 검색 화면과 개수가 어긋난다(사용자는 화면 그대로를 기대).
+     *
+     * @param  array<string, list<string>>  $bySource
+     */
+    private function addTokens(ShopKeywordAnalysis $analysis, array $bySource): int
+    {
+        $seen = [];   // "{source}|{norm}" — 같은 소스 안에서만 중복 제거
+        foreach ($analysis->tokens()->get(['source', 'keyword']) as $t) {
+            $seen[$t->source.'|'.$this->norm($t->keyword)] = true;
+        }
+        $banned = (array) ($analysis->banned ?? []);
+
+        $now = now();
+        $rows = [];
+        foreach ($bySource as $source => $list) {
+            foreach ((array) $list as $kw) {
+                $kw = trim((string) $kw);
+                $k = $this->norm($kw);
+                if ($k === '' || isset($seen[$source.'|'.$k]) || $this->containsBanned($kw, $banned)) {
+                    continue;
+                }
+                $seen[$source.'|'.$k] = true;
+                $rows[] = ['analysis_id' => $analysis->id, 'kind' => 'token', 'source' => (string) $source,
+                    'keyword' => $kw, 'rank' => null, 'monthly_total' => null, 'checked_at' => null,
+                    'created_at' => $now, 'updated_at' => $now];
+            }
+        }
+        if ($rows) {
+            foreach (array_chunk($rows, 200) as $chunk) {
+                DB::table('shop_keyword_analysis_items')->insert($chunk);
+            }
+            $analysis->update(['token_count' => $analysis->tokens()->count()]);
+        }
+
+        return count($rows);
+    }
+
+    /**
+     * "새로 조합" — 미확인 조합은 버리고(정보 손실 없음), 확인 결과는 보관(노출 실패는 감춤)한 뒤
+     * 현재 재료(백필된 제목·태그 포함)로 우선순위를 처음부터 다시 편성한다.
+     * 상품정보가 늦게 도착한 분석(속성 위주 저효율 조합)이 제목 단어 중심으로 재편된다.
      *
      * @return array{added:int, remaining:int, total:int}
      */
     public function regenerate(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
         $cfg = (array) config('rankfree.shopping.exposure');
-        $max = max(10, min(500, (int) ($limit ?? $analysis->combo_count ?: ($cfg['max_combos'] ?? 100))));
+        $hardCap = max(100, (int) ($cfg['hard_cap'] ?? 3000));
+        $max = min($hardCap, max(10, (int) ($limit ?? $hardCap)));
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
         $threshold = (int) $analysis->threshold;
 
-        // 노출 안 된 확인 완료 조합은 감춤(재생성 중복 방지 기록으로 남김)
+        // ① 미확인 조합은 삭제 — 재료가 좋아졌으면(제목 백필 등) 우선순위를 처음부터 다시 편성한다.
+        //    확인된 결과(rank)는 어떤 조합 유형이 먹히는지 패턴 데이터라 지우지 않는다.
+        $analysis->combos()->whereNull('rank')->delete();
+
+        // ② 노출 안 된 확인 완료 조합은 감춤(결과 보관 + 재생성 중복 방지)
         $analysis->combos()->whereNotNull('rank')
             ->where(fn ($q) => $q->where('rank', '<=', 0)->orWhere('rank', '>', $threshold))
             ->update(['hidden' => true]);
 
-        // 저장된 토큰으로 재료 복원
+        // ③ 저장된 토큰으로 재료 복원 — 속성(tail 재료)에서 경쟁 브랜드명 제외(오분류 정리: '고려은단' 등)
         $tokens = [];
         foreach ($analysis->tokens()->get() as $it) {
             $tokens[$it->source][] = $it->keyword;
         }
+        $compNorms = array_map(fn ($k) => $this->norm($k), $tokens['competitor_brand'] ?? []);
+        if ($compNorms) {
+            $tokens['attribute'] = array_values(array_filter($tokens['attribute'] ?? [],
+                fn ($k) => ! in_array($this->norm($k), $compNorms, true)));
+        }
         $me = ['title' => (string) $analysis->product_title, 'brand' => (string) $analysis->mall_name, 'price' => (int) $analysis->product_price];
         $core = (string) $analysis->core_keyword;
 
-        // 이미 만든(감춘 것 포함) 조합 + 삭제어 제외
+        // ④ 패턴 기반 자동 제외 — 충분히(≥12) 확인했는데 노출률 10% 미만인 유형(combo_tag)은
+        //    더 만들지 않는다. 보관해 둔 확인 결과가 곧 학습 데이터다.
+        $skipTags = [];
+        $byTag = $analysis->allCombos()->whereNotNull('rank')->get(['combo_tag', 'rank'])
+            ->groupBy(fn ($c) => (string) $c->combo_tag);
+        foreach ($byTag as $tag => $g) {
+            $exposedCnt = $g->filter(fn ($c) => $c->rank >= 1 && $c->rank <= $threshold)->count();
+            if ($tag !== '' && $g->count() >= 12 && $exposedCnt / $g->count() < 0.1) {
+                $skipTags[$tag] = true;
+            }
+        }
+
+        // 남아 있는(확인된 것 + 감춘 것) 조합 + 삭제어 제외
         $exclude = [];
         foreach ($analysis->allCombos()->pluck('keyword') as $kw) {
             $exclude[$this->norm($kw)] = true;
@@ -241,15 +421,15 @@ class ShopKeywordExposureAnalyzer
         $banned = (array) ($analysis->banned ?? []);
 
         $new = array_values(array_filter(
-            $this->buildCombos($core, $tokens, $me, $max, $maxTokens, $exclude),
-            fn ($kw) => ! $this->containsBanned($kw, $banned)
+            $this->buildCombos($core, $tokens, $me, $max, $maxTokens, $exclude, $skipTags),
+            fn ($c) => ! $this->containsBanned($c['keyword'], $banned)
         ));
 
         if ($new) {
             $now = now();
-            $rows = array_map(fn ($kw) => [
-                'analysis_id' => $analysis->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => $kw,
-                'rank' => null, 'hidden' => false, 'monthly_total' => null, 'checked_at' => null,
+            $rows = array_map(fn ($c) => [
+                'analysis_id' => $analysis->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => $c['keyword'],
+                'combo_tag' => $c['tag'], 'rank' => null, 'hidden' => false, 'monthly_total' => null, 'checked_at' => null,
                 'created_at' => $now, 'updated_at' => $now,
             ], $new);
             foreach (array_chunk($rows, 200) as $chunk) {
@@ -280,8 +460,8 @@ class ShopKeywordExposureAnalyzer
         return false;
     }
 
-    /** 순위체크 없이 현재 진행상황만 반환(락 미획득 시). */
-    private function progress(ShopKeywordAnalysis $analysis): array
+    /** 순위체크 없이 현재 진행상황만 반환(락 미획득·항목 소실 시). */
+    public function progress(ShopKeywordAnalysis $analysis): array
     {
         $threshold = (int) $analysis->threshold;
 
@@ -298,7 +478,8 @@ class ShopKeywordExposureAnalyzer
     /**
      * 소스별 토큰 + 내 상품정보(me) 추출.
      *
-     * 조합 재료: title(제목단어)·attribute(속성)·suffix(어미)·seller_tag(상세SEO태그) + me(브랜드·가격).
+     * 조합 재료: title(제목단어)·title_phrase(제목구절)·seller_tag(상세SEO태그) + me(브랜드·가격)
+     *   + tail 재료 attribute(속성)·suffix(어미) — 제목/브랜드 조합에 1개씩만 덧붙인다(단독 결합은 패턴 실측으로 제거).
      * 참고(조합 X, 표시만): autocomplete·searchad(검색광고)·shopping_related(쇼핑연관)·keyword_rec(쇼핑추천)·
      *   together(함께많이찾는)·competitor_brand(경쟁브랜드).
      *
@@ -312,7 +493,7 @@ class ShopKeywordExposureAnalyzer
         ];
         $me = ['title' => '', 'brand' => '', 'price' => 0];
 
-        // 어미(조합 재료)
+        // 어미(tail 재료 — 제목/브랜드 조합에 1개씩 덧붙일 때만 사용)
         $t['suffix'] = $this->cleanLoose((array) config('rankfree.shopping.exposure.suffixes', []));
 
         // 확장 수집 상품정보(있으면 우선) — 제목·브랜드·가격·SEO태그
@@ -355,7 +536,10 @@ class ShopKeywordExposureAnalyzer
                 $me = ['title' => (string) $sig['me']['title'], 'brand' => $this->cleanBrand((string) $sig['me']['mall']), 'price' => (int) $sig['me']['price']];
             }
             $t['competitor_brand'] = array_slice($this->cleanLoose(array_map(fn ($m) => $this->cleanBrand($m), $sig['competitor_malls'])), 0, self::PER_SOURCE['competitor_brand']);
-            $t['attribute'] = array_slice($this->cleanLoose($this->attrsFromProductNames($core, [$me['brand']], $sig['product_names'])), 0, self::PER_SOURCE['attribute']);
+            // ★ 속성 후보에서 경쟁 브랜드명 제외 — 브랜드명도 여러 상품명에 반복 등장해 '속성'으로 오분류된다
+            //   (실측: '고려은단'이 속성 → 남의 브랜드가 내 조합에 섞임)
+            $brandEx = array_merge([$me['brand']], $sig['competitor_malls'], $t['competitor_brand']);
+            $t['attribute'] = array_slice($this->cleanLoose($this->attrsFromProductNames($core, $brandEx, $sig['product_names'])), 0, self::PER_SOURCE['attribute']);
         } catch (Throwable) {
         }
 
@@ -367,10 +551,13 @@ class ShopKeywordExposureAnalyzer
         return ['tokens' => $t, 'me' => $me];
     }
 
-    /** 제목의 연속 구절(2~$maxTokens 단어 n-gram) — 붙어있는 그대로(예: "600정 X 1개"). @return list<string> */
+    /** 제목의 연속 구절(2~$maxTokens 단어 n-gram) — 공백 구분, 붙어있는 그대로(예: "600정 X 1개"). @return list<string> */
     private function titlePhrases(string $title, int $maxTokens): array
     {
-        $toks = array_values(array_filter(array_map('trim', preg_split('/[\s,()\[\]]+/u', trim($title)) ?: []), fn ($t) => $t !== ''));
+        $toks = array_values(array_filter(
+            array_map(fn ($t) => trim($t, " \t.,·()[]{}\"'"), preg_split('/\s+/u', trim($title)) ?: []),
+            fn ($t) => $t !== ''
+        ));
         $out = [];
         $seen = [];
         $n = count($toks);
@@ -392,20 +579,26 @@ class ShopKeywordExposureAnalyzer
         return array_slice($out, 0, 40);
     }
 
-    /** 제목에서 조합용 단어 추출(핵심어·브랜드·순수 수량·1자 제외). @return list<string> */
+    /**
+     * 제목에서 조합용 단어 추출(핵심어·1자 제외). **브랜드도 포함**한다 —
+     * 제목에 브랜드가 있으면(예: "유유제약 NCI200 …") 사용자는 그것도 제목 단어로 기대하고,
+     * 브랜드 결합 조합의 핵심 재료다.
+     * 분리는 **공백 기준**(판매자 제목 관례) — 양끝 괄호·구두점만 정리한다("(20개월분)" → "20개월분").
+     *
+     * @return list<string>
+     */
     private function titleWords(string $core, string $brand, string $title): array
     {
         $normCore = $this->norm($core);
-        $normBrand = $this->norm($brand);
         $out = [];
         $seen = [];
-        foreach (preg_split('/[\s,\/()\[\]·]+/u', trim($title)) ?: [] as $w) {
-            $w = trim($w);
+        foreach (preg_split('/\s+/u', trim($title)) ?: [] as $w) {
+            $w = trim($w, " \t.,·/()[]{}\"'");
             $nw = $this->norm($w);
             if ($nw === '' || isset($seen[$nw]) || mb_strlen($w, 'UTF-8') < 2) {
                 continue;
             }
-            if (str_contains($nw, $normCore) || str_contains($normCore, $nw) || ($normBrand !== '' && $nw === $normBrand)) {
+            if (str_contains($nw, $normCore) || str_contains($normCore, $nw)) {
                 continue;
             }
             // 수량·기간(600정·20개월분 등)도 내 제품 제목이면 그대로 조합 재료로 쓴다(제외하지 않음).
@@ -517,18 +710,30 @@ class ShopKeywordExposureAnalyzer
      * **짧은 길이부터 라운드로빈**으로 뽑아 모든 길이가 골고루 체크되게 한다(짧을수록 검색량 큼).
      *
      * @param  array<string, list<string>>  $tokens
-     * @return list<string>
+     * @param  array<string, true>  $skipTags  패턴상 노출이 안 나오는 유형(재생성 시 자동 제외)
+     * @return list<array{keyword:string, tag:string}>
      */
-    private function buildCombos(string $core, array $tokens, array $me, int $max, int $maxTokens, array $exclude = []): array
+    private function buildCombos(string $core, array $tokens, array $me, int $max, int $maxTokens, array $exclude = [], array $skipTags = []): array
     {
         $normCore = $this->norm($core);
         $brand = trim((string) ($me['brand'] ?? ''));
+        // 브랜드가 비면 제목 첫 단어를 브랜드로 본다 — 판매자 제목 관례("유유제약 NCI200 …", 사용자 확인).
+        // 브랜드가 있어야 브랜드 결합·브랜드+속성 조합이 만들어진다.
+        if ($brand === '' && trim((string) ($me['title'] ?? '')) !== '') {
+            $first = trim((string) ((preg_split('/\s+/u', trim((string) $me['title'])) ?: [])[0] ?? ''), " \t.,·/()[]{}\"'");
+            $nf = $this->norm($first);
+            if ($nf !== '' && $nf !== $normCore && ! str_contains($nf, $normCore) && ! str_contains($normCore, $nf)
+                && mb_strlen($first, 'UTF-8') >= 2 && ! preg_match('/[^\p{Hangul}a-zA-Z0-9]/u', $first)) {
+                $brand = $first;
+            }
+        }
         $price = (int) ($me['price'] ?? 0);
         $priceTok = $price > 0 ? (string) $price : '';
         $titleWords = array_values(array_slice($tokens['title'] ?? [], 0, 16));
         $sellerTags = $tokens['seller_tag'] ?? [];
-        $attrs = array_values(array_slice($tokens['attribute'] ?? [], 0, 12));
-        $suffixes = $tokens['suffix'] ?? [];
+        // tail 재료 — 속성·어미는 단독 티어가 아니라 제목/브랜드 조합에 1개씩만 덧붙인다
+        $attrs = array_values(array_slice($tokens['attribute'] ?? [], 0, 8));
+        $suffixes = array_values(array_slice($tokens['suffix'] ?? [], 0, 12));
 
         $perTierCap = max(60, $max);
         $genCap = max($max, 200) * 12;   // 넉넉히 생성 → "새로 조합"으로 여러 라운드 확장 가능
@@ -536,9 +741,9 @@ class ShopKeywordExposureAnalyzer
         $tiers = [];
         $seen = $exclude;   // 이미 만든/제외(재생성) 조합 norm 집합
         $total = 0;
-        $push = function (array $parts, int $minLen, bool $needCore) use (&$tiers, &$seen, &$total, $normCore, $maxTokens, $perTierCap, $genCap) {
-            if ($total >= $genCap) {
-                return;
+        $push = function (array $parts, int $minLen, bool $needCore, string $tag) use (&$tiers, &$seen, &$total, $normCore, $maxTokens, $perTierCap, $genCap, $skipTags) {
+            if ($total >= $genCap || isset($skipTags[$tag])) {
+                return;   // 패턴상 노출이 안 나오는 유형은 더 만들지 않는다
             }
             $cand = preg_replace('/\s+/u', ' ', trim(implode(' ', array_map(fn ($p) => trim((string) $p), $parts))));
             if ($cand === '') {
@@ -561,44 +766,59 @@ class ShopKeywordExposureAnalyzer
                 return;
             }
             $seen[$nc] = true;
-            $tiers[$len][$nc] = $cand;
+            $tiers[$len][$nc] = ['keyword' => $cand, 'tag' => $tag];   // tag = 생성 유형(노출 패턴 집계용)
             $total++;
         };
 
-        // 우선순위: 제목 단어 조합 → seller 태그 → +브랜드 → +브랜드+가격 → 속성 → 어미.
+        // 우선순위: 제목 단어 조합 → seller 태그 → +브랜드 → +브랜드+가격 → 브랜드+속성 → 어미.
         // (같은 tier 안 앞자리를 제목단어가 차지 → 라운드로빈에서 우선 생존)
         $titleSubsets = $this->attrSubsets($titleWords, $maxTokens - 1, $genCap);
 
         // A) 제목 단어 조합: core + 제목단어 부분집합 (최대한 많이)
         foreach ($titleSubsets as $sub) {
-            $push(array_merge([$core], $sub), 2, true);
+            $push(array_merge([$core], $sub), 2, true, 'title');
         }
         // B) 내 상품 SEO 태그 + 제목 연속 구절(핵심 미포함도 허용 — 내 상품이 그 태그/구절로 노출)
-        foreach ($sellerTags as $tag) {
-            $push([$tag], 1, false);
+        foreach ($sellerTags as $tg) {
+            $push([$tg], 1, false, 'tag');
         }
         foreach ($tokens['title_phrase'] ?? [] as $ph) {
-            $push([$ph], 2, false);
+            $push([$ph], 2, false, 'phrase');
         }
         // C) 브랜드 + core + 제목단어 부분집합
         if ($brand !== '') {
             foreach (array_merge([[]], $titleSubsets) as $sub) {
-                $push(array_merge([$brand, $core], $sub), 2, true);
+                $push(array_merge([$brand, $core], $sub), 2, true, 'brand');
             }
             // D) + 가격
             if ($priceTok !== '') {
                 foreach (array_merge([[]], $titleSubsets) as $sub) {
-                    $push(array_merge([$brand, $core], $sub, [$priceTok]), 3, true);
+                    $push(array_merge([$brand, $core], $sub, [$priceTok]), 3, true, 'brand_price');
                 }
             }
         }
-        // E) core + 속성 부분집합
-        foreach ($this->attrSubsets($attrs, $maxTokens - 1, $genCap) as $sub) {
-            $push(array_merge([$core], $sub), 2, true);
+        // 단독형 속성·어미 티어(브랜드+핵심+속성, 핵심+어미 2단어)는 패턴 실측으로 **제거**(0/298·1/20).
+        // E) 대신 성과 좋은 조합(제목·브랜드) 위에 속성/어미를 **1개 tail 로** 덧붙인다(사용자 요청 4종).
+        //    풀을 작게(제목단어 8·부분집합 ≤2) 잡아 상위 티어를 밀어내지 않고, combo_tag 별 패턴
+        //    자동 제외(≥12회·<10%)가 성과를 검증한다.
+        $tailSubsets = $this->attrSubsets(array_slice($titleWords, 0, 8), min(2, max(1, $maxTokens - 2)), $genCap);
+        foreach ($tailSubsets as $sub) {
+            foreach ($attrs as $at) {
+                $push(array_merge([$core], $sub, [$at]), 3, true, 'title_attr');      // 핵심+제목단어+속성
+            }
+            foreach ($suffixes as $sf) {
+                $push(array_merge([$core], $sub, [$sf]), 3, true, 'title_suffix');    // 핵심+제목단어+어미
+            }
         }
-        // F) core + 어미(2단어)
-        foreach ($suffixes as $sf) {
-            $push([$core, $sf], 2, true);
+        if ($brand !== '') {
+            foreach (array_merge([[]], $this->attrSubsets(array_slice($titleWords, 0, 8), 1, $genCap)) as $sub) {
+                foreach ($attrs as $at) {
+                    $push(array_merge([$brand, $core], $sub, [$at]), 3, true, 'brand_attr');      // 브랜드+제목+속성
+                }
+                foreach ($suffixes as $sf) {
+                    $push(array_merge([$brand, $core], $sub, [$sf]), 3, true, 'brand_suffix');    // 브랜드+제목+어미
+                }
+            }
         }
 
         // 짧은 길이부터 라운드로빈 → 모든 길이 대표
