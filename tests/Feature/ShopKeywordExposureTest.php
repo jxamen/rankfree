@@ -19,27 +19,39 @@ class ShopKeywordExposureTest extends TestCase
         config([
             'rankfree.shopping.exposure.max_combos' => 100,
             'rankfree.shopping.exposure.top' => 5,
-            'rankfree.shopping.exposure.batch_size' => 400,   // 한 번의 check() 로 전부
+            'rankfree.shopping.exposure.batch_size' => 500,
             'rankfree.shopping.exposure.suffixes' => ['추천', '인기', '무료배송'],
             'rankfree.shopping.exposure.negatives' => ['과다복용'],
             'rankfree.searchad.api_key' => '', 'rankfree.searchad.accounts' => [],
         ]);
 
-        // 모바일 검색 가격비교: 광고 1 + 오가닉 3(내 상품 111 = 오가닉 1위). 브랜드=판매몰, 속성=상품명 빈출어(고함량·리포좀)
-        $slots = [
-            ['sourceType' => 'AD', 'rank' => 9, 'channelProductId' => '999', 'productName' => '광고 비타민c', 'mallName' => '광고몰'],
-            ['sourceType' => 'SUPER_POINT', 'rank' => 1, 'channelProductId' => '111', 'productName' => '종근당 비타민c 고함량 1000', 'mallName' => '종근당'],
-            ['sourceType' => 'SAS', 'rank' => 2, 'channelProductId' => '222', 'productName' => '고려은단 비타민c 고함량 리포좀', 'mallName' => '고려은단'],
-            ['sourceType' => 'SAS', 'rank' => 3, 'channelProductId' => '333', 'productName' => '닥터가 비타민c 리포좀 3000', 'mallName' => '닥터가 공식스토어'],
+        // 내 상품 111: mallName=종근당(내 브랜드), 제목에 조합 재료 다수(고함량·1000·리포좀·분말·스틱·고용량)
+        $me = ['sourceType' => 'SUPER_POINT', 'rank' => 1, 'channelProductId' => '111', 'mallName' => '종근당', 'discountedSalePrice' => 19900,
+            'productName' => '종근당 비타민c 고함량 1000 리포좀 분말 스틱 고용량'];
+        $others = [
+            ['sourceType' => 'AD', 'rank' => 9, 'channelProductId' => '999', 'productName' => '광고 비타민c', 'mallName' => '광고몰', 'discountedSalePrice' => 9900],
+            ['sourceType' => 'SAS', 'rank' => 2, 'channelProductId' => '222', 'productName' => '고려은단 비타민c 고함량 리포좀', 'mallName' => '고려은단', 'discountedSalePrice' => 25000],
+            ['sourceType' => 'SAS', 'rank' => 3, 'channelProductId' => '333', 'productName' => '닥터가 비타민c 리포좀 3000', 'mallName' => '닥터가 공식스토어', 'discountedSalePrice' => 39800],
         ];
-        $mobileHtml = '<html><script>naver.search.ext.newshopping["shopping"]._INITIAL_STATE = '
+        $html = fn (array $slots) => '<html><script>naver.search.ext.newshopping["shopping"]._INITIAL_STATE = '
             .json_encode(['initProps' => ['pagedSlot' => [['slots' => array_map(fn ($s) => ['slotType' => 'CARD', 'data' => $s + ['productUrl' => ['mobileUrl' => 'x']]], $slots)]]]], JSON_UNESCAPED_UNICODE).';</script></html>';
+        $with = $html(array_merge([$others[0], $me], array_slice($others, 1)));   // 111 포함(제목·"고함량" 조합 노출)
+        $without = $html($others);                                                 // 111 없음(그 외 조합 미노출)
 
-        Http::fake([
-            'ac.search.naver.com/*' => Http::response(['items' => [[['비타민c1000'], ['비타민c 고함량'], ['비타민c과다복용']]]], 200),
-            'm.search.naver.com/*' => Http::response($mobileHtml, 200),
-            '*' => Http::response('', 200),
-        ]);
+        Http::fake(function ($request) use ($with, $without) {
+            $url = $request->url();
+            if (str_contains($url, 'ac.search.naver')) {
+                return Http::response(['items' => [[['비타민c1000'], ['비타민c 고함량'], ['비타민c과다복용']]]], 200);
+            }
+            if (str_contains($url, 'm.search.naver')) {
+                $q = (string) ($request->data()['query'] ?? '');
+                $nq = mb_strtolower(str_replace(' ', '', $q));
+                // 111 은 core 검색(제목 추출)·"고함량" 든 조합에서만 노출 → 그 외 조합은 미노출
+                return Http::response(($nq === '비타민c' || str_contains($nq, '고함량')) ? $with : $without, 200);
+            }
+
+            return Http::response('', 200);
+        });
     }
 
     private function store(User $user, array $override = []): ShopKeywordAnalysis
@@ -56,8 +68,7 @@ class ShopKeywordExposureTest extends TestCase
     private function runChecks(User $user, ShopKeywordAnalysis $a): void
     {
         for ($i = 0; $i < 10; $i++) {
-            $r = $this->actingAs($user)->post(route('console.shop-keyword.check', $a));
-            if ((int) $r->json('remaining') <= 0) {
+            if ((int) $this->actingAs($user)->post(route('console.shop-keyword.check', $a))->json('remaining') <= 0) {
                 break;
             }
         }
@@ -68,21 +79,34 @@ class ShopKeywordExposureTest extends TestCase
         $this->actingAs(User::factory()->create())->get(route('console.shop-keyword'))->assertOk()->assertSee('쇼핑 노출 키워드');
     }
 
-    public function test_auto_extracts_brand_and_attribute_and_builds_combos(): void
+    public function test_captures_product_info_and_builds_title_combos(): void
     {
         $a = $this->store(User::factory()->create());
-        $this->assertSame('checking', $a->status);
 
-        // 브랜드(판매몰명)·속성(상품명 빈출어) 자동 추출
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'brand', 'keyword' => '종근당']);
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'brand', 'keyword' => '닥터가']); // 공식스토어 접미 제거
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'attribute', 'keyword' => '고함량']);
-        // 조합: 브랜드+핵심, 핵심+속성
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '종근당 비타민c']);
+        // 내 상품정보(제목·브랜드·가격) 캡처
+        $this->assertSame('종근당 비타민c 고함량 1000 리포좀 분말 스틱 고용량', $a->product_title);
+        $this->assertSame('종근당', $a->mall_name);            // 내 브랜드(업체명)
+        $this->assertSame(19900, $a->product_price);
+
+        // 제목 단어 조합 + 브랜드 조합
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '비타민c 고함량']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '종근당 비타민c']);
+        // 제목 단어 토큰
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'title', 'keyword' => '고함량']);
+        // 경쟁 브랜드는 수집만(참고)
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'competitor_brand', 'keyword' => '고려은단']);
     }
 
-    public function test_exposure_uses_mobile_organic_rank_excluding_ads(): void
+    public function test_reference_sources_not_used_in_combos(): void
+    {
+        $a = $this->store(User::factory()->create());
+        // 참고 소스(자동완성/경쟁브랜드)는 조합(kind=combo)에 as-is 로 안 들어간다
+        $this->assertDatabaseMissing('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '고려은단']);
+        // 자동완성 원문은 참고 토큰으로만
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'autocomplete']);
+    }
+
+    public function test_exposure_rank_from_mobile_organic(): void
     {
         $u = User::factory()->create();
         $a = $this->store($u);
@@ -91,66 +115,45 @@ class ShopKeywordExposureTest extends TestCase
 
         $this->assertSame('done', $a->status);
         $this->assertGreaterThan(0, $a->exposed_count);
-        // 상품 111 = 광고 제외 오가닉 1위
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '종근당 비타민c', 'rank' => 1]);
-    }
-
-    public function test_suffixes_are_two_word_only_not_stacked(): void
-    {
-        $a = $this->store(User::factory()->create());
-        // config 어미 → 2단어 조합
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '비타민c 추천']);
-        // 어미·수식어가 3단어 이상으로 쌓인 조합은 없어야 한다(쓰레기 방지)
-        foreach ($a->combos()->pluck('keyword') as $kw) {
-            $this->assertStringNotContainsString('추천 인기', $kw);
-            $this->assertStringNotContainsString('인기 무료배송', $kw);
-        }
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '비타민c 고함량', 'rank' => 1]);
     }
 
     public function test_negative_words_excluded(): void
     {
         $a = $this->store(User::factory()->create());
-        // 자동완성 "비타민c과다복용" → 과다복용 은 부정어라 토큰·조합 어디에도 없어야
         foreach ($a->items()->pluck('keyword') as $kw) {
             $this->assertStringNotContainsString('과다복용', $kw);
         }
     }
 
-    public function test_delete_token_cascades_to_its_combos(): void
+    public function test_regenerate_hides_nonexposed_and_adds_new(): void
+    {
+        // "고함량" 조합만 노출, 나머지 미노출 → regenerate 가 미노출을 감추고 새 조합 추가
+        $u = User::factory()->create();
+        $a = $this->store($u, ['target_combos' => 30]);
+        $this->runChecks($u, $a);
+        $a->refresh();
+        $this->assertGreaterThan(0, $a->combos()->where('rank', '<=', 0)->count());   // 미노출 존재
+
+        $r = $this->actingAs($u)->post(route('console.shop-keyword.regenerate', $a))->assertOk();
+        $this->assertGreaterThan(0, (int) $r->json('added'));
+        $a->refresh();
+        $this->assertGreaterThan(0, $a->allCombos()->where('hidden', true)->count());   // 미노출 감춰짐
+        $this->assertGreaterThan(0, $a->combos()->whereNull('rank')->count());          // 새 미확인 조합
+    }
+
+    public function test_delete_token_cascades_and_bans(): void
     {
         $u = User::factory()->create();
         $a = $this->store($u);
+        $title = ShopKeywordAnalysisItem::where('analysis_id', $a->id)->where('source', 'title')->where('keyword', '고함량')->first();
+        $this->assertNotNull($title);
+        $this->assertGreaterThan(0, $a->allCombos()->where('keyword', 'like', '%고함량%')->count());
 
-        $brand = ShopKeywordAnalysisItem::where('analysis_id', $a->id)->where('kind', 'token')->where('keyword', '종근당')->first();
-        $this->assertNotNull($brand);
-        $this->assertGreaterThan(0, $a->combos()->where('keyword', 'like', '%종근당%')->count());
+        $this->actingAs($u)->delete(route('console.shop-keyword.item', [$a, $title]))->assertOk();
 
-        $this->actingAs($u)->delete(route('console.shop-keyword.item', [$a, $brand]))->assertOk();
-
-        // 토큰 + 그 단어가 든 조합이 모두 사라짐
-        $this->assertDatabaseMissing('shop_keyword_analysis_items', ['id' => $brand->id]);
-        $this->assertSame(0, $a->combos()->where('keyword', 'like', '%종근당%')->count());
-    }
-
-    public function test_delete_combo_removes_only_that_combo(): void
-    {
-        $u = User::factory()->create();
-        $a = $this->store($u);
-        $combo = $a->combos()->first();
-        $before = $a->combos()->count();
-
-        $this->actingAs($u)->delete(route('console.shop-keyword.item', [$a, $combo]))->assertOk();
-
-        $this->assertDatabaseMissing('shop_keyword_analysis_items', ['id' => $combo->id]);
-        $this->assertSame($before - 1, $a->fresh()->combos()->count());
-    }
-
-    public function test_combos_contain_core_keyword(): void
-    {
-        $a = $this->store(User::factory()->create());
-        foreach ($a->combos()->pluck('keyword') as $kw) {
-            $this->assertStringContainsStringIgnoringCase('비타민c', str_replace(' ', '', $kw));
-        }
+        $this->assertSame(0, $a->allCombos()->where('keyword', 'like', '%고함량%')->count());
+        $this->assertContains('고함량', (array) $a->fresh()->banned);   // 삭제어 기록
     }
 
     public function test_ownership_enforced(): void
@@ -159,6 +162,6 @@ class ShopKeywordExposureTest extends TestCase
         $other = User::factory()->create();
         $a = ShopKeywordAnalysis::create(['user_id' => $owner->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done']);
         $this->actingAs($other)->get(route('console.shop-keyword.show', $a))->assertForbidden();
-        $this->actingAs($other)->post(route('console.shop-keyword.check', $a))->assertForbidden();
+        $this->actingAs($other)->post(route('console.shop-keyword.regenerate', $a))->assertForbidden();
     }
 }

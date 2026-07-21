@@ -9,12 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ShopKeywordAnalysisItem extends Model
 {
     protected $fillable = [
-        'analysis_id', 'kind', 'source', 'keyword', 'rank', 'ad_exposed', 'monthly_total', 'checked_at',
+        'analysis_id', 'kind', 'source', 'keyword', 'rank', 'ad_exposed', 'hidden', 'monthly_total', 'checked_at',
     ];
 
     protected $casts = [
         'rank' => 'integer',
         'ad_exposed' => 'boolean',
+        'hidden' => 'boolean',
         'monthly_total' => 'integer',
         'checked_at' => 'datetime',
     ];

@@ -55,14 +55,15 @@ class NaverShopExposureService
     }
 
     /**
-     * core 키워드 모바일 검색 가격비교 결과에서 조합 재료 신호를 뽑는다(필터 붙여넣기 자동 대체).
-     * 광고 제외 오가닉 상위의 판매몰명(=브랜드 후보)·상품명(=속성/수식어 후보)을 반환.
+     * core 키워드 모바일 검색 가격비교 결과에서 조합 재료 신호를 뽑는다.
+     *  - product_names: 광고 제외 오가닉 상위 상품명(=속성 후보)
+     *  - me: 대상 상품이 결과에 있으면 그 제목·업체명·가격(제목 단어 조합의 핵심 재료)
      *
-     * @return array{brands:list<string>, product_names:list<string>}
+     * @return array{product_names:list<string>, competitor_malls:list<string>, me:?array{title:string, mall:string, price:int}}
      */
-    public function keywordSignals(string $keyword, int $topN = 20, int $timeout = 10): array
+    public function keywordSignals(string $keyword, array $target = [], int $topN = 20, int $timeout = 10): array
     {
-        $out = ['brands' => [], 'product_names' => []];
+        $out = ['product_names' => [], 'competitor_malls' => [], 'me' => null];
         $kw = trim($keyword);
         if ($kw === '') {
             return $out;
@@ -80,19 +81,30 @@ class NaverShopExposureService
             return $out;
         }
 
+        $idKind = (string) ($target['id_kind'] ?? 'channel');
+        $pid = (string) ($target['product_id'] ?? '');
+        $mall = $this->norm((string) ($target['mall_name'] ?? ''));
+
         $organic = 0;
         foreach (($this->parseSlots($r->body()) ?? []) as $s) {
+            // 대상 상품이 결과(광고 포함)에 있으면 제목·업체·가격 확보
+            if ($out['me'] === null && $this->matches($s, $idKind, $pid, $mall)) {
+                $out['me'] = [
+                    'title' => (string) ($s['productName'] ?? ''),
+                    'mall' => (string) ($s['mallName'] ?? ''),
+                    'price' => (int) ($s['price'] ?? 0),
+                ];
+            }
             if (($s['sourceType'] ?? '') === 'AD') {
-                continue;   // 광고 제외
+                continue;   // 속성·경쟁브랜드 후보는 광고 제외
             }
-            if (++$organic > $topN) {
-                break;
-            }
-            if (($s['mallName'] ?? '') !== '') {
-                $out['brands'][] = $s['mallName'];
-            }
-            if (($s['productName'] ?? '') !== '') {
-                $out['product_names'][] = $s['productName'];
+            if (++$organic <= $topN) {
+                if (($s['productName'] ?? '') !== '') {
+                    $out['product_names'][] = $s['productName'];
+                }
+                if (($s['mallName'] ?? '') !== '') {
+                    $out['competitor_malls'][] = $s['mallName'];
+                }
             }
         }
 
@@ -193,6 +205,7 @@ class NaverShopExposureService
                         'nvMid' => (string) ($d['nvMid'] ?? ''),
                         'productUrl' => (string) ($d['productUrl']['mobileUrl'] ?? $d['productUrl']['pcUrl'] ?? ''),
                         'mallName' => (string) ($d['mallName'] ?? ''),
+                        'price' => (int) ($d['discountedSalePrice'] ?? $d['salePrice'] ?? 0),
                         'productName' => trim(strip_tags((string) ($d['productName'] ?? ''))),
                     ];
                 }

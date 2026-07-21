@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ShopKeywordAnalysis extends Model
 {
     protected $fillable = [
-        'user_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'product_title',
-        'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status',
+        'user_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'product_title', 'product_price',
+        'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned',
     ];
 
     protected $casts = [
@@ -20,6 +20,8 @@ class ShopKeywordAnalysis extends Model
         'combo_count' => 'integer',
         'checked_count' => 'integer',
         'exposed_count' => 'integer',
+        'product_price' => 'integer',
+        'banned' => 'array',
     ];
 
     public function user(): BelongsTo
@@ -37,7 +39,14 @@ class ShopKeywordAnalysis extends Model
         return $this->items()->where('kind', 'token');
     }
 
+    /** 표시·순위체크 대상 조합(감춘 것 제외). */
     public function combos(): HasMany
+    {
+        return $this->items()->where('kind', 'combo')->where('hidden', false);
+    }
+
+    /** 감춘 것 포함 모든 조합 — "새로 조합" 재생성 시 중복 방지용. */
+    public function allCombos(): HasMany
     {
         return $this->items()->where('kind', 'combo');
     }

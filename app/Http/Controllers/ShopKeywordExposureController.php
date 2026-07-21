@@ -56,13 +56,22 @@ class ShopKeywordExposureController extends Controller
         return response()->json($this->analyzer->checkBatch($analysis));
     }
 
+    /** "새로 조합" — 노출 실패분 감추고 새 조합 생성(노출 키워드는 유지). */
+    public function regenerate(Request $request, ShopKeywordAnalysis $analysis)
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+
+        return response()->json($this->analyzer->regenerate($analysis));
+    }
+
     public function show(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
 
         $items = $analysis->items()->get();
         $tokens = $items->where('kind', 'token')->groupBy('source');
-        $combos = $items->where('kind', 'combo')->sortBy(fn ($i) => $this->rankSort($i->rank))->values();
+        $combos = $items->where('kind', 'combo')->where('hidden', false)
+            ->sortBy(fn ($i) => $this->rankSort($i->rank))->values();
 
         return view('console.shop-keyword.show', [
             'analysis' => $analysis,
@@ -79,8 +88,13 @@ class ShopKeywordExposureController extends Controller
 
         $removedCombos = 0;
         if ($item->kind === 'token') {
-            $removedCombos = $analysis->combos()
+            // 그 단어가 든 조합(감춘 것 포함) 삭제 + 삭제어로 기록 → "새로 조합" 때 다시 안 만든다
+            $removedCombos = $analysis->allCombos()
                 ->where('keyword', 'like', '%'.$this->escapeLike($item->keyword).'%')->delete();
+            $banned = (array) ($analysis->banned ?? []);
+            $banned[] = $item->keyword;
+            $analysis->banned = array_values(array_unique($banned));
+            $analysis->save();
         }
         $item->delete();
 
