@@ -533,7 +533,7 @@ class ShopKeywordExposureTest extends TestCase
 
         $this->actingAs($u)->get(route('admin.shop-keyword.show', $a))
             ->assertOk()
-            ->assertSeeInOrder(['키워드', '조회수', '배정 키워드'])
+            ->assertSeeInOrder(['키워드', '호출', '배정 키워드'])
             ->assertSee('1,234');
     }
 

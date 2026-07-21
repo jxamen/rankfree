@@ -164,7 +164,7 @@
                     <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:80px;">그룹</th>
                     <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">Short URL</th>
                     <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:92px;">키워드</th>
-                    <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:92px;">조회수</th>
+                    <th class="text-right text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;width:92px;">호출</th>
                     <th class="text-left text-muted py-2" style="font-size:var(--fs-xs);font-weight:600;">배정 키워드</th>
                 </tr></thead>
                 <tbody>
