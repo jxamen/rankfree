@@ -391,6 +391,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     // 키워드 자동 분석 — 후보 관리, 플레이스 키워드 분석·쇼핑 시장 분석 병렬 발행
     Route::get('/keyword-hub', [\App\Http\Controllers\Admin\KeywordHubController::class, 'index'])->name('keyword-hub');
     Route::get('/keyword-hub/candidates', [\App\Http\Controllers\Admin\KeywordHubController::class, 'candidates'])->name('keyword-hub.candidates');
+    Route::get('/keyword-hub/published/{type}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'published'])->name('keyword-hub.published-all');
     Route::get('/keyword-hub/published/{type}/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'published'])->name('keyword-hub.published');
     Route::post('/keyword-hub/categories', [\App\Http\Controllers\Admin\KeywordHubController::class, 'storeCategory'])->name('keyword-hub.categories.store');
     Route::put('/keyword-hub/categories/{category}', [\App\Http\Controllers\Admin\KeywordHubController::class, 'updateCategory'])->name('keyword-hub.categories.update');

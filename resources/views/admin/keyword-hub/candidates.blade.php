@@ -133,16 +133,7 @@
                     @forelse ($candidates as $c)
                         <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                             <td style="padding:7px 6px;"><input type="checkbox" name="ids[]" value="{{ $c->id }}" class="kh-ck"></td>
-                            @php
-                                $docUrl = $candidateDocumentUrls[$c->id] ?? null;
-                            @endphp
-                            <td style="padding:7px 6px;" class="text-ink font-semibold">
-                                @if ($docUrl)
-                                    <a href="{{ $docUrl }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $c->keyword }}</a>
-                                @else
-                                    {{ $c->keyword }}
-                                @endif
-                            </td>
+                            <td style="padding:7px 6px;" class="text-ink font-semibold">{{ $c->keyword }}</td>
                             @php
                                 $cat = $c->category;
                                 $catName = $cat ? collect([$cat->parent?->parent?->name, $cat->parent?->name, $cat->name])->filter()->implode(' › ') : '—';
@@ -154,7 +145,22 @@
                             <td style="padding:7px 6px;"><span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ $srcLabel[$c->source] ?? $c->source }}</span></td>
                             <td style="padding:7px 6px;text-align:right;" class="font-mono">{{ $c->monthly_total === null ? '미상' : number_format($c->monthly_total) }}</td>
                             <td style="padding:7px 6px;" class="text-muted">{{ $c->comp_idx ?? '—' }}</td>
-                            <td style="padding:7px 6px;" class="text-muted-soft">{{ $c->note }}</td>
+                            @php
+                                $docLinks = $candidateDocumentLinks[$c->id] ?? [];
+                            @endphp
+                            <td style="padding:7px 6px;" class="text-muted-soft">
+                                <div class="flex items-center gap-1 flex-wrap">
+                                    @if (!empty($docLinks['keyword']))
+                                        <a href="{{ $docLinks['keyword'] }}" target="_blank" rel="noopener" class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;">키워드분석</a>
+                                    @endif
+                                    @if (!empty($docLinks['market']))
+                                        <a href="{{ $docLinks['market'] }}" target="_blank" rel="noopener" class="badge border border-hairline" style="font-size:var(--fs-xs);text-decoration:none;">쇼핑시장분석</a>
+                                    @endif
+                                </div>
+                                @if ($c->note)
+                                    <div class="mt-1">{{ $c->note }}</div>
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr><td colspan="{{ $type === 'place' ? 8 : 7 }}" class="text-muted-soft text-center" style="padding:28px;">'{{ $stLabel[$status] }}' 상태의 {{ $typeLabel[$type] ?? $type }} 후보가 없습니다.</td></tr>

@@ -252,7 +252,7 @@ class KeywordHubController extends Controller
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
             ])->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
             'candidates' => $candidates,
-            'candidateDocumentUrls' => $this->candidateDocumentUrls($candidates->getCollection(), $type),
+            'candidateDocumentLinks' => $this->candidateDocumentLinks($candidates->getCollection(), $type),
             'status' => $status,
             'type' => $type,
             'catId' => $catId,
@@ -280,19 +280,19 @@ class KeywordHubController extends Controller
     }
 
     /** 카테고리별 발행 문서 목록 — 플레이스는 키워드 분석, 쇼핑은 시장 분석 링크로 연다. */
-    public function published(Request $request, string $type, KeywordCategory $category)
+    public function published(Request $request, string $type, ?KeywordCategory $category = null)
     {
-        abort_unless(in_array($type, ['place', 'shopping'], true) && $category->type === $type, 404);
+        abort_unless(in_array($type, ['place', 'shopping'], true) && (! $category || $category->type === $type), 404);
 
         $kw = trim((string) $request->query('q', ''));
-        $categoryIds = $this->categoryDescendantIds($category);
+        $categoryIds = $category ? $this->categoryDescendantIds($category) : null;
 
         if ($type === 'shopping') {
             $systemUserId = $this->systemUserId();
             $docs = $systemUserId
                 ? MarketAnalysis::with('category.parent.parent')
                     ->where('user_id', $systemUserId)
-                    ->whereIn('category_id', $categoryIds)
+                    ->when($categoryIds, fn ($q) => $q->whereIn('category_id', $categoryIds))
                     ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
                     ->orderByDesc('id')
                     ->paginate(50)->withQueryString()
@@ -300,7 +300,7 @@ class KeywordHubController extends Controller
         } else {
             $docs = KeywordSearch::with('category.parent.parent')
                 ->where('origin', 'hub')
-                ->whereIn('category_id', $categoryIds)
+                ->when($categoryIds, fn ($q) => $q->whereIn('category_id', $categoryIds))
                 ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'))
                 ->orderByDesc('monthly_total')
                 ->orderByDesc('id')
@@ -309,7 +309,7 @@ class KeywordHubController extends Controller
 
         return view('admin.keyword-hub.published', [
             'type' => $type,
-            'category' => $category->loadMissing('parent.parent'),
+            'category' => $category?->loadMissing('parent.parent'),
             'docs' => $docs,
             'q' => $kw,
         ]);
@@ -442,44 +442,47 @@ class KeywordHubController extends Controller
             ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'));
     }
 
-    private function candidateDocumentUrls($candidates, string $type): array
+    private function candidateDocumentLinks($candidates, string $type): array
     {
-        $published = $candidates->filter(fn (KeywordCandidate $candidate) => $candidate->status === 'published');
-        if ($published->isEmpty()) {
+        if ($candidates->isEmpty()) {
             return [];
         }
 
-        $keywords = $published->pluck('keyword')->filter()->unique()->values();
+        $keywords = $candidates->pluck('keyword')->filter()->unique()->values();
         if ($keywords->isEmpty()) {
             return [];
         }
 
+        $keywordDocs = KeywordSearch::where('origin', 'hub')
+            ->whereIn('keyword', $keywords)
+            ->orderByDesc('id')
+            ->get()
+            ->unique('keyword')
+            ->keyBy('keyword');
+
+        $marketDocs = collect();
         if ($type === 'shopping') {
             $systemUserId = $this->systemUserId();
-            if (! $systemUserId) {
-                return [];
+            if ($systemUserId) {
+                $marketDocs = MarketAnalysis::where('user_id', $systemUserId)
+                    ->whereIn('keyword', $keywords)
+                    ->orderByDesc('id')
+                    ->get()
+                    ->unique('keyword')
+                    ->keyBy('keyword');
             }
-
-            $docs = MarketAnalysis::where('user_id', $systemUserId)
-                ->whereIn('keyword', $keywords)
-                ->orderByDesc('id')
-                ->get()
-                ->unique('keyword')
-                ->keyBy('keyword');
-        } else {
-            $docs = KeywordSearch::where('origin', 'hub')
-                ->whereIn('keyword', $keywords)
-                ->orderByDesc('id')
-                ->get()
-                ->unique('keyword')
-                ->keyBy('keyword');
         }
 
-        return $published
+        return $candidates
             ->mapWithKeys(fn (KeywordCandidate $candidate) => [
-                $candidate->id => $docs->get($candidate->keyword)?->shareUrl(),
+                $candidate->id => [
+                    'keyword' => $keywordDocs->get($candidate->keyword)?->shareUrl()
+                        ?? route('console.keyword', ['keyword' => $candidate->keyword]),
+                    'market' => $type === 'shopping'
+                        ? $marketDocs->get($candidate->keyword)?->shareUrl()
+                        : null,
+                ],
             ])
-            ->filter()
             ->all();
     }
 

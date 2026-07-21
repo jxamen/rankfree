@@ -65,9 +65,17 @@
         <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">플레이스 후보 현황</div>
         <div class="grid grid-cols-2 gap-2">
             @foreach ($stLabel as $k => $label)
-                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $k, 'type' => 'place']) }}" class="card-soft px-3 py-2" style="text-decoration:none;">
+                @php
+                    $href = $k === 'published'
+                        ? route('admin.keyword-hub.published-all', ['type' => 'place'])
+                        : route('admin.keyword-hub.candidates', ['status' => $k, 'type' => 'place']);
+                    $count = $k === 'published'
+                        ? ($publishedCounts['place'] ?? 0)
+                        : ($candidateTypeCounts[$k]['place'] ?? 0);
+                @endphp
+                <a href="{{ $href }}" class="card-soft px-3 py-2" style="text-decoration:none;">
                     <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $label }}</div>
-                    <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($candidateTypeCounts[$k]['place'] ?? 0) }}</div>
+                    <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($count) }}</div>
                 </a>
             @endforeach
         </div>
@@ -77,9 +85,17 @@
         <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">쇼핑 후보 현황</div>
         <div class="grid grid-cols-2 gap-2 mb-4">
             @foreach ($stLabel as $k => $label)
-                <a href="{{ route('admin.keyword-hub.candidates', ['status' => $k, 'type' => 'shopping']) }}" class="card-soft px-3 py-2" style="text-decoration:none;">
+                @php
+                    $href = $k === 'published'
+                        ? route('admin.keyword-hub.published-all', ['type' => 'shopping'])
+                        : route('admin.keyword-hub.candidates', ['status' => $k, 'type' => 'shopping']);
+                    $count = $k === 'published'
+                        ? ($publishedCounts['shopping'] ?? 0)
+                        : ($candidateTypeCounts[$k]['shopping'] ?? 0);
+                @endphp
+                <a href="{{ $href }}" class="card-soft px-3 py-2" style="text-decoration:none;">
                     <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $label }}</div>
-                    <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($candidateTypeCounts[$k]['shopping'] ?? 0) }}</div>
+                    <div class="font-mono text-ink font-semibold" style="font-size:var(--fs-lg);">{{ number_format($count) }}</div>
                 </a>
             @endforeach
         </div>

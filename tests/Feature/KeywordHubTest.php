@@ -322,6 +322,8 @@ class KeywordHubTest extends TestCase
 
         $this->actingAs($admin)->get('/admin/keyword-hub')
             ->assertOk()
+            ->assertSee(route('admin.keyword-hub.published-all', ['type' => 'place']), false)
+            ->assertSee(route('admin.keyword-hub.published-all', ['type' => 'shopping']), false)
             ->assertSee(route('admin.keyword-hub.published', ['type' => 'place', 'category' => $placeRoot->id]), false)
             ->assertSee(route('admin.keyword-hub.published', ['type' => 'shopping', 'category' => $shopRoot->id]), false);
 
@@ -336,6 +338,11 @@ class KeywordHubTest extends TestCase
             ->assertSee('여름이불')
             ->assertSee($marketDoc->shareUrl(), false)
             ->assertDontSee('강남 한식');
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/published/shopping')
+            ->assertOk()
+            ->assertSee('여름이불')
+            ->assertSee($marketDoc->shareUrl(), false);
     }
 
     public function test_published_candidate_keywords_link_to_analysis_documents(): void
@@ -369,15 +376,25 @@ class KeywordHubTest extends TestCase
             'monthly_search' => 5000,
             'snapshot' => ['top_products' => []],
         ]);
+        $shoppingKeywordDoc = KeywordSearch::create([
+            'origin' => 'hub',
+            'category_id' => $shopping->id,
+            'keyword' => '여름이불',
+            'monthly_total' => 5000,
+        ]);
 
         $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=published&type=place')
             ->assertOk()
             ->assertSee('강남 맛집')
+            ->assertSee('키워드분석')
             ->assertSee($keywordDoc->shareUrl(), false);
 
         $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=published&type=shopping')
             ->assertOk()
             ->assertSee('여름이불')
+            ->assertSee('키워드분석')
+            ->assertSee('쇼핑시장분석')
+            ->assertSee($shoppingKeywordDoc->shareUrl(), false)
             ->assertSee($marketDoc->shareUrl(), false);
     }
 

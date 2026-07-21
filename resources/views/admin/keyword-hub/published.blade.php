@@ -5,7 +5,12 @@
 @php
     $typeLabel = ['place' => '플레이스 키워드 분석', 'shopping' => '쇼핑 시장 분석'];
     $isShopping = $type === 'shopping';
-    $categoryPath = collect([$category->parent?->parent?->name, $category->parent?->name, $category->name])->filter()->implode(' › ');
+    $categoryPath = $category
+        ? collect([$category->parent?->parent?->name, $category->parent?->name, $category->name])->filter()->implode(' › ')
+        : ($isShopping ? '쇼핑 전체' : '플레이스 전체');
+    $listRoute = $category
+        ? route('admin.keyword-hub.published', ['type' => $type, 'category' => $category->id])
+        : route('admin.keyword-hub.published-all', ['type' => $type]);
 @endphp
 
 @section('admin-content')
@@ -17,11 +22,11 @@
             <span class="badge border border-hairline" style="font-size:var(--fs-xs);">{{ $typeLabel[$type] ?? $type }}</span>
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">총 <b class="font-mono text-ink">{{ number_format($docs->total()) }}</b>개</span>
         </div>
-        <form method="GET" action="{{ route('admin.keyword-hub.published', ['type' => $type, 'category' => $category->id]) }}" class="flex items-center gap-2">
+        <form method="GET" action="{{ $listRoute }}" class="flex items-center gap-2">
             <input type="search" name="q" class="input" style="height:36px;width:220px;" placeholder="키워드 검색" value="{{ $q }}">
             <button type="submit" class="btn btn-secondary btn-sm" style="height:36px;">검색</button>
             @if ($q !== '')
-                <a href="{{ route('admin.keyword-hub.published', ['type' => $type, 'category' => $category->id]) }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
+                <a href="{{ $listRoute }}" class="btn btn-ghost btn-sm" style="height:36px;">초기화</a>
             @endif
             <a href="{{ route('admin.keyword-hub') }}" class="btn btn-ghost btn-sm" style="height:36px;">돌아가기</a>
         </form>
