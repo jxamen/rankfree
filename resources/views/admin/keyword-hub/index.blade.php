@@ -193,11 +193,25 @@
             + (d.updated_ago != null ? ' · ' + d.updated_ago + '초 전 갱신' : '');
     };
 
+    // 중단 요청 진행 표시 — 응답 올 때까지 버튼을 '중단 중…'으로 고정해 반복 클릭을 막는다
+    let stopping = false;
+    function applyStoppingUi() {
+        [stopBtn, barStop].forEach((b) => { b.style.display = ''; b.disabled = true; b.textContent = '중단 중…'; });
+        barMsg.textContent = '중단 처리 중 — 진행 중이던 작업까지만 하고 멈춥니다';
+    }
+
     function render(d) {
         d = d || {};
         const running = !!d.running;
-        startBtn.disabled = running;
-        stopBtn.disabled = !running;
+        startBtn.disabled = running || stopping;
+
+        if (stopping) {
+            applyStoppingUi();
+            return;
+        }
+        // 중단 버튼은 실행 중일 때만 노출(시작 전·종료 후엔 숨김)
+        [stopBtn, barStop].forEach((b) => { b.disabled = !running; b.textContent = '중단'; });
+        stopBtn.style.display = running ? '' : 'none';
 
         if (running) {
             statusEl.textContent = fmt(d);
@@ -220,14 +234,30 @@
     }
 
     async function toggle(on) {
+        if (!on) {
+            if (stopping) return;   // 이미 중단 요청 중 — 중복 클릭 무시
+            stopping = true;
+            applyStoppingUi();
+        }
         try {
             const res = await fetch(toggleUrl, {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' },
                 body: JSON.stringify({ on: on ? 1 : 0 }),
             });
-            if (res.ok) render((await res.json()).data);
-        } catch (e) { statusEl.textContent = '요청 실패 — 다시 시도해 주세요.'; }
+            if (res.ok) {
+                const d = (await res.json()).data;
+                stopping = false;
+                render(d);
+                if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
+                return;
+            }
+            throw new Error('HTTP ' + res.status);
+        } catch (e) {
+            stopping = false;
+            statusEl.textContent = '요청 실패 — 다시 시도해 주세요.';
+            fetchStatus();   // 실제 상태로 버튼 복구
+        }
     }
 
     startBtn.addEventListener('click', () => toggle(true));
