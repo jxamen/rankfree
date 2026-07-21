@@ -3,16 +3,21 @@
 namespace Tests\Feature;
 
 use App\Domain\Keyword\HubAutoRun;
+use App\Domain\Keyword\KeywordHubCollectionControl;
 use App\Domain\Keyword\KeywordHubCollector;
 use App\Domain\Keyword\KeywordHubPublisher;
 use App\Domain\Keyword\KeywordReportBuilder;
 use App\Domain\Keyword\NaverAutocompleteService;
 use App\Domain\Keyword\NaverKeywordService;
+use App\Jobs\KeywordHubCollectCategoryJob;
+use App\Jobs\KeywordHubCollectShoppingRootJob;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
+use App\Models\KeywordHubRun;
 use App\Models\KeywordSearch;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /** 키워드 콘텐츠 허브(22 Phase 1) — 수집(필터)·발행(thin 보류)·크론·관리자 승인 큐. */
@@ -383,5 +388,128 @@ class KeywordHubTest extends TestCase
         });
         $this->actingAs($admin)->post('/admin/keyword-hub/publish', ['limit' => 3])
             ->assertRedirect()->assertSessionHas('status');
+    }
+
+    public function test_admin_can_queue_parallel_collection_run(): void
+    {
+        Queue::fake();
+        $admin = $this->admin();
+
+        $placeA = KeywordCategory::create([
+            'type' => 'place',
+            'name' => 'place food',
+            'slug' => 'place-food',
+            'seed_keywords' => ['강남 맛집'],
+            'is_active' => true,
+        ]);
+        $placeB = KeywordCategory::create([
+            'type' => 'place',
+            'name' => 'place cafe',
+            'slug' => 'place-cafe',
+            'seed_keywords' => ['성수 카페'],
+            'is_active' => true,
+        ]);
+        KeywordCategory::create([
+            'type' => 'shopping',
+            'name' => 'fashion',
+            'slug' => 'fashion',
+            'naver_cid' => 50000000,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($admin)->post('/admin/keyword-hub/collect-batch', [
+            'collect_place' => 1,
+            'collect_shopping' => 1,
+            'place_limit' => 2,
+            'shopping_pages' => 1,
+            'shopping_depth' => 2,
+            'shopping_delay_ms' => 0,
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $run = KeywordHubRun::latest('id')->first();
+        $this->assertNotNull($run);
+        $this->assertSame('both', $run->type);
+        $this->assertSame(3, $run->total_jobs);
+        $this->assertDatabaseHas('keyword_hub_run_items', ['run_id' => $run->id, 'type' => 'place', 'target_id' => (string) $placeA->id]);
+        $this->assertDatabaseHas('keyword_hub_run_items', ['run_id' => $run->id, 'type' => 'place', 'target_id' => (string) $placeB->id]);
+        $this->assertDatabaseHas('keyword_hub_run_items', ['run_id' => $run->id, 'type' => 'shopping', 'target_id' => '50000000']);
+
+        Queue::assertPushed(KeywordHubCollectCategoryJob::class, 2);
+        Queue::assertPushed(KeywordHubCollectShoppingRootJob::class, 1);
+    }
+
+    public function test_collection_status_returns_latest_runs(): void
+    {
+        $admin = $this->admin();
+        $run = KeywordHubRun::create([
+            'type' => 'both',
+            'status' => 'running',
+            'total_jobs' => 2,
+            'finished_jobs' => 1,
+            'created_candidates' => 7,
+        ]);
+        $run->items()->create([
+            'type' => 'place',
+            'target_type' => 'category',
+            'target_id' => '1',
+            'label' => 'place food',
+            'status' => 'completed',
+            'created_candidates' => 7,
+        ]);
+
+        $this->actingAs($admin)->getJson('/admin/keyword-hub/collect-status')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $run->id)
+            ->assertJsonPath('data.0.status', 'running')
+            ->assertJsonPath('data.0.progress', 50)
+            ->assertJsonPath('data.0.items.0.label', 'place food');
+    }
+
+    public function test_admin_can_toggle_collection_processing(): void
+    {
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/collect-control', ['enabled' => 0])
+            ->assertOk()
+            ->assertJsonPath('data.enabled', false)
+            ->assertJsonPath('data.updated_by', $admin->email);
+        $this->assertFalse(KeywordHubCollectionControl::enabled());
+
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/collect-control', ['enabled' => 1])
+            ->assertOk()
+            ->assertJsonPath('data.enabled', true);
+        $this->assertTrue(KeywordHubCollectionControl::enabled());
+    }
+
+    public function test_collection_job_waits_when_admin_control_is_off(): void
+    {
+        $cat = KeywordCategory::create([
+            'type' => 'place',
+            'name' => 'place food',
+            'slug' => 'place-food-off',
+            'seed_keywords' => ['강남 맛집'],
+            'is_active' => true,
+        ]);
+        $run = KeywordHubRun::create(['type' => 'place', 'status' => 'queued', 'total_jobs' => 1]);
+        $item = $run->items()->create([
+            'type' => 'place',
+            'target_type' => 'category',
+            'target_id' => (string) $cat->id,
+            'label' => $cat->name,
+            'status' => 'queued',
+        ]);
+
+        KeywordHubCollectionControl::set(false, 'test');
+        $this->mock(KeywordHubCollector::class, function ($m) {
+            $m->shouldReceive('collect')->never();
+        });
+
+        (new KeywordHubCollectCategoryJob($item->id))->handle(app(KeywordHubCollector::class));
+
+        $this->assertDatabaseHas('keyword_hub_run_items', [
+            'id' => $item->id,
+            'status' => 'queued',
+            'note' => '관리자 OFF 상태로 대기 중',
+        ]);
     }
 }

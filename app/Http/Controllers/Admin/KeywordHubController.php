@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Keyword\HubAutoRun;
+use App\Domain\Keyword\KeywordHubCollectionControl;
 use App\Domain\Keyword\KeywordHubCollector;
 use App\Domain\Keyword\KeywordHubPublisher;
 use App\Domain\Seo\SearchEnginePing;
 use App\Http\Controllers\Controller;
+use App\Jobs\KeywordHubCollectCategoryJob;
+use App\Jobs\KeywordHubCollectShoppingRootJob;
 use App\Models\KeywordCandidate;
 use App\Models\KeywordCategory;
+use App\Models\KeywordHubRun;
+use App\Models\KeywordHubRunItem;
 use App\Models\KeywordSearch;
 use Illuminate\Http\Request;
 
@@ -25,6 +30,9 @@ class KeywordHubController extends Controller
             'counts' => KeywordCandidate::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
             'hubDocs' => KeywordSearch::where('origin', 'hub')->latest('id')->limit(10)->get(),
             'hubDocCount' => KeywordSearch::where('origin', 'hub')->count(),
+            'collectTargets' => $this->collectTargetSummary(),
+            'collectionRuns' => KeywordHubRun::with('items')->latest('id')->limit(5)->get(),
+            'collectionControl' => KeywordHubCollectionControl::state(),
             'auto' => $this->autoPayload(),   // 자동 발행 초기 상태(새로고침·재방문 복원용)
         ]);
     }
@@ -34,6 +42,115 @@ class KeywordHubController extends Controller
     {
         return response()->json(['data' => $this->autoPayload()])
             ->header('Cache-Control', 'no-store, max-age=0');
+    }
+
+    public function collectionStatus()
+    {
+        $runs = KeywordHubRun::with('items')->latest('id')->limit(5)->get()
+            ->map(fn (KeywordHubRun $run) => $this->collectionRunPayload($run))
+            ->values();
+
+        return response()->json(['data' => $runs])
+            ->header('Cache-Control', 'no-store, max-age=0');
+    }
+
+    public function collectionControl(Request $request)
+    {
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+        ]);
+
+        $state = KeywordHubCollectionControl::set(
+            (bool) $data['enabled'],
+            $request->user()?->email,
+        );
+
+        return response()->json(['data' => $this->collectionControlPayload($state)])
+            ->header('Cache-Control', 'no-store, max-age=0');
+    }
+
+    public function startCollection(Request $request)
+    {
+        $data = $request->validate([
+            'collect_place' => 'nullable|boolean',
+            'collect_shopping' => 'nullable|boolean',
+            'place_limit' => 'nullable|integer|min:1|max:500',
+            'shopping_pages' => 'nullable|integer|min:1|max:25',
+            'shopping_depth' => 'nullable|integer|min:2|max:3',
+            'shopping_delay_ms' => 'nullable|integer|min:0|max:5000',
+        ]);
+
+        $collectPlace = $request->boolean('collect_place');
+        $collectShopping = $request->boolean('collect_shopping');
+        if (! $collectPlace && ! $collectShopping) {
+            return back()->withErrors(['collect' => '수집 대상을 하나 이상 선택해 주세요.']);
+        }
+
+        $type = $collectPlace && $collectShopping ? 'both' : ($collectPlace ? 'place' : 'shopping');
+        $options = [
+            'place_limit' => min(max((int) ($data['place_limit'] ?? 50), 1), 500),
+            'shopping_pages' => min(max((int) ($data['shopping_pages'] ?? config('rankfree.hub.datalab_pages', 25)), 1), 25),
+            'shopping_depth' => min(max((int) ($data['shopping_depth'] ?? 3), 2), 3),
+            'shopping_delay_ms' => min(max((int) ($data['shopping_delay_ms'] ?? 300), 0), 5000),
+        ];
+
+        $run = KeywordHubRun::create([
+            'type' => $type,
+            'status' => 'queued',
+            'options' => $options,
+            'note' => '관리자 수동 시작',
+        ]);
+
+        $items = [];
+        if ($collectPlace) {
+            foreach ($this->placeCollectCategories($options['place_limit']) as $category) {
+                $items[] = $run->items()->create([
+                    'type' => 'place',
+                    'target_type' => 'category',
+                    'target_id' => (string) $category->id,
+                    'label' => $category->parent ? $category->parent->name.' > '.$category->name : $category->name,
+                ]);
+            }
+        }
+
+        if ($collectShopping) {
+            $shoppingRoots = $this->shoppingRootCategories();
+            if ($shoppingRoots->isEmpty()) {
+                $items[] = $run->items()->create([
+                    'type' => 'shopping',
+                    'target_type' => 'shopping_all',
+                    'target_id' => null,
+                    'label' => '쇼핑 전체',
+                    'note' => '데이터랩 분류가 아직 없어 전체 동기화로 시작',
+                ]);
+            } else {
+                foreach ($shoppingRoots as $root) {
+                    $items[] = $run->items()->create([
+                        'type' => 'shopping',
+                        'target_type' => 'shopping_root',
+                        'target_id' => (string) $root->naver_cid,
+                        'label' => $root->name,
+                    ]);
+                }
+            }
+        }
+
+        $run->forceFill([
+            'total_jobs' => count($items),
+            'status' => count($items) ? 'queued' : 'completed',
+            'finished_at' => count($items) ? null : now(),
+            'note' => count($items) ? '큐에 등록됨' : '수집 대상 없음',
+        ])->save();
+
+        foreach ($items as $item) {
+            if ($item->type === 'shopping') {
+                KeywordHubCollectShoppingRootJob::dispatch($item->id);
+            } else {
+                KeywordHubCollectCategoryJob::dispatch($item->id);
+            }
+        }
+
+        return back()->with('status', '백그라운드 수집 작업 '.$run->total_jobs.'개를 큐에 등록했습니다.');
     }
 
     /** 자동 발행 on/off 토글 — {on: bool, type: shopping|place}. 서버 크론(hub:auto-publish)이 실제 발행을 이어간다. */
@@ -62,6 +179,18 @@ class KeywordHubController extends Controller
             'remaining' => (int) ($s['remaining'] ?? 0),
             'updated_ago' => $ago,
             'stale' => $ago !== null && $ago > 180,   // 3분 넘게 갱신 없으면 크론 미동작 의심
+        ];
+    }
+
+    private function collectionControlPayload(?array $state = null): array
+    {
+        $state = $state ?? KeywordHubCollectionControl::state();
+        $updatedAt = $state['updated_at'] ?? null;
+
+        return [
+            'enabled' => (bool) ($state['enabled'] ?? true),
+            'updated_at' => $updatedAt ? date('Y-m-d H:i:s', (int) $updatedAt) : null,
+            'updated_by' => $state['updated_by'] ?? null,
         ];
     }
 
@@ -318,6 +447,77 @@ class KeywordHubController extends Controller
             ]],
             'ping' => $note,
         ]]);
+    }
+
+    private function collectTargetSummary(): array
+    {
+        return [
+            'place_categories' => $this->placeCollectCategories(100000)->count(),
+            'shopping_roots' => $this->shoppingRootCategories()->count(),
+        ];
+    }
+
+    private function placeCollectCategories(int $limit)
+    {
+        return KeywordCategory::with('parent')
+            ->where('type', 'place')
+            ->where('is_active', true)
+            ->whereNull('naver_cid')
+            ->orderByRaw('collected_at is null desc')
+            ->orderBy('collected_at')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (KeywordCategory $category) => (bool) $category->seedList())
+            ->take($limit)
+            ->values();
+    }
+
+    private function shoppingRootCategories()
+    {
+        return KeywordCategory::where('type', 'shopping')
+            ->where('is_active', true)
+            ->whereNull('parent_id')
+            ->whereNotNull('naver_cid')
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function collectionRunPayload(KeywordHubRun $run): array
+    {
+        $progress = $run->total_jobs > 0
+            ? (int) floor(($run->finished_jobs / max(1, $run->total_jobs)) * 100)
+            : 100;
+
+        return [
+            'id' => $run->id,
+            'type' => $run->type,
+            'status' => $run->status,
+            'total_jobs' => (int) $run->total_jobs,
+            'finished_jobs' => (int) $run->finished_jobs,
+            'failed_jobs' => (int) $run->failed_jobs,
+            'progress' => $progress,
+            'seeds' => (int) $run->seeds,
+            'created_candidates' => (int) $run->created_candidates,
+            'updated_candidates' => (int) $run->updated_candidates,
+            'filtered_candidates' => (int) $run->filtered_candidates,
+            'note' => $run->note,
+            'created_at' => $run->created_at?->format('Y-m-d H:i:s'),
+            'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
+            'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
+            'items' => $run->items
+                ->sortBy('id')
+                ->take(12)
+                ->map(fn (KeywordHubRunItem $item) => [
+                    'id' => $item->id,
+                    'type' => $item->type,
+                    'label' => $item->label,
+                    'status' => $item->status,
+                    'created_candidates' => (int) $item->created_candidates,
+                    'error' => $item->error,
+                    'note' => $item->note,
+                ])->values(),
+        ];
     }
 
     /** 시드 textarea(줄바꿈/콤마 구분) → 배열. */

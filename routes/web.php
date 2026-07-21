@@ -398,6 +398,9 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/candidates/bulk', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkCandidates'])->name('keyword-hub.candidates.bulk');
     Route::post('/keyword-hub/candidates/bulk-all', [\App\Http\Controllers\Admin\KeywordHubController::class, 'bulkAllCandidates'])->name('keyword-hub.candidates.bulk-all');
     Route::post('/keyword-hub/collect', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collect'])->name('keyword-hub.collect');
+    Route::post('/keyword-hub/collect-batch', [\App\Http\Controllers\Admin\KeywordHubController::class, 'startCollection'])->name('keyword-hub.collect-batch');
+    Route::get('/keyword-hub/collect-status', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collectionStatus'])->name('keyword-hub.collect-status');
+    Route::post('/keyword-hub/collect-control', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collectionControl'])->name('keyword-hub.collect-control');
     Route::post('/keyword-hub/publish', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publish'])->name('keyword-hub.publish');
     Route::post('/keyword-hub/publish-batch', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publishBatch'])->name('keyword-hub.publish-batch');
     Route::post('/keyword-hub/auto', [\App\Http\Controllers\Admin\KeywordHubController::class, 'autoToggle'])->name('keyword-hub.auto');

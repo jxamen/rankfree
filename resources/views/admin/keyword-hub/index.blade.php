@@ -22,7 +22,7 @@
 @endif
 
 {{-- 현황 + 발행 --}}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-5">
     <div class="card p-5">
         <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">후보 현황</div>
         <div class="flex flex-wrap gap-2">
@@ -56,6 +56,50 @@
         </div>
         <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">시작하면 서버가 백그라운드로 선택한 유형의 쌓인 키워드를 검색량 큰 순으로 계속 분석·발행합니다(검색량 없으면 자동 보류). 브라우저를 닫아도 계속되고, 진행상황은 상단 바에 표시됩니다(매분 배치).</div>
     </div>
+
+    <div class="card p-5">
+        <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">백그라운드 수집</div>
+        <div class="flex items-center gap-2 mb-3 flex-wrap" style="font-size:var(--fs-xs);">
+            <span id="kh-collect-control-badge" class="badge border border-hairline">
+                수집 처리 {{ ($collectionControl['enabled'] ?? true) ? 'ON' : 'OFF' }}
+            </span>
+            <button type="button" id="kh-collect-control-on" class="btn btn-secondary btn-sm" style="height:32px;">켜기</button>
+            <button type="button" id="kh-collect-control-off" class="btn btn-ghost btn-sm" style="height:32px;">끄기</button>
+            <span id="kh-collect-control-note" class="text-muted-soft"></span>
+        </div>
+        <form method="POST" action="{{ route('admin.keyword-hub.collect-batch') }}" class="flex flex-col gap-3">
+            @csrf
+            <div class="flex items-center gap-3 flex-wrap" style="font-size:var(--fs-sm);">
+                <label class="flex items-center gap-1.5" style="cursor:pointer;">
+                    <input type="checkbox" name="collect_place" value="1" checked> 플레이스
+                    <span class="font-mono text-muted">{{ number_format($collectTargets['place_categories'] ?? 0) }}</span>
+                </label>
+                <label class="flex items-center gap-1.5" style="cursor:pointer;">
+                    <input type="checkbox" name="collect_shopping" value="1" checked> 쇼핑
+                    <span class="font-mono text-muted">{{ number_format($collectTargets['shopping_roots'] ?? 0) }}</span>
+                </label>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="text-muted" style="font-size:var(--fs-xs);">플레이스 카테고리
+                    <input type="number" name="place_limit" min="1" max="500" value="50" class="input mt-1" style="height:36px;">
+                </label>
+                <label class="text-muted" style="font-size:var(--fs-xs);">쇼핑 페이지
+                    <input type="number" name="shopping_pages" min="1" max="25" value="{{ (int) config('rankfree.hub.datalab_pages', 25) }}" class="input mt-1" style="height:36px;">
+                </label>
+                <label class="text-muted" style="font-size:var(--fs-xs);">쇼핑 깊이
+                    <select name="shopping_depth" class="input mt-1" style="height:36px;">
+                        <option value="3" selected>3단계</option>
+                        <option value="2">2단계</option>
+                    </select>
+                </label>
+                <label class="text-muted" style="font-size:var(--fs-xs);">요청 간격(ms)
+                    <input type="number" name="shopping_delay_ms" min="0" max="5000" value="300" class="input mt-1" style="height:36px;">
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" style="height:40px;">동시 수집 시작</button>
+        </form>
+        <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">큐 워커가 `hub-place`, `hub-shopping` 큐를 처리하면 병렬로 진행됩니다.</div>
+    </div>
 </div>
 
 {{-- 최근 발행 문서 --}}
@@ -70,6 +114,42 @@
     @empty
         <div class="text-muted-soft" style="font-size:var(--fs-xs);">아직 발행된 허브 문서가 없습니다.</div>
     @endforelse
+</div>
+
+<div class="card p-5 mt-5">
+    <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">최근 수집 작업</div>
+        <span class="text-muted-soft" style="font-size:var(--fs-xs);">자동 갱신</span>
+    </div>
+    <div id="kh-collect-runs" class="flex flex-col gap-2">
+        @forelse ($collectionRuns as $run)
+            @php
+                $pct = $run->total_jobs > 0 ? (int) floor(($run->finished_jobs / max(1, $run->total_jobs)) * 100) : 100;
+            @endphp
+            <div class="card-soft p-3" style="font-size:var(--fs-xs);">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="badge border border-hairline">#{{ $run->id }}</span>
+                    <span class="badge">{{ $run->type }}</span>
+                    <span class="text-ink font-semibold">{{ $run->status }}</span>
+                    <span class="text-muted font-mono">{{ number_format($run->finished_jobs) }}/{{ number_format($run->total_jobs) }}</span>
+                    <span class="text-muted-soft ml-auto">{{ $run->created_at?->format('m-d H:i') }}</span>
+                </div>
+                <div class="mt-2" style="height:6px;border-radius:999px;background:var(--color-hairline-soft);overflow:hidden;">
+                    <div style="height:100%;width:{{ $pct }}%;background:var(--color-primary);"></div>
+                </div>
+                <div class="text-muted mt-2">
+                    신규 <b class="font-mono">{{ number_format($run->created_candidates) }}</b>
+                    · 갱신 <b class="font-mono">{{ number_format($run->updated_candidates) }}</b>
+                    · 필터 <b class="font-mono">{{ number_format($run->filtered_candidates) }}</b>
+                    @if ($run->failed_jobs)
+                        · 실패 <b class="font-mono text-error">{{ number_format($run->failed_jobs) }}</b>
+                    @endif
+                </div>
+            </div>
+        @empty
+            <div class="text-muted-soft" style="font-size:var(--fs-xs);">아직 등록된 수집 작업이 없습니다.</div>
+        @endforelse
+    </div>
 </div>
 
 <script>
@@ -137,6 +217,120 @@
     barStop.addEventListener('click', () => toggle(false));
 
     render(@json($auto));   // 서버 초기 상태 — 진행 중이면 상단 바 표시 + 폴링 시작
+})();
+</script>
+<script>
+(function () {
+    const box = document.getElementById('kh-collect-runs');
+    if (!box) return;
+
+    const statusUrl = '{{ route('admin.keyword-hub.collect-status') }}';
+    const controlUrl = '{{ route('admin.keyword-hub.collect-control') }}';
+    const csrf = '{{ csrf_token() }}';
+    const controlBadge = document.getElementById('kh-collect-control-badge');
+    const controlOn = document.getElementById('kh-collect-control-on');
+    const controlOff = document.getElementById('kh-collect-control-off');
+    const controlNote = document.getElementById('kh-collect-control-note');
+    const label = {
+        queued: '대기',
+        running: '진행',
+        completed: '완료',
+        failed: '실패',
+        cancelled: '취소',
+        both: '전체',
+        place: '플레이스',
+        shopping: '쇼핑',
+    };
+
+    const esc = (v) => String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const nf = (v) => Number(v || 0).toLocaleString();
+
+    function renderControl(state) {
+        state = state || {};
+        const enabled = state.enabled !== false;
+        if (controlBadge) {
+            controlBadge.textContent = '수집 처리 ' + (enabled ? 'ON' : 'OFF');
+            controlBadge.style.background = enabled
+                ? 'color-mix(in srgb,var(--color-success) 12%,var(--color-canvas))'
+                : 'color-mix(in srgb,var(--color-error) 10%,var(--color-canvas))';
+            controlBadge.style.color = enabled ? 'var(--color-success)' : 'var(--color-error)';
+        }
+        if (controlOn) controlOn.disabled = enabled;
+        if (controlOff) controlOff.disabled = !enabled;
+        if (controlNote) {
+            const by = state.updated_by ? ' · ' + state.updated_by : '';
+            controlNote.textContent = state.updated_at ? state.updated_at + by : '';
+        }
+    }
+
+    async function setControl(enabled) {
+        try {
+            if (controlOn) controlOn.disabled = true;
+            if (controlOff) controlOff.disabled = true;
+            const res = await fetch(controlUrl, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled ? 1 : 0 }),
+            });
+            if (res.ok) renderControl((await res.json()).data);
+        } catch (e) {
+            if (controlNote) controlNote.textContent = '상태 변경 실패';
+        }
+    }
+
+    function runHtml(run) {
+        const pct = Math.max(0, Math.min(100, Number(run.progress || 0)));
+        const items = (run.items || []).map((item) => (
+            '<span class="badge border border-hairline" style="font-size:var(--fs-xs);">' +
+            esc(item.label) + ' · ' + esc(label[item.status] || item.status) +
+            (item.created_candidates ? ' +' + nf(item.created_candidates) : '') +
+            '</span>'
+        )).join(' ');
+
+        return '<div class="card-soft p-3" style="font-size:var(--fs-xs);">' +
+            '<div class="flex items-center gap-2 flex-wrap">' +
+            '<span class="badge border border-hairline">#' + esc(run.id) + '</span>' +
+            '<span class="badge">' + esc(label[run.type] || run.type) + '</span>' +
+            '<span class="text-ink font-semibold">' + esc(label[run.status] || run.status) + '</span>' +
+            '<span class="text-muted font-mono">' + nf(run.finished_jobs) + '/' + nf(run.total_jobs) + '</span>' +
+            '<span class="text-muted-soft ml-auto">' + esc(run.created_at || '') + '</span>' +
+            '</div>' +
+            '<div class="mt-2" style="height:6px;border-radius:999px;background:var(--color-hairline-soft);overflow:hidden;">' +
+            '<div style="height:100%;width:' + pct + '%;background:var(--color-primary);"></div>' +
+            '</div>' +
+            '<div class="text-muted mt-2">신규 <b class="font-mono">' + nf(run.created_candidates) + '</b>' +
+            ' · 갱신 <b class="font-mono">' + nf(run.updated_candidates) + '</b>' +
+            ' · 필터 <b class="font-mono">' + nf(run.filtered_candidates) + '</b>' +
+            (run.failed_jobs ? ' · 실패 <b class="font-mono text-error">' + nf(run.failed_jobs) + '</b>' : '') +
+            '</div>' +
+            (items ? '<div class="flex flex-wrap gap-1.5 mt-2">' + items + '</div>' : '') +
+            '</div>';
+    }
+
+    async function refreshRuns() {
+        try {
+            const url = statusUrl + (statusUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+            if (!res.ok) return;
+            const runs = (await res.json()).data || [];
+            box.innerHTML = runs.length
+                ? runs.map(runHtml).join('')
+                : '<div class="text-muted-soft" style="font-size:var(--fs-xs);">아직 등록된 수집 작업이 없습니다.</div>';
+        } catch (e) {
+            // keep the last rendered state
+        }
+    }
+
+    refreshRuns();
+    setInterval(refreshRuns, 5000);
+    renderControl(@json($collectionControl));
+    controlOn?.addEventListener('click', () => setControl(true));
+    controlOff?.addEventListener('click', () => setControl(false));
 })();
 </script>
 @endsection
