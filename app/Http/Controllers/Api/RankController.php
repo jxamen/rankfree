@@ -36,7 +36,7 @@ class RankController extends Controller
     public function store(Request $request, RankSlotService $service)
     {
         $data = $request->validate([
-            'place' => ['required', 'string', 'max:300'],
+            'place' => ['required', 'string', 'max:1000'],
             'keyword' => ['required_without:keywords', 'nullable', 'string', 'max:100'],
             'keywords' => ['required_without:keyword', 'nullable', 'array', 'min:1'],
             'keywords.*' => ['string', 'max:100'],
@@ -65,7 +65,7 @@ class RankController extends Controller
     public function resolve(Request $request, RankSlotService $service)
     {
         $data = $request->validate([
-            'place' => ['required', 'string', 'max:300'],
+            'place' => ['required', 'string', 'max:1000'],
         ]);
 
         return response()->json(['place' => $service->resolvePlace($data['place'])]);
@@ -96,7 +96,7 @@ class RankController extends Controller
     {
         $data = $request->validate([
             'keyword' => ['required', 'string', 'max:100'],
-            'place' => ['required', 'string', 'max:300'],
+            'place' => ['required', 'string', 'max:1000'],
         ]);
         $placeId = $checker->resolvePlaceId($data['place']);
         $result = $checker->check($data['keyword'], $placeId, $placeId ? null : $data['place']);

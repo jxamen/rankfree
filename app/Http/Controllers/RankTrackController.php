@@ -39,7 +39,7 @@ class RankTrackController extends Controller
     public function store(Request $request, RankSlotService $service)
     {
         $data = $request->validate([
-            'place' => ['required', 'string', 'max:300'],
+            'place' => ['required', 'string', 'max:1000'],
             'keywords' => ['required', 'array', 'min:1'],
             'keywords.*' => ['nullable', 'string', 'max:100'],
             'label' => ['nullable', 'string', 'max:100'],
@@ -89,7 +89,7 @@ class RankTrackController extends Controller
 
         $data = $request->validate([
             'keyword' => ['required', 'string', 'max:100'],
-            'place' => ['required', 'string', 'max:300'],
+            'place' => ['required', 'string', 'max:1000'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
         $kw = trim($data['keyword']);

@@ -123,7 +123,7 @@
             <div class="flex gap-3 flex-wrap items-start mb-4">
                 <div style="flex:2;min-width:260px;">
                     <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">내 플레이스 URL 또는 ID</label>
-                    <input name="place" id="rf-place" class="input" value="{{ old('place') }}" placeholder="https://map.naver.com/... · m.place URL · 플레이스 ID" required autocomplete="off">
+                    <input name="place" id="rf-place" class="input" value="{{ old('place') }}" placeholder="https://map.naver.com/... · m.place URL · 플레이스 ID" required maxlength="1000" autocomplete="off">
                     <div id="rf-place-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
                 </div>
                 <div style="width:150px;">
@@ -173,7 +173,7 @@
             </div>
             <div class="mb-3">
                 <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">플레이스 URL 또는 ID</label>
-                <input name="place" id="rf-edit-place" class="input" value="" required maxlength="300" autocomplete="off" placeholder="https://m.place.naver.com/... · 플레이스 ID">
+                <input name="place" id="rf-edit-place" class="input" value="" required maxlength="1000" autocomplete="off" placeholder="https://m.place.naver.com/... · 플레이스 ID">
                 <div id="rf-edit-place-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
             </div>
             <div class="mb-4">

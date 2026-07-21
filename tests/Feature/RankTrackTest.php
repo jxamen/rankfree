@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Place\RankSlotService;
 use App\Models\PlaceRankRecord;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +16,50 @@ class RankTrackTest extends TestCase
     private function makeUser(string $email = 'tester@rankfree.kr'): User
     {
         return User::create(['name' => '테스터', 'email' => $email, 'password' => 'secret1234']);
+    }
+
+    public function test_store_accepts_long_naver_place_url(): void
+    {
+        $user = $this->makeUser();
+        $longUrl = 'https://map.naver.com/p/entry/place/1137930547?'
+            .http_build_query([
+                'c' => str_repeat('127.1234567,37.1234567,15,0,0,0,dh,', 8),
+                'placePath' => '/home',
+                'entry' => 'plt',
+                'searchType' => 'place',
+                'lng' => '127.1234567',
+                'lat' => '37.1234567',
+                'more' => str_repeat('x', 120),
+            ]);
+        $this->assertGreaterThan(300, mb_strlen($longUrl));
+
+        $this->mock(RankSlotService::class, function ($mock) use ($user, $longUrl): void {
+            $mock->shouldReceive('addMany')
+                ->once()
+                ->withArgs(fn ($actualUser, $place, $keywords, $label) => $actualUser->is($user)
+                    && $place === $longUrl
+                    && $keywords === ['강남 미용실']
+                    && $label === null)
+                ->andReturn([
+                    'place' => [
+                        'place_id' => '1137930547',
+                        'place_name' => '긴 URL 테스트',
+                        'place_url' => 'https://m.place.naver.com/place/1137930547',
+                        'category' => 'place',
+                    ],
+                    'created' => [],
+                    'skipped' => [],
+                ]);
+        });
+
+        $this->actingAs($user)
+            ->from('/console/rank')
+            ->post('/console/rank', [
+                'place' => $longUrl,
+                'keywords' => ['강남 미용실'],
+            ])
+            ->assertRedirect('/console/rank')
+            ->assertSessionHasNoErrors();
     }
 
     public function test_update_changes_keyword_and_label(): void
