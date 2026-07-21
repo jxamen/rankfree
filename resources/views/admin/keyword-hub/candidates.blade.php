@@ -133,7 +133,16 @@
                     @forelse ($candidates as $c)
                         <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                             <td style="padding:7px 6px;"><input type="checkbox" name="ids[]" value="{{ $c->id }}" class="kh-ck"></td>
-                            <td style="padding:7px 6px;" class="text-ink font-semibold">{{ $c->keyword }}</td>
+                            @php
+                                $docUrl = $candidateDocumentUrls[$c->id] ?? null;
+                            @endphp
+                            <td style="padding:7px 6px;" class="text-ink font-semibold">
+                                @if ($docUrl)
+                                    <a href="{{ $docUrl }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $c->keyword }}</a>
+                                @else
+                                    {{ $c->keyword }}
+                                @endif
+                            </td>
                             @php
                                 $cat = $c->category;
                                 $catName = $cat ? collect([$cat->parent?->parent?->name, $cat->parent?->name, $cat->name])->filter()->implode(' › ') : '—';

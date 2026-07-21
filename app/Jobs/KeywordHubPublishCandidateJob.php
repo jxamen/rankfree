@@ -55,7 +55,7 @@ class KeywordHubPublishCandidateJob implements ShouldQueue, ShouldBeUnique
         }
 
         $doc = $publisher->publish($candidate);
-        HubAutoRun::progress($doc ? 1 : 0, $doc ? 0 : 1);
+        HubAutoRun::progress($doc ? 1 : 0, $doc ? 0 : 1, $candidate->category?->type);
 
         if ($doc instanceof KeywordSearch || $doc instanceof MarketAnalysis) {
             $ping->afterHubPublish(collect([$doc]));

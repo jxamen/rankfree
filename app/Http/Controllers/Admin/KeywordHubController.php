@@ -184,6 +184,18 @@ class KeywordHubController extends Controller
             'done' => (int) ($s['done'] ?? 0),
             'held' => (int) ($s['held'] ?? 0),
             'remaining' => (int) ($s['remaining'] ?? 0),
+            'by_type' => [
+                'place' => [
+                    'done' => (int) ($s['place_done'] ?? 0),
+                    'held' => (int) ($s['place_held'] ?? 0),
+                    'remaining' => (int) ($s['place_remaining'] ?? 0),
+                ],
+                'shopping' => [
+                    'done' => (int) ($s['shopping_done'] ?? 0),
+                    'held' => (int) ($s['shopping_held'] ?? 0),
+                    'remaining' => (int) ($s['shopping_remaining'] ?? 0),
+                ],
+            ],
             'updated_ago' => $ago,
             'stale' => $ago !== null && $ago > 180,   // 3분 넘게 갱신 없으면 크론 미동작 의심
         ];
@@ -217,6 +229,11 @@ class KeywordHubController extends Controller
             $catId = 0;
         }
 
+        $candidates = $this->filteredCandidates($status, $type, $catId, $source, $kw, $region)
+            ->with('category.parent.parent')
+            ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
+            ->paginate(50)->withQueryString();
+
         return view('admin.keyword-hub.candidates', [
             // 선택한 유형만 표시한다. 지역 후보와 쇼핑 데이터랩 카테고리가 한 목록에 섞이지 않게 한다.
             'categories' => KeywordCategory::with('parent.parent')
@@ -234,10 +251,8 @@ class KeywordHubController extends Controller
                 'candidates as approved_count' => fn ($q) => $q->where('status', 'approved'),
                 'candidates as published_count' => fn ($q) => $q->where('status', 'published'),
             ])->orderBy('type')->orderBy('sort')->orderBy('id')->get(),
-            'candidates' => $this->filteredCandidates($status, $type, $catId, $source, $kw, $region)
-                ->with('category.parent.parent')
-                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')->orderByDesc('id')
-                ->paginate(50)->withQueryString(),
+            'candidates' => $candidates,
+            'candidateDocumentUrls' => $this->candidateDocumentUrls($candidates->getCollection(), $type),
             'status' => $status,
             'type' => $type,
             'catId' => $catId,
@@ -425,6 +440,47 @@ class KeywordHubController extends Controller
             ->when($source !== '', fn ($q) => $q->where('source', $source))
             ->when($type === 'place' && $region !== '', fn ($q) => $q->where('region', $region))
             ->when($kw !== '', fn ($q) => $q->where('keyword', 'like', '%'.addcslashes($kw, '\\%_').'%'));
+    }
+
+    private function candidateDocumentUrls($candidates, string $type): array
+    {
+        $published = $candidates->filter(fn (KeywordCandidate $candidate) => $candidate->status === 'published');
+        if ($published->isEmpty()) {
+            return [];
+        }
+
+        $keywords = $published->pluck('keyword')->filter()->unique()->values();
+        if ($keywords->isEmpty()) {
+            return [];
+        }
+
+        if ($type === 'shopping') {
+            $systemUserId = $this->systemUserId();
+            if (! $systemUserId) {
+                return [];
+            }
+
+            $docs = MarketAnalysis::where('user_id', $systemUserId)
+                ->whereIn('keyword', $keywords)
+                ->orderByDesc('id')
+                ->get()
+                ->unique('keyword')
+                ->keyBy('keyword');
+        } else {
+            $docs = KeywordSearch::where('origin', 'hub')
+                ->whereIn('keyword', $keywords)
+                ->orderByDesc('id')
+                ->get()
+                ->unique('keyword')
+                ->keyBy('keyword');
+        }
+
+        return $published
+            ->mapWithKeys(fn (KeywordCandidate $candidate) => [
+                $candidate->id => $docs->get($candidate->keyword)?->shareUrl(),
+            ])
+            ->filter()
+            ->all();
     }
 
     /** 지금 수집 — 선택 카테고리(없으면 로테이션 순서대로 1개)를 동기 수집. */

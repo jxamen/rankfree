@@ -159,10 +159,23 @@
     const typeLabel = { shopping: '쇼핑', place: '플레이스' };
     let poll = null;
 
-    const fmt = (d) => (d.type ? '유형 ' + (typeLabel[d.type] || d.type) + ' · ' : '쇼핑+플레이스 · ')
-        + '발행 ' + (d.done || 0) + ' · 보류 ' + (d.held || 0)
-        + ' · 남은 ' + Number(d.remaining || 0).toLocaleString()
-        + (d.updated_ago != null ? ' · ' + d.updated_ago + '초 전 갱신' : '');
+    const typeLine = (d, type) => {
+        const row = ((d.by_type || {})[type] || {});
+        return (typeLabel[type] || type)
+            + ' 발행 ' + (row.done || 0)
+            + ' · 보류 ' + (row.held || 0)
+            + ' · 남은 ' + Number(row.remaining || 0).toLocaleString();
+    };
+    const fmt = (d) => {
+        const head = d.type ? '유형 ' + (typeLabel[d.type] || d.type) : '쇼핑+플레이스';
+        const lines = d.type
+            ? [typeLine(d, d.type)]
+            : [typeLine(d, 'place'), typeLine(d, 'shopping')];
+        lines.push('합계 발행 ' + (d.done || 0) + ' · 보류 ' + (d.held || 0) + ' · 남은 ' + Number(d.remaining || 0).toLocaleString());
+
+        return head + ' · ' + lines.join(' / ')
+            + (d.updated_ago != null ? ' · ' + d.updated_ago + '초 전 갱신' : '');
+    };
 
     function render(d) {
         d = d || {};

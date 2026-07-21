@@ -26,13 +26,25 @@ class HubAutoRun
 
     public static function state(): array
     {
-        $s = Cache::get(self::KEY, []);
+        $raw = Cache::get(self::KEY, []);
+        $raw = is_array($raw) ? $raw : [];
 
-        return array_merge([
+        $state = array_merge([
             'running' => false, 'type' => null,
             'done' => 0, 'held' => 0, 'remaining' => 0,
+            'place_done' => 0, 'place_held' => 0, 'place_remaining' => 0,
+            'shopping_done' => 0, 'shopping_held' => 0, 'shopping_remaining' => 0,
             'started_at' => null, 'last_at' => null,
-        ], is_array($s) ? $s : []);
+        ], $raw);
+
+        if (! array_key_exists('place_remaining', $raw)) {
+            $state['place_remaining'] = ($state['type'] ?? null) === 'shopping' ? 0 : self::query('place')->count();
+        }
+        if (! array_key_exists('shopping_remaining', $raw)) {
+            $state['shopping_remaining'] = ($state['type'] ?? null) === 'place' ? 0 : self::query('shopping')->count();
+        }
+
+        return $state;
     }
 
     private static function save(array $s): void
@@ -54,6 +66,10 @@ class HubAutoRun
                 'running' => true, 'type' => $type,
                 'done' => 0, 'held' => 0,
                 'remaining' => self::query($type)->count(),
+                'place_done' => 0, 'place_held' => 0,
+                'place_remaining' => $type === 'shopping' ? 0 : self::query('place')->count(),
+                'shopping_done' => 0, 'shopping_held' => 0,
+                'shopping_remaining' => $type === 'place' ? 0 : self::query('shopping')->count(),
                 'started_at' => now()->timestamp, 'last_at' => now()->timestamp,
             ];
             self::save($s);
@@ -81,13 +97,19 @@ class HubAutoRun
     }
 
     /** 크론 배치 후 진행 갱신(누적 done/held, 남은 재계산, 하트비트). 다 드레인되면 자동 종료. */
-    public static function progress(int $addDone, int $addHeld): array
+    public static function progress(int $addDone, int $addHeld, ?string $type = null): array
     {
-        return self::locked(function () use ($addDone, $addHeld) {
+        return self::locked(function () use ($addDone, $addHeld, $type) {
             $s = self::state();
             $s['done'] = (int) $s['done'] + $addDone;
             $s['held'] = (int) $s['held'] + $addHeld;
             $s['remaining'] = self::query($s['type'] ?? null)->count();
+            if (in_array($type, ['place', 'shopping'], true)) {
+                $s[$type.'_done'] = (int) ($s[$type.'_done'] ?? 0) + $addDone;
+                $s[$type.'_held'] = (int) ($s[$type.'_held'] ?? 0) + $addHeld;
+            }
+            $s['place_remaining'] = ($s['type'] ?? null) === 'shopping' ? 0 : self::query('place')->count();
+            $s['shopping_remaining'] = ($s['type'] ?? null) === 'place' ? 0 : self::query('shopping')->count();
             $s['last_at'] = now()->timestamp;
             if ($s['remaining'] === 0) {
                 $s['running'] = false;   // 다 드레인 → 자동 종료

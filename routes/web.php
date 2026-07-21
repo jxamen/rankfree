@@ -309,10 +309,6 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/product/{analysis}', [ProductAnalysisController::class, 'show'])->name('product.show');
     Route::delete('/product/{analysis}', [ProductAnalysisController::class, 'destroy'])->name('product.destroy');
 
-    // 쿠폰함 (26) — 보유 쿠폰 확인·다운로드 쿠폰 받기. 사용은 셀프마케팅 주문 페이지에서
-    Route::get('/coupons', [\App\Http\Controllers\CouponController::class, 'index'])->name('coupons');
-    Route::post('/coupons/{coupon}/download', [\App\Http\Controllers\CouponController::class, 'download'])->name('coupons.download');
-
     // API 키 관리 (발급·허용기간·일일 한도·허용 IP)
     Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys');
     Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
@@ -374,17 +370,6 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/orders/{order}/approve', [MarketingOrderController::class, 'approve'])->name('orders.approve');
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
-
-    // 쿠폰 관리 (26) — 쿠폰 CRUD + 발급(특정 회원·전체 회원)·회수·사용 내역
-    Route::get('/coupons', [\App\Http\Controllers\Admin\CouponController::class, 'index'])->name('coupons');
-    Route::post('/coupons', [\App\Http\Controllers\Admin\CouponController::class, 'store'])->name('coupons.store');
-    Route::delete('/coupons/user-coupons/{userCoupon}', [\App\Http\Controllers\Admin\CouponController::class, 'revoke'])->name('coupons.revoke');
-    Route::get('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'show'])->name('coupons.show');
-    Route::put('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'update'])->name('coupons.update');
-    Route::post('/coupons/{coupon}/toggle', [\App\Http\Controllers\Admin\CouponController::class, 'toggle'])->name('coupons.toggle');
-    Route::post('/coupons/{coupon}/issue', [\App\Http\Controllers\Admin\CouponController::class, 'issue'])->name('coupons.issue');
-    Route::post('/coupons/{coupon}/issue-all', [\App\Http\Controllers\Admin\CouponController::class, 'issueAll'])->name('coupons.issue-all');
-    Route::delete('/coupons/{coupon}', [\App\Http\Controllers\Admin\CouponController::class, 'destroy'])->name('coupons.destroy');
 
     // 구글 계정 OAuth 연동 (서치 콘솔·GA4 공용)
     Route::get('/google-connect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'redirect'])->name('google-connect');
