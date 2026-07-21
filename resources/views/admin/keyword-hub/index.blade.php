@@ -30,10 +30,12 @@
                     <span class="badge border border-hairline">Supervisor 워커 병렬 처리</span>
                     <span class="badge border border-hairline">분당 큐 {{ number_format((int) config('rankfree.hub.auto_per_run', 60)) }}개</span>
                 </div>
-                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">켜면 서버가 쇼핑·플레이스 후보를 함께 큐에 넣습니다. 실제 동시 발행 개수는 서버 Supervisor의 `numprocs` 값입니다.</div>
+                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">유형별로 따로 돌리거나 동시에 돌릴 수 있습니다. 실제 동시 발행 개수는 서버 Supervisor의 `numprocs` 값입니다.</div>
             </div>
-            <div class="flex items-center gap-2">
-                <button type="button" id="kh-auto-start" class="btn btn-primary btn-sm">동시 자동 발행 시작</button>
+            <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" class="kh-auto-start btn btn-secondary btn-sm" data-type="place">플레이스만 시작</button>
+                <button type="button" class="kh-auto-start btn btn-secondary btn-sm" data-type="shopping">쇼핑만 시작</button>
+                <button type="button" class="kh-auto-start btn btn-primary btn-sm" data-type="">동시 시작</button>
                 <button type="button" id="kh-auto-stop" class="btn btn-secondary btn-sm" disabled>중단</button>
                 <span id="kh-auto-status" class="text-muted" style="font-size:var(--fs-xs);"></span>
             </div>
@@ -163,7 +165,7 @@
 
 <script>
 (function () {
-    const startBtn = document.getElementById('kh-auto-start');
+    const startBtns = Array.from(document.querySelectorAll('.kh-auto-start'));
     const stopBtn = document.getElementById('kh-auto-stop');
     const statusEl = document.getElementById('kh-auto-status');
     const bar = document.getElementById('kh-auto-bar');
@@ -203,7 +205,7 @@
     function render(d) {
         d = d || {};
         const running = !!d.running;
-        startBtn.disabled = running || stopping;
+        startBtns.forEach((b) => { b.disabled = running || stopping; });
 
         if (stopping) {
             applyStoppingUi();
@@ -233,7 +235,7 @@
         } catch (e) {}
     }
 
-    async function toggle(on) {
+    async function toggle(on, type) {
         if (!on) {
             if (stopping) return;   // 이미 중단 요청 중 — 중복 클릭 무시
             stopping = true;
@@ -243,7 +245,7 @@
             const res = await fetch(toggleUrl, {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                body: JSON.stringify({ on: on ? 1 : 0 }),
+                body: JSON.stringify({ on: on ? 1 : 0, type: type || null }),
             });
             if (res.ok) {
                 const d = (await res.json()).data;
@@ -260,7 +262,7 @@
         }
     }
 
-    startBtn.addEventListener('click', () => toggle(true));
+    startBtns.forEach((b) => b.addEventListener('click', () => toggle(true, b.dataset.type || null)));
     stopBtn.addEventListener('click', () => toggle(false));
     barStop.addEventListener('click', () => toggle(false));
 
