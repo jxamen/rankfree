@@ -273,12 +273,13 @@ class ShopKeywordExposureController extends Controller
             $reference = $references !== []
                 ? $references[random_int(0, count($references) - 1)]
                 : (string) ($link->analysis()->value('core_keyword') ?: '');
+            $grammar = $link->getConnection()->getQueryGrammar();
 
             $affected = ShopKeywordShortLink::whereKey($link->id)
                 ->where('cursor', $link->cursor)
                 ->update([
-                    'cursor' => DB::raw('cursor + 1'),
-                    'hit_count' => DB::raw('hit_count + 1'),
+                    'cursor' => DB::raw($grammar->wrap('cursor').' + 1'),
+                    'hit_count' => DB::raw($grammar->wrap('hit_count').' + 1'),
                     'last_served_at' => now(),
                     'updated_at' => now(),
                 ]);

@@ -8,6 +8,7 @@ use App\Models\ShopKeywordAnalysisItem;
 use App\Models\ShopKeywordShortLink;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -485,6 +486,14 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertSame(['비타민c 고함량', '비타민c 1000', '비타민c 스틱'], $links[0]->keywords);
         $this->assertSame(['비타민c 리포좀', '비타민c 분말'], $links[1]->keywords);
 
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, 'update') && str_contains($sql, 'shop_keyword_short_links')) {
+                $queries[] = $query->sql;
+            }
+        });
+
         $first = $this->shortRedirectParams($links[0]->token);
         $second = $this->shortRedirectParams($links[0]->token);
         $third = $this->shortRedirectParams($links[1]->token);
@@ -501,6 +510,9 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertMatchesRegularExpression('/^[a-z0-9]{8}$/', $first['ackey']);
         $this->assertSame(2, $links[0]->fresh()->hit_count);
         $this->assertSame(1, $links[1]->fresh()->hit_count);
+        $this->assertNotEmpty($queries);
+        $this->assertStringContainsString('"cursor" = "cursor" + 1', $queries[0]);
+        $this->assertStringContainsString('"hit_count" = "hit_count" + 1', $queries[0]);
     }
 
     public function test_short_link_count_cannot_exceed_exposed_keyword_count(): void
