@@ -5,11 +5,11 @@
 @php
     // 조합 재료 소스 + 참고(조합 X) 소스 라벨
     $srcLabel = [
-        'title' => '제목 단어', 'seller_tag' => '상세 SEO태그', 'attribute' => '상품속성', 'suffix' => '어미',
+        'title' => '제목 단어', 'title_phrase' => '제목 구절', 'seller_tag' => '상세 SEO태그', 'attribute' => '상품속성', 'suffix' => '어미',
         'autocomplete' => '자동완성', 'searchad' => '검색광고 추천', 'shopping_related' => '쇼핑 연관',
         'keyword_rec' => '쇼핑 키워드추천', 'together' => '함께 많이 찾는', 'competitor_brand' => '경쟁 브랜드',
     ];
-    $comboSources = ['title', 'seller_tag', 'attribute', 'suffix'];   // 조합에 쓰는 소스
+    $comboSources = ['title', 'title_phrase', 'seller_tag', 'attribute', 'suffix'];   // 조합에 쓰는 소스
     $refSources = ['autocomplete', 'searchad', 'shopping_related', 'keyword_rec', 'together', 'competitor_brand'];
     $th = $analysis->threshold;
     $shopUrl = fn ($kw) => 'https://m.search.naver.com/search.naver?where=m&query='.urlencode($kw);

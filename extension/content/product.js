@@ -1902,6 +1902,30 @@
     if (extra) for (const k in extra) node[k] = extra[k];
     return node;
   }
+  // 상품정보(제목·업체명·가격·SEO태그·브랜드) 수집 → 서버 저장. 노출 키워드 분석(25) 조합 재료.
+  async function collectProductInfo() {
+    try {
+      const cpid = getChannelProductNo();
+      if (!cpid) return;
+      const node = spNodeFrom(await getMyPreloadedAsync(2500));
+      const A = (node && node.product) || {};
+      const channel = (node && node.smartStoreV2 && node.smartStoreV2.channel) || {};
+      const tags = (((A.seoInfo && A.seoInfo.sellerTags) || []).map((t) => (t && t.text) || '')).filter(Boolean);
+      const nss = A.naverShoppingSearchInfo || {};
+      const payload = {
+        channel_product_id: String(cpid),
+        title: String(A.name || A.dispName || getProductName() || '').slice(0, 300),
+        brand: String(nss.brandName || nss.manufacturerName || '').slice(0, 120),
+        mall_name: String(channel.channelName || getStoreName() || '').slice(0, 150),
+        price: num(A.salePrice || getProductPrice() || 0) || null,
+        seller_tags: tags.slice(0, 60),
+        category: String((A.category && A.category.wholeCategoryName) || '').slice(0, 191),
+      };
+      if (!payload.title && !payload.seller_tags.length) return;   // 아무것도 못 뽑으면 스킵
+      await sendBg('saveProductInfo', payload);
+    } catch (e) { /* noop */ }
+  }
+
   async function spFetchTop(keyword) {
     // 검색 API(search.shopping)는 봇 차단(418) → 서버가 openapi shop.json으로 대신 검색.
     const r = await sendBg('sellerCompetitors', { keyword });
@@ -2228,6 +2252,7 @@
     runReviewCollect();
   } else {
     mount();
+    collectProductInfo();   // 상품정보 자동 수집(노출 키워드 분석 조합 재료)
     if (location.hash === '#rankfree-review') autoOpenReview();
   }
 })();

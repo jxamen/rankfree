@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ExtToken;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordAnalysisItem;
 use App\Models\User;
@@ -154,6 +155,39 @@ class ShopKeywordExposureTest extends TestCase
 
         $this->assertSame(0, $a->allCombos()->where('keyword', 'like', '%고함량%')->count());
         $this->assertContains('고함량', (array) $a->fresh()->banned);   // 삭제어 기록
+    }
+
+    public function test_extension_product_info_feeds_title_and_seller_tag_combos(): void
+    {
+        $user = User::factory()->create();
+        [, $plain] = ExtToken::issue($user);
+
+        // 확장이 상품 페이지에서 수집한 상품정보 업로드
+        $this->withHeader('Authorization', 'Bearer '.$plain)->postJson('/api/ext/product-infos', [
+            'channel_product_id' => '138663861',
+            'title' => '고려은단 비타민C 1000 600정 X 1개 (20개월분)',
+            'brand' => '고려은단비타민C1000',
+            'mall_name' => '고려은단비타민C',
+            'price' => 50000,
+            'seller_tags' => ['메가도스비타민c', '비타민c1000', '고함량비타민'],
+        ])->assertOk()->assertJson(['ok' => true]);
+        $this->assertDatabaseHas('shop_product_infos', ['user_id' => $user->id, 'channel_product_id' => '138663861']);
+
+        // 이 상품으로 분석 → 저장된 제목·SEO태그가 조합 재료로 사용됨(모바일 검색에 없어도)
+        $a = $this->store($user, ['product' => 'https://brand.naver.com/koreaeundan/products/138663861']);
+
+        $this->assertSame('고려은단 비타민C 1000 600정 X 1개 (20개월분)', $a->product_title);
+        $this->assertSame(50000, $a->product_price);
+        // 수량·기간 토큰도 제목 단어로 추출
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'title', 'keyword' => '600정']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'title', 'keyword' => '20개월분']);
+        // seller_tag 통짜 조합(핵심 미포함도) + 제목단어 조합
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '메가도스비타민c']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '비타민c 600정']);
+        // 제목 연속 구절 조합(붙어있는 그대로, X 포함)
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '600정 X 1개']);
+        // seller_tag 토큰
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'seller_tag', 'keyword' => '메가도스비타민c']);
     }
 
     public function test_ownership_enforced(): void

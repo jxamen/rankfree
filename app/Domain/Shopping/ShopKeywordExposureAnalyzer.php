@@ -60,6 +60,19 @@ class ShopKeywordExposureAnalyzer
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
 
         $target = $this->shop->resolveTarget(trim($productInput));
+
+        // 확장이 수집한 상품정보(있으면 조합 재료로 — 제목·브랜드·가격·SEO태그). 서버는 상품페이지 429라 확장 수집분 사용.
+        if (empty($opts['product_info']) && ($target['product_id'] ?? '') !== '') {
+            $pi = \App\Models\ShopProductInfo::where('user_id', $user->id)
+                ->where('channel_product_id', $target['product_id'])->first();
+            if ($pi) {
+                $opts['product_info'] = [
+                    'title' => (string) $pi->title, 'brand' => (string) ($pi->brand ?: $pi->mall_name),
+                    'price' => (int) $pi->price, 'seller_tags' => (array) $pi->seller_tags,
+                ];
+            }
+        }
+
         $ext = $this->extractTokens($core, $target, $opts);
         $tokens = $ext['tokens'];
         $me = $ext['me'];
@@ -116,6 +129,7 @@ class ShopKeywordExposureAnalyzer
         $limit = max(1, (int) ($limit ?? $cfg['batch_size'] ?? 15));
         $budget = (float) ($cfg['batch_sec'] ?? 12);
         $scanPages = max(1, (int) ($cfg['scan_pages'] ?? 1));
+        $delayMs = max(0, (int) ($cfg['fetch_delay_ms'] ?? 250));
         $threshold = (int) $analysis->threshold;
 
         $httpTimeout = (int) config('rankfree.shopping.timeout', 15);
@@ -160,6 +174,10 @@ class ShopKeywordExposureAnalyzer
                 $item->save();
                 if ($item->rank >= 1 && $item->rank <= $threshold) {
                     $newlyExposed[] = $item;
+                }
+                // m.search 를 너무 빠르게 연속 호출하면 IP rate-limit(429)이 걸린다 — fetch 간 짧은 간격.
+                if ($delayMs > 0) {
+                    usleep($delayMs * 1000);
                 }
             }
 
@@ -289,7 +307,7 @@ class ShopKeywordExposureAnalyzer
     private function extractTokens(string $core, array $target, array $opts): array
     {
         $t = [
-            'title' => [], 'attribute' => [], 'suffix' => [], 'seller_tag' => [],
+            'title' => [], 'title_phrase' => [], 'attribute' => [], 'suffix' => [], 'seller_tag' => [],
             'autocomplete' => [], 'searchad' => [], 'shopping_related' => [], 'keyword_rec' => [], 'together' => [], 'competitor_brand' => [],
         ];
         $me = ['title' => '', 'brand' => '', 'price' => 0];
@@ -343,8 +361,35 @@ class ShopKeywordExposureAnalyzer
 
         // 제목 단어(조합 핵심 재료) — 내 제품 제목에서 핵심어·브랜드·수량 제외한 단어
         $t['title'] = $this->titleWords($core, $me['brand'], $me['title']);
+        // 제목 연속 구절(n-gram) — "600정 X 1개" 처럼 제목에 붙어있는 그대로도 조합(내 상품이 그 구절로 노출)
+        $t['title_phrase'] = $this->titlePhrases($me['title'], max(2, min(6, (int) config('rankfree.shopping.exposure.max_tokens', 5))));
 
         return ['tokens' => $t, 'me' => $me];
+    }
+
+    /** 제목의 연속 구절(2~$maxTokens 단어 n-gram) — 붙어있는 그대로(예: "600정 X 1개"). @return list<string> */
+    private function titlePhrases(string $title, int $maxTokens): array
+    {
+        $toks = array_values(array_filter(array_map('trim', preg_split('/[\s,()\[\]]+/u', trim($title)) ?: []), fn ($t) => $t !== ''));
+        $out = [];
+        $seen = [];
+        $n = count($toks);
+        for ($i = 0; $i < $n; $i++) {
+            for ($len = 2; $len <= $maxTokens && $i + $len <= $n; $len++) {
+                $phrase = preg_replace('/\s+/u', ' ', implode(' ', array_slice($toks, $i, $len)));
+                if ($this->hasNegative($phrase) || ! KeywordHubCollector::acceptableKeyword($phrase)) {
+                    continue;
+                }
+                $k = $this->norm($phrase);
+                if ($k === '' || isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = $phrase;
+            }
+        }
+
+        return array_slice($out, 0, 40);
     }
 
     /** 제목에서 조합용 단어 추출(핵심어·브랜드·순수 수량·1자 제외). @return list<string> */
@@ -363,11 +408,9 @@ class ShopKeywordExposureAnalyzer
             if (str_contains($nw, $normCore) || str_contains($normCore, $nw) || ($normBrand !== '' && $nw === $normBrand)) {
                 continue;
             }
-            if (preg_match('/^\d+(개|포|정|박스|병|매|입|월|개월|스틱|캡슐|알|g|kg|mg|ml|l)$/u', $nw) || $this->hasNegative($w)) {
-                continue;
-            }
-            if (preg_match('/[^\p{Hangul}a-zA-Z0-9]/u', $w)) {
-                continue;   // × 같은 기호 제거
+            // 수량·기간(600정·20개월분 등)도 내 제품 제목이면 그대로 조합 재료로 쓴다(제외하지 않음).
+            if ($this->hasNegative($w) || preg_match('/[^\p{Hangul}a-zA-Z0-9]/u', $w)) {
+                continue;   // 부정어·기호(×) 만 제외
             }
             $seen[$nw] = true;
             $out[] = $w;
@@ -530,9 +573,12 @@ class ShopKeywordExposureAnalyzer
         foreach ($titleSubsets as $sub) {
             $push(array_merge([$core], $sub), 2, true);
         }
-        // B) 내 상품 SEO 태그(핵심 미포함도 허용 — 내 상품이 그 태그로 노출)
+        // B) 내 상품 SEO 태그 + 제목 연속 구절(핵심 미포함도 허용 — 내 상품이 그 태그/구절로 노출)
         foreach ($sellerTags as $tag) {
             $push([$tag], 1, false);
+        }
+        foreach ($tokens['title_phrase'] ?? [] as $ph) {
+            $push([$ph], 2, false);
         }
         // C) 브랜드 + core + 제목단어 부분집합
         if ($brand !== '') {
@@ -654,7 +700,7 @@ class ShopKeywordExposureAnalyzer
     {
         $rows = [];
         $seen = [];
-        foreach (['title', 'seller_tag', 'attribute', 'suffix', 'shopping_related', 'keyword_rec', 'searchad', 'autocomplete', 'together', 'competitor_brand'] as $src) {
+        foreach (['title', 'title_phrase', 'seller_tag', 'attribute', 'suffix', 'shopping_related', 'keyword_rec', 'searchad', 'autocomplete', 'together', 'competitor_brand'] as $src) {
             foreach ($tokens[$src] ?? [] as $kw) {
                 $k = $this->norm($kw);
                 if ($k === '' || isset($seen[$k])) {

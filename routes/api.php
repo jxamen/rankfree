@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ExtKeywordController;
 use App\Http\Controllers\Api\ExtMarketController;
 use App\Http\Controllers\Api\ExtPlaceController;
 use App\Http\Controllers\Api\ExtProductController;
+use App\Http\Controllers\Api\ExtProductInfoController;
 use App\Http\Controllers\Api\ExtSellerCaptchaController;
 use App\Http\Controllers\Api\ExtSellerInfoController;
 use App\Http\Controllers\Api\ExtSellerPowerController;
@@ -53,6 +54,9 @@ Route::prefix('ext')->group(function (): void {
         Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1');
         Route::get('/market-analyses', [ExtMarketController::class, 'index']);
         Route::get('/market-analyses/{analysis}', [ExtMarketController::class, 'show']);
+
+        // 상품정보(제목·업체명·가격·SEO태그) — 노출 키워드 분석 조합 재료(서버는 상품페이지 429라 확장 수집)
+        Route::post('/product-infos', [ExtProductInfoController::class, 'store'])->middleware('throttle:60,1');
 
         // 상품 분석(리뷰 분석) 저장/내역
         Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');

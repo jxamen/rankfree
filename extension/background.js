@@ -345,6 +345,19 @@ const handlers = {
     return { ok, status, id: json && json.id, share_token: json && json.share_token, apiBase, message: json && json.message };
   },
 
+  /** 상품정보(제목·업체명·가격·SEO태그) 저장 — 노출 키워드 분석 조합 재료(25) */
+  async saveProductInfo(payload) {
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false };
+    const { ok, status, json } = await apiFetch('/api/ext/product-infos', {
+      method: 'POST',
+      body: payload,
+      token,
+      apiBase,
+    });
+    return { ok, status, id: json && json.id, message: json && json.message };
+  },
+
   async listProductAnalyses({ limit } = {}) {
     const { token, apiBase } = await getStore();
     if (!token) return { ok: false, loggedIn: false };
