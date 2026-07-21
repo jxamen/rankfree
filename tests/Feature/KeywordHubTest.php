@@ -161,10 +161,25 @@ class KeywordHubTest extends TestCase
         $this->assertDatabaseMissing('keyword_searches', ['origin' => 'hub', 'keyword' => '여름이불']);
     }
 
+    /** 쇼핑 시장 분석은 확장 플로 수집 데이터로만 — 소스 없으면 서버 생성 없이 보류한다(2026-07-22 확정). */
+    public function test_publisher_rejects_shopping_candidate_without_extension_source(): void
+    {
+        $cat = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구']);
+        $c = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '여름이불', 'source' => 'datalab', 'monthly_total' => 12000, 'status' => 'approved']);
+
+        $doc = app(KeywordHubPublisher::class)->publish($c);
+
+        $this->assertNull($doc);
+        $this->assertSame('rejected', $c->fresh()->status);
+        $this->assertStringContainsString('확장 수집 데이터 필요', (string) $c->fresh()->note);
+        $this->assertSame(0, MarketAnalysis::count());
+    }
+
     public function test_publisher_holds_thin_candidates(): void
     {
         $this->mockBuilder([]); // 모든 키워드 vm=null (데이터 없음)
-        $cat = $this->category();
+        // 쇼핑은 확장 소스 없으면 builder 전에 보류되므로, thin-content 게이트는 place 경로로 검증한다
+        $cat = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집']);
         $c = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '캠핑의자', 'source' => 'seed', 'status' => 'approved']);
 
         $doc = app(KeywordHubPublisher::class)->publish($c);
@@ -323,6 +338,49 @@ class KeywordHubTest extends TestCase
             ->assertDontSee('강남 한식');
     }
 
+    public function test_published_candidate_keywords_link_to_analysis_documents(): void
+    {
+        $admin = $this->admin();
+        $system = User::create([
+            'name' => 'hub',
+            'email' => config('rankfree.hub.system_user_email', 'hub-system@rankfree.kr'),
+            'password' => 'x1234567',
+            'role' => 'super',
+        ]);
+
+        $place = $this->category(['type' => 'place', 'name' => '맛집', 'slug' => '맛집', 'seed_keywords' => []]);
+        $shopping = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구', 'seed_keywords' => []]);
+
+        KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'source' => 'combo', 'region' => '강남', 'status' => 'published']);
+        KeywordCandidate::create(['category_id' => $shopping->id, 'keyword' => '여름이불', 'source' => 'datalab', 'status' => 'published']);
+
+        $keywordDoc = KeywordSearch::create([
+            'origin' => 'hub',
+            'category_id' => $place->id,
+            'keyword' => '강남 맛집',
+            'monthly_total' => 8000,
+        ]);
+        $marketDoc = MarketAnalysis::create([
+            'user_id' => $system->id,
+            'category_id' => $shopping->id,
+            'keyword' => '여름이불',
+            'total_count' => 1000,
+            'item_count' => 80,
+            'monthly_search' => 5000,
+            'snapshot' => ['top_products' => []],
+        ]);
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=published&type=place')
+            ->assertOk()
+            ->assertSee('강남 맛집')
+            ->assertSee($keywordDoc->shareUrl(), false);
+
+        $this->actingAs($admin)->get('/admin/keyword-hub/candidates?status=published&type=shopping')
+            ->assertOk()
+            ->assertSee('여름이불')
+            ->assertSee($marketDoc->shareUrl(), false);
+    }
+
     public function test_publish_batch_publishes_one_and_reports_remaining(): void
     {
         $admin = $this->admin();
@@ -400,7 +458,9 @@ class KeywordHubTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.running', true)
             ->assertJsonPath('data.type', null)
-            ->assertJsonPath('data.remaining', 1);
+            ->assertJsonPath('data.remaining', 1)
+            ->assertJsonPath('data.by_type.place.remaining', 0)
+            ->assertJsonPath('data.by_type.shopping.remaining', 1);
         $this->assertTrue(HubAutoRun::isRunning());
 
         // 상태 폴링
@@ -411,6 +471,33 @@ class KeywordHubTest extends TestCase
         $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 0])
             ->assertOk()->assertJsonPath('data.running', false);
         $this->assertFalse(HubAutoRun::isRunning());
+    }
+
+    public function test_auto_run_progress_tracks_place_and_shopping_separately(): void
+    {
+        $shop = $this->category(['seed_keywords' => []]);
+        $place = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집', 'seed_keywords' => []]);
+        $shopCandidate = KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+        $placeCandidate = KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'monthly_total' => 8000, 'status' => 'pending']);
+
+        HubAutoRun::start(null);
+        $state = HubAutoRun::state();
+        $this->assertSame(1, $state['place_remaining']);
+        $this->assertSame(1, $state['shopping_remaining']);
+
+        $placeCandidate->update(['status' => 'published']);
+        $state = HubAutoRun::progress(1, 0, 'place');
+        $this->assertSame(1, $state['place_done']);
+        $this->assertSame(0, $state['shopping_done']);
+        $this->assertSame(0, $state['place_remaining']);
+        $this->assertSame(1, $state['shopping_remaining']);
+
+        $shopCandidate->update(['status' => 'rejected']);
+        $state = HubAutoRun::progress(0, 1, 'shopping');
+        $this->assertSame(1, $state['place_done']);
+        $this->assertSame(1, $state['shopping_held']);
+        $this->assertSame(0, $state['remaining']);
+        $this->assertFalse($state['running']);
     }
 
     public function test_hub_auto_publish_command_drains_pending_by_type_when_on(): void
@@ -443,6 +530,8 @@ class KeywordHubTest extends TestCase
         $s = HubAutoRun::state();
         $this->assertSame(0, $s['done']);
         $this->assertSame(1, $s['remaining']);
+        $this->assertSame(0, $s['place_remaining']);
+        $this->assertSame(1, $s['shopping_remaining']);
         $this->assertTrue($s['running']);
     }
 

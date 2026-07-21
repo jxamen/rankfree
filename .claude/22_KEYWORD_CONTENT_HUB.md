@@ -63,6 +63,8 @@
 
 1. **hub:collect** ([HubCollect](../app/Console/Commands/HubCollect.php) · [KeywordHubCollector](../app/Domain/Keyword/KeywordHubCollector.php)) — 카테고리를 `collected_at` 오래된 순으로 N개 로테이션(기본 3): 시드 → keywordstool 연관 + 자동완성 → candidates upsert(pending). **자동 필터**: 길이 2~60자 · `min_volume`(기본 월 1,000) 미만 제외(시드는 면제 — 운영자 의도 존중, 자동완성 등 볼륨 미상은 pending 통과) · `banned_patterns` 정규식 · 기발행(origin=hub) 제외. 재수집 시 승인/거부 **상태는 보존**하고 지표만 갱신
 2. **hub:publish** ([HubPublish](../app/Console/Commands/HubPublish.php) · [KeywordHubPublisher](../app/Domain/Keyword/KeywordHubPublisher.php)) — 승인 후보를 검색량 큰 순으로 상한(기본 10)만큼 발행: `KeywordReportBuilder::build()` → `KeywordSearch(origin=hub, user_id=NULL, category_id, snapshot, refreshed_at)`. **thin content 방지**: has_volume 없으면 발행하지 않고 rejected + '데이터 부족' 사유
+   - **허브 목록의 쇼핑 키워드 링크는 시장분석(/market) 우선**(2026-07-22): `KeywordSearch::publicUrl()` — 같은 키워드의 MarketAnalysis 가 있으면 `/market/{slug}`, 없으면 키워드 문서 폴백(슬러그 6h 캐시). 카드 라벨은 `publicLabel()`('시장 분석'/'키워드 분석'). 공개 화면·AEO 문구의 '네이버' 단어는 전부 제거(2026-07-22, /keywords·/keyword·공용 헤더푸터·Presenter)
+   - **쇼핑 시장 분석은 확장 플로 수집 데이터로만**(사용자 확정 2026-07-22): 발행은 `latestMarketSource()`(확장 수집 MarketAnalysis) 복제 방식만. 서버 SERP(keyword_shop_ranks) 기반 자동 생성은 판매량·매출이 빠진 껍데기라 **금지** — 소스 없으면 '확장 수집 데이터 필요' 보류. 한때 있던 `hub:shopping-market-backfill`(서버 생성 백필)은 같은 이유로 제거·운영 생성분(~323건) 삭제 정리
 3. **hub:refresh** ([HubRefresh](../app/Console/Commands/HubRefresh.php)) — `refresh_after_days`(기본 30일) 지난 문서를 오래된 순 상한(기본 20)만큼 재수집 → 사이트맵 lastmod 갱신 효과. 볼륨이 안 나오면 기존 스냅샷 유지·커서만 전진
 
 - **스케줄**: [routes/console.php](../routes/console.php) — **발행과 발굴을 분리**한다.
@@ -160,6 +162,7 @@ Route::get('/api/keywords/suggest', …)->middleware('throttle:60,1');   // rout
 - 허브 문서는 새 모델이 아니라 **KeywordSearch 재사용**(origin=hub) — 공유 슬러그·사이트맵(keyword 섹션)·분석 파이프라인·공유 뷰를 그대로 씀
 - 문서 본문은 1차 **결정적 템플릿**(데이터→문장), LLM은 선택 보강만
 - 추천은 실시간 쿼리 + 6h 캐시(사전 계산 컬럼 없음) — 문서 수가 커지면(1만+) 재검토
+- **규모 대응은 샤딩이 아니라 파티션 로테이션 + 인덱스**(2026-07-18 결정): 순위 매핑(keyword_place_ranks·keyword_shop_ranks)은 이미 마스터 정규화+월별 RANGE 파티션. 여기에 `hub:partition-rotate`(매일 05:50 KST)가 이번 달~2개월 뒤 파티션 선생성(pmax REORGANIZE) + 보존 개월 수(`HUB_RANK_RETENTION_MONTHS`, 기본 13, 0 이하=파기 안 함) 지난 월 DROP PARTITION. sqlite(로컬/테스트)는 DELETE 폴백. 공개 허브 인기순은 `ks_origin_vol(origin, monthly_total)` 인덱스가 filesort 제거
 
 ## 코드 (Phase 0)
 
@@ -169,3 +172,12 @@ Route::get('/api/keywords/suggest', …)->middleware('throttle:60,1');   // rout
 | [resources/views/partials/related-docs.blade.php](../resources/views/partials/related-docs.blade.php) | "함께 보면 좋은 분석" 카드 그리드 |
 | [tests/Feature/RelatedDocsTest.php](../tests/Feature/RelatedDocsTest.php) | 크로스 추천·추적슬롯 제외·폴백·중복 제거 |
 | 수정: KeywordAnalysis/Market/Product/SellerPower 컨트롤러 `shared()` · [routes/web.php](../routes/web.php) `/store` 클로저 · share 뷰 5종 | 추천 데이터 주입 + 블록 include |
+
+## 관리자 화면 분리 — 발행 전용 허브 + 후보·수집 관리 (2026-07-17)
+
+`/admin/keyword-hub` 가 대량 시딩(후보 4.6만+) 이후 화면 폭주해 역할을 둘로 나눴다.
+
+- **`/admin/keyword-hub` = 발행 전용**: 후보 현황(상태별 카운트 → 관리 페이지 링크) · **연속 발행** · 최근 발행 문서.
+  - 연속 발행: [발행 시작] → JS 루프가 `POST keyword-hub/publish-batch`(요청당 **1건** — 웹 타임아웃 회피)를 반복 호출, 발행/보류/남은 승인 진행 표시. [중단] 은 진행 중인 1건까지만 하고 멈춘다. 승인 소진(remaining=0) 시 자동 완료. 발행 성공 배치마다 검색엔진 알림(21, SearchEnginePing) 동작.
+- **`/admin/keyword-hub/candidates` = 후보·수집 관리**: 후보 큐(상태·출처·카테고리·지역 필터, 선택/전체 일괄 처리) · 카테고리·시드 관리 · 수동 수집 실행.
+- **시드 카드·수집 로테이션은 수동 카테고리(naver_cid 없음)만** — 데이터랩 쇼핑 1~3분류(2천여 개, hub:shopping-collect 자동 동기화)는 시드 카드로 펼치지 않고, 관리자 수집 버튼·hub:collect 크론 로테이션에서도 제외(시드가 없어 헛돎). 데이터랩 분류 조회는 키워드 탐색(admin.keyword-browse).
