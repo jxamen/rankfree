@@ -19,39 +19,46 @@ class Ga4Reporter
         return $this->creds->isConfigured();
     }
 
-    /** 기간(일) 대시보드 데이터. 실패 시 ['error'=>메시지]. */
-    public function report(int $days): array
+    /** 기간 대시보드 데이터 — int N=어제까지 최근 N일, 'today'=오늘(당일 집계 중, 어제와 비교). 실패 시 ['error'=>메시지]. */
+    public function report(int|string $period): array
     {
-        $days = max(1, min(365, $days));
+        $today = $period === 'today';
+        $days = $today ? 1 : max(1, min(365, (int) $period));
         $ttl = (int) config('ga4-insights.cache_ttl', 600);
-        $key = $this->cacheKey($days);
+        $key = $this->cacheKey($period);
 
-        $build = fn () => $this->build($days);
+        $build = fn () => $this->build($days, $today);
 
         return $ttl > 0 ? Cache::remember($key, $ttl, $build) : $build();
     }
 
-    public function cacheKey(int $days): string
+    public function cacheKey(int|string $period): string
     {
-        return 'ga4-insights:'.md5((string) $this->creds->propertyId()).':'.$days;
+        return 'ga4-insights:'.md5((string) $this->creds->propertyId()).':'.$period;
     }
 
-    public function flush(int $days): void
+    public function flush(int|string $period): void
     {
-        Cache::forget($this->cacheKey($days));
+        Cache::forget($this->cacheKey($period));
     }
 
-    private function build(int $days): array
+    private function build(int $days, bool $today = false): array
     {
         $tz = config('ga4-insights.timezone', 'Asia/Seoul');
         $rowsN = (int) config('ga4-insights.rows', 15);
-        $end = Carbon::now($tz)->subDay()->toDateString();
-        $start = Carbon::now($tz)->subDays($days)->toDateString();
-        $prevEnd = Carbon::now($tz)->subDays($days + 1)->toDateString();
-        $prevStart = Carbon::now($tz)->subDays($days * 2)->toDateString();
+        if ($today) {
+            // 오늘 하루(집계 중) — 직전 비교는 어제 하루
+            $end = $start = Carbon::now($tz)->toDateString();
+            $prevEnd = $prevStart = Carbon::now($tz)->subDay()->toDateString();
+        } else {
+            $end = Carbon::now($tz)->subDay()->toDateString();
+            $start = Carbon::now($tz)->subDays($days)->toDateString();
+            $prevEnd = Carbon::now($tz)->subDays($days + 1)->toDateString();
+            $prevStart = Carbon::now($tz)->subDays($days * 2)->toDateString();
+        }
         $cur = [['startDate' => $start, 'endDate' => $end]];
         $range = [
-            'start' => $start, 'end' => $end, 'days' => $days,
+            'start' => $start, 'end' => $end, 'days' => $days, 'today' => $today,
             'prevStart' => $prevStart, 'prevEnd' => $prevEnd,
         ];
 

@@ -74,9 +74,42 @@
 .ga4-empty{color:var(--ga4-soft);font-size:var(--ga4-fs-xs);text-align:center;padding:28px}
 
 .ga4-chart{display:flex;align-items:flex-end;gap:3px;height:190px}
-.ga4-chart>div{flex:1;min-width:3px;background:linear-gradient(var(--ga4-accent),color-mix(in srgb,var(--ga4-accent) 55%,var(--ga4-card)));border-radius:4px 4px 0 0;transition:opacity .12s}
-.ga4-chart>div:hover{opacity:.75}
+.ga4-chart .c{flex:1;min-width:3px;height:100%;display:flex;flex-direction:column;justify-content:flex-end}
+.ga4-chart .c .n{display:none;font-size:var(--ga4-fs-xs);color:var(--ga4-soft);text-align:center;line-height:1;margin-bottom:3px;white-space:nowrap}
+.ga4-chart .c .b{display:block;background:linear-gradient(var(--ga4-accent),color-mix(in srgb,var(--ga4-accent) 55%,var(--ga4-card)));border-radius:4px 4px 0 0;transition:opacity .12s}
+.ga4-chart .c:hover .b{opacity:.75}
+.ga4-chart.nums .c .n{display:block}
+.ga4-chart.nums .c .b{max-height:calc(100% - 16px)}
 .ga4-axis{display:flex;justify-content:space-between;color:var(--ga4-soft);font-size:var(--ga4-fs-xs);margin-top:8px}
+/* ── 드래그앤드롭 12그리드 배치(#ga4-layout) ─────────────────────────
+   한 줄에 N개 = 균등 분할(2=6+6, 3=4+4+4, 4=3+3+3+3). 섹션은 컨테이너 쿼리로 내부 그리드 적응. */
+#ga4-layout .ga4-row{display:grid;gap:14px;grid-template-columns:1fr;align-items:stretch}
+@media(min-width:1024px){
+  #ga4-layout .ga4-row.cols2{grid-template-columns:repeat(2,1fr)}
+  #ga4-layout .ga4-row.cols3{grid-template-columns:repeat(3,1fr)}
+  #ga4-layout .ga4-row.cols4{grid-template-columns:repeat(4,1fr)}
+}
+#ga4-layout .ga4-section{margin-bottom:0;container-type:inline-size;display:flex;flex-direction:column;min-width:0}
+#ga4-layout .ga4-section>.ga4-card:last-child{flex:1}
+/* ⚠️ 드래그 하이라이트는 지오메트리를 절대 바꾸지 않는다(배경·아웃라인만) —
+   높이가 변하면 커서 아래 요소가 요동쳐 drop 이 무효화된다(실측: enter/leave 폭주 후 dragend) */
+.ga4-rowgap{height:14px;border-radius:8px;transition:background .12s}
+#ga4-layout.dragging .ga4-rowgap{background:color-mix(in srgb,var(--ga4-accent) 7%,transparent)}
+#ga4-layout .ga4-rowgap.over{background:color-mix(in srgb,var(--ga4-accent) 32%,transparent)}
+#ga4-layout [data-sec].over{outline:2px dashed var(--ga4-accent);outline-offset:3px;border-radius:12px}
+#ga4-layout [data-sec].drag-src{opacity:.45}
+.ga4-drag{cursor:grab;user-select:none;touch-action:none;color:var(--ga4-soft);margin-right:8px;font-size:14px;line-height:1}
+.ga4-drag:hover{color:var(--ga4-accent)}
+.ga4-drag:active{cursor:grabbing}
+#ga4-layout.dragging{user-select:none;cursor:grabbing}
+.ga4-ghost{position:fixed;z-index:9999;pointer-events:none;background:var(--ga4-card);border:1px solid var(--ga4-accent);border-radius:8px;padding:6px 12px;font-size:var(--ga4-fs-xs);color:var(--ga4-ink,#0a0b0d);box-shadow:0 8px 24px rgba(0,0,0,.14);white-space:nowrap}
+/* 좁은 컬럼에선 KPI·2열 카드가 컨테이너 폭에 맞춰 줄어들게(뷰포트 미디어쿼리 무시) */
+#ga4-layout .ga4-kpis{grid-template-columns:repeat(2,1fr)}
+@container(min-width:640px){#ga4-layout .ga4-kpis{grid-template-columns:repeat(3,1fr)}}
+@container(min-width:1080px){#ga4-layout .ga4-kpis{grid-template-columns:repeat(5,1fr)}}
+#ga4-layout .ga4-cols2{grid-template-columns:1fr}
+@container(min-width:640px){#ga4-layout .ga4-cols2{grid-template-columns:1fr 1fr}}
+
 .ga4-hours{display:flex;align-items:flex-end;gap:4px;height:120px}
 .ga4-hours>div{flex:1;background:linear-gradient(var(--ga4-accent),color-mix(in srgb,var(--ga4-accent) 55%,var(--ga4-card)));border-radius:3px 3px 0 0;min-height:3px}
 .ga4-hours-axis{display:flex;justify-content:space-between;color:var(--ga4-soft);font-size:var(--ga4-fs-xs);margin-top:8px}
