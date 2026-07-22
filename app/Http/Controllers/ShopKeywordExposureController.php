@@ -373,17 +373,20 @@ class ShopKeywordExposureController extends Controller
             ->sortByDesc(fn ($r) => ($r['checked'] ? $r['exposed'] / $r['checked'] : 0) * 1000 + $r['exposed'])
             ->values();
 
+        // 확장 상품페이지 수집분(2026-07-22) — 대표이미지 + 관련 태그 표기
+        $productInfo = $analysis->product_id
+            ? \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+                ->where('channel_product_id', $analysis->product_id)->first()
+            : null;
+
         return view('admin.shop-keyword.show', [
             'analysis' => $analysis->loadMissing('order'),
             'tokens' => $tokens,
             'combos' => $combos,
             'patterns' => $patterns,
             'shortLinks' => $analysis->shortLinks()->orderBy('group_no')->get(),
-            // 대표이미지(발주용) — 확장 상품페이지 수집분(2026-07-22)
-            'thumbnailUrl' => (string) ($analysis->product_id
-                ? \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
-                    ->where('channel_product_id', $analysis->product_id)->value('thumbnail_url')
-                : null) ?: null,
+            'thumbnailUrl' => (string) ($productInfo?->thumbnail_url) ?: null,
+            'sellerTags' => array_values(array_filter((array) ($productInfo?->seller_tags ?? []))),
         ]);
     }
 

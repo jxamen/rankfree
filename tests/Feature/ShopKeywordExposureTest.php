@@ -125,6 +125,13 @@ class ShopKeywordExposureTest extends TestCase
         $a = $this->store($u, ['check_method' => 'api']);
 
         $this->assertSame('api', $a->check_method);
+
+        // 폴링 응답에 건별 결과(items)가 실려야 화면이 리로드 없이 노출 테이블을 갱신한다(요약 숫자 불일치 방지)
+        $first = $this->actingAs($u)->post(route('admin.shop-keyword.check', $a))->json();
+        $this->assertNotEmpty($first['items'] ?? []);
+        $this->assertArrayHasKey('rank', $first['items'][0]);
+        $this->assertArrayHasKey('keyword', $first['items'][0]);
+
         $this->runChecks($u, $a);
         $a->refresh();
 

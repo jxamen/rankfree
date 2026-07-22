@@ -160,6 +160,7 @@ class ShopKeywordExposureAnalyzer
             $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
             $t0 = microtime(true);
             $stopped = false;
+            $batchResults = [];   // 이번 배치 건별 결과 — 화면이 노출 테이블·배지를 리로드 없이 갱신(요약 숫자와 불일치 방지)
 
             foreach ($pending as $item) {
                 $elapsed = microtime(true) - $t0;
@@ -195,6 +196,8 @@ class ShopKeywordExposureAnalyzer
                 $item->ad_exposed = ! empty($res['ad']);
                 $item->checked_at = now();
                 $item->save();
+                $batchResults[] = ['id' => $item->id, 'keyword' => $item->keyword, 'rank' => (int) $item->rank,
+                    'ad' => (bool) $item->ad_exposed, 'combo_tag' => $item->combo_tag];
                 // search: m.search 연속 호출 IP rate-limit 완화 간격. api: 키 로테이션이 있어 짧게만.
                 $gap = $useApi ? min(120, $delayMs) : $delayMs;
                 if ($gap > 0) {
@@ -211,7 +214,8 @@ class ShopKeywordExposureAnalyzer
             $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
-                'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status];
+                'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
+                'items' => $batchResults];
         } finally {
             $lock->release();
         }

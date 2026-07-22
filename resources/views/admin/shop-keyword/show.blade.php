@@ -55,6 +55,22 @@
         @else
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
         @endif
+        {{-- 수동 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지를 다시 수집 --}}
+        <button type="button" id="sk-recollect" class="btn btn-ghost btn-sm" title="확장으로 상품페이지(제목·태그·이미지·가격)를 다시 수집합니다">다시 수집</button>
+    </div>
+    {{-- 관련 태그(스마트스토어 상품페이지 하단) — 확장 수집분. 조합 재료(seller_tag)로도 쓰인다(2026-07-22) --}}
+    <div class="mt-1 flex items-center gap-2 flex-wrap">
+        <span class="text-muted" style="font-size:var(--fs-xs);">관련 태그</span>
+        @if (! empty($sellerTags ?? []))
+            <div class="flex items-center gap-1 flex-wrap">
+                @foreach ($sellerTags as $t)
+                    <span class="badge border border-hairline" style="font-size:var(--fs-xs);padding:1px 8px;">#{{ $t }}</span>
+                @endforeach
+            </div>
+            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ collect($sellerTags)->map(fn ($t) => '#'.$t)->join(' ') }}" style="border:0;background:none;cursor:pointer;">복사</button>
+        @else
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
+        @endif
     </div>
     @if ($analysis->order)
         <div class="mt-1"><span class="text-muted" style="font-size:var(--fs-xs);">연결 주문</span>
@@ -777,6 +793,9 @@ window.__SK = {
         let d;
         try { d = await r.json(); } catch (e) { retry(); return; }
         errCount = 0;
+        // 서버 배치의 건별 결과를 확장 모드와 동일하게 실시간 반영 — 요약 숫자만 늘고
+        // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
+        (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
         renderProgress(d);
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
@@ -827,7 +846,31 @@ window.__SK = {
         if (stopBtn) stopBtn.classList.remove('hidden');
         if (label) label.textContent = '순위 확인 재개 중…';
         post(cfg.urls.pause, { paused: false }).catch(() => {});
-        if (extMode) runExtLoop(); else poll();
+        if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
+    });
+
+    // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)
+    const recollect = document.getElementById('sk-recollect');
+    if (recollect) recollect.addEventListener('click', async function () {
+        if (!cfg.productUrl) { alert('제품 URL이 없어 수집할 수 없습니다.'); return; }
+        recollect.disabled = true;
+        recollect.textContent = '수집 중…';
+        const ok = await waitExt(1500);
+        if (!ok) {
+            recollect.disabled = false;
+            recollect.textContent = '다시 수집';
+            alert('랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인 후 페이지를 새로고침하세요.');
+            return;
+        }
+        const pi = await extCall('collectProductPage', { url: cfg.productUrl }, 45000);
+        if (pi && pi.ok) {
+            await post(cfg.urls.productInfo, { info: pi.info || null }).catch(() => {});
+            location.reload();
+        } else {
+            recollect.disabled = false;
+            recollect.textContent = '다시 수집';
+            alert('수집에 실패했습니다 — 상품페이지가 열리지 않았을 수 있어요. 잠시 후 다시 시도하세요.');
+        }
     });
 
     (async function boot() {
