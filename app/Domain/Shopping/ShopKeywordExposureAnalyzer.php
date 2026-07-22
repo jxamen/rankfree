@@ -84,8 +84,10 @@ class ShopKeywordExposureAnalyzer
         $tokens = $ext['tokens'];
         $me = $ext['me'];
         $combos = $this->buildCombos($core, $tokens, $me, $maxCombos, $maxTokens);
+        // 순위 확인 방식(2026-07-22) — 기본 api(shop.json). ⚠️ 클로저 밖에서 확정(use 누락 시 조용히 기본값이 된다)
+        $checkMethod = in_array($opts['check_method'] ?? '', ['api', 'search'], true) ? $opts['check_method'] : 'api';
 
-        return DB::transaction(function () use ($user, $core, $target, $productInput, $threshold, $tokens, $me, $combos) {
+        return DB::transaction(function () use ($user, $core, $target, $productInput, $threshold, $tokens, $me, $combos, $checkMethod) {
             $tokenRows = $this->tokenRows($tokens);
 
             $analysis = ShopKeywordAnalysis::create([
@@ -103,6 +105,7 @@ class ShopKeywordExposureAnalyzer
                 'checked_count' => 0,
                 'exposed_count' => 0,
                 'status' => count($combos) ? 'checking' : 'done',
+                'check_method' => $checkMethod,
             ]);
 
             $now = now();
@@ -150,6 +153,9 @@ class ShopKeywordExposureAnalyzer
 
         try {
             $target = $this->targetOf($analysis);
+            // 방식(2026-07-22): api = shop.json 1콜/조합(빠름·차단 없음, 쇼핑 순위추적과 동일 기준·광고 판별 없음)
+            //                  search = 통합검색 크롤링(실화면 오가닉·광고 판별, IP rate-limit 가능)
+            $useApi = $analysis->check_method !== 'search';
 
             $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
             $t0 = microtime(true);
@@ -161,8 +167,21 @@ class ShopKeywordExposureAnalyzer
                     break;
                 }
                 try {
-                    // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
-                    $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
+                    if ($useApi) {
+                        // shop.json 상위 40 안 순위(1페이지 1콜 — threshold 최대 40 커버). 광고 판별 없음.
+                        $api = $this->shop->checkRank($item->keyword, $target, [
+                            'display' => 40, 'max_pages' => 1,
+                            'timeout' => max(2, min($httpTimeout, (int) ceil($budget - $elapsed))),
+                        ]);
+                        // ⚠️ checkRank 는 일부 키가 429 여도 다음 키로 성공하면 blocked=true + found 를 함께 준다(실측)
+                        //    — found 면 성공으로 확정하고, 못 찾았는데 blocked 일 때만 중단(미노출 오기록 방지).
+                        $res = ! empty($api['found'])
+                            ? ['rank' => (int) $api['rank'], 'ad' => false, 'blocked' => false, 'error' => null]
+                            : ['rank' => 0, 'ad' => false, 'blocked' => ! empty($api['blocked']), 'error' => $api['error'] ?? null];
+                    } else {
+                        // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
+                        $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
+                    }
                 } catch (Throwable) {
                     $stopped = true;   // 일시 오류 — rank 오기록 대신 중단(재시도 가능)
                     break;
@@ -176,9 +195,10 @@ class ShopKeywordExposureAnalyzer
                 $item->ad_exposed = ! empty($res['ad']);
                 $item->checked_at = now();
                 $item->save();
-                // m.search 를 너무 빠르게 연속 호출하면 IP rate-limit(429)이 걸린다 — fetch 간 짧은 간격.
-                if ($delayMs > 0) {
-                    usleep($delayMs * 1000);
+                // search: m.search 연속 호출 IP rate-limit 완화 간격. api: 키 로테이션이 있어 짧게만.
+                $gap = $useApi ? min(120, $delayMs) : $delayMs;
+                if ($gap > 0) {
+                    usleep($gap * 1000);
                 }
             }
 

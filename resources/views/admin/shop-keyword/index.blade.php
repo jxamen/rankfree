@@ -27,12 +27,29 @@
         </div>
     </div>
 
+    {{-- 순위 확인 방식 — 기본 API(빠름·차단 없음). 통합검색은 실화면 기준·광고 판별이 필요할 때만 --}}
+    <div class="mb-3">
+        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">순위 확인 방식</label>
+        <div class="flex gap-4 flex-wrap" style="font-size:var(--fs-xs);">
+            @foreach (\App\Models\ShopKeywordAnalysis::CHECK_METHODS as $code => $label)
+                <label class="flex items-center gap-1.5 text-body" style="cursor:pointer;">
+                    <input type="radio" name="check_method" value="{{ $code }}" @checked(old('check_method', 'api') === $code)>
+                    {{ $label }}
+                </label>
+            @endforeach
+        </div>
+        <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">
+            <b class="text-muted">쇼핑 API(기본)</b>: openapi 쇼핑검색 기준 순위 — 서버에서 빠르게 끝나고 차단이 없습니다(쇼핑 순위추적과 동일 기준, 광고 노출 판별 없음).
+            <b class="text-muted">통합검색 크롤링</b>: 실제 모바일 통합검색 화면의 오가닉 순위 + 광고 노출 판별 — 정확하지만 느리고 보안문자·차단(429)이 걸릴 수 있습니다.
+        </div>
+    </div>
+
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
         브랜드·상품속성·연관·자동완성·어미 조합을 <b>자동으로 만들 수 있는 만큼 전부</b> 만들어 확인합니다 — 따로 입력할 것이 없습니다.
     </div>
 
     <div class="flex items-center justify-between flex-wrap gap-2">
-        <span class="text-muted-soft" style="font-size:var(--fs-xs);">순위는 <b>네이버 모바일 검색 가격비교(광고 제외) 노출 위치</b>입니다. 조합이 많으면 순위를 채우는 데 시간이 걸릴 수 있어요.</span>
+        <span class="text-muted-soft" style="font-size:var(--fs-xs);">조합이 많으면 순위를 채우는 데 시간이 걸릴 수 있어요.</span>
         <button type="submit" class="btn btn-primary">분석하기</button>
     </div>
 </form>

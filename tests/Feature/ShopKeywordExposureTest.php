@@ -58,6 +58,22 @@ class ShopKeywordExposureTest extends TestCase
                 // 111 은 core 검색(제목 추출)·"고함량" 든 조합에서만 노출 → 그 외 조합은 미노출
                 return Http::response(($nq === '비타민c' || str_contains($nq, '고함량')) ? $with : $without, 200);
             }
+            // api 방식(shop.json) — m.search 와 같은 규칙: "고함량" 조합에서만 내 상품(111) 노출.
+            // ⚠️ api 테스트에서만 활성(self::$fakeShopJson) — 항상 items 를 주면 prepare 의 백필·재료 추출이
+            //    바뀌어 기존 크롤링 테스트의 조합 기대가 어긋난다.
+            if (str_contains($url, 'openapi.naver.com/v1/search/shop.json')) {
+                if (! self::$fakeShopJson) {
+                    return Http::response('', 200);
+                }
+                $q = (string) ($request->data()['query'] ?? '');
+                $mine = ['productId' => '111', 'title' => '종근당 <b>비타민c</b> 고함량', 'mallName' => '종근당',
+                    'link' => 'https://smartstore.naver.com/x/products/111', 'lprice' => '19900', 'image' => ''];
+                $other = ['productId' => '222', 'title' => '고려은단 비타민c', 'mallName' => '고려은단',
+                    'link' => 'https://smartstore.naver.com/y/products/222', 'lprice' => '25000', 'image' => ''];
+                $items = str_contains(mb_strtolower($q), '고함량') ? [$other, $mine] : [$other];
+
+                return Http::response(['total' => count($items), 'items' => $items], 200);
+            }
 
             return Http::response('', 200);
         });
@@ -69,6 +85,7 @@ class ShopKeywordExposureTest extends TestCase
             'core_keyword' => '비타민c',
             'product' => 'https://smartstore.naver.com/x/products/111',
             'threshold' => 5,
+            'check_method' => 'search',   // 기존 테스트는 통합검색 크롤링 파이프라인 검증(api 는 별도 테스트)
         ], $override));
 
         return ShopKeywordAnalysis::latest('id')->first();
@@ -94,6 +111,27 @@ class ShopKeywordExposureTest extends TestCase
         parse_str((string) parse_url($location, PHP_URL_QUERY), $params);
 
         return $params;
+    }
+
+    /** api 테스트에서만 shop.json fake 활성 — setUp 에서 매 테스트 false 로 리셋. */
+    private static bool $fakeShopJson = false;
+
+    /** api 방식(기본) — shop.json 1콜/조합으로 순위 판정: 빠르고 차단 없음, 광고 판별은 없음. */
+    public function test_api_method_checks_via_shop_json(): void
+    {
+        self::$fakeShopJson = true;
+        config(['rankfree.shopping.api_keys' => [['id' => 'k1', 'secret' => 's1']]]);
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->store($u, ['check_method' => 'api']);
+
+        $this->assertSame('api', $a->check_method);
+        $this->runChecks($u, $a);
+        $a->refresh();
+
+        $this->assertSame('done', $a->status);
+        $this->assertGreaterThan(0, $a->exposed_count);                            // '고함량' 조합이 API 로 노출 판정
+        $this->assertSame(0, (int) $a->combos()->whereNull('rank')->count());      // 전 조합 확인 완료
+        $this->assertSame(0, (int) $a->combos()->where('ad_exposed', true)->count());   // API 는 광고 판별 없음
     }
 
     public function test_index_renders(): void
@@ -350,7 +388,9 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertTrue((bool) $r->json('data.found'));
         $a->refresh();
         $this->assertSame('고려은단 비타민C 1000 600정', $a->product_title);
-        $this->assertSame('고려은단', $a->mall_name);
+        // mall(상점명)/brand(제조사) 분리(2026-07-22) — 원천에 상점명이 없으면 mall_name 은 비우고 brand 로 백필
+        $this->assertSame('고려은단', $a->brand);
+        $this->assertNull($a->mall_name);
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'seller_tag', 'keyword' => '메가도스비타민c']);
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'title', 'keyword' => '600정']);
     }
