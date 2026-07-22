@@ -78,6 +78,12 @@ return [
 
     // 소셜 로그인 — 각 플랫폼 개발자센터에서 앱 등록 후 Client ID/Secret 발급.
     // Redirect(콜백) URL 등록: {APP_URL}/auth/{provider}/callback
+    // 구글 서비스 계정 키 파일 경로 — 외부 발주 구글시트 전송·열 조회, GSC/GA4 폴백 인증.
+    // config 캐시(운영) 상태에서 env() 런타임 폴백이 안 되므로 반드시 여기 등록.
+    'google_sheets' => [
+        'credentials' => env('GOOGLE_SERVICE_ACCOUNT_JSON', ''),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
