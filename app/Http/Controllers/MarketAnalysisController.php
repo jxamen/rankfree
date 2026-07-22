@@ -38,10 +38,21 @@ class MarketAnalysisController extends Controller
         $a = MarketAnalysis::findByShareKey($slug);
         abort_if(! $a, 404);
 
-        // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
-        $weekday = $a->keyword ? $datalab->weekdayRatio($a->keyword) : null;
+        // 키워드당 정식 URL 하나(2026-07-22) — 같은 키워드 문서가 여러 개라 -2·-13 슬러그가 늘던 것을
+        // 첫 문서 슬러그로 301 통합(SEO 중복 해소). 어떤 슬러그·토큰으로 들어와도 같은 페이지로 모인다.
+        $canonical = MarketAnalysis::where('keyword', $a->keyword)->orderBy('id')->first();
+        if ($canonical && $canonical->slug && $slug !== $canonical->slug) {
+            return redirect()->to(route('market.shared', $canonical->slug), 301);
+        }
 
-        return view('market.share', ['a' => $a, 'weekday' => $weekday, 'related' => $related->sectionsFor($a)]);
+        // 표시는 그 키워드의 **최신 데이터** — 누가 어떤 문서를 조회했든 같은(가장 신선한) 분석을 보여준다
+        $display = MarketAnalysis::where('keyword', $a->keyword)
+            ->orderByDesc('updated_at')->orderByDesc('id')->first() ?? $a;
+
+        // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
+        $weekday = $display->keyword ? $datalab->weekdayRatio($display->keyword) : null;
+
+        return view('market.share', ['a' => $display, 'weekday' => $weekday, 'related' => $related->sectionsFor($display)]);
     }
 
     public function destroy(Request $request, MarketAnalysis $analysis)

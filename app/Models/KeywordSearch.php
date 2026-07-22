@@ -87,7 +87,8 @@ class KeywordSearch extends Model
             $slug = \Illuminate\Support\Facades\Cache::remember(
                 self::marketSlugCacheKey($this->keyword),
                 now()->addHours(6),
-                fn () => (string) MarketAnalysis::where('keyword', $this->keyword)->orderByDesc('id')->value('slug'),
+                // 첫 문서 슬러그 = 키워드 정식 URL(다른 슬러그는 301로 여기로 모인다)
+                fn () => (string) MarketAnalysis::where('keyword', $this->keyword)->orderBy('id')->value('slug'),
             );
             if ($slug !== '') {
                 return route('market.shared', $slug);

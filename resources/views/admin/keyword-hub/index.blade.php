@@ -260,8 +260,16 @@
                 const d = (await res.json()).data;
                 stopping = false;
                 render(d);
-                if (d.hint) statusEl.textContent = d.hint;   // 발행 가능 후보 0 등 — 시작 안 된 이유 안내
-                else if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
+                if (d.hint) {   // 발행 가능 후보 0 등 — 시작 안 된 이유 + 다음 액션 링크
+                    statusEl.textContent = d.hint + ' ';
+                    if (d.hint_url) {
+                        const a = document.createElement('a');
+                        a.href = d.hint_url;
+                        a.textContent = '수집 상품 열기 →';
+                        a.className = 'text-ink font-semibold';
+                        statusEl.appendChild(a);
+                    }
+                } else if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
                 return;
             }
             throw new Error('HTTP ' + res.status);

@@ -177,10 +177,14 @@ class KeywordHubController extends Controller
 
             // 발행 가능한 후보가 0이면 시작하지 않고 이유를 알려준다 — "남은 0"으로 바로 꺼져 혼란(실사고)
             if (HubAutoRun::query($type)->count() === 0) {
+                $pendingShopping = number_format(KeywordCandidate::whereIn('status', ['pending', 'approved'])
+                    ->whereHas('category', fn ($c) => $c->where('type', 'shopping'))->count());
+
                 return response()->json(['data' => $this->autoPayload() + [
                     'hint' => $type === 'shopping'
-                        ? '발행 가능한 쇼핑 후보가 없습니다 — 쇼핑은 확장 대량 수집(수집 상품 페이지)으로 시장분석을 먼저 수집해야 발행됩니다.'
+                        ? "발행 가능한 쇼핑 후보가 없습니다. 대기 {$pendingShopping}건은 아직 '키워드 목록'일 뿐 문서 내용(시장분석)이 수집되지 않았습니다 — 확장 대량 수집을 켜면 수집되는 키워드부터 자동 발행됩니다."
                         : '발행 가능한 후보가 없습니다 — 후보 수집(승인 포함)을 먼저 진행하세요.',
+                    'hint_url' => $type === 'shopping' ? route('admin.shop-products') : null,
                 ]])->header('Cache-Control', 'no-store, max-age=0');
             }
 
