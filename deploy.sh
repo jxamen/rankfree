@@ -27,6 +27,7 @@ php83 artisan route:cache
 php83 artisan view:cache
 
 echo "▶ 큐 워커 재기동(supervisor — 워커가 구 코드를 물고 있지 않게)"
-~/.local/bin/supervisorctl -c ~/.supervisor/supervisord.conf restart rankfree-worker || true
+# numprocs>1 이면 프로세스 그룹이라 'rankfree-worker:*' 로 재기동해야 한다
+~/.local/bin/supervisorctl -c ~/.supervisor/supervisord.conf restart 'rankfree-worker:*' || true
 
 echo "✅ 배포 완료: $(git rev-parse --short HEAD)"
