@@ -8,6 +8,11 @@
 @section('admin-content')
 <x-console.page-head title="키워드 자동 분석" desc="플레이스 후보는 키워드 분석, 쇼핑 후보는 쇼핑 시장 분석 문서로 병렬 발행합니다." />
 
+<style>
+/* 실행 중 중단 버튼 강조 — error 는 텍스트·보더로만(배경 금지 규칙) */
+.kh-stop-live{border-color:var(--color-error) !important;color:var(--color-error) !important;font-weight:600;}
+</style>
+
 <div id="kh-auto-bar" class="flex items-center gap-3 px-4 py-2 mb-4"
      style="position:sticky;top:0;z-index:30;border-radius:16px;border:1px solid var(--color-hairline);background:color-mix(in srgb,var(--color-primary) 6%,var(--color-canvas));{{ ($auto['running'] ?? false) ? '' : 'display:none;' }}">
     <span class="badge border border-hairline flex-none" style="font-size:var(--fs-xs);">자동 분석 중</span>
@@ -198,7 +203,7 @@
     // 중단 요청 진행 표시 — 응답 올 때까지 버튼을 '중단 중…'으로 고정해 반복 클릭을 막는다
     let stopping = false;
     function applyStoppingUi() {
-        [stopBtn, barStop].forEach((b) => { b.style.display = ''; b.disabled = true; b.textContent = '중단 중…'; });
+        [stopBtn, barStop].forEach((b) => { b.style.display = ''; b.disabled = true; b.textContent = '중단 중…'; b.classList.remove('kh-stop-live'); });
         barMsg.textContent = '중단 처리 중 — 진행 중이던 작업까지만 하고 멈춥니다';
     }
 
@@ -211,8 +216,12 @@
             applyStoppingUi();
             return;
         }
-        // 중단 버튼은 실행 중일 때만 노출(시작 전·종료 후엔 숨김)
-        [stopBtn, barStop].forEach((b) => { b.disabled = !running; b.textContent = '중단'; });
+        // 중단 버튼은 실행 중일 때만 노출(시작 전·종료 후엔 숨김) + 실행 중엔 강조(kh-stop-live)
+        [stopBtn, barStop].forEach((b) => {
+            b.disabled = !running;
+            b.textContent = '중단';
+            b.classList.toggle('kh-stop-live', running);
+        });
         stopBtn.style.display = running ? '' : 'none';
 
         if (running) {
@@ -251,7 +260,8 @@
                 const d = (await res.json()).data;
                 stopping = false;
                 render(d);
-                if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
+                if (d.hint) statusEl.textContent = d.hint;   // 발행 가능 후보 0 등 — 시작 안 된 이유 안내
+                else if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
                 return;
             }
             throw new Error('HTTP ' + res.status);

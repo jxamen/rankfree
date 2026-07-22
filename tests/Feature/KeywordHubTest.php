@@ -492,6 +492,21 @@ class KeywordHubTest extends TestCase
             ->assertJsonPath('data.remaining', 0);
     }
 
+    /** 발행 가능한 후보가 0이면 시작하지 않고 이유(hint)를 준다 — "남은 0"으로 바로 꺼지는 혼란 방지. */
+    public function test_auto_toggle_refuses_start_with_zero_eligible_and_hints(): void
+    {
+        $admin = $this->admin();
+        $shop = $this->category(['seed_keywords' => []]);
+        // 시장분석 없는 쇼핑 후보만 존재 → 발행 가능 0
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+
+        $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1, 'type' => 'shopping'])
+            ->assertOk()
+            ->assertJsonPath('data.running', false)
+            ->assertJsonPath('data.hint', fn ($v) => str_contains((string) $v, '확장 대량 수집'));
+        $this->assertFalse(HubAutoRun::isRunning());
+    }
+
     public function test_auto_toggle_starts_and_stops_with_type(): void
     {
         $admin = $this->admin();
