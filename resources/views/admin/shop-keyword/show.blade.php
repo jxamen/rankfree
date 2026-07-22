@@ -40,10 +40,14 @@
         <div><span class="text-muted" style="font-size:var(--fs-xs);">가격</span><br><b class="text-ink font-mono" id="sk-me-price">{{ $analysis->product_price ? number_format($analysis->product_price).'원' : '—' }}</b></div>
     </div>
     <div class="mt-2"><span class="text-muted" style="font-size:var(--fs-xs);">제품명</span>
-        <span class="text-ink" id="sk-me-title" style="font-size:var(--fs-sm);">{{ $analysis->product_title ?: '—' }}</span></div>
+        <span class="text-ink" id="sk-me-title" style="font-size:var(--fs-sm);">{{ $analysis->product_title ?: '—' }}</span>
+        @if ($analysis->product_title)
+            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ $analysis->product_title }}" style="border:0;background:none;cursor:pointer;font-size:var(--fs-xs);">복사</button>
+        @endif</div>
     @if ($analysis->product_url)
         <div class="mt-1"><span class="text-muted" style="font-size:var(--fs-xs);">제품 URL</span>
-            <a href="{{ \Illuminate\Support\Str::startsWith($analysis->product_url, ['http://','https://']) ? $analysis->product_url : '#' }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);word-break:break-all;">{{ $analysis->product_url }}</a></div>
+            <a href="{{ \Illuminate\Support\Str::startsWith($analysis->product_url, ['http://','https://']) ? $analysis->product_url : '#' }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);word-break:break-all;">{{ $analysis->product_url }}</a>
+            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ $analysis->product_url }}" style="border:0;background:none;cursor:pointer;font-size:var(--fs-xs);">복사</button></div>
     @endif
     {{-- 대표이미지(썸네일) — 발주 시 필요. 확장 상품페이지 수집으로 채워진다(2026-07-22) --}}
     <div class="mt-1 flex items-center gap-2 flex-wrap">
@@ -55,8 +59,6 @@
         @else
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
         @endif
-        {{-- 수동 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지를 다시 수집 --}}
-        <button type="button" id="sk-recollect" class="btn btn-ghost btn-sm" title="확장으로 상품페이지(제목·태그·이미지·가격)를 다시 수집합니다">다시 수집</button>
     </div>
     {{-- 관련 태그(스마트스토어 상품페이지 하단) — 확장 수집분. 조합 재료(seller_tag)로도 쓰인다(2026-07-22) --}}
     <div class="mt-1 flex items-center gap-2 flex-wrap">
@@ -67,7 +69,8 @@
                     <span class="badge border border-hairline" style="font-size:var(--fs-xs);padding:1px 8px;">#{{ $t }}</span>
                 @endforeach
             </div>
-            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ collect($sellerTags)->map(fn ($t) => '#'.$t)->join(' ') }}" style="border:0;background:none;cursor:pointer;">복사</button>
+            {{-- 태그 복사는 콤마 구분(발주·시스템 입력용, # 없이) --}}
+            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ collect($sellerTags)->join(',') }}" style="border:0;background:none;cursor:pointer;">복사</button>
         @else
             <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
         @endif
@@ -85,6 +88,9 @@
         title="노출 안 된 조합을 접고 새 조합을 생성합니다(노출 키워드는 유지)">＋ 새로 조합</button>
     <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
         title="노출 판정된 조합만 미확인으로 되돌려 다시 확인합니다 — 광고(슈퍼적립) 오판 정정용">노출 재확인</button>
+    {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
+    <button type="button" id="sk-recollect" class="btn btn-secondary btn-sm"
+        title="확장으로 상품페이지(제목·관련태그·대표이미지·가격)를 다시 수집합니다">상품정보 다시 수집</button>
     <form method="POST" action="{{ route('admin.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;">
         @csrf @method('DELETE')
         <button type="submit" class="btn btn-ghost btn-sm text-error" data-confirm="이 분석을 삭제할까요?">삭제</button>
@@ -858,7 +864,7 @@ window.__SK = {
         const ok = await waitExt(1500);
         if (!ok) {
             recollect.disabled = false;
-            recollect.textContent = '다시 수집';
+            recollect.textContent = '상품정보 다시 수집';
             alert('랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인 후 페이지를 새로고침하세요.');
             return;
         }
@@ -868,7 +874,7 @@ window.__SK = {
             location.reload();
         } else {
             recollect.disabled = false;
-            recollect.textContent = '다시 수집';
+            recollect.textContent = '상품정보 다시 수집';
             alert('수집에 실패했습니다 — 상품페이지가 열리지 않았을 수 있어요. 잠시 후 다시 시도하세요.');
         }
     });
