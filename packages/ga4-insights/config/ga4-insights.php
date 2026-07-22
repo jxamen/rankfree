@@ -39,4 +39,11 @@ return [
 
     // 각 표에 노출할 행 수
     'rows' => (int) env('GA4_INSIGHTS_ROWS', 15),
+
+    // 검색 유입 키워드(선택) — GA4 는 자연검색 검색어를 안 내려주므로 호스트 앱이 보완.
+    // 클래스명 문자열만 허용(config:cache 안전). null 이면 해당 카드가 비어 있는 상태로 표시된다.
+    'keywords' => [
+        'gsc_provider' => null,     // Jcurve\Ga4Insights\Contracts\KeywordsProvider 구현 — 실제 검색어(예: 서치 콘솔)
+        'landing_resolver' => null, // Jcurve\Ga4Insights\Contracts\LandingKeywordResolver 구현 — 랜딩 경로 → 키워드 환원
+    ],
 ];

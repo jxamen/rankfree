@@ -103,6 +103,20 @@
 .ga4-drag:active{cursor:grabbing}
 #ga4-layout.dragging{user-select:none;cursor:grabbing}
 .ga4-ghost{position:fixed;z-index:9999;pointer-events:none;background:var(--ga4-card);border:1px solid var(--ga4-accent);border-radius:8px;padding:6px 12px;font-size:var(--ga4-fs-xs);color:var(--ga4-ink,#0a0b0d);box-shadow:0 8px 24px rgba(0,0,0,.14);white-space:nowrap}
+/* 드래그 중 줄 틈의 히트 영역을 위아래로 넓힌다 — 보이는 높이는 그대로(지오메트리 불변 원칙) */
+#ga4-layout.dragging .ga4-rowgap{position:relative;z-index:5}
+#ga4-layout.dragging .ga4-rowgap::after{content:'';position:absolute;left:0;right:0;top:-12px;bottom:-12px}
+/* 지표 숨기기(✕) — 섹션에 올렸을 때만 보임 */
+.ga4-section>.head{position:relative;padding-right:28px}
+.ga4-hide{position:absolute;right:0;top:0;border:0;background:none;color:var(--ga4-soft);cursor:pointer;font-size:13px;line-height:1;padding:4px 6px;border-radius:6px;opacity:0;transition:opacity .12s}
+.ga4-section:hover .ga4-hide{opacity:1}
+.ga4-hide:hover{color:var(--ga4-down);background:color-mix(in srgb,var(--ga4-down) 8%,transparent)}
+/* 지표 표시 패널 */
+.ga4-secmenu{position:relative;display:inline-block}
+.ga4-secmenu-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:60;background:var(--ga4-card);border:1px solid var(--ga4-line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.12);padding:10px 12px;min-width:250px;max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.ga4-secmenu-panel label{display:flex;align-items:center;gap:8px;font-size:var(--ga4-fs-xs);color:var(--ga4-fg);padding:5px 6px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.ga4-secmenu-panel label:hover{background:color-mix(in srgb,var(--ga4-accent) 7%,transparent)}
+.ga4-secmenu-panel input{accent-color:var(--ga4-accent)}
 /* 좁은 컬럼에선 KPI·2열 카드가 컨테이너 폭에 맞춰 줄어들게(뷰포트 미디어쿼리 무시) */
 #ga4-layout .ga4-kpis{grid-template-columns:repeat(2,1fr)}
 @container(min-width:640px){#ga4-layout .ga4-kpis{grid-template-columns:repeat(3,1fr)}}

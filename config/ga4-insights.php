@@ -29,6 +29,12 @@ return [
     'cache_ttl' => (int) env('GA4_INSIGHTS_CACHE_TTL', 600),
     'rows' => 15,
 
+    // 검색 유입 키워드 — GA4 가 검색어를 안 내려줘서 앱이 보완(클래스명, config:cache 안전)
+    'keywords' => [
+        'gsc_provider' => \App\Support\Ga4GscKeywordsProvider::class,        // 구글 실제 검색어(서치 콘솔 수집분)
+        'landing_resolver' => \App\Support\Ga4LandingKeywordResolver::class, // 키워드 슬러그 랜딩 → 키워드(네이버 등 추정)
+    ],
+
     // 미연동 안내(앱 전용) — 환경설정으로 유도
     'setup_help' => '<b>환경설정 › 외부 연동</b>에서 <b>[구글 계정으로 연동]</b> 후 <b>GA4 속성 ID(숫자)</b>를 등록하세요. '
         .'(대안: 서비스 계정 키를 설정하고 그 계정을 GA4 속성에 뷰어로 추가) '

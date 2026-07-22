@@ -95,6 +95,8 @@ class Ga4Reporter
             $this->q(['newVsReturning'], ['activeUsers', 'sessions', 'engagementRate'], $cur, orderMetric: 'sessions', limit: 4),
             // 13) 시간대(시각)
             $this->q(['hour'], ['sessions', 'activeUsers'], $cur, orderDim: 'hour', desc: false, limit: 24),
+            // 14) 소스 × 랜딩 — 검색 유입 키워드 추정(키워드 슬러그 페이지 랜딩 환원)용
+            $this->q(['sessionSource', 'landingPagePlusQueryString'], ['sessions', 'totalUsers'], $cur, orderMetric: 'sessions', limit: 200),
         ];
 
         try {
@@ -124,6 +126,7 @@ class Ga4Reporter
             'events' => $this->named($r(11), 'eventName', ['eventCount', 'totalUsers']),
             'newReturning' => $this->named($r(12), 'newVsReturning', ['activeUsers', 'sessions', 'engagementRate']),
             'hours' => $this->hours($r(13)),
+            'searchKeywords' => $this->searchKeywords($r(14), $start, $end),
             'realtime' => $this->realtime(),
             'error' => null,
         ];
@@ -249,6 +252,54 @@ class Ga4Reporter
         }
 
         return $h;
+    }
+
+    /**
+     * 검색 유입 키워드 — GA4 는 자연검색 검색어를 안 내려주므로 두 갈래로 보완:
+     *  queries: 호스트가 등록한 실제 검색어 공급자(예: 구글 서치 콘솔 수집분)
+     *  landing: 소스 × 랜딩에서 키워드 슬러그 페이지를 키워드로 환원(네이버 등 추정치)
+     * 둘 다 옵션 — config('ga4-insights.keywords.*') 에 클래스명 등록 시에만 동작(미등록 앱은 빈 값).
+     */
+    private function searchKeywords(array $rows, string $start, string $end): array
+    {
+        $landing = [];
+        $resolverCls = (string) config('ga4-insights.keywords.landing_resolver', '');
+        if ($resolverCls !== '' && class_exists($resolverCls)) {
+            try {
+                $resolver = app($resolverCls);
+                $agg = [];
+                foreach ($rows as $x) {
+                    $src = strtolower(trim($x['d']['sessionSource'] ?? ''));
+                    if ($src === '' || $src === '(direct)' || $src === '(not set)') {
+                        continue;
+                    }
+                    $kw = $resolver->resolve((string) ($x['d']['landingPagePlusQueryString'] ?? ''));
+                    if (! $kw) {
+                        continue;
+                    }
+                    $key = $src.'|'.$kw;
+                    $agg[$key] ??= ['source' => $src, 'keyword' => $kw, 'sessions' => 0, 'users' => 0];
+                    $agg[$key]['sessions'] += (int) round((float) ($x['m']['sessions'] ?? 0));
+                    $agg[$key]['users'] += (int) round((float) ($x['m']['totalUsers'] ?? 0));
+                }
+                usort($agg, fn ($a, $b) => $b['sessions'] <=> $a['sessions']);
+                $landing = array_slice(array_values($agg), 0, 30);
+            } catch (\Throwable $e) {
+                $landing = [];
+            }
+        }
+
+        $queries = [];
+        $providerCls = (string) config('ga4-insights.keywords.gsc_provider', '');
+        if ($providerCls !== '' && class_exists($providerCls)) {
+            try {
+                $queries = app($providerCls)->rows($start, $end, (int) config('ga4-insights.rows', 15));
+            } catch (\Throwable $e) {
+                $queries = [];
+            }
+        }
+
+        return ['queries' => $queries, 'landing' => $landing];
     }
 
     private function realtime(): array
