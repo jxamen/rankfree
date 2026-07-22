@@ -207,11 +207,13 @@
                 아직 이 상품에 주문한 내역이 없습니다. "주문" 탭에서 첫 주문을 접수하면 진행 상태가 여기에 표시됩니다.
             </div>
         @else
+            @php $fieldMap = $product->fields->keyBy('field_key'); @endphp
             <div style="overflow-x:auto;">
                 <table class="w-full" style="min-width:640px;">
                     <thead>
                         <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
-                            <th class="text-left px-5 py-3 font-semibold" style="width:160px;">주문번호</th>
+                            <th class="text-center px-3 py-3 font-semibold" style="width:56px;">No</th>
+                            <th class="text-left px-5 py-3 font-semibold" style="width:170px;">주문번호</th>
                             <th class="text-right px-3 py-3 font-semibold" style="width:120px;">수량 · 기간</th>
                             <th class="text-right px-3 py-3 font-semibold" style="width:120px;">금액</th>
                             <th class="text-center px-3 py-3 font-semibold" style="width:90px;">상태</th>
@@ -221,7 +223,13 @@
                     <tbody>
                         @foreach ($myOrders as $o)
                             <tr style="border-top:1px solid var(--color-hairline-soft);">
-                                <td class="px-5 py-3 text-ink font-medium" style="font-size:var(--fs-xs);">{{ $o->order_no }}</td>
+                                {{-- No — 전체 건수 기준 내림차순(최신이 가장 큰 번호) --}}
+                                <td class="px-3 py-3 text-center text-muted-soft font-mono" style="font-size:var(--fs-xs);">{{ ($myOrdersTotal ?? $myOrders->count()) - $loop->index }}</td>
+                                <td class="px-5 py-3" style="font-size:var(--fs-xs);">
+                                    <button type="button" class="rf-od-toggle text-accent font-medium hover:underline" data-target="od-{{ $o->id }}"
+                                            style="background:none;border:0;padding:0;cursor:pointer;font-size:var(--fs-xs);font-family:inherit;"
+                                            title="클릭하면 상세 주문 내역이 펼쳐집니다">{{ $o->order_no }}</button>
+                                </td>
                                 <td class="px-3 py-3 text-right text-muted" style="font-size:var(--fs-xs);">
                                     {{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif
                                 </td>
@@ -230,6 +238,46 @@
                                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $orderStatusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $orderStatuses[$o->status] ?? $o->status }}</span>
                                 </td>
                                 <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
+                            </tr>
+                            {{-- 상세 주문 내역 — 주문번호 클릭 시 펼침 --}}
+                            <tr id="od-{{ $o->id }}" hidden>
+                                <td colspan="6" class="px-5 py-4" style="background:var(--color-surface-soft);border-top:1px solid var(--color-hairline-soft);">
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                                        @foreach (array_filter([
+                                            ['단가', number_format($o->unit_price).'원'],
+                                            ['수량', number_format($o->quantity).($o->days ? ' × '.$o->days.'일' : '')],
+                                            (float) $o->discount_amount > 0 ? ['쿠폰 할인', '-'.number_format($o->discount_amount).'원'] : null,
+                                            ['합계', number_format($o->total_price).'원'],
+                                        ]) as [$lab, $val])
+                                            <div>
+                                                <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
+                                                <div class="text-ink" style="font-size:var(--fs-xs);font-weight:600;">{{ $val }}</div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    @if (! empty($o->field_values))
+                                        <div class="text-muted font-semibold mb-2" style="font-size:var(--fs-xs);">주문 입력 정보</div>
+                                        <div class="flex flex-col gap-1">
+                                            @foreach ($o->field_values as $key => $val)
+                                                @php $f = $fieldMap->get($key); @endphp
+                                                <div class="grid grid-cols-1 sm:grid-cols-4 gap-1" style="font-size:var(--fs-xs);">
+                                                    <div class="text-muted-soft">{{ $f->label ?? $key }}</div>
+                                                    <div class="sm:col-span-3 text-body" style="word-break:break-all;">
+                                                        @if (is_null($val) || $val === '' || $val === [])
+                                                            <span class="text-muted-soft">—</span>
+                                                        @elseif (in_array($f->field_type ?? '', ['FILE', 'IMAGE'], true))
+                                                            <a href="{{ asset('storage/'.$val) }}" target="_blank" rel="noopener" class="text-accent hover:underline">첨부 보기</a>
+                                                        @elseif (is_array($val))
+                                                            {{ implode(', ', array_map('strval', $val)) }}
+                                                        @else
+                                                            {{ $val }}
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -259,6 +307,13 @@ document.querySelectorAll('.rf-tab').forEach(function (b) {
     b.addEventListener('click', function () {
         document.querySelectorAll('.rf-tab').forEach(function (x) { x.classList.toggle('on', x === b); });
         document.querySelectorAll('.rf-tabpane').forEach(function (p) { p.hidden = p.dataset.tab !== b.dataset.tab; });
+    });
+});
+// 주문번호 클릭 → 상세 주문 내역 펼침/접힘
+document.querySelectorAll('.rf-od-toggle').forEach(function (b) {
+    b.addEventListener('click', function () {
+        var row = document.getElementById(b.dataset.target);
+        if (row) row.hidden = !row.hidden;
     });
 });
 </script>
