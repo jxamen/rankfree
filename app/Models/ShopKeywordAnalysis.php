@@ -16,7 +16,7 @@ class ShopKeywordAnalysis extends Model
     ];
 
     protected $fillable = [
-        'user_id', 'marketing_order_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'product_title', 'product_price',
+        'user_id', 'marketing_order_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'brand', 'product_title', 'product_price',
         'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned', 'check_method',
     ];
 

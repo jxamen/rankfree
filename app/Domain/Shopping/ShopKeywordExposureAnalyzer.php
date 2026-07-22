@@ -74,6 +74,7 @@ class ShopKeywordExposureAnalyzer
             if ($pi) {
                 $opts['product_info'] = [
                     'title' => (string) $pi->title, 'brand' => (string) ($pi->brand ?: $pi->mall_name),
+                    'mall' => (string) $pi->mall_name,
                     'price' => (int) $pi->price, 'seller_tags' => (array) $pi->seller_tags,
                 ];
             }
@@ -92,7 +93,8 @@ class ShopKeywordExposureAnalyzer
                 'core_keyword' => $core,
                 'product_url' => $target['url'] ?: (preg_match('#^https?://#i', trim($productInput)) ? trim($productInput) : null),
                 'product_id' => $target['product_id'] ?: null,
-                'mall_name' => $me['brand'] ?: ($target['mall_name'] ?: null),   // 내 브랜드(업체명)
+                'mall_name' => ($me['mall'] ?? '') !== '' ? $me['mall'] : ($target['mall_name'] ?: null),   // 실제 상점명(스토어)
+                'brand' => $me['brand'] ?: null,                                 // 제조사·브랜드(콤보 재료)
                 'product_title' => $me['title'] ?: null,
                 'product_price' => $me['price'] ?: null,
                 'threshold' => $threshold,
@@ -248,7 +250,7 @@ class ShopKeywordExposureAnalyzer
                 $this->cleanLoose(array_map(fn ($m) => $this->cleanBrand($m), $sig['competitor_malls'])),
                 0, self::PER_SOURCE['competitor_brand']);
             // 속성 후보에서 경쟁 브랜드명 제외(extractTokens 와 동일 — 남의 브랜드가 조합 재료로 섞이는 것 방지)
-            $brandEx = array_merge([(string) $analysis->mall_name], $sig['competitor_malls'], $add['competitor_brand']);
+            $brandEx = array_merge([(string) $analysis->brand, (string) $analysis->mall_name], $sig['competitor_malls'], $add['competitor_brand']);
             $add['attribute'] = array_slice(
                 $this->cleanLoose($this->attrsFromProductNames($core, $brandEx, $sig['product_names'])),
                 0, self::PER_SOURCE['attribute']);
@@ -274,7 +276,8 @@ class ShopKeywordExposureAnalyzer
 
         $this->backfillMe($analysis, [
             'title' => (string) $pi->title,
-            'mall' => (string) ($pi->brand ?: $pi->mall_name),
+            'mall' => (string) $pi->mall_name,
+            'brand' => (string) ($pi->brand ?: $pi->mall_name),
             'price' => (int) $pi->price,
         ]);
         $analysis->refresh();
@@ -282,7 +285,7 @@ class ShopKeywordExposureAnalyzer
         $core = (string) $analysis->core_keyword;
         $maxTokens = max(2, min(6, (int) config('rankfree.shopping.exposure.max_tokens', 5)));
         $added = $this->addTokens($analysis, [
-            'title' => $this->titleWords($core, (string) $analysis->mall_name, (string) $analysis->product_title),
+            'title' => $this->titleWords($core, (string) ($analysis->brand ?: $analysis->mall_name), (string) $analysis->product_title),
             'title_phrase' => $this->titlePhrases((string) $analysis->product_title, $maxTokens),
             'seller_tag' => $this->cleanLoose((array) $pi->seller_tags),
         ]);
@@ -314,7 +317,10 @@ class ShopKeywordExposureAnalyzer
             $dirty['product_title'] = trim((string) $me['title']);
         }
         if (! $analysis->mall_name && trim((string) ($me['mall'] ?? '')) !== '') {
-            $dirty['mall_name'] = $this->cleanBrand((string) $me['mall']);
+            $dirty['mall_name'] = trim((string) $me['mall']);   // 실제 상점명 — 정제(cleanBrand)하지 않는다
+        }
+        if (! $analysis->brand && trim((string) ($me['brand'] ?? '')) !== '') {
+            $dirty['brand'] = $this->cleanBrand((string) $me['brand']);
         }
         if (! $analysis->product_price && (int) ($me['price'] ?? 0) > 0) {
             $dirty['product_price'] = (int) $me['price'];
@@ -398,7 +404,8 @@ class ShopKeywordExposureAnalyzer
             $tokens['attribute'] = array_values(array_filter($tokens['attribute'] ?? [],
                 fn ($k) => ! in_array($this->norm($k), $compNorms, true)));
         }
-        $me = ['title' => (string) $analysis->product_title, 'brand' => (string) $analysis->mall_name, 'price' => (int) $analysis->product_price];
+        $me = ['title' => (string) $analysis->product_title, 'brand' => (string) ($analysis->brand ?: $analysis->mall_name),
+            'mall' => (string) $analysis->mall_name, 'price' => (int) $analysis->product_price];
         $core = (string) $analysis->core_keyword;
 
         // ④ 패턴 기반 자동 제외 — 충분히(≥12) 확인했는데 노출률 10% 미만인 유형(combo_tag)은
@@ -491,7 +498,7 @@ class ShopKeywordExposureAnalyzer
             'title' => [], 'title_phrase' => [], 'attribute' => [], 'suffix' => [], 'seller_tag' => [],
             'autocomplete' => [], 'searchad' => [], 'shopping_related' => [], 'keyword_rec' => [], 'together' => [], 'competitor_brand' => [],
         ];
-        $me = ['title' => '', 'brand' => '', 'price' => 0];
+        $me = ['title' => '', 'brand' => '', 'mall' => '', 'price' => 0];
 
         // 어미(tail 재료 — 제목/브랜드 조합에 1개씩 덧붙일 때만 사용)
         $t['suffix'] = $this->cleanLoose((array) config('rankfree.shopping.exposure.suffixes', []));
@@ -499,7 +506,8 @@ class ShopKeywordExposureAnalyzer
         // 확장 수집 상품정보(있으면 우선) — 제목·브랜드·가격·SEO태그
         $pi = (array) ($opts['product_info'] ?? []);
         if (($pi['title'] ?? '') !== '') {
-            $me = ['title' => (string) $pi['title'], 'brand' => (string) ($pi['brand'] ?? ''), 'price' => (int) ($pi['price'] ?? 0)];
+            $me = ['title' => (string) $pi['title'], 'brand' => (string) ($pi['brand'] ?? ''),
+                'mall' => (string) ($pi['mall'] ?? ''), 'price' => (int) ($pi['price'] ?? 0)];
         }
         $t['seller_tag'] = $this->cleanLoose((array) ($pi['seller_tags'] ?? []));
         $t['shopping_related'] = $this->clean((array) ($pi['shopping_related'] ?? []));
@@ -533,7 +541,9 @@ class ShopKeywordExposureAnalyzer
         try {
             $sig = $this->exposure->keywordSignals($core, $target);
             if ($me['title'] === '' && ! empty($sig['me']['title'])) {
-                $me = ['title' => (string) $sig['me']['title'], 'brand' => $this->cleanBrand((string) $sig['me']['mall']), 'price' => (int) $sig['me']['price']];
+                // SERP 매칭 슬롯 — mall 은 실제 상점명, 브랜드 정보는 없어 상점명 정제값으로 대신한다
+                $me = ['title' => (string) $sig['me']['title'], 'brand' => $this->cleanBrand((string) $sig['me']['mall']),
+                    'mall' => (string) $sig['me']['mall'], 'price' => (int) $sig['me']['price']];
             }
             $t['competitor_brand'] = array_slice($this->cleanLoose(array_map(fn ($m) => $this->cleanBrand($m), $sig['competitor_malls'])), 0, self::PER_SOURCE['competitor_brand']);
             // ★ 속성 후보에서 경쟁 브랜드명 제외 — 브랜드명도 여러 상품명에 반복 등장해 '속성'으로 오분류된다
