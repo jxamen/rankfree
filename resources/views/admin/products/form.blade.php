@@ -302,9 +302,14 @@
                         @endforeach
                     </select>
                 </div>
+                <div style="flex:1;min-width:200px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">고정값 (주문 생성 시 자동 입력)</label>
+                    <input class="input fx-default" placeholder="예: 아웃랜딩 Y" style="width:100%;">
+                </div>
             </div>
             <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">필수 포함 값을 설정하면 주문 입력값에 해당 문자열이 없을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다.
-                자동 채움을 고르면 주문에 연결된 쇼핑 유입키워드 분석에서 확장이 수집한 값이 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).</div>
+                자동 채움을 고르면 주문에 연결된 쇼핑 유입키워드 분석에서 확장이 수집한 값이 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).
+                고정값은 <b class="text-muted">숨김 필드</b>에서 주문 생성 시 그대로 저장되는 값입니다 — 항상 같은 값을 발주에 전달할 때 쓰고, 주문 상세에서 건별 수정도 가능합니다.</div>
         </div>
     </div>
 </template>
@@ -376,8 +381,9 @@
         node.querySelector('.fx-contains').value = data.contains || '';
         node.querySelector('.fx-contains-msg').value = data.contains_message || '';
         node.querySelector('.fx-autofill').value = data.autofill || '';
+        node.querySelector('.fx-default').value = data.default_value || '';
         function syncMore() {
-            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg', '.fx-autofill'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
+            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg', '.fx-autofill', '.fx-default'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
             moreBtn.classList.toggle('btn-secondary', has);
             moreBtn.classList.toggle('btn-ghost', !has);
             moreBtn.textContent = has ? '옵션 ●' : '옵션';
@@ -644,6 +650,7 @@
                 is_required: r.querySelector('.fx-req').checked, options: opts, group: currentGroup, sort_order: rows.length,
                 is_hidden: r.querySelector('.fx-hidden').checked,               // 내부(발주 전달용) 필드
                 autofill: r.querySelector('.fx-autofill').value || null,        // 유입키워드 수집값 자동 채움
+                default_value: r.querySelector('.fx-default').value.trim() || null,   // 숨김 필드 고정값(주문 생성 시 시드)
                 placeholder: r.querySelector('.fx-ph').value.trim() || null,
                 contains: r.querySelector('.fx-contains').value.trim() || null,
                 contains_message: r.querySelector('.fx-contains-msg').value.trim() || null,

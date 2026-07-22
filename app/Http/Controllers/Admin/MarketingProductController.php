@@ -141,6 +141,7 @@ class MarketingProductController extends Controller
                     'field_key' => $f->field_key, 'field_type' => $f->field_type, 'label' => $f->label,
                     'placeholder' => $f->placeholder, 'help_text' => $f->help_text, 'is_required' => (bool) $f->is_required,
                     'is_hidden' => (bool) $f->is_hidden, 'autofill' => (string) ($f->autofill_source ?? ''),
+                    'default_value' => $f->default_value,
                     'options' => $f->options_json ?? [], 'group' => $groupNames->get($f->group_id, ''), 'sort_order' => $f->sort_order,
                     'contains' => $f->validation_json['contains'] ?? '',
                     'contains_message' => $f->validation_json['contains_message'] ?? '',
@@ -256,6 +257,7 @@ class MarketingProductController extends Controller
                     'is_hidden' => (bool) ($f['is_hidden'] ?? false),
                     'autofill_source' => array_key_exists((string) ($f['autofill'] ?? ''), ProductField::AUTOFILL_SOURCES)
                         ? (string) $f['autofill'] : null,
+                    'default_value' => trim((string) ($f['default_value'] ?? '')) !== '' ? trim((string) $f['default_value']) : null,
                     'options_json' => in_array($type, ['SELECT', 'MULTI_SELECT'], true) ? $this->normOptions($opts) : null,
                     'validation_json' => trim((string) ($f['contains'] ?? '')) !== ''
                         ? ['contains' => trim((string) $f['contains']), 'contains_message' => trim((string) ($f['contains_message'] ?? ''))]

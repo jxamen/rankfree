@@ -53,6 +53,7 @@
     탭 변경은 즉시 저장하지 않고 **상품 저장 시 vendors_json 으로 함께 저장**(비면 업체 기본 탭).
     열 미리보기는 `GET admin/vendors/{vendor}/sheet-columns?tab=` 로 특정 탭 조회.
     **발주 전송 우선순위**: 배분 sheet_tab → 업체 gsheet_tab → 첫 탭. 검증 [ProductSheetTabTest](../tests/Feature/ProductSheetTabTest.php) 3건.
+  - **내부(숨김) 필드 — 자동 채움 + 고정값(2026-07-22)** — `product_fields.is_hidden`(고객 주문 폼 미노출)·`autofill_source`(유입키워드 수집값 매핑: 핵심키워드/상품URL/상품ID/상품명/상점명/가격/정답태그/썸네일)·`default_value`(**고정값** — 주문 생성 시 OrderPlacer 가 field_values 에 시드, 항상 같은 값을 발주에 전달할 때. 빌더 [옵션]에서 입력). 값 채움 순서: 고정값(생성 시) → 수집 반영(OrderFieldAutofill, 빈 필드만) → 주문 상세 수동 입력/다시 채우기(강제). 발주는 기존 `field:<key>` 매핑으로 전달, **필수 내부 필드가 비면 승인 차단**.
 - **주문 상세** — 우측 [승인 · 발주] 카드(배분 미리보기 → SweetAlert 확인 → 발주), 좌측 [외부 발주 현황] 테이블(상태·응답·재전송).
 
 ## 주의
