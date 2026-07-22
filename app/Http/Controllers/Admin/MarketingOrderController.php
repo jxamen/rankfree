@@ -12,7 +12,9 @@ class MarketingOrderController extends Controller
 {
     public function index(Request $request)
     {
-        $q = MarketingOrder::with('product', 'user')->latest();
+        $q = MarketingOrder::with('product', 'user')
+            ->with('shopKeywordAnalyses:id,marketing_order_id,exposed_count,status')   // 유입키워드 연결 표시용
+            ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {
             $q->where('status', $status);
@@ -37,9 +39,33 @@ class MarketingOrderController extends Controller
         ]);
     }
 
+    /**
+     * 쇼핑 유입키워드 수집 요청 — 주문 입력값(keyword·shop_url)으로 노출 키워드 분석을 만들어
+     * 주문과 상호 연결한다(2026-07-22). 발주 시 분석의 Short URL 을 쓰는 흐름의 진입점.
+     */
+    public function createShopKeyword(Request $request, MarketingOrder $order, \App\Domain\Shopping\ShopKeywordExposureAnalyzer $analyzer)
+    {
+        // 이미 연결된 분석이 있으면 그리로 — 중복 생성 방지(멱등)
+        if ($existing = $order->shopKeywordAnalyses()->latest('id')->first()) {
+            return redirect()->route('admin.shop-keyword.show', $existing)
+                ->with('status', "주문 {$order->order_no} 에 연결된 분석으로 이동했습니다.");
+        }
+
+        $src = $order->shopKeywordSource();
+        if (! $src) {
+            return back()->withErrors(['shop_keyword' => '이 주문에서 키워드·상품 URL 을 찾지 못했습니다 — 쇼핑 유입 주문이 아니거나 입력값이 비어 있습니다.']);
+        }
+
+        $analysis = $analyzer->prepare($request->user(), $src['keyword'], $src['url']);
+        $analysis->update(['marketing_order_id' => $order->id]);
+
+        return redirect()->route('admin.shop-keyword.show', $analysis)
+            ->with('status', "주문 {$order->order_no} 의 유입키워드 수집을 시작했습니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 쓰세요.");
+    }
+
     public function show(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
-        $order->load('product.fields', 'product.vendorAllocations.vendor', 'user', 'dispatches');
+        $order->load('product.fields', 'product.vendorAllocations.vendor', 'user', 'dispatches', 'shopKeywordAnalyses.shortLinks');
 
         // 승인 전 배분 미리보기 — 활성 업체 배분에 이 주문 수량을 적용한 결과
         $allocRows = $order->product

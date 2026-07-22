@@ -45,6 +45,22 @@
         <div class="mt-1"><span class="text-muted" style="font-size:var(--fs-xs);">제품 URL</span>
             <a href="{{ \Illuminate\Support\Str::startsWith($analysis->product_url, ['http://','https://']) ? $analysis->product_url : '#' }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);word-break:break-all;">{{ $analysis->product_url }}</a></div>
     @endif
+    {{-- 대표이미지(썸네일) — 발주 시 필요. 확장 상품페이지 수집으로 채워진다(2026-07-22) --}}
+    <div class="mt-1 flex items-center gap-2 flex-wrap">
+        <span class="text-muted" style="font-size:var(--fs-xs);">대표이미지</span>
+        @if ($thumbnailUrl ?? null)
+            <img src="{{ $thumbnailUrl }}" alt="대표이미지" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--color-hairline);">
+            <a href="{{ $thumbnailUrl }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);word-break:break-all;max-width:520px;">{{ \Illuminate\Support\Str::limit($thumbnailUrl, 80) }}</a>
+            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ $thumbnailUrl }}" style="border:0;background:none;cursor:pointer;">복사</button>
+        @else
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
+        @endif
+    </div>
+    @if ($analysis->order)
+        <div class="mt-1"><span class="text-muted" style="font-size:var(--fs-xs);">연결 주문</span>
+            <a href="{{ route('admin.orders.show', $analysis->order) }}" class="text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $analysis->order->order_no }} ↗</a>
+            <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 발주 시 이 분석의 Short URL 사용</span></div>
+    @endif
 </div>
 
 <div class="flex items-center gap-2 mb-4 flex-wrap">
@@ -374,6 +390,8 @@ window.__SK = {
     needTitle: @json(! $analysis->product_title && (string) $analysis->product_id !== ''),
     needSupplement: @json($needSupplement),
     paused: @json($analysis->status === 'paused'),
+    method: @json($analysis->check_method ?? 'api'),   // api=서버 shop.json 폴링 | search=확장 통합검색 크롤링
+
     urls: {
         check: '{{ route('admin.shop-keyword.check', $analysis) }}',
         pause: '{{ route('admin.shop-keyword.pause', $analysis) }}',
@@ -528,7 +546,7 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (extMode ? '브라우저에서 순위 확인 중(확장) ' : '순위 확인 ') + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
@@ -817,7 +835,8 @@ window.__SK = {
         if (extMode && !stopped) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다
         if (!box) return;   // 미확인 조합 없음 — 보충만 수행
         if (stopped) return;   // 서버 저장된 중단 — "이어서 확인" 클릭 전까지 시작하지 않는다
-        if (extMode) runExtLoop(); else poll();
+        // api 방식은 서버 shop.json 폴링으로 처리(빠름·차단 없음) — 확장 크롤링 루프는 통합검색 방식 전용
+        if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
     })();
 })();
 </script>

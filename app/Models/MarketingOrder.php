@@ -67,4 +67,44 @@ class MarketingOrder extends Model
             $this->userCoupon->update(['used_at' => null, 'order_id' => null]);
         }
     }
+
+    /** 이 주문에서 만든 쇼핑 노출 키워드 분석들 — 발주 시 분석의 Short URL 사용(2026-07-22). */
+    public function shopKeywordAnalyses(): HasMany
+    {
+        return $this->hasMany(ShopKeywordAnalysis::class, 'marketing_order_id');
+    }
+
+    /**
+     * 쇼핑 유입키워드 수집 대상 여부 + 재료 추출 — 주문 입력값(field_values)에서
+     * 키워드와 스마트스토어/쇼핑 상품 URL 을 찾는다(표준 키 keyword·shop_url, 없으면 휴리스틱).
+     *
+     * @return array{keyword: string, url: string}|null
+     */
+    public function shopKeywordSource(): ?array
+    {
+        $fv = (array) $this->field_values;
+
+        $keyword = trim((string) ($fv['keyword'] ?? ''));
+        if ($keyword === '') {
+            foreach ($fv as $k => $v) {
+                if (is_string($v) && $v !== '' && (str_contains((string) $k, 'keyword') || str_contains((string) $k, '키워드'))) {
+                    $keyword = trim($v);
+                    break;
+                }
+            }
+        }
+
+        $url = trim((string) ($fv['shop_url'] ?? ''));
+        if (! preg_match('#^https?://#i', $url)) {
+            $url = '';
+            foreach ($fv as $v) {
+                if (is_string($v) && preg_match('#https?://(smartstore|brand|shopping|search\.shopping)\.naver\.com/\S+#i', $v, $m)) {
+                    $url = trim($m[0]);
+                    break;
+                }
+            }
+        }
+
+        return ($keyword !== '' && $url !== '') ? ['keyword' => $keyword, 'url' => $url] : null;
+    }
 }

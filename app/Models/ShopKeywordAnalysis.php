@@ -9,9 +9,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** 쇼핑 노출 키워드 분석 1회 — 핵심 키워드 + 상품 대상 + 조합 순위체크 요약(25). */
 class ShopKeywordAnalysis extends Model
 {
+    /** 순위 확인 방식 — api: shop.json(빠름·차단 없음) | search: 통합검색 크롤링(실화면 기준·광고 판별, 차단 가능) */
+    public const CHECK_METHODS = [
+        'api' => '쇼핑 API (빠름 · 차단 없음)',
+        'search' => '통합검색 크롤링 (실제 화면 기준 · 광고 판별)',
+    ];
+
     protected $fillable = [
-        'user_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'product_title', 'product_price',
-        'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned',
+        'user_id', 'marketing_order_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'product_title', 'product_price',
+        'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned', 'check_method',
     ];
 
     protected $casts = [
@@ -27,6 +33,12 @@ class ShopKeywordAnalysis extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** 연결된 쇼핑 유입 주문 — 발주 시 이 분석의 Short URL 을 쓴다(2026-07-22). */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(MarketingOrder::class, 'marketing_order_id');
     }
 
     public function items(): HasMany

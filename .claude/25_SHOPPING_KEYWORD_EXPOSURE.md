@@ -113,6 +113,11 @@
 | [extension/background.js](../extension/background.js) | 위 3개 핸들러 — m.search fetch(_INITIAL_STATE 조각)·qra JSON·상품페이지 백그라운드 탭 수집(payload 회신) |
 
 - 라우트: `admin.shop-keyword.*`(index/store/check/pending/check-html/supplement/product-info/pause/show/destroy) — [routes/web.php](../routes/web.php). `['auth','operator']` admin 그룹(운영자 전용). 공개 Short URL `/s/{token}` 은 그대로.
+- **주문 연동(2026-07-22)**: 쇼핑 유입 주문(/admin/orders — field_values keyword·shop_url)에서 "수집요청" →
+  `POST admin/orders/{order}/shop-keyword` 가 분석 생성 + `shop_keyword_analyses.marketing_order_id` 상호 연결(멱등).
+  주문 목록 No(desc)·유입키워드 열, 주문 상세 연결 카드, 분석 상단 주문 역링크 — 발주 시 분석 Short URL 사용.
+  **대표이미지(thumbnail_url)**: 확장 v0.3.9 상품페이지 수집이 채움(`shop_product_infos.thumbnail_url`, 상태 JSON→og:image→첫 이미지 폴백,
+  관련 태그는 seller_tags + 상세 하단 `#태그` DOM 폴백) — 분석 상단에 미리보기·복사.
 - 메뉴: 미등록이어도 접근 가능(menu.gate 기본 허용). 사이드바는 `/admin/menus`에서 **쇼핑** 그룹 하위로 수동 추가([[menus-via-admin-not-seeder]]).
 - 설정: `config/rankfree.php` → `shopping.exposure`(top·**hard_cap**·max_tokens·attr_pool·batch_size·batch_sec·suffixes). 조합수 선택 UI 없음 — 전부 생성.
 - 확장: manifest 0.3.6 — host `m.search.naver.com`·`s.search.naver.com` 추가, console-bridge content script 는 `admin/shop-keyword*`(+구 `console/shop-keyword*` prod 호환) 매칭. qra("함께 많이 찾는")는 **모바일+PC 합집합**. **확장 새로고침 + 페이지 새로고침 필요**.

@@ -371,6 +371,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/orders/{order}', [MarketingOrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{order}/status', [MarketingOrderController::class, 'updateStatus'])->name('orders.status');
     Route::post('/orders/{order}/approve', [MarketingOrderController::class, 'approve'])->name('orders.approve');
+    Route::post('/orders/{order}/shop-keyword', [MarketingOrderController::class, 'createShopKeyword'])->middleware('throttle:30,1')->name('orders.shop-keyword');
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
 

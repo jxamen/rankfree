@@ -41,6 +41,7 @@ class ShopKeywordExposureController extends Controller
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|min:1|max:40',
+            'check_method' => 'nullable|in:api,search',
         ]);
 
         // 조합 수는 선택하지 않는다 — 만들 수 있는 조합 전부 생성(hard_cap 안전선).
@@ -49,7 +50,7 @@ class ShopKeywordExposureController extends Controller
             $data['core_keyword'],
             $data['product'],
             null,
-            ['threshold' => $data['threshold'] ?? null],
+            ['threshold' => $data['threshold'] ?? null, 'check_method' => $data['check_method'] ?? 'api'],
         );
 
         return redirect()->route('admin.shop-keyword.show', $analysis);
@@ -134,6 +135,7 @@ class ShopKeywordExposureController extends Controller
             'info.seller_tags' => 'nullable|array|max:60',
             'info.seller_tags.*' => 'nullable|string|max:80',
             'info.category' => 'nullable|string|max:191',
+            'info.thumbnail_url' => 'nullable|string|max:500',   // 대표이미지 — 쇼핑 유입 발주용(2026-07-22)
         ]);
 
         $info = (array) ($data['info'] ?? []);
@@ -151,6 +153,7 @@ class ShopKeywordExposureController extends Controller
                         fn ($s) => trim((string) $s), (array) ($info['seller_tags'] ?? [])
                     )))),
                     'category' => $info['category'] ?? null,
+                    'thumbnail_url' => $info['thumbnail_url'] ?? null,
                     'collected_at' => now(),
                 ],
             );
@@ -366,11 +369,16 @@ class ShopKeywordExposureController extends Controller
             ->values();
 
         return view('admin.shop-keyword.show', [
-            'analysis' => $analysis,
+            'analysis' => $analysis->loadMissing('order'),
             'tokens' => $tokens,
             'combos' => $combos,
             'patterns' => $patterns,
             'shortLinks' => $analysis->shortLinks()->orderBy('group_no')->get(),
+            // 대표이미지(발주용) — 확장 상품페이지 수집분(2026-07-22)
+            'thumbnailUrl' => (string) ($analysis->product_id
+                ? \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+                    ->where('channel_product_id', $analysis->product_id)->value('thumbnail_url')
+                : null) ?: null,
         ]);
     }
 

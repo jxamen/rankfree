@@ -46,19 +46,23 @@
         <table class="w-full" style="min-width:900px;">
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
-                    <th class="text-left px-5 py-3 font-semibold" style="width:150px;">주문번호</th>
+                    <th class="text-left px-5 py-3 font-semibold" style="width:56px;">No</th>
+                    <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문번호</th>
                     <th class="text-left px-3 py-3 font-semibold">상품</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문자</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:110px;">수량 · 기간</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:110px;">금액</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:80px;">상태</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
                     <th class="text-right px-5 py-3 font-semibold" style="width:130px;">주문일시</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($orders as $o)
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
-                        <td class="px-5 py-3">
+                        {{-- No — 최신 주문이 가장 큰 번호(desc, 페이지 걸쳐 연속) --}}
+                        <td class="px-5 py-3 text-muted font-mono" style="font-size:var(--fs-xs);">{{ $orders->total() - $orders->firstItem() + 1 - $loop->index }}</td>
+                        <td class="px-3 py-3">
                             <a href="{{ route('admin.orders.show', $o) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $o->order_no }}</a>
                         </td>
                         <td class="px-3 py-3 text-body" style="font-size:var(--fs-xs);">{{ $o->product?->title ?? '(삭제된 상품)' }}</td>
@@ -73,10 +77,25 @@
                         <td class="px-3 py-3 text-center">
                             <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $statusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $statuses[$o->status] ?? $o->status }}</span>
                         </td>
+                        {{-- 쇼핑 유입키워드 — 연결된 분석이 있으면 열기, 없고 쇼핑 주문이면 수집요청 --}}
+                        <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);white-space:nowrap;">
+                            @if ($a = $o->shopKeywordAnalyses->first())
+                                <a href="{{ route('admin.shop-keyword.show', $a) }}" class="text-ink font-semibold" title="연결된 노출 키워드 분석 열기">
+                                    노출 {{ number_format($a->exposed_count) }} ↗
+                                </a>
+                            @elseif ($o->shopKeywordSource())
+                                <form method="POST" action="{{ route('admin.orders.shop-keyword', $o) }}" style="display:inline;">
+                                    @csrf
+                                    <button type="submit" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">수집요청</button>
+                                </form>
+                            @else
+                                <span class="text-muted-soft">—</span>
+                            @endif
+                        </td>
                         <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
+                    <tr><td colspan="9" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
                 @endforelse
             </tbody>
         </table>

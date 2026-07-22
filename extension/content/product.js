@@ -1910,7 +1910,20 @@
       const node = spNodeFrom(await getMyPreloadedAsync(2500));
       const A = (node && node.product) || {};
       const channel = (node && node.smartStoreV2 && node.smartStoreV2.channel) || {};
-      const tags = (((A.seoInfo && A.seoInfo.sellerTags) || []).map((t) => (t && t.text) || '')).filter(Boolean);
+      let tags = (((A.seoInfo && A.seoInfo.sellerTags) || []).map((t) => (t && t.text) || '')).filter(Boolean);
+      // 태그 폴백(2026-07-22) — 상태 JSON에 없으면 상세 하단 관련 태그 링크(#…)에서 추출
+      if (!tags.length) {
+        tags = Array.prototype.map.call(
+          document.querySelectorAll('a[href*="search?q=%23"]'),
+          (a) => (a.textContent || '').trim().replace(/^#/, '')
+        ).filter(Boolean);
+      }
+      // 대표이미지(썸네일) 1개 — 쇼핑 유입 발주에 필요(2026-07-22). 상태 JSON → og:image → 첫 상품 이미지 순
+      const thumb = String(
+        (A.representImage && A.representImage.url)
+        || ((document.querySelector('meta[property="og:image"]') || {}).content || '')
+        || ((document.querySelector('img[src*="shop-phinf.pstatic.net"]') || {}).src || '')
+      ).slice(0, 500);
       const nss = A.naverShoppingSearchInfo || {};
       const payload = {
         channel_product_id: String(cpid),
@@ -1920,6 +1933,7 @@
         price: num(A.salePrice || getProductPrice() || 0) || null,
         seller_tags: tags.slice(0, 60),
         category: String((A.category && A.category.wholeCategoryName) || '').slice(0, 191),
+        thumbnail_url: thumb || null,
       };
       if (!payload.title && !payload.seller_tags.length) return;   // 아무것도 못 뽑으면 스킵
       await sendBg('saveProductInfo', payload);
