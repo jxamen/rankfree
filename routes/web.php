@@ -359,6 +359,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::get('/products', [MarketingProductController::class, 'index'])->name('products');
     Route::get('/products/create', [MarketingProductController::class, 'create'])->name('products.create');
     Route::post('/products', [MarketingProductController::class, 'store'])->name('products.store');
+    Route::post('/products/reorder', [MarketingProductController::class, 'reorder'])->name('products.reorder');
     Route::get('/products/{product}/edit', [MarketingProductController::class, 'edit'])->name('products.edit');
     Route::put('/products/{product}', [MarketingProductController::class, 'update'])->name('products.update');
     Route::post('/products/{product}/toggle', [MarketingProductController::class, 'toggle'])->name('products.toggle');

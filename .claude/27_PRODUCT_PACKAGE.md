@@ -11,6 +11,12 @@
 - **서버 강제**([OrderController@store](../app/Http/Controllers/OrderController.php)): 화면 제출값을 믿지 않는다 — `fixed_quantity` 있으면 수량 무조건 그 값(field_values 의 일수량도 덮어씀), `fixed_days` 있으면 일수·종료일을 서버가 재계산. min/max·min_days 검증은 고정일 때 건너뜀(고정값이 우선).
 - 실측(2026-07-22 Playwright): 수량 100·기간 7일 고정 상품(단가 100) → 입력 잠김·총액 70,000 자동, 쿠폰(26) 병행 65,000, 저장값 qty=100·days=7 확인.
 
+## 노출 순서 (드래그 정렬, 2026-07-22)
+
+- `marketing_products.sort_order`([마이그레이션](../database/migrations/2026_07_22_002000_add_sort_order_to_marketing_products.php), 기존 순서(유형→id)로 백필) — **셀프마케팅 카탈로그·관리자 목록 공통 노출 순서**.
+- 관리자 [상품 목록](../resources/views/admin/products/index.blade.php)에서 ⠿ 핸들 드래그(SortableJS, 메뉴 관리와 동일 패턴) → `admin.products.reorder`(ajax)로 즉시 저장. **필터(검색·유형) 상태에선 비활성**(전체 목록에서만 순서 의미가 유효). 페이지네이션은 페이지 오프셋을 더해 저장.
+- 카탈로그([SelfMarketingController](../app/Http/Controllers/SelfMarketingController.php))는 `sort_order → id` 정렬. 카드/리스트 뷰(`view=list`) 동일 적용.
+
 ## 상품 복제
 
 - 목록의 **복제** 버튼 → [duplicate()](../app/Http/Controllers/Admin/MarketingProductController.php) — 상품 + 필드·단계(그룹 매핑 유지)·업체 배분까지 통째로 복사.

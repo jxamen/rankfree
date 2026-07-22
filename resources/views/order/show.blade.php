@@ -40,6 +40,21 @@
         <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
 
+    @php
+        // 활성 탭 — 주문 완료 직후엔 접수 내역(새 주문 확인), 검증 오류 시엔 주문 폼 유지
+        $activeTab = request('tab') === 'history' || (session('order_done') && ! $errors->any()) ? 'history' : 'order';
+    @endphp
+    {{-- 좌: 주문(폼) / 우: 주문 내역 --}}
+    <div class="rf-tabs" role="tablist">
+        <button type="button" class="rf-tab {{ $activeTab === 'order' ? 'on' : '' }}" data-tab="order" role="tab">주문</button>
+        <button type="button" class="rf-tab {{ $activeTab === 'history' ? 'on' : '' }}" data-tab="history" role="tab">주문 내역 <span class="text-muted-soft">{{ number_format($myOrdersTotal ?? 0) }}</span></button>
+        @if (auth()->user()?->isOperator())
+            {{-- 어드민 전용 — 상품 수정 페이지 바로가기 --}}
+            <a href="{{ route('admin.products.edit', $product) }}" class="btn btn-secondary btn-sm" style="margin-left:auto;align-self:center;margin-bottom:8px;">상품 수정</a>
+        @endif
+    </div>
+
+    <div class="rf-tabpane" data-tab="order" @if ($activeTab !== 'order') hidden @endif>
     <form method="POST" action="{{ route('order.store', $product->order_token) }}" enctype="multipart/form-data" id="order-form"
           data-step-mode="{{ $stepMode ? '1' : '0' }}" data-mode="{{ $product->quantity_mode }}"
           data-unit="{{ $product->min_price }}" data-qty="{{ $qtyName }}" data-start="{{ $startName }}" data-end="{{ $endName }}" data-days="{{ $daysName }}"
@@ -177,18 +192,21 @@
             </div>
         @endif
     </form>
+    </div>
 
-    {{-- 이 상품에 대한 내 주문 접수 내역 — 최근 20건 --}}
-    @if (($myOrders ?? collect())->isNotEmpty())
-        @php
-            $orderStatuses = \App\Models\MarketingOrder::STATUSES;
-            $orderStatusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
-        @endphp
-        <div class="card overflow-hidden mt-6">
-            <div class="px-5 pt-5 pb-3 flex items-baseline gap-2">
-                <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 접수 내역</span>
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 대한 내 주문 {{ number_format($myOrdersTotal) }}건{{ $myOrdersTotal > $myOrders->count() ? ' · 최근 '.$myOrders->count().'건 표시' : '' }}</span>
+    {{-- 이 상품에 대한 내 주문 접수 내역 — 최근 20건. 주문이 없어도 영역은 항상 표기 --}}
+    @php
+        $myOrders = $myOrders ?? collect();
+        $orderStatuses = \App\Models\MarketingOrder::STATUSES;
+        $orderStatusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
+    @endphp
+    <div class="rf-tabpane" data-tab="history" @if ($activeTab !== 'history') hidden @endif>
+    <div class="card overflow-hidden">
+        @if ($myOrders->isEmpty())
+            <div class="text-center text-muted-soft" style="padding:36px 24px;font-size:var(--fs-xs);">
+                아직 이 상품에 주문한 내역이 없습니다. "주문" 탭에서 첫 주문을 접수하면 진행 상태가 여기에 표시됩니다.
             </div>
+        @else
             <div style="overflow-x:auto;">
                 <table class="w-full" style="min-width:640px;">
                     <thead>
@@ -217,8 +235,9 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-    @endif
+        @endif
+    </div>
+    </div>
 </section>
 
 <style>
@@ -226,7 +245,23 @@
     #order-form .order-step.active { display: block; }
     #order-form [data-required].step-err .input,
     #order-form [data-required].step-err input { border-color: var(--color-error); }
+    /* 주문 / 주문 내역 탭 — admin settings 와 동일 패턴 */
+    .rf-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-hairline); margin-bottom: 20px; }
+    .rf-tab { padding: 9px 18px; font-size: var(--fs-sm); font-weight: 600; color: var(--color-muted); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .12s ease, border-color .12s ease; }
+    .rf-tab:hover { color: var(--color-ink); }
+    .rf-tab.on { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+    .rf-tabpane[hidden] { display: none; }
 </style>
+
+<script>
+// 주문 ↔ 주문 내역 탭 전환
+document.querySelectorAll('.rf-tab').forEach(function (b) {
+    b.addEventListener('click', function () {
+        document.querySelectorAll('.rf-tab').forEach(function (x) { x.classList.toggle('on', x === b); });
+        document.querySelectorAll('.rf-tabpane').forEach(function (p) { p.hidden = p.dataset.tab !== b.dataset.tab; });
+    });
+});
+</script>
 
 <script>
 (function () {

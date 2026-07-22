@@ -18,7 +18,7 @@ class MarketingProductController extends Controller
         $q = trim((string) $request->query('q', ''));
         $type = $request->query('type');
 
-        $query = MarketingProduct::withCount('fields', 'orders')->latest();
+        $query = MarketingProduct::withCount('fields', 'orders')->orderBy('sort_order')->orderBy('id');
         if ($q !== '') {
             $query->where('title', 'like', "%{$q}%");
         }
@@ -68,6 +68,19 @@ class MarketingProductController extends Controller
         $product->update(['is_active' => ! $product->is_active]);
 
         return back();
+    }
+
+    /** 드래그 정렬 일괄 저장 (ajax) — order: [{id, sort_order}]. 카탈로그·관리자 목록 공통 노출 순서. */
+    public function reorder(Request $request)
+    {
+        foreach ((array) $request->input('order', []) as $o) {
+            $id = (int) ($o['id'] ?? 0);
+            if ($id) {
+                MarketingProduct::where('id', $id)->update(['sort_order' => (int) ($o['sort_order'] ?? 0)]);
+            }
+        }
+
+        return response()->json(['success' => true]);
     }
 
     /** 상품 복제 — 필드·단계·업체 배분까지 통째로. 새 주문 URL 발급, 실수 노출 방지로 비활성 시작. */

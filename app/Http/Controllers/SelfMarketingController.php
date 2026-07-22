@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MarketingProduct;
 use App\Models\ProductType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 
 /**
  * 셀프마케팅 — 관리자가 등록한 마케팅 상품을 카드로 노출(비회원 열람 가능, 주문은 로그인).
@@ -16,12 +17,19 @@ class SelfMarketingController extends Controller
     {
         $type = $request->query('type');
         $q = trim((string) $request->query('q', ''));
-        $view = $request->query('view') === 'list' ? 'list' : 'card';
+
+        // 뷰 타입(카드/리스트) — 명시 선택은 쿠키(1년)로 기억, 파라미터 없으면 마지막 선택 유지
+        $view = $request->query('view');
+        if (in_array($view, ['card', 'list'], true)) {
+            Cookie::queue('sm_view', $view, 60 * 24 * 365);
+        } else {
+            $view = $request->cookie('sm_view') === 'list' ? 'list' : 'card';
+        }
 
         $products = MarketingProduct::where('is_active', true)
             ->when($type, fn ($query) => $query->where('product_type', $type))
             ->when($q !== '', fn ($query) => $query->where('title', 'like', "%{$q}%"))
-            ->orderBy('product_type')->orderBy('id')
+            ->orderBy('sort_order')->orderBy('id')
             ->get();
 
         // 유형 코드 → 이름 맵

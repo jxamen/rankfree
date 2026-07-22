@@ -16,7 +16,7 @@ class MarketingProduct extends Model
         'fixed_quantity', 'fixed_days',
         'quantity_mode', 'min_daily_quantity', 'field_render_mode', 'default_fulfillment',
         'daily_cutoff_hour', 'process_weekends', 'process_holidays', 'processing_lag_days',
-        'order_token', 'is_active', 'created_by',
+        'order_token', 'is_active', 'sort_order', 'created_by',
     ];
 
     protected $casts = [
@@ -27,6 +27,7 @@ class MarketingProduct extends Model
         'fixed_quantity' => 'integer', 'fixed_days' => 'integer',
         'min_daily_quantity' => 'integer', 'daily_cutoff_hour' => 'integer', 'processing_lag_days' => 'integer',
         'process_weekends' => 'boolean', 'process_holidays' => 'boolean', 'is_active' => 'boolean',
+        'sort_order' => 'integer',
     ];
 
     protected static function booted(): void

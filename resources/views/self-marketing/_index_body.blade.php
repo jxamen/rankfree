@@ -29,7 +29,7 @@
         </form>
         {{-- 카드 ↔ 리스트 뷰 토글 — 유형 칩과 같은 badge 스타일 --}}
         <div class="flex items-center gap-1" style="border-left:1px solid var(--color-hairline-soft);padding-left:10px;">
-            <a href="{{ route('self-marketing', array_filter(['type' => $type, 'q' => $q])) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ ! $viewParam ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">카드</a>
+            <a href="{{ route('self-marketing', array_filter(['type' => $type, 'q' => $q, 'view' => 'card'])) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ ! $viewParam ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">카드</a>
             <a href="{{ route('self-marketing', array_filter(['type' => $type, 'q' => $q, 'view' => 'list'])) }}" class="badge" style="font-size:var(--fs-xs);padding:5px 13px;{{ $viewParam ? 'background:var(--color-ink);color:var(--color-canvas);' : '' }}">리스트</a>
         </div>
     </div></div>
@@ -52,7 +52,7 @@
                             <th class="text-left px-5 py-3 font-semibold" style="width:120px;">유형</th>
                             <th class="text-left px-3 py-3 font-semibold">상품명</th>
                             <th class="text-right px-3 py-3 font-semibold" style="width:130px;">시작가</th>
-                            <th class="text-right px-5 py-3 font-semibold" style="width:110px;">주문</th>
+                            <th class="text-right px-5 py-3 font-semibold" style="width:190px;">주문</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -75,8 +75,9 @@
                                 <td class="px-3 py-3 text-right text-ink font-medium" style="font-size:var(--fs-sm);white-space:nowrap;">
                                     {{ $price > 0 ? number_format($price).'원~' : '견적 문의' }}
                                 </td>
-                                <td class="px-5 py-3 text-right">
-                                    <a href="{{ $product->orderUrl() }}" class="btn btn-primary btn-sm flex-none">신청하기</a>
+                                <td class="px-5 py-3 text-right" style="white-space:nowrap;">
+                                    <a href="{{ $product->orderUrl() }}?tab=history" class="btn btn-secondary btn-sm">주문내역</a>
+                                    <a href="{{ $product->orderUrl() }}" class="btn btn-primary btn-sm">신청하기</a>
                                 </td>
                             </tr>
                         @endforeach
@@ -92,22 +93,32 @@
                     $desc = trim(strip_tags((string) $product->description));
                     $price = (float) $product->min_price;
                 @endphp
-                <div class="card p-6 flex flex-col" style="box-shadow:var(--shadow-card);">
-                    <span class="badge self-start" style="font-size:var(--fs-xs);padding:3px 10px;">{{ $typeName }}</span>
-                    <h3 class="mt-3" style="font-size:var(--fs-md);line-height:1.35;"><a href="{{ $product->orderUrl() }}" class="text-ink font-semibold hover:underline">{{ $product->title }}</a></h3>
+                <div class="card p-6 flex flex-col relative" style="box-shadow:var(--shadow-card);overflow:hidden;">
+                    {{-- 배경 장식 SVG — 우상단 동심원 라인(토큰 색, 데이터 의미 없음) --}}
+                    <svg class="absolute" viewBox="0 0 200 200" fill="none" aria-hidden="true"
+                         style="top:-64px;right:-64px;width:200px;height:200px;color:var(--color-hairline);pointer-events:none;">
+                        <circle cx="100" cy="100" r="34" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="100" cy="100" r="62" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+                        <circle cx="100" cy="100" r="90" stroke="currentColor" stroke-width="1.5" opacity=".3"/>
+                    </svg>
+                    <span class="badge self-start relative" style="font-size:var(--fs-xs);padding:3px 10px;">{{ $typeName }}</span>
+                    <h3 class="mt-3 relative" style="font-size:var(--fs-md);line-height:1.35;"><a href="{{ $product->orderUrl() }}" class="text-ink font-semibold hover:underline">{{ $product->title }}</a></h3>
                     @if ($desc !== '')
-                        <p class="text-muted mt-2 flex-1" style="font-size:var(--fs-sm);line-height:1.65;">{{ \Illuminate\Support\Str::limit($desc, 110) }}</p>
+                        <p class="text-muted mt-2 flex-1 relative" style="font-size:var(--fs-sm);line-height:1.65;">{{ \Illuminate\Support\Str::limit($desc, 110) }}</p>
                     @else
                         <div class="flex-1"></div>
                     @endif
-                    <div class="mt-5 flex items-end justify-between gap-3" style="border-top:1px solid var(--color-hairline-soft);padding-top:16px;">
+                    <div class="mt-5 flex items-end justify-between gap-3 relative" style="border-top:1px solid var(--color-hairline-soft);padding-top:16px;">
                         <div>
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">시작가</div>
                             <div class="font-display text-ink" style="font-size:var(--fs-lg);line-height:1.1;">
                                 {{ $price > 0 ? number_format($price).'원~' : '견적 문의' }}
                             </div>
                         </div>
-                        <a href="{{ $product->orderUrl() }}" class="btn btn-primary btn-sm flex-none">신청하기</a>
+                        <div class="flex items-center gap-1.5 flex-none">
+                            <a href="{{ $product->orderUrl() }}?tab=history" class="btn btn-secondary btn-sm">주문내역</a>
+                            <a href="{{ $product->orderUrl() }}" class="btn btn-primary btn-sm">신청하기</a>
+                        </div>
                     </div>
                 </div>
             @endforeach

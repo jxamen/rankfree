@@ -28,11 +28,21 @@
     </div>
 </form>
 
+@php
+    // 드래그 정렬은 전체 목록(무필터)에서만 — 필터 상태에선 순서 의미가 어긋난다
+    $sortable = $q === '' && ! $type;
+    $sortBase = ($products->currentPage() - 1) * $products->perPage();
+@endphp
+@if ($sortable)
+    <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);">⠿ 핸들을 드래그해 노출 순서를 바꿀 수 있습니다 — 셀프마케팅 카탈로그에 같은 순서로 노출됩니다.</div>
+@endif
+
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
         <table class="w-full" style="min-width:820px;">
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
+                    @if ($sortable)<th style="width:36px;"></th>@endif
                     <th class="text-center px-3 py-3 font-semibold" style="width:70px;" title="외부 주문 API의 product_id">번호(API)</th>
                     <th class="text-left px-5 py-3 font-semibold">상품명</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:120px;">유형</th>
@@ -43,9 +53,12 @@
                     <th class="text-right px-5 py-3 font-semibold" style="width:200px;">작업</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody {!! $sortable ? 'id="rf-product-sort"' : '' !!}>
                 @forelse ($products as $p)
-                    <tr style="border-top:1px solid var(--color-hairline-soft);">
+                    <tr style="border-top:1px solid var(--color-hairline-soft);" data-id="{{ $p->id }}">
+                        @if ($sortable)
+                            <td class="text-center rf-drag" style="cursor:grab;color:var(--color-muted-soft);font-size:var(--fs-xs);" title="드래그해서 순서 변경">⠿</td>
+                        @endif
                         <td class="px-3 py-3 text-center text-body font-mono" style="font-size:var(--fs-xs);" title="외부 주문 API product_id">{{ $p->id }}</td>
                         <td class="px-5 py-3">
                             <a href="{{ route('admin.products.edit', $p) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $p->title }}</a>
@@ -75,7 +88,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="8" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">아직 상품이 없습니다. 우측 상단 "＋ 새 상품"으로 만드세요.</td></tr>
+                    <tr><td colspan="{{ $sortable ? 9 : 8 }}" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">아직 상품이 없습니다. 우측 상단 "＋ 새 상품"으로 만드세요.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -107,4 +120,35 @@ document.querySelectorAll('.rf-copy').forEach(function (b) {
     });
 });
 </script>
+
+@if ($sortable)
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script>
+// 드래그 정렬 — 놓는 즉시 저장(페이지 오프셋 반영). 실패 시 알림 후 원래 순서로 복구.
+(function () {
+    if (typeof window.Sortable !== 'function') { console.error('SortableJS not loaded'); return; }
+    var tbody = document.getElementById('rf-product-sort');
+    if (!tbody) return;
+    var base = {{ $sortBase }};
+    new Sortable(tbody, {
+        handle: '.rf-drag',
+        draggable: 'tr[data-id]',
+        animation: 150,
+        onEnd: function () {
+            var order = [].filter.call(tbody.children, function (tr) { return tr.dataset && tr.dataset.id; })
+                .map(function (tr, i) { return { id: tr.dataset.id, sort_order: base + i }; });
+            fetch(@json(route('admin.products.reorder')), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': @json(csrf_token()), 'Accept': 'application/json' },
+                body: JSON.stringify({ order: order }),
+            }).then(function (r) { if (!r.ok) throw 0; })
+              .catch(function () {
+                  Swal.fire({ icon: 'error', title: '순서 저장에 실패했습니다', text: '잠시 후 다시 시도하세요.' })
+                      .then(function () { location.reload(); });
+              });
+        },
+    });
+})();
+</script>
+@endif
 @endsection
