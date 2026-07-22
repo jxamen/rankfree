@@ -588,8 +588,9 @@ class ShopKeywordExposureAnalyzer
     /** 제목의 연속 구절(2~$maxTokens 단어 n-gram) — 공백 구분, 붙어있는 그대로(예: "600정 X 1개"). @return list<string> */
     private function titlePhrases(string $title, int $maxTokens): array
     {
+        // trim() 은 바이트 단위라 문자 목록에 멀티바이트(·)가 있으면 한글이 반쪽으로 잘려 깨진 UTF-8 이 생긴다 — 유니코드 안전 trim
         $toks = array_values(array_filter(
-            array_map(fn ($t) => trim($t, " \t.,·()[]{}\"'"), preg_split('/\s+/u', trim($title)) ?: []),
+            array_map(fn ($t) => (string) preg_replace('/^[\s.,·()\[\]{}"\']+|[\s.,·()\[\]{}"\']+$/u', '', $t), preg_split('/\s+/u', trim($title)) ?: []),
             fn ($t) => $t !== ''
         ));
         $out = [];
@@ -598,6 +599,9 @@ class ShopKeywordExposureAnalyzer
         for ($i = 0; $i < $n; $i++) {
             for ($len = 2; $len <= $maxTokens && $i + $len <= $n; $len++) {
                 $phrase = preg_replace('/\s+/u', ' ', implode(' ', array_slice($toks, $i, $len)));
+                if ($phrase === null || $phrase === '') {
+                    continue;   // 깨진 UTF-8 등 정규식 실패 — 이 구절만 건너뛴다
+                }
                 if ($this->hasNegative($phrase) || ! KeywordHubCollector::acceptableKeyword($phrase)) {
                     continue;
                 }
@@ -627,7 +631,8 @@ class ShopKeywordExposureAnalyzer
         $out = [];
         $seen = [];
         foreach (preg_split('/\s+/u', trim($title)) ?: [] as $w) {
-            $w = trim($w, " \t.,·/()[]{}\"'");
+            // 바이트 trim 에 멀티바이트(·)가 있으면 "캐비넷"류 한글 끝 바이트가 잘려 깨진 UTF-8 이 된다 — 유니코드 안전 trim
+            $w = (string) preg_replace('/^[\s.,·\/()\[\]{}"\']+|[\s.,·\/()\[\]{}"\']+$/u', '', $w);
             $nw = $this->norm($w);
             if ($nw === '' || isset($seen[$nw]) || mb_strlen($w, 'UTF-8') < 2) {
                 continue;
