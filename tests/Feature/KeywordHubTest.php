@@ -178,6 +178,26 @@ class KeywordHubTest extends TestCase
         $this->assertSame(2, HubAutoRun::query(null)->count());                          // 플레이스 + 시장분석 보유 쇼핑
     }
 
+    /** 시스템 발행본만 있는 키워드의 중복 후보는 거부가 아니라 published 로 정리된다(오거부 실사고 수정). */
+    public function test_publisher_marks_duplicate_candidate_published_when_system_doc_exists(): void
+    {
+        $cat = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구']);
+        $cat2 = $this->category(['type' => 'shopping', 'name' => '생활', 'slug' => '생활']);
+        $c = KeywordCandidate::create(['category_id' => $cat->id, 'keyword' => '여름이불', 'source' => 'datalab', 'monthly_total' => 12000, 'status' => 'approved']);
+        $dup = KeywordCandidate::create(['category_id' => $cat2->id, 'keyword' => '여름이불', 'source' => 'datalab', 'monthly_total' => 12000, 'status' => 'approved']);
+        $sourceUser = User::create(['name' => 'u', 'email' => 'dup-source@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $sourceUser->id, 'keyword' => '여름이불', 'snapshot' => ['top_products' => []]]);
+
+        app(KeywordHubPublisher::class)->publish($c);          // 소스 복제 → 시스템 발행본 생성
+        MarketAnalysis::where('user_id', $sourceUser->id)->delete();   // 소스가 사라져도(정리 등)
+
+        $doc = app(KeywordHubPublisher::class)->publish($dup); // 중복 후보 — 시스템 발행본만 있는 상태
+
+        $this->assertNotNull($doc, '시스템 발행본이 있으면 중복 후보는 발행 완료로 처리돼야 한다');
+        $this->assertSame('published', $dup->fresh()->status);
+        $this->assertNull($dup->fresh()->note);
+    }
+
     /** 쇼핑 시장 분석은 확장 플로 수집 데이터로만 — 소스 없으면 서버 생성 없이 보류한다(2026-07-22 확정). */
     public function test_publisher_rejects_shopping_candidate_without_extension_source(): void
     {

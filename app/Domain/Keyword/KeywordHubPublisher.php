@@ -88,6 +88,17 @@ class KeywordHubPublisher
             return $doc;
         }
 
+        // 소스(사용자 수집분)는 없어도 **시스템 발행본이 이미 있으면** 그 키워드는 발행 완료 상태다 —
+        // 같은 키워드가 여러 카테고리에 후보로 존재해 중복 후보가 '확장 수집 데이터 필요'로 오거부되던
+        // 실사고(시간당 60건, 발행 대상 선별과 판정 불일치) 수정. 후보만 published 로 정리한다.
+        $existing = MarketAnalysis::where('user_id', $this->systemUserId())
+            ->where('keyword', $c->keyword)->first();
+        if ($existing) {
+            $c->update(['status' => 'published', 'note' => null]);
+
+            return $existing;
+        }
+
         // 쇼핑 시장 분석은 **확장 플로 수집 데이터로만** 만든다(사용자 확정 2026-07-22) —
         // 서버 SERP 기반 자동 생성은 판매량·매출·차트가 빠진 껍데기 문서라 발행하지 않는다.
         $c->update(['status' => 'rejected', 'note' => '쇼핑 시장 분석은 확장 수집 데이터 필요 — 보류 ('.now()->format('Y-m-d').')']);
