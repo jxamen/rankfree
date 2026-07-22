@@ -29,7 +29,7 @@
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                     <th class="text-center px-3 py-3 font-semibold" style="width:44px;">No</th>
                     <th class="text-left px-5 py-3 font-semibold">업체명</th>
-                    <th class="text-center px-3 py-3 font-semibold" style="width:90px;">채널</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:190px;">채널</th>
                     <th class="text-left px-3 py-3 font-semibold">전송 대상</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:90px;">연결 상품</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:80px;">활성</th>
@@ -44,9 +44,7 @@
                             <div class="text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $v->name }}</div>
                             @if ($v->memo)<div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $v->memo }}</div>@endif
                         </td>
-                        <td class="px-3 py-3 text-center">
-                            <span class="badge" style="font-size:var(--fs-xs);background:var(--color-surface-strong);">{{ \App\Models\Vendor::CHANNELS[$v->channel] ?? $v->channel }}</span>
-                        </td>
+                        <td class="px-3 py-3 text-center text-body" style="font-size:var(--fs-xs);">{{ \App\Models\Vendor::CHANNELS[$v->channel] ?? $v->channel }}</td>
                         <td class="px-3 py-3 text-muted" style="font-size:var(--fs-xs);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             {{ $v->channel === 'gsheet' ? ('시트 '.$v->gsheet_id.($v->gsheet_tab ? ' · '.$v->gsheet_tab : '')) : ($v->api_method.' '.$v->api_url) }}
                         </td>

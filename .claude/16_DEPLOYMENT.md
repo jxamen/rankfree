@@ -29,6 +29,9 @@
 **API 키만으로 되는 기능** — 로컬 `.env` 값 그대로 복사:
 - 키워드 검색량·경쟁: `NAVER_SEARCHAD_API_KEY` `NAVER_SEARCHAD_SECRET` `NAVER_SEARCHAD_CUSTOMER_ID`
 - 쇼핑 순위·셀러력·시장분석: `NAVER_SHOPPING_API_KEYS`
+- 외부 발주 구글시트(전송·열 조회): `GOOGLE_SERVICE_ACCOUNT_JSON=storage/app/google-service-account.json` 절대경로 —
+  키 파일은 git 미포함(storage gitignore)이라 **scp 로 별도 업로드**(jcurve 소유·600). 로컬은 shopitrend 서비스 계정 키 사용(2026-07-22 설정),
+  발주 시트는 `id-615@shopitrend.iam.gserviceaccount.com` 에 **편집자 공유** 필수
 
 **Playwright(chromium) 필요한 기능** — 키워드 성별·연령·트렌드(검색광고 웹세션), 스마트플레이스, 경쟁 SERP:
 - `.env`: `NAVER_ADS_LOGIN_ID` `NAVER_ADS_LOGIN_PW` `NAVER_ADS_CUSTOMER_ID` `NAVER_ADS_ACCOUNT_NO`, `RANKFREE_NODE=/home/jcurve/.nvm/versions/node/v22.14.0/bin/node`

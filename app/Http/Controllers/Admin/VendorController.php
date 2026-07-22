@@ -43,6 +43,39 @@ class VendorController extends Controller
         return back();
     }
 
+    /**
+     * 구글시트 헤더(1행) 조회 (ajax) — 상품 편집 매핑 UI 에서 시트 열 이름을 자동으로 보여주기 위함.
+     * 전송(append)과 동일한 서비스 계정·스코프를 사용하므로 발주가 되는 시트면 조회도 된다.
+     */
+    public function sheetColumns(Vendor $vendor)
+    {
+        if ($vendor->channel !== 'gsheet' || trim((string) $vendor->gsheet_id) === '') {
+            return response()->json(['error' => '구글시트 채널 업체가 아니거나 시트 ID가 설정되지 않았습니다.'], 422);
+        }
+        $token = \App\Support\GoogleServiceAccount::token('https://www.googleapis.com/auth/spreadsheets');
+        if (! $token) {
+            return response()->json(['error' => '구글 서비스 계정 인증 실패 — .env GOOGLE_SERVICE_ACCOUNT_JSON(키 파일 경로)을 확인하세요.'], 422);
+        }
+
+        $tab = trim((string) $vendor->gsheet_tab) ?: '시트1';
+        $range = rawurlencode("'{$tab}'!1:1");
+        $res = \Illuminate\Support\Facades\Http::timeout(15)->withToken($token)
+            ->get("https://sheets.googleapis.com/v4/spreadsheets/{$vendor->gsheet_id}/values/{$range}");
+        if (! $res->successful()) {
+            $hint = match ($res->status()) {
+                403 => ' — 시트를 서비스 계정 이메일에 공유했는지 확인하세요.',
+                404 => ' — 시트 ID·탭 이름을 확인하세요.',
+                default => '',
+            };
+
+            return response()->json(['error' => '시트 조회 실패 (HTTP '.$res->status().')'.$hint], 422);
+        }
+
+        $cols = array_map(fn ($c) => trim((string) $c), $res->json('values.0', []) ?? []);
+
+        return response()->json(['tab' => $tab, 'columns' => $cols]);
+    }
+
     public function destroy(Vendor $vendor)
     {
         $name = $vendor->name;

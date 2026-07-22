@@ -166,7 +166,7 @@
         </div>
         <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
             관리자가 주문을 <b class="text-muted">승인</b>하면 아래 배분(비율/고정 수량)대로 각 업체에 자동 전송됩니다(API 호출 · 구글시트).
-            <b class="text-muted">[매핑]</b>에서 업체별로 보낼 키 ← 주문 값 연결을 설정하세요 — 구글시트는 매핑 순서대로 열(A, B, C…)에 기록됩니다. 비율 내림 잔여분은 마지막 비율 업체에 배분됩니다.
+            <b class="text-muted">[매핑]</b>에서 업체별로 보낼 키 ← 주문 값 연결을 설정하세요 — 구글시트는 매핑 순서대로 열(A, B, C…)에 기록되며, <b class="text-muted">매핑을 열면 시트 1행의 열 이름을 자동으로 불러와</b> 열별로 보낼 값을 고를 수 있습니다. 비율 내림 잔여분은 마지막 비율 업체에 배분됩니다.
         </p>
         <input type="hidden" name="vendors_json" id="vendors_json">
         <div id="vendor-list" class="flex flex-col gap-3"></div>
@@ -205,6 +205,11 @@
         </div>
         {{-- 매핑 패널 — 보낼 키 ← 값 소스 --}}
         <div class="vx-map mt-2 rounded-lg" style="display:none;background:var(--color-surface-soft);border:1px solid var(--color-hairline-soft);padding:10px 12px;">
+            {{-- 구글시트 전용 — 시트 1행(열 이름) 자동 로드 상태 · 다시 불러오기 --}}
+            <div class="vx-sheet-bar" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
+                <span class="vx-sheet-info text-muted-soft" style="font-size:var(--fs-xs);"></span>
+                <button type="button" class="btn btn-ghost btn-sm vx-sheet-reload" style="margin-left:auto;flex:none;">시트 열 다시 불러오기</button>
+            </div>
             <div class="vx-map-rows flex flex-col gap-2"></div>
             <div class="flex items-center justify-between mt-2">
                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 기본 페이로드(주문번호·상품명·수량·입력값 전체)로 전송됩니다.</span>
@@ -432,6 +437,16 @@
     var vempty = document.getElementById('vendor-empty');
     function vRefreshEmpty() { vempty.style.display = vlist.children.length ? 'none' : 'block'; }
 
+    // 구글시트 열 이름 조회 — 업체별 캐시(같은 편집 화면에서 반복 조회 방지)
+    var SHEET_COLS_URL = @json(route('admin.vendors.sheet-columns', ['vendor' => '__ID__']));
+    var sheetColsCache = {};
+    // 열 번호 → 시트 열 문자(A~Z, AA…)
+    function colLetter(i) {
+        var s = ''; i++;
+        while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+        return s;
+    }
+
     // 매핑 소스 — 주문 고정 항목 + 현재 빌더의 동적 필드(열 때마다 갱신)
     function fieldSources() {
         var out = [
@@ -484,6 +499,8 @@
         var vendorSel = node.querySelector('.vx-vendor');
         (Array.isArray(data.map) ? data.map : []).forEach(function (m) { addMapRow(mapRows, m); });
         var mapBtn = node.querySelector('.vx-map-toggle');
+        var sheetBar = node.querySelector('.vx-sheet-bar');
+        var sheetInfo = node.querySelector('.vx-sheet-info');
         function isGsheet() {
             var opt = vendorSel.options[vendorSel.selectedIndex];
             return !!opt && opt.textContent.indexOf('구글시트') !== -1;
@@ -491,13 +508,49 @@
         // 구글시트 업체는 매핑 행 = 시트 열(A, B, C…) — 행마다 대상 열 표시
         function syncCols() {
             var gs = isGsheet();
+            sheetBar.style.display = gs ? 'flex' : 'none';
             Array.prototype.forEach.call(mapRows.querySelectorAll('.vmap-row'), function (r, i) {
                 var col = r.querySelector('.vm-col');
                 col.style.display = gs ? '' : 'none';
-                col.textContent = '열 ' + String.fromCharCode(65 + (i % 26));
+                col.textContent = '열 ' + colLetter(i);
                 r.querySelector('.vm-key').placeholder = gs ? '열 제목 (메모용, 예: 키워드)' : '보낼 키 (예: keyword)';
             });
         }
+        // 구글시트 열 이름 자동 로드 — 1행 헤더를 읽어 열마다 매핑 행 생성·제목 표시
+        function applySheetCols(data) {
+            var cols = (data.columns || []).slice();
+            while (cols.length && cols[cols.length - 1] === '') cols.pop();   // 뒤쪽 빈 열 제거
+            if (!cols.length) {
+                sheetInfo.textContent = "'" + data.tab + "' 시트 1행에 열 제목이 없습니다 — 시트 첫 행에 열 이름을 입력해 두세요.";
+                sheetInfo.style.color = 'var(--color-error)';
+                return;
+            }
+            cols.forEach(function (title, i) {
+                var row = mapRows.querySelectorAll('.vmap-row')[i];
+                if (!row) { addMapRow(mapRows, { src: 'static', value: '' }); row = mapRows.querySelectorAll('.vmap-row')[i]; }
+                row.querySelector('.vm-key').value = title || ('열 ' + colLetter(i));
+            });
+            sheetInfo.textContent = "'" + data.tab + "' 시트 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요.";
+            sheetInfo.style.color = '';
+            syncMapBtn();
+        }
+        function loadSheetCols(force) {
+            if (!isGsheet()) return;
+            var vid = vendorSel.value;
+            if (!vid) return;
+            if (!force && sheetColsCache[vid]) { applySheetCols(sheetColsCache[vid]); return; }
+            sheetInfo.textContent = '시트 열 불러오는 중…';
+            sheetInfo.style.color = '';
+            fetch(SHEET_COLS_URL.replace('__ID__', vid), { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                .then(function (res) {
+                    if (!res.ok) throw new Error(res.j.error || '시트 조회에 실패했습니다.');
+                    sheetColsCache[vid] = res.j;
+                    applySheetCols(res.j);
+                })
+                .catch(function (e) { sheetInfo.textContent = e.message; sheetInfo.style.color = 'var(--color-error)'; });
+        }
+        node.querySelector('.vx-sheet-reload').addEventListener('click', function () { loadSheetCols(true); });
         function syncMapBtn() {
             var n = mapRows.children.length;
             mapBtn.textContent = n ? '매핑 ' + n : '매핑';
@@ -505,11 +558,18 @@
             mapBtn.classList.toggle('btn-ghost', !n);
             syncCols();
         }
-        vendorSel.addEventListener('change', syncCols);
+        vendorSel.addEventListener('change', function () {
+            syncCols();
+            if (map.style.display !== 'none') loadSheetCols();   // 매핑 패널이 열려 있으면 새 업체 시트 즉시 로드
+        });
         mapBtn.addEventListener('click', function () {
             var open = map.style.display !== 'none';
             map.style.display = open ? 'none' : 'block';
-            if (!open) { mapRows.querySelectorAll('.vm-src').forEach(function (s) { fillSrc(s, s.value); }); syncCols(); }   // 필드 목록 최신화
+            if (!open) {
+                mapRows.querySelectorAll('.vm-src').forEach(function (s) { fillSrc(s, s.value); });   // 필드 목록 최신화
+                syncCols();
+                loadSheetCols();   // 구글시트면 열 이름 자동 로드
+            }
         });
         node.querySelector('.vx-map-add').addEventListener('click', function () { addMapRow(mapRows, {}); syncMapBtn(); });
         map.addEventListener('click', function () { setTimeout(syncMapBtn, 0); });   // ✕ 삭제 후 카운트 갱신
