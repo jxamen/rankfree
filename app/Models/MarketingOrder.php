@@ -83,16 +83,7 @@ class MarketingOrder extends Model
     public function shopKeywordSource(): ?array
     {
         $fv = (array) $this->field_values;
-
-        $keyword = trim((string) ($fv['keyword'] ?? ''));
-        if ($keyword === '') {
-            foreach ($fv as $k => $v) {
-                if (is_string($v) && $v !== '' && (str_contains((string) $k, 'keyword') || str_contains((string) $k, '키워드'))) {
-                    $keyword = trim($v);
-                    break;
-                }
-            }
-        }
+        $keyword = (string) $this->keywordFromFields();
 
         $url = trim((string) ($fv['shop_url'] ?? ''));
         if (! preg_match('#^https?://#i', $url)) {
@@ -106,5 +97,23 @@ class MarketingOrder extends Model
         }
 
         return ($keyword !== '' && $url !== '') ? ['keyword' => $keyword, 'url' => $url] : null;
+    }
+
+    /** 주문 입력값에서 키워드만 추출(표기용) — 표준 키 keyword, 없으면 키 이름 휴리스틱(keyword·키워드 포함). */
+    public function keywordFromFields(): ?string
+    {
+        $fv = (array) $this->field_values;
+
+        $keyword = trim((string) ($fv['keyword'] ?? ''));
+        if ($keyword === '') {
+            foreach ($fv as $k => $v) {
+                if (is_string($v) && $v !== '' && (str_contains((string) $k, 'keyword') || str_contains((string) $k, '키워드'))) {
+                    $keyword = trim($v);
+                    break;
+                }
+            }
+        }
+
+        return $keyword !== '' ? $keyword : null;
     }
 }

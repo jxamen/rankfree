@@ -48,10 +48,9 @@
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                     <th class="text-left px-5 py-3 font-semibold" style="width:56px;">No</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문번호</th>
-                    <th class="text-left px-3 py-3 font-semibold">상품</th>
+                    <th class="text-left px-3 py-3 font-semibold">상품 · 키워드</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문자</th>
-                    <th class="text-right px-3 py-3 font-semibold" style="width:110px;">수량 · 기간</th>
-                    <th class="text-right px-3 py-3 font-semibold" style="width:110px;">금액</th>
+                    <th class="text-right px-3 py-3 font-semibold" style="width:130px;">수량 · 금액</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:80px;">상태</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
                     <th class="text-right px-5 py-3 font-semibold" style="width:130px;">주문일시</th>
@@ -65,15 +64,22 @@
                         <td class="px-3 py-3">
                             <a href="{{ route('admin.orders.show', $o) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $o->order_no }}</a>
                         </td>
-                        <td class="px-3 py-3 text-body" style="font-size:var(--fs-xs);">{{ $o->product?->title ?? '(삭제된 상품)' }}</td>
+                        <td class="px-3 py-3" style="font-size:var(--fs-xs);">
+                            <div class="text-body">{{ $o->product?->title ?? '(삭제된 상품)' }}</div>
+                            {{-- 주문 키워드(입력값에서 추출, 2026-07-22) --}}
+                            @if ($kw = $o->keywordFromFields())
+                                <div class="text-muted-soft">키워드: <b class="text-muted">{{ $kw }}</b></div>
+                            @endif
+                        </td>
                         <td class="px-3 py-3" style="font-size:var(--fs-xs);">
                             <div class="text-ink">{{ $o->orderer_name }}</div>
                             <div class="text-muted-soft">{{ $o->orderer_contact }}</div>
                         </td>
-                        <td class="px-3 py-3 text-right text-muted" style="font-size:var(--fs-xs);">
-                            {{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif
+                        {{-- 수량·기간 + 금액 — 한 열 2줄(2026-07-22) --}}
+                        <td class="px-3 py-3 text-right" style="font-size:var(--fs-xs);">
+                            <div class="text-muted">{{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif</div>
+                            <div class="text-ink font-medium">{{ number_format($o->total_price) }}원</div>
                         </td>
-                        <td class="px-3 py-3 text-right text-ink font-medium" style="font-size:var(--fs-xs);">{{ number_format($o->total_price) }}원</td>
                         <td class="px-3 py-3 text-center">
                             <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $statusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $statuses[$o->status] ?? $o->status }}</span>
                         </td>
