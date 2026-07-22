@@ -58,6 +58,7 @@ class MarketingOrderController extends Controller
 
         $analysis = $analyzer->prepare($request->user(), $src['keyword'], $src['url']);
         $analysis->update(['marketing_order_id' => $order->id]);
+        app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis);   // 이미 수집된 값이 있으면 즉시 채움
 
         return redirect()->route('admin.shop-keyword.show', $analysis)
             ->with('status', "주문 {$order->order_no} 의 유입키워드 수집을 시작했습니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 쓰세요.");
@@ -80,9 +81,57 @@ class MarketingOrderController extends Controller
         ]);
     }
 
+    /** 내부(숨김) 필드 값 수동 저장 — 수집이 안 채운 항목을 관리자가 직접 입력. */
+    public function updateInternalFields(Request $request, MarketingOrder $order)
+    {
+        $order->loadMissing('product.fields');
+        $hidden = $order->product?->fields->where('is_active', true)->where('is_hidden', true) ?? collect();
+        if ($hidden->isEmpty()) {
+            return back()->withErrors(['internal' => '이 상품에는 내부(숨김) 필드가 없습니다.']);
+        }
+
+        $fv = (array) $order->field_values;
+        $input = (array) $request->input('internal', []);
+        foreach ($hidden as $f) {
+            if (array_key_exists($f->field_key, $input)) {
+                $v = trim((string) $input[$f->field_key]);
+                $fv[$f->field_key] = $v !== '' ? $v : null;
+            }
+        }
+        $order->update(['field_values' => $fv]);
+
+        return back()->with('status', '내부 필드 값을 저장했습니다.');
+    }
+
+    /** 연결된 유입키워드 분석의 수집값으로 내부 필드 다시 채우기(기존 값 덮어씀). */
+    public function autofillInternalFields(MarketingOrder $order, \App\Domain\Order\OrderFieldAutofill $autofill)
+    {
+        $analysis = $order->shopKeywordAnalyses()->latest('id')->first();
+        if (! $analysis) {
+            return back()->withErrors(['internal' => '연결된 유입키워드 분석이 없습니다 — 먼저 수집요청을 하세요.']);
+        }
+
+        $filled = $autofill->fillFromAnalysis($analysis, force: true);
+
+        return back()->with('status', $filled > 0
+            ? "수집값으로 {$filled}개 필드를 채웠습니다."
+            : '채울 수 있는 수집값이 아직 없습니다 — 확장 상품정보 수집 후 다시 시도하세요.');
+    }
+
     /** 승인 — 상품의 업체 배분 설정대로 외부 발주(API/구글시트) 후 진행중으로 전환. */
     public function approve(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        // 필수 내부(숨김) 필드가 비어 있으면 발주 차단 — 수집·수동 입력으로 채운 뒤 승인
+        $order->loadMissing('product.fields');
+        $fv = (array) $order->field_values;
+        $missing = ($order->product?->fields ?? collect())
+            ->where('is_active', true)->where('is_hidden', true)->where('is_required', true)
+            ->filter(fn ($f) => trim((string) ($fv[$f->field_key] ?? '')) === '')
+            ->pluck('label');
+        if ($missing->isNotEmpty()) {
+            return back()->withErrors(['approve' => '필수 내부 필드가 비어 있어 승인할 수 없습니다: '.$missing->implode(', ').' — 수집값 채우기 또는 직접 입력 후 승인하세요.']);
+        }
+
         $result = $dispatcher->dispatch($order);
         if (! $result['ok']) {
             return back()->withErrors(['approve' => $result['message']]);

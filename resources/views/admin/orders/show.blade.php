@@ -9,6 +9,9 @@
 @php
     $statusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
     $fieldMap = $order->product?->fields->keyBy('field_key') ?? collect();
+    // 내부(숨김) 필드 — 고객에겐 안 보이고 외부 발주 전달에 쓰는 값(수집 자동 채움 + 수동 입력)
+    $hiddenFields = $fieldMap->where('is_active', true)->where('is_hidden', true)->values();
+    $hiddenKeys = $hiddenFields->pluck('field_key')->all();
 @endphp
 
 <x-console.page-head :title="'주문 상세'.($order->order_no ? ' — '.$order->order_no : '')" desc="주문 정보·입력 값 확인 및 진행 상태 변경" />
@@ -83,6 +86,7 @@
             @else
                 <div class="flex flex-col gap-3">
                     @foreach ($order->field_values as $key => $val)
+                        @continue(in_array($key, $hiddenKeys, true))
                         @php $f = $fieldMap->get($key); $label = $f->label ?? $key; $type = $f->field_type ?? 'TEXT'; @endphp
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
                             <div class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $label }}</div>
@@ -104,6 +108,45 @@
                 </div>
             @endif
         </div>
+
+        {{-- 내부(숨김) 필드 — 외부 발주 전달용. 유입키워드 수집값으로 자동 채움 + 수동 입력(2026-07-22) --}}
+        @if ($hiddenFields->isNotEmpty())
+        <div class="card p-6">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">내부 필드 <span class="text-muted-soft font-normal">(발주 전달용 · 고객에게 안 보임)</span></div>
+                @if ($order->shopKeywordAnalyses->isNotEmpty())
+                    <form method="POST" action="{{ route('admin.orders.autofill', $order) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-secondary btn-sm">수집값 다시 채우기</button>
+                    </form>
+                @endif
+            </div>
+            <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집(확장 상품정보)이 반영될 때 매핑된 값이 자동 저장됩니다. 비어 있는 항목은 직접 입력할 수 있습니다.</p>
+            <form method="POST" action="{{ route('admin.orders.internal-fields', $order) }}" class="flex flex-col gap-3">
+                @csrf
+                @method('PUT')
+                @foreach ($hiddenFields as $f)
+                    @php $cur = $order->field_values[$f->field_key] ?? null; @endphp
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+                        <div style="font-size:var(--fs-xs);">
+                            <span class="text-muted font-semibold">{{ $f->label }}</span>
+                            @if ($f->is_required)<span class="text-error">*</span>@endif
+                            @if ($f->autofill_source)
+                                <div class="text-muted-soft mt-0.5">자동: {{ \App\Models\ProductField::AUTOFILL_SOURCES[$f->autofill_source] ?? $f->autofill_source }}</div>
+                            @endif
+                        </div>
+                        <div class="sm:col-span-3">
+                            <input type="text" name="internal[{{ $f->field_key }}]" value="{{ is_array($cur) ? implode(', ', $cur) : $cur }}"
+                                   class="input w-full" style="font-size:var(--fs-xs);" placeholder="{{ $f->autofill_source ? '수집 대기 중 — 직접 입력 가능' : '직접 입력' }}">
+                        </div>
+                    </div>
+                @endforeach
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm">내부 필드 저장</button>
+                </div>
+            </form>
+        </div>
+        @endif
 
         {{-- 외부 발주 현황 — 승인 시 업체 배분대로 전송된 기록 --}}
         <div class="card p-6">

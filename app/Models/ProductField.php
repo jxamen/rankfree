@@ -24,13 +24,28 @@ class ProductField extends Model
         'TAGS' => '태그(다중 입력)',
     ];
 
+    /**
+     * 자동 채움 소스(2026-07-22) — 주문에 연결된 쇼핑 유입키워드 분석의 확장 수집값.
+     * 내부(숨김) 필드가 외부 발주 전달용 값을 사람 손 없이 받게 한다.
+     */
+    public const AUTOFILL_SOURCES = [
+        'core_keyword' => '핵심 키워드',
+        'product_url' => '상품 URL',
+        'product_id' => '상품 ID',
+        'product_title' => '상품명(수집)',
+        'mall_name' => '상점명(수집)',
+        'product_price' => '상품 가격(수집)',
+        'seller_tags' => '정답 태그 목록(수집)',
+        'thumbnail_url' => '상품 이미지 URL(수집)',
+    ];
+
     protected $fillable = [
         'product_id', 'group_id', 'field_key', 'field_type', 'label', 'placeholder', 'help_text',
-        'is_required', 'default_value', 'options_json', 'validation_json', 'condition_json', 'sort_order', 'is_active',
+        'is_required', 'is_hidden', 'autofill_source', 'default_value', 'options_json', 'validation_json', 'condition_json', 'sort_order', 'is_active',
     ];
 
     protected $casts = [
-        'is_required' => 'boolean', 'is_active' => 'boolean', 'sort_order' => 'integer',
+        'is_required' => 'boolean', 'is_hidden' => 'boolean', 'is_active' => 'boolean', 'sort_order' => 'integer',
         'options_json' => 'array', 'validation_json' => 'array', 'condition_json' => 'array',
     ];
 

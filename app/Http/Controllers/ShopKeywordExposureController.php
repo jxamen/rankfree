@@ -169,6 +169,11 @@ class ShopKeywordExposureController extends Controller
             $r['combo_added'] = $regen['added'];
         }
 
+        // 연결된 주문이 있으면 수집값으로 내부(숨김) 필드 자동 채움 — 외부 발주 전달용(2026-07-22)
+        if ($analysis->marketing_order_id) {
+            app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
+        }
+
         return response()->json(['data' => $r]);
     }
 

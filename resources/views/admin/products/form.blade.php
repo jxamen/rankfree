@@ -268,7 +268,11 @@
                 <label class="rf-switch"><input type="checkbox" class="fx-req" checked><span class="rf-track"></span></label>
                 <span style="font-size:var(--fs-xs);">필수</span>
             </span>
-            <button type="button" class="btn btn-ghost btn-sm fx-more" title="placeholder·필수 포함값 등 개별 설정">옵션</button>
+            <span class="inline-flex items-center gap-1.5" style="height:34px;" title="고객 주문 폼에는 안 보이는 내부 필드 — 외부 발주 전달용. 값은 유입키워드 수집으로 자동 채우거나 주문 상세에서 입력">
+                <label class="rf-switch"><input type="checkbox" class="fx-hidden"><span class="rf-track"></span></label>
+                <span style="font-size:var(--fs-xs);">숨김</span>
+            </span>
+            <button type="button" class="btn btn-ghost btn-sm fx-more" title="placeholder·필수 포함값·자동 채움 등 개별 설정">옵션</button>
             <button type="button" class="btn btn-ghost btn-sm fx-del" style="color:var(--color-error);">삭제</button>
         </div>
         <div class="fx-opts mt-2" style="display:none;">
@@ -289,8 +293,18 @@
                     <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">미포함 시 안내 메시지</label>
                     <input class="input fx-contains-msg" placeholder="예: 네이버 플레이스(m.place.naver.com) URL을 입력하세요" style="width:100%;">
                 </div>
+                <div style="flex:1;min-width:200px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">자동 채움 (유입키워드 수집값)</label>
+                    <select class="input fx-autofill" style="width:100%;">
+                        <option value="">안 함(수동)</option>
+                        @foreach (\App\Models\ProductField::AUTOFILL_SOURCES as $code => $name)
+                            <option value="{{ $code }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                </div>
             </div>
-            <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">필수 포함 값을 설정하면 주문 입력값에 해당 문자열이 없을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다.</div>
+            <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">필수 포함 값을 설정하면 주문 입력값에 해당 문자열이 없을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다.
+                자동 채움을 고르면 주문에 연결된 쇼핑 유입키워드 분석에서 확장이 수집한 값이 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).</div>
         </div>
     </div>
 </template>
@@ -352,6 +366,7 @@
         type.value = data.field_type || 'TEXT';
         key.value = data.field_key || genKey();   // 기존 키 유지, 없으면 자동 생성
         req.checked = data.is_required !== false;
+        node.querySelector('.fx-hidden').checked = data.is_hidden === true;   // 내부(발주 전달용) 필드
         if (Array.isArray(data.options)) optsTa.value = data.options.map(function (o) { return o.label || o; }).join('\n');
         function syncOpts() { optsWrap.style.display = TYPES_WITH_OPTS.indexOf(type.value) !== -1 ? 'block' : 'none'; }
         type.addEventListener('change', syncOpts); syncOpts();
@@ -360,8 +375,9 @@
         node.querySelector('.fx-ph').value = data.placeholder || '';
         node.querySelector('.fx-contains').value = data.contains || '';
         node.querySelector('.fx-contains-msg').value = data.contains_message || '';
+        node.querySelector('.fx-autofill').value = data.autofill || '';
         function syncMore() {
-            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
+            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg', '.fx-autofill'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
             moreBtn.classList.toggle('btn-secondary', has);
             moreBtn.classList.toggle('btn-ghost', !has);
             moreBtn.textContent = has ? '옵션 ●' : '옵션';
@@ -466,7 +482,8 @@
         list.querySelectorAll('.field-row').forEach(function (r) {
             var k = r.querySelector('.fx-key').value.trim();
             var lb = r.querySelector('.fx-label').value.trim();
-            if (k) out.push(['field:' + k, '필드: ' + (lb || k)]);
+            var hid = r.querySelector('.fx-hidden').checked ? ' (숨김)' : '';
+            if (k) out.push(['field:' + k, '필드: ' + (lb || k) + hid]);
         });
         out.push(['static', '고정값 직접 입력']);
         return out;
@@ -625,6 +642,8 @@
                 label: label, field_type: type,
                 field_key: r.querySelector('.fx-key').value.trim() || 'field_' + (rows.length + 1),
                 is_required: r.querySelector('.fx-req').checked, options: opts, group: currentGroup, sort_order: rows.length,
+                is_hidden: r.querySelector('.fx-hidden').checked,               // 내부(발주 전달용) 필드
+                autofill: r.querySelector('.fx-autofill').value || null,        // 유입키워드 수집값 자동 채움
                 placeholder: r.querySelector('.fx-ph').value.trim() || null,
                 contains: r.querySelector('.fx-contains').value.trim() || null,
                 contains_message: r.querySelector('.fx-contains-msg').value.trim() || null,

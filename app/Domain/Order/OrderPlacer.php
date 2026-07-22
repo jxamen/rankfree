@@ -35,6 +35,12 @@ class OrderPlacer
         // ── 동적 필드 검증·정규화 ─────────────────────────────────────────
         $values = [];
         foreach ($product->fields->where('is_active', true) as $f) {
+            // 숨김(내부) 필드 — 고객 입력·검증 없이 기본값만 시드. 실값은 유입키워드 수집(autofill)·관리자 입력으로 채운다.
+            if ($f->is_hidden) {
+                $values[$f->field_key] = ($f->default_value !== null && $f->default_value !== '') ? $f->default_value : null;
+
+                continue;
+            }
             $val = $fieldInput[$f->field_key] ?? null;
 
             if (in_array($f->field_type, ['FILE', 'IMAGE'], true)) {

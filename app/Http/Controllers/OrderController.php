@@ -18,7 +18,8 @@ class OrderController extends Controller
         $sched = $this->scheduleFields($product);
         $specialKeys = collect($sched)->filter()->pluck('field_key')->all();
 
-        $infoFields = $product->fields->where('is_active', true)
+        // 숨김(내부) 필드는 고객 폼에 렌더하지 않는다 — 발주 전달용 값은 유입키워드 수집으로 채운다(2026-07-22)
+        $infoFields = $product->fields->where('is_active', true)->where('is_hidden', false)
             ->reject(fn ($f) => in_array($f->field_key, $specialKeys, true))->values();
 
         // 스텝 모드: 정보 필드를 그룹별 단계로 묶는다(그룹 정렬 순).
@@ -60,7 +61,7 @@ class OrderController extends Controller
 
         // 웹 전용: 파일 업로드 저장 후 나머지 입력과 합쳐 공용 로직(OrderPlacer)으로 — 검증·계산은 API 와 동일
         $input = [];
-        foreach ($product->fields->where('is_active', true) as $f) {
+        foreach ($product->fields->where('is_active', true)->where('is_hidden', false) as $f) {
             $key = 'f_'.$f->field_key;
             if (in_array($f->field_type, ['FILE', 'IMAGE'], true)) {
                 $input[$f->field_key] = $request->hasFile($key)
