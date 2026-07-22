@@ -161,6 +161,23 @@ class KeywordHubTest extends TestCase
         $this->assertDatabaseMissing('keyword_searches', ['origin' => 'hub', 'keyword' => '여름이불']);
     }
 
+    /** 자동 발행 대상 선별 — 쇼핑은 확장 수집 시장분석이 있는 키워드만(없는 후보는 pending 유지, 거부 공회전 방지). */
+    public function test_auto_run_query_targets_only_market_ready_shopping(): void
+    {
+        $place = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집']);
+        $shop = $this->category(['type' => 'shopping', 'name' => '침구', 'slug' => '침구']);
+        KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남맛집', 'source' => 'seed', 'status' => 'pending']);
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '여름이불', 'source' => 'datalab', 'status' => 'pending']);
+        KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '겨울이불', 'source' => 'datalab', 'status' => 'pending']);
+
+        $u = User::create(['name' => 'u', 'email' => 'mk@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $u->id, 'keyword' => '여름이불', 'snapshot' => ['top_products' => []]]);
+
+        $this->assertSame(1, HubAutoRun::query('place')->count());                       // 플레이스는 전부
+        $this->assertSame(['여름이불'], HubAutoRun::query('shopping')->pluck('keyword')->all());   // 시장분석 있는 것만
+        $this->assertSame(2, HubAutoRun::query(null)->count());                          // 플레이스 + 시장분석 보유 쇼핑
+    }
+
     /** 쇼핑 시장 분석은 확장 플로 수집 데이터로만 — 소스 없으면 서버 생성 없이 보류한다(2026-07-22 확정). */
     public function test_publisher_rejects_shopping_candidate_without_extension_source(): void
     {
@@ -480,6 +497,9 @@ class KeywordHubTest extends TestCase
         $admin = $this->admin();
         $shop = $this->category(['seed_keywords' => []]);
         KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
+        // 쇼핑 후보는 확장 수집 시장분석이 있어야 자동 발행 대상(2026-07-22 정책)
+        $mu = User::create(['name' => 'm', 'email' => 'mk1@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $mu->id, 'keyword' => '캠핑의자', 'snapshot' => ['top_products' => []]]);
 
         // 시작 — 유형 미지정이면 쇼핑+플레이스 전체를 동시에 처리한다
         $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1])
@@ -507,6 +527,8 @@ class KeywordHubTest extends TestCase
         $place = $this->category(['type' => 'place', 'name' => '지역맛집', 'slug' => '지역맛집', 'seed_keywords' => []]);
         $shopCandidate = KeywordCandidate::create(['category_id' => $shop->id, 'keyword' => '캠핑의자', 'monthly_total' => 5000, 'status' => 'pending']);
         $placeCandidate = KeywordCandidate::create(['category_id' => $place->id, 'keyword' => '강남 맛집', 'monthly_total' => 8000, 'status' => 'pending']);
+        $mu = User::create(['name' => 'm', 'email' => 'mk2@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $mu->id, 'keyword' => '캠핑의자', 'snapshot' => ['top_products' => []]]);
 
         HubAutoRun::start(null);
         $state = HubAutoRun::state();
@@ -542,6 +564,10 @@ class KeywordHubTest extends TestCase
                 return KeywordSearch::create(['origin' => 'hub', 'keyword' => $c->keyword, 'category_id' => $c->category_id]);
             });
         });
+
+        // 쇼핑 후보는 확장 수집 시장분석이 있어야 자동 발행 대상(2026-07-22 정책)
+        $mu = User::create(['name' => 'm', 'email' => 'mk3@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $mu->id, 'keyword' => '캠핑의자', 'snapshot' => ['top_products' => []]]);
 
         // 꺼져 있으면 아무 것도 안 한다
         $this->artisan('hub:auto-publish')->assertSuccessful();

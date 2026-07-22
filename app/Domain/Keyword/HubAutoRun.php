@@ -17,11 +17,29 @@ class HubAutoRun
 
     private const TTL_DAYS = 30;
 
-    /** 처리 대상 = 아직 발행/보류되지 않은 쌓인 후보(pending·approved), 유형(shopping/place) 필터. */
+    /**
+     * 처리 대상 = 아직 발행/보류되지 않은 쌓인 후보(pending·approved), 유형(shopping/place) 필터.
+     * 쇼핑은 **확장 수집 시장분석이 있는 키워드만** 대상 — 없는 후보를 한 건씩 rejected 로 갈아버리는
+     * 공회전(실사고: 거부 3.5만 건) 방지. 수집(v0.3.7+)으로 시장분석이 생기면 자동으로 대상에 들어온다.
+     */
     public static function query(?string $type)
     {
-        return KeywordCandidate::whereIn('status', ['pending', 'approved'])
-            ->when($type, fn ($q) => $q->whereHas('category', fn ($c) => $c->where('type', $type)));
+        $base = KeywordCandidate::whereIn('status', ['pending', 'approved']);
+        $marketKeywords = \App\Models\MarketAnalysis::query()->select('keyword');
+
+        if ($type === 'place') {
+            return $base->whereHas('category', fn ($c) => $c->where('type', 'place'));
+        }
+        if ($type === 'shopping') {
+            return $base->whereHas('category', fn ($c) => $c->where('type', 'shopping'))
+                ->whereIn('keyword', $marketKeywords);
+        }
+
+        return $base->where(fn ($q) => $q
+            ->whereHas('category', fn ($c) => $c->where('type', 'place'))
+            ->orWhere(fn ($qq) => $qq
+                ->whereHas('category', fn ($c) => $c->where('type', 'shopping'))
+                ->whereIn('keyword', \App\Models\MarketAnalysis::query()->select('keyword'))));
     }
 
     public static function state(): array
