@@ -205,10 +205,10 @@
         </div>
         {{-- 매핑 패널 — 보낼 키 ← 값 소스 --}}
         <div class="vx-map mt-2 rounded-lg" style="display:none;background:var(--color-surface-soft);border:1px solid var(--color-hairline-soft);padding:10px 12px;">
-            {{-- 구글시트 전용 — 탭 선택(업체 설정에 저장) + 시트 1행(열 이름) 자동 로드 상태 · 다시 불러오기 --}}
+            {{-- 구글시트 전용 — 탭 선택(이 상품에만 적용, 저장 시 반영) + 시트 1행(열 이름) 자동 로드 상태 · 다시 불러오기 --}}
             <div class="vx-sheet-bar" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;flex:none;">시트 탭</span>
-                <select class="input vx-sheet-tab" style="width:160px;display:none;flex:none;" title="선택한 탭은 업체 설정에 저장되어 발주 전송에도 적용됩니다"></select>
+                <select class="input vx-sheet-tab" style="width:160px;display:none;flex:none;" title="이 상품의 발주에만 적용되는 탭입니다(저장 시 반영) — 같은 업체를 쓰는 다른 상품에는 영향 없음"></select>
                 <span class="vx-sheet-info text-muted-soft" style="font-size:var(--fs-xs);"></span>
                 <button type="button" class="btn btn-ghost btn-sm vx-sheet-reload" style="margin-left:auto;flex:none;">시트 열 다시 불러오기</button>
             </div>
@@ -441,7 +441,6 @@
 
     // 구글시트 열 이름 조회 — 업체별 캐시(같은 편집 화면에서 반복 조회 방지)
     var SHEET_COLS_URL = @json(route('admin.vendors.sheet-columns', ['vendor' => '__ID__']));
-    var SHEET_TAB_URL = @json(route('admin.vendors.gsheet-tab', ['vendor' => '__ID__']));
     var sheetColsCache = {};
     // 열 번호 → 시트 열 문자(A~Z, AA…)
     function colLetter(i) {
@@ -493,6 +492,8 @@
     function addVendorRow(data) {
         data = data || {};
         var node = vtpl.content.firstElementChild.cloneNode(true);
+        // 상품 단위 시트 탭(2026-07-22) — 빈 값이면 업체 기본 탭을 따른다. 저장은 폼 제출 시(vendors_json).
+        node.dataset.sheetTab = data.sheet_tab || '';
         node.querySelector('.vx-vendor').value = data.vendor_id || '';
         node.querySelector('.vx-type').value = data.alloc_type || 'ratio';
         node.querySelector('.vx-value').value = data.alloc_value != null ? data.alloc_value : 0;
@@ -523,7 +524,7 @@
         //   reset=true(탭 전환)면 기존 행을 비우고 새 탭 열로 다시 만든다.
         var tabSel = node.querySelector('.vx-sheet-tab');
         function applySheetCols(data, reset) {
-            // 탭 선택 목록 — 서버가 준 실제 탭들. 선택은 업체 설정(gsheet_tab)에 저장된다.
+            // 탭 선택 목록 — 서버가 준 실제 탭들. 선택은 **이 상품의 배분(sheet_tab)** 에만 저장된다(제출 시).
             if (Array.isArray(data.tabs) && data.tabs.length) {
                 tabSel.innerHTML = data.tabs.map(function (t) {
                     return '<option value="' + t.replace(/"/g, '&quot;') + '"' + (t === data.tab ? ' selected' : '') + '>' + t + '</option>';
@@ -544,7 +545,8 @@
                 if (!row) { addMapRow(mapRows, { src: 'static', value: '' }); row = mapRows.querySelectorAll('.vmap-row')[i]; }
                 row.querySelector('.vm-key').value = title || ('열 ' + colLetter(i));
             });
-            sheetInfo.textContent = "'" + data.tab + "' 탭 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요.";
+            sheetInfo.textContent = "'" + data.tab + "' 탭 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요."
+                + (node.dataset.sheetTab ? ' (이 상품 전용 탭 · 저장 시 반영)' : '');
             sheetInfo.style.color = '';
             syncMapBtn();
         }
@@ -552,34 +554,28 @@
             if (!isGsheet()) return;
             var vid = vendorSel.value;
             if (!vid) return;
-            if (!force && sheetColsCache[vid]) { applySheetCols(sheetColsCache[vid], false); return; }
+            var tab = node.dataset.sheetTab || '';
+            var key = vid + '|' + tab;   // 탭별 캐시 — 같은 업체라도 상품 탭이 다르면 다른 열
+            if (!force && sheetColsCache[key]) { applySheetCols(sheetColsCache[key], false); return; }
             sheetInfo.textContent = '시트 열 불러오는 중…';
             sheetInfo.style.color = '';
-            fetch(SHEET_COLS_URL.replace('__ID__', vid), { headers: { 'Accept': 'application/json' } })
+            var url = SHEET_COLS_URL.replace('__ID__', vid) + (tab ? ('?tab=' + encodeURIComponent(tab)) : '');
+            fetch(url, { headers: { 'Accept': 'application/json' } })
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
                 .then(function (res) {
                     if (!res.ok) throw new Error(res.j.error || '시트 조회에 실패했습니다.');
-                    sheetColsCache[vid] = res.j;
+                    sheetColsCache[key] = res.j;
                     applySheetCols(res.j, !!reset);
                 })
                 .catch(function (e) { sheetInfo.textContent = e.message; sheetInfo.style.color = 'var(--color-error)'; });
         }
         node.querySelector('.vx-sheet-reload').addEventListener('click', function () { loadSheetCols(true); });
-        // 탭 변경 — 업체 설정(gsheet_tab)에 저장 후 그 탭 기준으로 매핑 행 재구성
+        // 탭 변경(2026-07-22) — 업체 설정을 건드리지 않는다. 이 상품의 배분 탭으로만 기록되고(제출 시 저장),
+        // 그 탭 기준으로 매핑 행을 재구성한다. 같은 업체를 쓰는 다른 상품엔 영향 없음.
         tabSel.addEventListener('change', function () {
-            var vid = vendorSel.value;
-            if (!vid || !tabSel.value) return;
-            sheetInfo.textContent = '탭 저장 중…';
-            sheetInfo.style.color = '';
-            fetch(SHEET_TAB_URL.replace('__ID__', vid), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': @json(csrf_token()), 'Accept': 'application/json' },
-                body: JSON.stringify({ tab: tabSel.value }),
-            }).then(function (r) {
-                if (!r.ok) throw 0;
-                delete sheetColsCache[vid];
-                loadSheetCols(true, true);
-            }).catch(function () { sheetInfo.textContent = '탭 저장에 실패했습니다.'; sheetInfo.style.color = 'var(--color-error)'; });
+            if (!vendorSel.value || !tabSel.value) return;
+            node.dataset.sheetTab = tabSel.value;
+            loadSheetCols(true, true);
         });
         function syncMapBtn() {
             var n = mapRows.children.length;
@@ -653,6 +649,7 @@
                 alloc_value: parseInt(r.querySelector('.vx-value').value, 10) || 0,
                 is_active: r.querySelector('.vx-active').checked,
                 map: map,
+                sheet_tab: r.dataset.sheetTab || '',   // 상품 단위 시트 탭(비면 업체 기본)
             });
         });
         document.getElementById('vendors_json').value = JSON.stringify(vrows);

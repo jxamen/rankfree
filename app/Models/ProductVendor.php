@@ -14,7 +14,7 @@ class ProductVendor extends Model
     ];
 
     protected $fillable = [
-        'product_id', 'vendor_id', 'alloc_type', 'alloc_value', 'field_map', 'sort_order', 'is_active',
+        'product_id', 'vendor_id', 'alloc_type', 'alloc_value', 'field_map', 'sheet_tab', 'sort_order', 'is_active',
     ];
 
     protected $casts = [

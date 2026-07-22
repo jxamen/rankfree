@@ -152,6 +152,7 @@ class MarketingProductController extends Controller
                 ->map(fn ($pv) => [
                     'vendor_id' => $pv->vendor_id, 'alloc_type' => $pv->alloc_type, 'alloc_value' => $pv->alloc_value,
                     'is_active' => (bool) $pv->is_active, 'map' => (array) $pv->field_map,
+                    'sheet_tab' => (string) ($pv->sheet_tab ?? ''),   // 상품 단위 시트 탭(비면 업체 기본)
                 ])->values()->toArray()
             : [];
 
@@ -297,6 +298,8 @@ class MarketingProductController extends Controller
                     'alloc_type' => in_array($r['alloc_type'] ?? '', ['ratio', 'fixed'], true) ? $r['alloc_type'] : 'ratio',
                     'alloc_value' => max(0, (int) ($r['alloc_value'] ?? 0)),
                     'field_map' => $map ?: null,
+                    // 상품 단위 시트 탭(2026-07-22) — 비우면 업체 기본 탭 사용(같은 업체를 쓰는 다른 상품과 독립)
+                    'sheet_tab' => mb_substr(trim((string) ($r['sheet_tab'] ?? '')), 0, 120) ?: null,
                     'sort_order' => $i,
                     'is_active' => (bool) ($r['is_active'] ?? true),
                 ],

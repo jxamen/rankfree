@@ -199,8 +199,11 @@ class OrderDispatchService
             return false;
         }
 
-        // 탭 미설정이면 첫 번째 탭 자동 사용(탭 이름 불일치 400 방지). 메타 조회 실패 시 종전 기본값 유지.
-        $tab = trim((string) $v->gsheet_tab);
+        // 탭 우선순위(2026-07-22): 상품×업체 배분 탭(sheet_tab) → 업체 기본(gsheet_tab) → 첫 탭.
+        // 같은 업체를 쓰는 상품마다 다른 탭으로 보낼 수 있다.
+        $allocTab = (string) \App\Models\ProductVendor::where('product_id', $d->order?->product_id)
+            ->where('vendor_id', $v->id)->value('sheet_tab');
+        $tab = trim($allocTab) ?: trim((string) $v->gsheet_tab);
         if ($tab === '') {
             $meta = Http::timeout(15)->withToken($token)
                 ->get("https://sheets.googleapis.com/v4/spreadsheets/{$v->gsheet_id}?fields=sheets.properties.title");

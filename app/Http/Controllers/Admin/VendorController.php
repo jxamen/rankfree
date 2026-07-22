@@ -71,7 +71,12 @@ class VendorController extends Controller
         }
         $tabs = collect($meta->json('sheets', []))->pluck('properties.title')
             ->filter(fn ($t) => trim((string) $t) !== '')->values();
-        $tab = trim((string) $vendor->gsheet_tab);
+        // ?tab= — 상품 단위 탭 미리보기(2026-07-22): 배분별 탭 오버라이드 UI 가 특정 탭의 열을 조회할 때 사용.
+        // 미지정이면 종전대로 업체 기본 탭 → 첫 탭 순.
+        $tab = trim((string) request()->query('tab', ''));
+        if ($tab === '') {
+            $tab = trim((string) $vendor->gsheet_tab);
+        }
         if ($tab === '') {
             $tab = (string) ($tabs->first() ?? '');
         }
