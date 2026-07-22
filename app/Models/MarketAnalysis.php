@@ -37,6 +37,12 @@ class MarketAnalysis extends Model
         return 'market';
     }
 
+    /** 같은 키워드 = 같은 시장 데이터 — 최신 분석이 기본 슬러그를 인수(-2 없음, 2026-07-22 결정). */
+    protected function shareSlugTakesOver(): bool
+    {
+        return true;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

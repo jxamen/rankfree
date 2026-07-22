@@ -73,7 +73,7 @@
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 시장 수집 <span class="text-muted-soft font-normal">(자동 — 위 시작 버튼에 포함)</span></div>
-            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">'쇼핑만 시작' 또는 '동시 시작'을 누르면 확장이 대기 키워드의 시장분석(판매량·매출)을 자동 수집하고, 수집되는 대로 발행이 따라갑니다. 브라우저를 켜둔 채 두세요(확장 v0.3.7+ 로그인 필요).</div>
+            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">'쇼핑만 시작' 또는 '동시 시작'을 누르면 확장이 대기 키워드의 시장분석(판매량·매출)을 자동 수집하고, 수집되는 대로 발행이 따라갑니다. 브라우저를 켜둔 채 두세요(확장 v0.3.8+ 로그인 필요).</div>
         </div>
         <div class="flex items-center gap-2 flex-none">
             <button type="button" id="kh-collect-stop" class="btn btn-secondary btn-sm kh-stop-live" hidden>수집 중단</button>
@@ -111,7 +111,7 @@
         if (!lastStat) return '';
         let s = ' · 최근 10분 수집 ' + lastStat.serp_10m + ' · 시장분석 생성 ' + lastStat.market_10m;
         if (lastStat.serp_10m > 0 && lastStat.market_10m === 0) {
-            s += ' — ⚠️ 수집은 되는데 시장분석이 안 생깁니다: 확장이 구버전입니다. chrome://extensions 에서 v0.3.7 로 새로고침하세요';
+            s += ' — ⚠️ 수집은 되는데 시장분석이 안 생깁니다: 확장이 구버전입니다. chrome://extensions 에서 v0.3.8 로 새로고침하세요';
         }
         return s;
     }
@@ -155,7 +155,7 @@
     function startCollect() {
         if (!hasExt()) {
             msg.style.color = 'var(--color-error)';
-            msg.textContent = '랭크프리 확장이 이 페이지에 연결되지 않았습니다 — chrome://extensions 에서 확장 새로고침(v0.3.7)·로그인 후 이 페이지를 새로고침하세요.';
+            msg.textContent = '랭크프리 확장이 이 페이지에 연결되지 않았습니다 — chrome://extensions 에서 확장 새로고침(v0.3.8)·로그인 후 이 페이지를 새로고침하세요.';
             return false;
         }
         msg.style.color = '';

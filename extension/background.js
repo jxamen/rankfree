@@ -1095,12 +1095,14 @@ const handlers = {
             // ★ 램프업 — 성공이 이어지면 동시 수를 target(conc)까지 1씩 천천히 올린다.
             //   (콜드스타트에 10개를 한꺼번에 열지 않고, 네이버가 받아주는 만큼만 서서히 늘린다)
             okStreak++;
+            // 성공했으면 직전 실패/차단 사유를 지운다 — 안 지우면 failed 누적 때문에
+            // "차단 감지, N초 대기 후 재개" 가 수집이 잘 돼도 화면에 계속 남는다(실측)
             if (okStreak >= RAMP_EVERY && liveConc < conc) {
               liveConc++;
               okStreak = 0;
-              await patch({ done, failed, gap, conc: liveConc, blockedUntil: 0 });
+              await patch({ done, failed, gap, conc: liveConc, blockedUntil: 0, lastError: '' });
             } else {
-              await patch({ done, failed, gap, blockedUntil: 0 });
+              await patch({ done, failed, gap, blockedUntil: 0, lastError: '' });
             }
           } else {
             failed++;
@@ -1129,7 +1131,8 @@ const handlers = {
                 blockedUntil: until });
               await sleep(rest);
               blocked = false;
-              await patch({ blockedUntil: 0 });
+              // 대기 종료 — 차단 안내도 함께 지워 재개 후 낡은 사유가 남지 않게 한다
+              await patch({ blockedUntil: 0, lastError: '' });
             } else {
               await patch({ done, failed, gap, lastError });
             }

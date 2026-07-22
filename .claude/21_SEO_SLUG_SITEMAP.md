@@ -18,6 +18,7 @@
 | `/shopping/{slug}` | ShopRankSlot | keyword | ❌ 추적 대상 — 비공개 |
 
 - **슬러그 생성**: [HasShareSlug](../app/Models/Concerns/HasShareSlug.php) 트레이트. `creating` 훅에서 자동 부여, 중복이면 `-2/-3…`.
+- **키워드-전역 데이터는 슬러그 인수(-2 금지, 2026-07-22)**: `shareSlugTakesOver()=true` 모델(현재 **MarketAnalysis**)은 같은 키워드의 새 문서가 **기본 슬러그를 인수**하고 이전 문서는 반납(slug=null) — 같은 키워드 = 같은 데이터라 정식 URL 1개에 최신만 공개. 구 `-2` 링크·구 토큰은 `findByShareKey` 폴백 + 컨트롤러 301 로 기본 슬러그에 통합([MarketCanonicalUrlTest](../tests/Feature/MarketCanonicalUrlTest.php) 고정). 기존 파생 슬러그는 [dedupe 마이그레이션](../database/migrations/2026_07_22_003500_dedupe_market_analysis_slugs.php)으로 정리. ⚠️ **사용자 소유 데이터(순위추적 슬롯 등)엔 켜지 말 것** — 남의 공유 링크를 빼앗게 된다.
   한글·영문·숫자만 남기고(`\p{L}\p{N}`) 나머지는 `-`, 소문자화, 120자 컷.
 - **하위호환**: 구 `/k /m /p /sp /ps /r /rc /sr {token}` 은 **301** 로 새 슬러그 URL 로 이동(기존 배포 링크·확장 응답 유지). `findByShareKey()` 가 slug→token 순 조회.
 - **공유 버튼**: 콘솔의 공유 버튼은 `$model->shareUrl()`(슬러그) 사용. 라우트 이름(keyword.shared 등)은 그대로 두고 경로만 슬러그로 전환.

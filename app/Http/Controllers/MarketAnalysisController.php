@@ -38,9 +38,9 @@ class MarketAnalysisController extends Controller
         $a = MarketAnalysis::findByShareKey($slug);
         abort_if(! $a, 404);
 
-        // 키워드당 정식 URL 하나(2026-07-22) — 같은 키워드 문서가 여러 개라 -2·-13 슬러그가 늘던 것을
-        // 첫 문서 슬러그로 301 통합(SEO 중복 해소). 어떤 슬러그·토큰으로 들어와도 같은 페이지로 모인다.
-        $canonical = MarketAnalysis::where('keyword', $a->keyword)->orderBy('id')->first();
+        // 키워드당 정식 URL 하나(2026-07-22) — 슬러그는 최신 문서가 기본형(-2 없이)으로 인수하므로
+        // (HasShareSlug::shareSlugTakesOver) 정식 URL = 슬러그 보유 문서. 파생 슬러그·토큰은 전부 301 통합.
+        $canonical = MarketAnalysis::where('keyword', $a->keyword)->whereNotNull('slug')->orderByDesc('id')->first();
         if ($canonical && $canonical->slug && $slug !== $canonical->slug) {
             return redirect()->to(route('market.shared', $canonical->slug), 301);
         }
