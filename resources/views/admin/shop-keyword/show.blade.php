@@ -91,9 +91,11 @@
     {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
     <button type="button" id="sk-recollect" class="btn btn-secondary btn-sm"
         title="확장으로 상품페이지(제목·관련태그·대표이미지·가격)를 다시 수집합니다">상품정보 다시 수집</button>
-    <form method="POST" action="{{ route('admin.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;">
+    {{-- data-confirm 은 form 에 — app.js 전역 핸들러(SweetAlert2)가 form 속성만 읽는다 --}}
+    <form method="POST" action="{{ route('admin.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;"
+          data-confirm="'{{ $analysis->core_keyword }}' 분석을 삭제할까요?" data-confirm-text="조합·확인 결과·단축 URL이 함께 삭제되며 되돌릴 수 없습니다.">
         @csrf @method('DELETE')
-        <button type="submit" class="btn btn-ghost btn-sm text-error" data-confirm="이 분석을 삭제할까요?">삭제</button>
+        <button type="submit" class="btn btn-ghost btn-sm text-error">삭제</button>
     </form>
 </div>
 
