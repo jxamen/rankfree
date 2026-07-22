@@ -67,6 +67,108 @@
     </div>
 </div>
 
+{{-- 쇼핑 시장 수집(확장 대량 수집) — 쇼핑 발행의 재료(시장분석: 판매량·매출)를 만드는 단계.
+     admin-bridge(bulkStart)로 확장을 여기서 바로 구동한다(키워드 탐색과 동일 프로토콜). --}}
+<div class="card p-5 mb-5">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 시장 수집 <span class="text-muted-soft font-normal">(확장 대량 수집)</span></div>
+            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">대기 쇼핑 키워드를 확장이 자동으로 돌며 시장분석(판매량·매출)을 만듭니다 — <b>쇼핑 발행의 재료</b>입니다. 브라우저를 켜둔 채 진행하세요(확장 v0.3.7+ 로그인 필요).</div>
+        </div>
+        <div class="flex items-center gap-2 flex-none">
+            <button type="button" id="kh-collect-start" class="btn btn-primary btn-sm">쇼핑 시장 수집 시작</button>
+            <button type="button" id="kh-collect-stop" class="btn btn-secondary btn-sm kh-stop-live" hidden>수집 중단</button>
+        </div>
+    </div>
+    <div id="kh-collect-msg" class="text-muted mt-2" style="font-size:var(--fs-xs);"></div>
+</div>
+
+<script>
+(function () {
+    const start = document.getElementById('kh-collect-start');
+    const stop = document.getElementById('kh-collect-stop');
+    const msg = document.getElementById('kh-collect-msg');
+    const statusUrl = '{{ route('admin.keyword-hub.collect-market-status') }}';
+    let poll = null;
+    let statPoll = null;
+    let lastStat = null;
+
+    const send = (type, extra) => window.postMessage(Object.assign({ source: 'rankfree-admin', type }, extra || {}), '*');
+    const hasExt = () => document.documentElement.getAttribute('data-rf-ext') === '1';
+
+    async function fetchStat() {
+        try {
+            const r = await fetch(statusUrl + '?t=' + Date.now(), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (r.ok) lastStat = (await r.json()).data;
+        } catch (e) { /* noop */ }
+    }
+    function statLine() {
+        if (!lastStat) return '';
+        let s = ' · 최근 10분 수집 ' + lastStat.serp_10m + ' · 시장분석 생성 ' + lastStat.market_10m;
+        if (lastStat.serp_10m > 0 && lastStat.market_10m === 0) {
+            s += ' — ⚠️ 수집은 되는데 시장분석이 안 생깁니다: 확장이 구버전입니다. chrome://extensions 에서 v0.3.7 로 새로고침하세요';
+        }
+        return s;
+    }
+    function live() {
+        stop.hidden = false;
+        start.disabled = true;
+        if (!poll) poll = setInterval(() => send('bulkStatus'), 1500);
+        if (!statPoll) { fetchStat(); statPoll = setInterval(fetchStat, 20000); }
+    }
+    function idle() {
+        if (poll) { clearInterval(poll); poll = null; }
+        if (statPoll) { clearInterval(statPoll); statPoll = null; }
+        stop.hidden = true;
+        start.disabled = false;
+    }
+
+    window.addEventListener('message', (e) => {
+        const m = e.data;
+        if (!m || m.source !== 'rankfree-ext') return;
+        if (m.type === 'bulkStartResult') {
+            if (!m.ok) { msg.style.color = 'var(--color-error)'; msg.textContent = m.message || '시작 실패 — 확장 설치·로그인을 확인하세요.'; start.disabled = false; return; }
+            msg.style.color = '';
+            live();
+        }
+        if (m.type === 'bulkStatusResult' && m.bulk) {
+            const b = m.bulk;
+            if (b.running) live();
+            const waiting = b.blockedUntil && b.blockedUntil > Date.now();
+            msg.style.color = '';
+            msg.textContent = (!b.running ? '수집 종료 — ' : (waiting ? '차단 감지 — 대기 중… ' : '수집 중… '))
+                + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+                + (b.category ? ' · 분류: ' + b.category + (b.categoryTotal ? ' (' + b.categoryIndex + '/' + b.categoryTotal + ')' : '') : '')
+                + (b.running && b.current ? ' · 현재: ' + b.current : '')
+                + (b.remaining ? ' · 남은 ' + Number(b.remaining).toLocaleString() : '')
+                + statLine();
+            if (b.failed > 0 && b.lastError) { msg.textContent += ' · 사유: ' + b.lastError; if (!waiting) msg.style.color = 'var(--color-error)'; }
+            if (!b.running) { idle(); msg.textContent += ' — 다시 시작하면 남은 분류부터 이어집니다'; }
+        }
+        if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }
+    });
+
+    start.addEventListener('click', () => {
+        if (!hasExt()) {
+            msg.style.color = 'var(--color-error)';
+            msg.textContent = '랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인(v0.3.7+) 후 페이지를 새로고침하세요.';
+            return;
+        }
+        start.disabled = true;
+        msg.style.color = '';
+        msg.textContent = '시작하는 중…';
+        send('bulkStart', { limit: 0, delayMs: 6000, concurrency: 2 });
+    });
+    stop.addEventListener('click', () => send('bulkStop'));
+
+    // 이미 수집이 돌고 있으면 이어서 표시(브릿지가 붙을 때까지 잠깐 재시도)
+    (function ask(n) {
+        if (hasExt()) { send('bulkStatus'); return; }
+        if (n > 0) setTimeout(() => ask(n - 1), 300);
+    })(10);
+})();
+</script>
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
     <div class="card p-5">
         <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">플레이스 후보 현황</div>

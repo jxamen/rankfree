@@ -80,14 +80,17 @@ class HubAutoRun
     {
         return self::locked(function () use ($type) {
             $type = in_array($type, ['shopping', 'place'], true) ? $type : null;
+            // 전체(remaining)는 유형별 합으로 만든다 — query(null) 는 OR+서브쿼리라 120만 행에서 수십 초씩 걸린다(실사고)
+            $place = $type === 'shopping' ? 0 : self::query('place')->count();
+            $shop = $type === 'place' ? 0 : self::query('shopping')->count();
             $s = [
                 'running' => true, 'type' => $type,
                 'done' => 0, 'held' => 0,
-                'remaining' => self::query($type)->count(),
+                'remaining' => $place + $shop,
                 'place_done' => 0, 'place_held' => 0,
-                'place_remaining' => $type === 'shopping' ? 0 : self::query('place')->count(),
+                'place_remaining' => $place,
                 'shopping_done' => 0, 'shopping_held' => 0,
-                'shopping_remaining' => $type === 'place' ? 0 : self::query('shopping')->count(),
+                'shopping_remaining' => $shop,
                 'started_at' => now()->timestamp, 'last_at' => now()->timestamp,
                 'counted_at' => now()->timestamp,   // 남은 수 실측 시각 — progress() 재계산 스로틀 기준
             ];
@@ -132,9 +135,9 @@ class HubAutoRun
             }
 
             $recount = function () use (&$s): void {
-                $s['remaining'] = self::query($s['type'] ?? null)->count();
                 $s['place_remaining'] = ($s['type'] ?? null) === 'shopping' ? 0 : self::query('place')->count();
                 $s['shopping_remaining'] = ($s['type'] ?? null) === 'place' ? 0 : self::query('shopping')->count();
+                $s['remaining'] = (int) $s['place_remaining'] + (int) $s['shopping_remaining'];   // query(null) 회피
                 $s['counted_at'] = now()->timestamp;
             };
 

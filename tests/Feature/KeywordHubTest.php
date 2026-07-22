@@ -503,7 +503,7 @@ class KeywordHubTest extends TestCase
         $this->actingAs($admin)->postJson('/admin/keyword-hub/auto', ['on' => 1, 'type' => 'shopping'])
             ->assertOk()
             ->assertJsonPath('data.running', false)
-            ->assertJsonPath('data.hint', fn ($v) => str_contains((string) $v, '확장 대량 수집'));
+            ->assertJsonPath('data.hint', fn ($v) => str_contains((string) $v, '쇼핑 시장 수집'));
         $this->assertFalse(HubAutoRun::isRunning());
     }
 

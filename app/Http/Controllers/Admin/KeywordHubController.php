@@ -53,6 +53,19 @@ class KeywordHubController extends Controller
         ]);
     }
 
+    /**
+     * 쇼핑 시장 수집 상태(폴링) — 최근 10분 수집·시장분석 생성 수.
+     * 수집은 되는데 시장분석이 0이면 구버전 확장(purchase6m 미전송)이라는 신호다.
+     */
+    public function collectMarketStatus()
+    {
+        return response()->json(['data' => [
+            'serp_10m' => \App\Models\KeywordShopSerp::where('collected_at', '>=', now()->subMinutes(10))->count(),
+            'market_10m' => MarketAnalysis::where('updated_at', '>=', now()->subMinutes(10))->count(),
+            'market_total' => MarketAnalysis::count(),
+        ]])->header('Cache-Control', 'no-store, max-age=0');
+    }
+
     /** 자동 발행 상태(폴링용 JSON). 브라우저·프록시 캐시 금지 — 폴링이 최신 진행을 봐야 한다. */
     public function autoStatus()
     {
@@ -175,16 +188,13 @@ class KeywordHubController extends Controller
         if ($request->boolean('on')) {
             $type = in_array($request->input('type'), ['shopping', 'place'], true) ? $request->input('type') : null;
 
-            // 발행 가능한 후보가 0이면 시작하지 않고 이유를 알려준다 — "남은 0"으로 바로 꺼져 혼란(실사고)
-            if (HubAutoRun::query($type)->count() === 0) {
-                $pendingShopping = number_format(KeywordCandidate::whereIn('status', ['pending', 'approved'])
-                    ->whereHas('category', fn ($c) => $c->where('type', 'shopping'))->count());
-
+            // 발행 가능한 후보가 0이면 시작하지 않고 이유를 알려준다 — "남은 0"으로 바로 꺼져 혼란(실사고).
+            // count() 는 120만 행에서 수 초 — exists() 로 즉시 판정한다(시작 버튼 무반응 실사고).
+            if (! HubAutoRun::query($type)->exists()) {
                 return response()->json(['data' => $this->autoPayload() + [
                     'hint' => $type === 'shopping'
-                        ? "발행 가능한 쇼핑 후보가 없습니다. 대기 {$pendingShopping}건은 아직 '키워드 목록'일 뿐 문서 내용(시장분석)이 수집되지 않았습니다 — 확장 대량 수집을 켜면 수집되는 키워드부터 자동 발행됩니다."
+                        ? "발행 가능한 쇼핑 후보가 없습니다. 대기 키워드는 아직 문서 내용(시장분석)이 수집되지 않은 상태입니다 — 아래 '쇼핑 시장 수집'을 시작하면 수집되는 키워드부터 자동 발행됩니다."
                         : '발행 가능한 후보가 없습니다 — 후보 수집(승인 포함)을 먼저 진행하세요.',
-                    'hint_url' => $type === 'shopping' ? route('admin.shop-products') : null,
                 ]])->header('Cache-Control', 'no-store, max-age=0');
             }
 

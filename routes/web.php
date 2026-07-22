@@ -408,6 +408,7 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/keyword-hub/publish-batch', [\App\Http\Controllers\Admin\KeywordHubController::class, 'publishBatch'])->name('keyword-hub.publish-batch');
     Route::post('/keyword-hub/auto', [\App\Http\Controllers\Admin\KeywordHubController::class, 'autoToggle'])->name('keyword-hub.auto');
     Route::get('/keyword-hub/auto-status', [\App\Http\Controllers\Admin\KeywordHubController::class, 'autoStatus'])->name('keyword-hub.auto-status');
+    Route::get('/keyword-hub/collect-market-status', [\App\Http\Controllers\Admin\KeywordHubController::class, 'collectMarketStatus'])->name('keyword-hub.collect-market-status');
 
     // 자동 수집 현황 — 스케줄러에 등록된 자동 작업(무엇을·언제)과 데이터별 최근 수집 시각 열람
     Route::get('/schedule', [\App\Http\Controllers\Admin\ScheduleOverviewController::class, 'index'])->name('schedule');
