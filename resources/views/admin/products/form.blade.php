@@ -205,8 +205,10 @@
         </div>
         {{-- 매핑 패널 — 보낼 키 ← 값 소스 --}}
         <div class="vx-map mt-2 rounded-lg" style="display:none;background:var(--color-surface-soft);border:1px solid var(--color-hairline-soft);padding:10px 12px;">
-            {{-- 구글시트 전용 — 시트 1행(열 이름) 자동 로드 상태 · 다시 불러오기 --}}
-            <div class="vx-sheet-bar" style="display:none;align-items:center;gap:8px;margin-bottom:8px;">
+            {{-- 구글시트 전용 — 탭 선택(업체 설정에 저장) + 시트 1행(열 이름) 자동 로드 상태 · 다시 불러오기 --}}
+            <div class="vx-sheet-bar" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;flex:none;">시트 탭</span>
+                <select class="input vx-sheet-tab" style="width:160px;display:none;flex:none;" title="선택한 탭은 업체 설정에 저장되어 발주 전송에도 적용됩니다"></select>
                 <span class="vx-sheet-info text-muted-soft" style="font-size:var(--fs-xs);"></span>
                 <button type="button" class="btn btn-ghost btn-sm vx-sheet-reload" style="margin-left:auto;flex:none;">시트 열 다시 불러오기</button>
             </div>
@@ -439,6 +441,7 @@
 
     // 구글시트 열 이름 조회 — 업체별 캐시(같은 편집 화면에서 반복 조회 방지)
     var SHEET_COLS_URL = @json(route('admin.vendors.sheet-columns', ['vendor' => '__ID__']));
+    var SHEET_TAB_URL = @json(route('admin.vendors.gsheet-tab', ['vendor' => '__ID__']));
     var sheetColsCache = {};
     // 열 번호 → 시트 열 문자(A~Z, AA…)
     function colLetter(i) {
@@ -516,13 +519,24 @@
                 r.querySelector('.vm-key').placeholder = gs ? '열 제목 (메모용, 예: 키워드)' : '보낼 키 (예: keyword)';
             });
         }
-        // 구글시트 열 이름 자동 로드 — 1행 헤더를 읽어 열마다 매핑 행 생성·제목 표시
-        function applySheetCols(data) {
+        // 구글시트 열 이름 자동 로드 — 1행 헤더를 읽어 열마다 매핑 행 생성·제목 표시.
+        //   reset=true(탭 전환)면 기존 행을 비우고 새 탭 열로 다시 만든다.
+        var tabSel = node.querySelector('.vx-sheet-tab');
+        function applySheetCols(data, reset) {
+            // 탭 선택 목록 — 서버가 준 실제 탭들. 선택은 업체 설정(gsheet_tab)에 저장된다.
+            if (Array.isArray(data.tabs) && data.tabs.length) {
+                tabSel.innerHTML = data.tabs.map(function (t) {
+                    return '<option value="' + t.replace(/"/g, '&quot;') + '"' + (t === data.tab ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                tabSel.style.display = '';
+            }
+            if (reset) { mapRows.innerHTML = ''; }
             var cols = (data.columns || []).slice();
             while (cols.length && cols[cols.length - 1] === '') cols.pop();   // 뒤쪽 빈 열 제거
             if (!cols.length) {
-                sheetInfo.textContent = "'" + data.tab + "' 시트 1행에 열 제목이 없습니다 — 시트 첫 행에 열 이름을 입력해 두세요.";
+                sheetInfo.textContent = "'" + data.tab + "' 탭 1행에 열 제목이 없습니다 — 시트 첫 행에 열 이름을 입력해 두세요.";
                 sheetInfo.style.color = 'var(--color-error)';
+                syncMapBtn();
                 return;
             }
             cols.forEach(function (title, i) {
@@ -530,15 +544,15 @@
                 if (!row) { addMapRow(mapRows, { src: 'static', value: '' }); row = mapRows.querySelectorAll('.vmap-row')[i]; }
                 row.querySelector('.vm-key').value = title || ('열 ' + colLetter(i));
             });
-            sheetInfo.textContent = "'" + data.tab + "' 시트 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요.";
+            sheetInfo.textContent = "'" + data.tab + "' 탭 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요.";
             sheetInfo.style.color = '';
             syncMapBtn();
         }
-        function loadSheetCols(force) {
+        function loadSheetCols(force, reset) {
             if (!isGsheet()) return;
             var vid = vendorSel.value;
             if (!vid) return;
-            if (!force && sheetColsCache[vid]) { applySheetCols(sheetColsCache[vid]); return; }
+            if (!force && sheetColsCache[vid]) { applySheetCols(sheetColsCache[vid], false); return; }
             sheetInfo.textContent = '시트 열 불러오는 중…';
             sheetInfo.style.color = '';
             fetch(SHEET_COLS_URL.replace('__ID__', vid), { headers: { 'Accept': 'application/json' } })
@@ -546,11 +560,27 @@
                 .then(function (res) {
                     if (!res.ok) throw new Error(res.j.error || '시트 조회에 실패했습니다.');
                     sheetColsCache[vid] = res.j;
-                    applySheetCols(res.j);
+                    applySheetCols(res.j, !!reset);
                 })
                 .catch(function (e) { sheetInfo.textContent = e.message; sheetInfo.style.color = 'var(--color-error)'; });
         }
         node.querySelector('.vx-sheet-reload').addEventListener('click', function () { loadSheetCols(true); });
+        // 탭 변경 — 업체 설정(gsheet_tab)에 저장 후 그 탭 기준으로 매핑 행 재구성
+        tabSel.addEventListener('change', function () {
+            var vid = vendorSel.value;
+            if (!vid || !tabSel.value) return;
+            sheetInfo.textContent = '탭 저장 중…';
+            sheetInfo.style.color = '';
+            fetch(SHEET_TAB_URL.replace('__ID__', vid), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': @json(csrf_token()), 'Accept': 'application/json' },
+                body: JSON.stringify({ tab: tabSel.value }),
+            }).then(function (r) {
+                if (!r.ok) throw 0;
+                delete sheetColsCache[vid];
+                loadSheetCols(true, true);
+            }).catch(function () { sheetInfo.textContent = '탭 저장에 실패했습니다.'; sheetInfo.style.color = 'var(--color-error)'; });
+        });
         function syncMapBtn() {
             var n = mapRows.children.length;
             mapBtn.textContent = n ? '매핑 ' + n : '매핑';

@@ -95,6 +95,15 @@ class VendorController extends Controller
         return response()->json(['tab' => $tab, 'tabs' => $tabs, 'columns' => $cols]);
     }
 
+    /** 매핑 패널에서 시트 탭 선택 저장 (ajax) — 업체 설정(gsheet_tab)에 반영되어 열 조회·발주 전송이 같은 탭을 쓴다. */
+    public function updateGsheetTab(Request $request, Vendor $vendor)
+    {
+        $data = $request->validate(['tab' => ['required', 'string', 'max:120']]);
+        $vendor->update(['gsheet_tab' => $data['tab']]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function destroy(Vendor $vendor)
     {
         $name = $vendor->name;
