@@ -1,7 +1,8 @@
 # 28. 외부 주문 API — 마케팅 상품 주문 v1 (scope: order)
 
 > /admin/products 의 활성 상품을 **외부 시스템이 API 키로 주문**한다. (2026-07-22 구현·테스트 9건·실호출 검증)
-> 공개 문서는 [/developers](../resources/views/site/developers.blade.php) '마케팅 상품 주문' 섹션.
+> 개발자 문서는 **본문 공용 partial** [partials/developers-doc](../resources/views/partials/developers-doc.blade.php) — 공개 [/developers](../resources/views/site/developers.blade.php) 와 **콘솔 [/console/developers](../resources/views/console/developers.blade.php)** 두 곳에서 렌더(내용 수정은 partial 한 곳만). **주제별 탭**(시작하기·순위추적·경쟁분석·키워드분석·상품 주문, 해시 딥링크 #order 등). 콘솔 사이드바 'API › API 문서' 메뉴(DB)는 콘솔 문서로 연결.
+> 상품 번호(product_id)는 관리자 상품 목록의 **번호(API)** 열 = `GET /products` 의 `id`.
 
 ## 핵심 원칙 — 주문 로직 단일화
 

@@ -309,7 +309,8 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/product/{analysis}', [ProductAnalysisController::class, 'show'])->name('product.show');
     Route::delete('/product/{analysis}', [ProductAnalysisController::class, 'destroy'])->name('product.destroy');
 
-    // API 키 관리 (발급·허용기간·일일 한도·허용 IP)
+    // API 키 관리 (발급·허용기간·일일 한도·허용 IP) + 콘솔 내 개발자 문서(공개 /developers 와 본문 공용)
+    Route::view('/developers', 'console.developers')->name('developers');
     Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys');
     Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
     Route::post('/api-keys/{key}/toggle', [ApiKeyController::class, 'toggle'])->name('api-keys.toggle');

@@ -3,7 +3,7 @@
 
 @section('page-actions')
     <div class="flex items-center gap-2">
-        <a href="{{ route('developers') }}" target="_blank" class="btn btn-secondary btn-sm">API 문서</a>
+        <a href="{{ route('console.developers') }}" class="btn btn-secondary btn-sm">API 문서</a>
         <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm">＋ 키 발급</button>
     </div>
 @endsection
@@ -97,7 +97,7 @@
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     인증: <code style="font-family:var(--font-mono);">Authorization: Bearer rk_…</code> 헤더 (또는 <code style="font-family:var(--font-mono);">X-API-KEY</code>) ·
     Base URL: <code style="font-family:var(--font-mono);">{{ url('/api/v1') }}</code> ·
-    자세한 사용법은 <a href="{{ route('developers') }}" target="_blank" class="text-accent">API 문서</a> 참조.
+    자세한 사용법은 <a href="{{ route('console.developers') }}" class="text-accent">API 문서</a> 참조.
 </p>
 
 {{-- 키 발급 모달 --}}

@@ -33,7 +33,7 @@
         <table class="w-full" style="min-width:820px;">
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
-                    <th class="text-center px-3 py-3 font-semibold" style="width:44px;">No</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:70px;" title="외부 주문 API의 product_id">번호(API)</th>
                     <th class="text-left px-5 py-3 font-semibold">상품명</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:120px;">유형</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:110px;">단가</th>
@@ -46,7 +46,7 @@
             <tbody>
                 @forelse ($products as $p)
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
-                        <td class="px-3 py-3 text-center text-muted-soft" style="font-size:var(--fs-xs);">{{ $products->firstItem() + $loop->index }}</td>
+                        <td class="px-3 py-3 text-center text-body font-mono" style="font-size:var(--fs-xs);" title="외부 주문 API product_id">{{ $p->id }}</td>
                         <td class="px-5 py-3">
                             <a href="{{ route('admin.products.edit', $p) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $p->title }}</a>
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">주문 URL: <a href="{{ $p->orderUrl() }}" target="_blank" class="text-accent hover:underline">/order/{{ Str::limit($p->order_token, 10, '…') }}</a></div>
