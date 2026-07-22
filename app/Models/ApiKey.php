@@ -16,6 +16,7 @@ class ApiKey extends Model
         'compete' => '경쟁분석',
         'keyword' => '키워드분석',
         'keyword_detail' => '키워드 상세분석',
+        'order' => '마케팅 상품 주문',
     ];
 
     protected $fillable = [

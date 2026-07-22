@@ -24,8 +24,8 @@
     <div class="badge mb-4 border border-hairline">개발자 문서</div>
     <h1 class="font-display text-ink" style="font-size:clamp(28px,4vw,40px);line-height:1.1;">랭크프리 API</h1>
     <p class="mt-4 text-body" style="font-size:var(--fs-base);line-height:1.7;">
-        네이버 플레이스 <b class="text-ink">순위추적</b>, <b class="text-ink">경쟁분석</b>, <b class="text-ink">키워드분석</b> 데이터를
-        REST API로 제공합니다. API 키는 <a href="{{ route('console.api-keys') }}" class="text-accent">콘솔 → API 키</a>에서
+        네이버 플레이스 <b class="text-ink">순위추적</b>, <b class="text-ink">경쟁분석</b>, <b class="text-ink">키워드분석</b> 데이터와
+        <b class="text-ink">마케팅 상품 주문</b>을 REST API로 제공합니다. API 키는 <a href="{{ route('console.api-keys') }}" class="text-accent">콘솔 → API 키</a>에서
         발급하며, 키마다 권한(scope)·허용기간·일일 호출 한도·허용 IP를 설정할 수 있습니다.
     </p>
 
@@ -142,6 +142,82 @@ HTTP/1.1 200
     }
   }
 }</pre>
+
+    {{-- ============ 마케팅 상품 주문 ============ --}}
+    <h2 class="font-display text-ink doc-h2">마케팅 상품 주문 <span class="badge border border-hairline" style="font-size:var(--fs-xs);vertical-align:middle;">scope: order</span></h2>
+    <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
+        판매 중인 마케팅 상품을 조회하고 외부 시스템에서 바로 주문을 접수합니다. 검증·금액 계산은
+        웹 주문과 <b class="text-ink">완전히 동일한 규칙</b>이 적용됩니다(고정 수량·기간 상품은 입력값과 무관하게 고정값으로 접수).
+        주문은 <code class="doc-code">pending</code>(접수) 상태로 생성되며 운영자 승인 후 진행됩니다.
+    </p>
+    <table class="doc-table mt-4">
+        <thead><tr><th style="width:340px;">엔드포인트</th><th>설명</th></tr></thead>
+        <tbody>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/products</code></td><td>주문 가능 상품 목록 — 단가·과금 방식·수량/기간 제한·고정값·<code class="doc-code">orderable</code></td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/products/{id}</code></td><td>상품 상세 — 주문 입력 필드 스펙(<code class="doc-code">fields</code>: key·type·required·options·contains)</td></tr>
+            <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/orders</code></td><td>주문 생성 — <code class="doc-code">product_id</code>(필수), <code class="doc-code">quantity</code>, <code class="doc-code">days</code>, <code class="doc-code">fields</code>(객체), <code class="doc-code">user_coupon_id</code>(선택)</td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/orders</code></td><td>내 주문 목록 — <code class="doc-code">status</code>(pending·processing·completed·canceled) 필터, <code class="doc-code">page</code>/<code class="doc-code">per_page</code>(≤100)</td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/orders/{orderNo}</code></td><td>주문 단건 조회(상태 확인) — 본인 주문만</td></tr>
+        </tbody>
+    </table>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">주문 입력 규칙</b></p>
+    <table class="doc-table mt-2">
+        <thead><tr><th style="width:200px;">항목</th><th>규칙</th></tr></thead>
+        <tbody>
+            <tr><td><code class="doc-code">quantity</code></td><td>과금 방식 <code class="doc-code">total</code>(단가×수량) 상품의 수량. <code class="doc-code">min_quantity</code>~<code class="doc-code">max_quantity</code> 범위. <b>상품에 <code class="doc-code">daily_qty</code> 필드가 있으면 대신 <code class="doc-code">fields.daily_qty</code> 로 전달</b></td></tr>
+            <tr><td><code class="doc-code">days</code></td><td>과금 방식 <code class="doc-code">daily</code>(단가×일수량×일수) 상품의 기간(일). <b>상품에 <code class="doc-code">start_date</code>/<code class="doc-code">end_date</code> 필드가 있으면 대신 <code class="doc-code">fields</code> 로 날짜를 전달</b>(YYYY-MM-DD, <code class="doc-code">earliest_start_date</code> 이후만)</td></tr>
+            <tr><td>고정 상품</td><td><code class="doc-code">fixed_quantity</code>/<code class="doc-code">fixed_days</code> 가 있는 상품은 어떤 값을 보내도 <b>고정값으로 접수</b>. 기간 고정 + 날짜 필드 상품은 시작일만 보내면 종료일 자동 계산</td></tr>
+            <tr><td><code class="doc-code">fields</code></td><td>상품 상세의 <code class="doc-code">fields</code> 스펙대로 <code class="doc-code">{"field_key": "값"}</code>. 필수 필드 누락·<code class="doc-code">contains</code> 불일치 시 <code class="doc-code">422</code> + <code class="doc-code">field: "f_{key}"</code>. 플레이스 URL 필드는 서버가 표준 m.place URL 로 정규화</td></tr>
+            <tr><td>파일 필드</td><td>API 미지원 — 필수 파일 필드가 있는 상품은 <code class="doc-code">orderable: false</code>(웹 주문만 가능)</td></tr>
+            <tr><td><code class="doc-code">user_coupon_id</code></td><td>보유 쿠폰 발급분 ID(선택). 할인은 서버가 재계산해 <code class="doc-code">discount_amount</code>·<code class="doc-code">total_price</code> 에 반영</td></tr>
+        </tbody>
+    </table>
+
+    <pre class="doc-pre mt-4">GET {{ url('/api/v1') }}/products/12
+
+HTTP/1.1 200
+{
+  "product": {
+    "id": 12, "title": "네이버 플레이스 저장 리워드", "type_name": "참여형 리워드",
+    "unit_price": 300, "quantity_mode": "daily",
+    "min_quantity": 10, "max_quantity": 10000, "min_days": 1,
+    "fixed_quantity": null, "fixed_days": null,
+    "earliest_start_date": "2026-07-24", "orderable": true,
+    "fields": [
+      {"key": "place_url", "label": "플레이스 URL", "type": "URL", "required": true, "contains": null, "api_supported": true},
+      {"key": "daily_qty", "label": "일 수량", "type": "NUMBER", "required": true, "api_supported": true},
+      {"key": "start_date", "label": "시작일", "type": "DATE", "required": true, "api_supported": true},
+      {"key": "end_date", "label": "종료일", "type": "DATE", "required": true, "api_supported": true}
+    ]
+  }
+}</pre>
+    <pre class="doc-pre mt-3">POST {{ url('/api/v1') }}/orders
+{
+  "product_id": 12,
+  "fields": {
+    "place_url": "https://m.place.naver.com/restaurant/1234567890",
+    "daily_qty": "100",
+    "start_date": "2026-07-25",
+    "end_date": "2026-07-31"
+  }
+}
+
+HTTP/1.1 201
+{
+  "order": {
+    "order_no": "MO260722ABC123", "status": "pending", "status_label": "접수",
+    "product": {"id": 12, "title": "네이버 플레이스 저장 리워드"},
+    "quantity": 100, "days": 7,
+    "unit_price": 300, "discount_amount": 0, "total_price": 210000,
+    "fields": {"place_url": "…", "daily_qty": "100", "start_date": "2026-07-25", "end_date": "2026-07-31"},
+    "created_at": "2026-07-22T14:30:00+09:00"
+  }
+}</pre>
+    <pre class="doc-pre mt-3">POST {{ url('/api/v1') }}/orders   (검증 실패)
+
+HTTP/1.1 422
+{"message": "'플레이스 URL' 항목을 입력하세요.", "field": "f_place_url"}</pre>
 
     <div class="card-soft mt-12 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

@@ -3,14 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Domain\Place\PlaceRankChecker;
-use App\Models\MarketingOrder;
 use App\Models\MarketingProduct;
 use App\Models\ProductType;
 use App\Models\UserCoupon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /** 마케팅 상품 주문 — 콘솔 내 회원 전용 주문 페이지(order_token 기반). */
 class OrderController extends Controller
@@ -54,151 +50,33 @@ class OrderController extends Controller
         ]);
     }
 
-    public function store(Request $request, string $token)
+    public function store(Request $request, string $token, \App\Domain\Order\OrderPlacer $placer)
     {
         $product = MarketingProduct::where('order_token', $token)->where('is_active', true)->firstOrFail();
         $product->load('fields');
-        $minDate = $product->earliestStartDate()->toDateString();
-        $sched = $this->scheduleFields($product);
-        $user = $request->user();
 
-        // 동적 필드 검증·수집 (일수량·시작일·종료일도 여기서 함께 수집됨. 파일은 public 디스크에 저장)
-        $values = [];
+        // 웹 전용: 파일 업로드 저장 후 나머지 입력과 합쳐 공용 로직(OrderPlacer)으로 — 검증·계산은 API 와 동일
+        $input = [];
         foreach ($product->fields->where('is_active', true) as $f) {
             $key = 'f_'.$f->field_key;
             if (in_array($f->field_type, ['FILE', 'IMAGE'], true)) {
-                if ($request->hasFile($key)) {
-                    $values[$f->field_key] = $request->file($key)->store('orders/'.$product->id, 'public');
-                } elseif ($f->is_required) {
-                    return back()->withInput()->withErrors([$key => "'{$f->label}' 파일을 첨부하세요."]);
-                } else {
-                    $values[$f->field_key] = null;
-                }
-
-                continue;
-            }
-            $val = $request->input($key);
-            if ($f->is_required && (is_null($val) || $val === '' || $val === [])) {
-                return back()->withInput()->withErrors([$key => "'{$f->label}' 항목을 입력하세요."]);
-            }
-            // 날짜: 접수 마감·진행 지연을 반영한 최소 시작일 이전 선택 불가
-            if ($f->field_type === 'DATE' && is_string($val) && $val !== '' && $val < $minDate) {
-                return back()->withInput()->withErrors([$key => "'{$f->label}' 은(는) {$minDate} 이후 날짜만 가능합니다."]);
-            }
-            // 플레이스 URL 필드는 실제 업종을 반영한 m.place 형태로 정규화(스마트플레이스 등록과 동일)
-            if ($f->field_type === 'URL' && is_string($val) && trim($val) !== '') {
-                try {
-                    if ($clean = app(PlaceRankChecker::class)->cleanPlaceUrl($val)) {
-                        $val = $clean;
-                    }
-                } catch (\Throwable $e) {
-                    // 조회 실패 시 원본 유지
-                }
-            }
-            // 필수 포함 값 — 관리자가 설정한 문자열이 입력에 없으면 지정한 안내 메시지로 반려 (URL 정규화 후 검사)
-            $contains = trim((string) ($f->validation_json['contains'] ?? ''));
-            if ($contains !== '' && is_string($val) && trim($val) !== '' && ! str_contains($val, $contains)) {
-                $msg = trim((string) ($f->validation_json['contains_message'] ?? ''))
-                    ?: "'{$f->label}' 항목에는 '{$contains}' 이(가) 포함되어야 합니다.";
-
-                return back()->withInput()->withErrors([$key => $msg]);
-            }
-            $values[$f->field_key] = $val;
-        }
-
-        // 수량: 고정 수량 상품이면 화면 입력과 무관하게 그 값 그대로(패키지 판매), 아니면 입력값 + 범위 검증
-        if ($product->fixed_quantity) {
-            $qty = $product->fixed_quantity;
-            if ($sched['qty']) {
-                $values[$sched['qty']->field_key] = (string) $qty;   // 저장되는 입력값도 고정값으로 통일
-            }
-        } else {
-            $qty = (int) ($sched['qty'] ? ($values[$sched['qty']->field_key] ?? 0) : $request->input('quantity'));
-            if ($qty < $product->min_quantity || $qty > $product->max_quantity) {
-                return back()->withInput()->withErrors(['quantity' => "수량은 {$product->min_quantity}~{$product->max_quantity} 사이여야 합니다."]);
-            }
-        }
-
-        // 기간: 고정 기간 상품이면 시작일만 받고 종료일·일수는 서버가 확정, 아니면 기존 입력 방식
-        $days = 1;
-        if ($product->quantity_mode === 'daily') {
-            if ($product->fixed_days) {
-                $days = $product->fixed_days;
-                if ($sched['start']) {
-                    $s = $values[$sched['start']->field_key] ?? null;
-                    if (! $s) {
-                        return back()->withInput()->withErrors(['days' => '시작일을 선택하세요.']);
-                    }
-                    if ($sched['end']) {
-                        // 종료일은 제출값을 믿지 않고 시작일 + 고정기간 - 1 로 재계산
-                        $values[$sched['end']->field_key] = Carbon::parse($s)->addDays($days - 1)->toDateString();
-                    }
-                }
-            } elseif ($sched['start'] && $sched['end']) {
-                $s = $values[$sched['start']->field_key] ?? null;
-                $e = $values[$sched['end']->field_key] ?? null;
-                if (! $s || ! $e) {
-                    return back()->withInput()->withErrors(['days' => '시작일과 종료일을 선택하세요.']);
-                }
-                if ($e < $s) {
-                    return back()->withInput()->withErrors(['days' => '종료일은 시작일 이후여야 합니다.']);
-                }
-                $days = Carbon::parse($s)->diffInDays(Carbon::parse($e)) + 1;
+                $input[$f->field_key] = $request->hasFile($key)
+                    ? $request->file($key)->store('orders/'.$product->id, 'public')
+                    : null;
             } else {
-                $days = (int) $request->input('days', $product->min_days);
-            }
-            if (! $product->fixed_days && $days < $product->min_days) {
-                return back()->withInput()->withErrors(['days' => "기간은 최소 {$product->min_days}일 이상이어야 합니다."]);
+                $input[$f->field_key] = $request->input($key);
             }
         }
 
-        $unit = (float) $product->min_price;
-        $gross = $unit * $qty * $days;
-
-        // 쿠폰 — 본인 발급분·사용 가능·상품 적용 가능 검증 후 서버에서 할인 재계산(화면 값은 신뢰하지 않음)
-        $userCoupon = null;
-        $discount = 0;
-        if ($ucId = $request->input('user_coupon_id')) {
-            $userCoupon = UserCoupon::with('coupon')->whereKey($ucId)->where('user_id', $user->id)->first();
-            if (! $userCoupon || ! $userCoupon->isUsable()) {
-                return back()->withInput()->withErrors(['user_coupon_id' => '사용할 수 없는 쿠폰입니다(만료·사용됨·중지).']);
-            }
-            if (! $userCoupon->coupon->appliesTo($product->id)) {
-                return back()->withInput()->withErrors(['user_coupon_id' => '이 상품에는 사용할 수 없는 쿠폰입니다.']);
-            }
-            $discount = $userCoupon->coupon->discountFor($gross);
-            if ($discount < 1) {
-                return back()->withInput()->withErrors(['user_coupon_id' => '최소 주문 금액('.number_format((float) $userCoupon->coupon->min_order_amount).'원) 이상부터 사용할 수 있는 쿠폰입니다.']);
-            }
-        }
-
-        $order = DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon) {
-            // 동시 제출로 같은 쿠폰이 두 번 쓰이지 않게 잠금 후 미사용 재확인
-            if ($userCoupon) {
-                $locked = UserCoupon::whereKey($userCoupon->id)->whereNull('used_at')->lockForUpdate()->first();
-                if (! $locked) {
-                    throw ValidationException::withMessages(['user_coupon_id' => '이미 사용된 쿠폰입니다.']);
-                }
-            }
-
-            $order = MarketingOrder::create([
-                'product_id' => $product->id,
-                'user_id' => $user->id,
-                'quantity' => $qty,
-                'days' => $product->quantity_mode === 'daily' ? $days : null,
-                'field_values' => $values,
-                'unit_price' => $unit,
-                'total_price' => max(0, $gross - $discount),
-                'status' => 'pending',
-                'orderer_name' => $user->name,
-                'orderer_contact' => $user->email,
-                'user_coupon_id' => $userCoupon?->id,
-                'discount_amount' => $discount,
+        try {
+            $order = $placer->place($request->user(), $product, $input, [
+                'quantity' => $request->input('quantity'),
+                'days' => $request->input('days'),
+                'user_coupon_id' => $request->input('user_coupon_id'),
             ]);
-            $userCoupon?->update(['used_at' => now(), 'order_id' => $order->id]);
-
-            return $order;
-        });
+        } catch (\App\Domain\Order\OrderInputException $e) {
+            return back()->withInput()->withErrors([$e->field => $e->getMessage()]);
+        }
 
         return redirect()->route('order.show', $token)->with('order_done', $order->order_no);
     }

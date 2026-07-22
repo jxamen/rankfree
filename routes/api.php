@@ -107,6 +107,15 @@ Route::prefix('v1')->group(function (): void {
     // 키워드분석 — 경량(scope: keyword)과 상세(scope: keyword_detail)를 분리 제공
     Route::middleware('auth.apikey:keyword')->get('/keyword', [KeywordController::class, 'show']);
     Route::middleware('auth.apikey:keyword_detail')->get('/keyword/detail', [KeywordController::class, 'detail']);
+
+    // 마케팅 상품 주문 (scope: order) — 상품 조회·주문 생성·상태 조회. 웹 주문과 동일 로직(OrderPlacer)
+    Route::middleware('auth.apikey:order')->group(function (): void {
+        Route::get('/products', [\App\Http\Controllers\Api\OrderApiController::class, 'products']);
+        Route::get('/products/{id}', [\App\Http\Controllers\Api\OrderApiController::class, 'product'])->whereNumber('id');
+        Route::get('/orders', [\App\Http\Controllers\Api\OrderApiController::class, 'index']);
+        Route::post('/orders', [\App\Http\Controllers\Api\OrderApiController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/orders/{orderNo}', [\App\Http\Controllers\Api\OrderApiController::class, 'show']);
+    });
 });
 
 /*
