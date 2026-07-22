@@ -14,10 +14,12 @@ class ExtSellerCaptchaApiTest extends TestCase
 
     private function authed(): array
     {
+        // 판매자정보 캡차 수집은 슈퍼관리자 전용(2026-07-22 확정) — 대량 수집 계열 super only
         $user = User::create([
             'name' => 'Tester',
             'email' => 'seller-captcha@rankfree.kr',
             'password' => 'secret1234',
+            'role' => 'super',
         ]);
         [, $plain] = ExtToken::issue($user);
 

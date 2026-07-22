@@ -13,14 +13,27 @@ class ExtSellerInfoApiTest extends TestCase
 
     private function authed(): array
     {
+        // 판매자정보 수집은 슈퍼관리자 전용(2026-07-22 확정) — 대량 수집 계열 super only
         $user = User::create([
             'name' => 'Tester',
             'email' => 'seller-info@rankfree.kr',
             'password' => 'secret1234',
+            'role' => 'super',
         ]);
         [, $plain] = ExtToken::issue($user);
 
         return [$user, ['Authorization' => 'Bearer '.$plain]];
+    }
+
+    /** 일반 확장 사용자는 판매자정보·캡차 수집 저장 불가 — 일반 기능(시장분석 등)만 사용 가능. */
+    public function test_normal_user_cannot_store_seller_data(): void
+    {
+        $u = User::create(['name' => 'n', 'email' => 'normal-si@rf.kr', 'password' => 'secret1234']);
+        [, $plain] = ExtToken::issue($u);
+        $h = ['Authorization' => 'Bearer '.$plain];
+
+        $this->postJson('/api/ext/seller-infos', ['channel_uid' => 'cu-normal'], $h)->assertForbidden();
+        $this->postJson('/api/ext/seller-captchas', ['channel_uid' => 'cu-normal'], $h)->assertForbidden();
     }
 
     private function payload(array $override = []): array

@@ -14,6 +14,12 @@ class ExtSellerCaptchaController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // 판매자정보 캡차 수집(영업 대량 수집 플로)은 슈퍼관리자 전용 —
+        // 일반 확장 사용자 토큰으로는 저장하지 않는다(2026-07-22 확정: 대량 수집 계열은 super only).
+        if (! $request->user()?->isSuperAdmin()) {
+            return response()->json(['ok' => false, 'message' => '권한이 없습니다.'], 403);
+        }
+
         if (strlen($request->getContent()) > 3_000_000) {
             return response()->json(['ok' => false, 'message' => 'Payload is too large.'], 413);
         }

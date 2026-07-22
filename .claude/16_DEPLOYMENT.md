@@ -244,6 +244,9 @@ chmod -R 775 storage bootstrap/cache
 - 설정: `~/.supervisor/supervisord.conf` — `[program:rankfree-worker]` =
   `/usr/bin/php83 /www/jcurve/rankfree/artisan queue:work --queue=hub-publish,hub-place,hub-shopping,default --sleep=3 --tries=3 --max-time=3600`
   (운영 `QUEUE_CONNECTION=database` 기존값 사용. `--max-time`으로 매시간 자가 재기동 — 메모리 누수 예방)
+  **numprocs=4**(+`process_name=%(program_name)s_%(process_num)02d`, 로그 `worker-%(process_num)02d.log`) —
+  워커 1개 직렬일 때 검색광고 429 재시도로 느려진 플레이스 잡이 쇼핑 발행(43ms짜리)을 굶기던 실사고(2026-07-22).
+  keyword-hub 화면의 "동시 발행 개수 = numprocs" 문구와 일치
   ⚠️ **잡이 named queue 를 쓰면 여기 `--queue=` 에 반드시 추가** — 키워드 허브 잡(hub-publish·hub-place·hub-shopping)이 default 만 듣던 워커에 안 잡혀 "발행 0" 이 났던 실사고(2026-07-22). 새 큐 추가 시 sed 로 conf 수정 후 `supervisorctl reread && update`
 - 로그: `storage/logs/worker.log`(stderr 포함, 10MB×3 로테이션). supervisord 자체 로그는 `~/.supervisor/`
 - 제어: `~/.local/bin/supervisorctl -c ~/.supervisor/supervisord.conf status|restart rankfree-worker`
