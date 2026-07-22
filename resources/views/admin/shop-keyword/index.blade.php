@@ -7,6 +7,9 @@
     <x-slot:desc>핵심 키워드와 상품 URL로 키워드를 추출·조합해, <b>어떤 검색어에서 내 상품이 쇼핑 상위 {{ $top }}위에 노출되는지</b> 찾아 제품명·태그·상세페이지 SEO 개선 근거로 씁니다.</x-slot:desc>
 </x-console.page-head>
 
+@if (session('status'))
+    <div class="card-soft px-4 py-3 mb-4 text-muted" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
+@endif
 @error('core_keyword')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 @error('product')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 
@@ -14,8 +17,8 @@
     @csrf
     <div class="flex gap-3 flex-wrap items-start mb-3">
         <div style="flex:1;min-width:220px;">
-            <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">핵심 키워드</label>
-            <input name="core_keyword" class="input" value="{{ old('core_keyword') }}" placeholder="예: 비타민c" required autofocus>
+            <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">핵심 키워드 <span class="text-muted-soft">(여러 개는 쉼표로 — 최대 5개, 키워드별 분석 생성)</span></label>
+            <input name="core_keyword" class="input" value="{{ old('core_keyword') }}" placeholder="예: 비타민c, 비타민씨1000" required autofocus>
         </div>
         <div style="flex:2;min-width:300px;">
             <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">상품 URL(스마트스토어/가격비교) 또는 업체명</label>

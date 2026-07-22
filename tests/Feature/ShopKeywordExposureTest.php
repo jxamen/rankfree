@@ -141,6 +141,30 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertSame(0, (int) $a->combos()->where('ad_exposed', true)->count());   // API 는 광고 판별 없음
     }
 
+    /** 핵심 키워드 여러 개(쉼표 구분) — 키워드별 분석이 각각 생성되고 목록으로 안내(2026-07-22). */
+    public function test_multiple_core_keywords_create_separate_analyses(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+
+        $res = $this->actingAs($u)->post(route('admin.shop-keyword.store'), [
+            'core_keyword' => '비타민c, 비타민씨1000,비타민c',   // 중복은 1개로
+            'product' => 'https://smartstore.naver.com/x/products/111',
+            'threshold' => 5,
+            'check_method' => 'api',
+        ]);
+
+        $res->assertRedirect(route('admin.shop-keyword'));
+        $this->assertSame(2, ShopKeywordAnalysis::count());
+        $this->assertSame(['비타민c', '비타민씨1000'], ShopKeywordAnalysis::orderBy('id')->pluck('core_keyword')->all());
+        $this->assertSame(['api', 'api'], ShopKeywordAnalysis::pluck('check_method')->all());
+
+        // 6개 초과는 반려
+        $this->actingAs($u)->post(route('admin.shop-keyword.store'), [
+            'core_keyword' => 'a1,a2,a3,a4,a5,a6',
+            'product' => 'https://smartstore.naver.com/x/products/111',
+        ])->assertSessionHasErrors('core_keyword');
+    }
+
     public function test_index_renders(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'operator']))->get(route('admin.shop-keyword'))->assertOk()->assertSee('쇼핑 노출 키워드');

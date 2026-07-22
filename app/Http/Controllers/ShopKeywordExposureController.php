@@ -38,22 +38,44 @@ class ShopKeywordExposureController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'core_keyword' => 'required|string|max:120',
+            'core_keyword' => 'required|string|max:600',
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|min:1|max:40',
             'check_method' => 'nullable|in:api,search',
         ]);
 
-        // 조합 수는 선택하지 않는다 — 만들 수 있는 조합 전부 생성(hard_cap 안전선).
-        $analysis = $this->analyzer->prepare(
-            $request->user(),
-            $data['core_keyword'],
-            $data['product'],
-            null,
-            ['threshold' => $data['threshold'] ?? null, 'check_method' => $data['check_method'] ?? 'api'],
-        );
+        // 핵심 키워드 여러 개(쉼표·줄바꿈 구분, 2026-07-22) — 한 핵심으로 노출이 안 찾아질 때
+        // 다른 핵심으로도 병행 시도할 수 있게 키워드별 분석을 각각 만든다.
+        $cores = collect(preg_split('/[,\r\n]+/u', $data['core_keyword']))
+            ->map(fn ($k) => trim($k))->filter()->unique()->values();
+        if ($cores->isEmpty()) {
+            return back()->withInput()->withErrors(['core_keyword' => '핵심 키워드를 입력하세요.']);
+        }
+        if ($cores->count() > 5) {
+            return back()->withInput()->withErrors(['core_keyword' => '핵심 키워드는 한 번에 최대 5개까지 가능합니다(키워드별 분석이 각각 생성됩니다).']);
+        }
+        if ($tooLong = $cores->first(fn ($k) => mb_strlen($k) > 120)) {
+            return back()->withInput()->withErrors(['core_keyword' => "핵심 키워드가 너무 깁니다: {$tooLong}"]);
+        }
 
-        return redirect()->route('admin.shop-keyword.show', $analysis);
+        // 조합 수는 선택하지 않는다 — 만들 수 있는 조합 전부 생성(hard_cap 안전선).
+        $created = [];
+        foreach ($cores as $core) {
+            $created[] = $this->analyzer->prepare(
+                $request->user(),
+                $core,
+                $data['product'],
+                null,
+                ['threshold' => $data['threshold'] ?? null, 'check_method' => $data['check_method'] ?? 'api'],
+            );
+        }
+
+        if (count($created) === 1) {
+            return redirect()->route('admin.shop-keyword.show', $created[0]);
+        }
+
+        return redirect()->route('admin.shop-keyword')
+            ->with('status', count($created).'개 핵심 키워드 분석을 만들었습니다 — 각 분석을 열면 순위 확인이 시작됩니다.');
     }
 
     /** 배치 순위체크(폴링) — 확장 미설치 폴백. 서버가 직접 fetch 해 일부를 체크하고 진행상황 JSON 반환. */
