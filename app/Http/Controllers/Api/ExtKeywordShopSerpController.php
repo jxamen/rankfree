@@ -59,9 +59,9 @@ class ExtKeywordShopSerpController extends Controller
     }
 
     /**
-     * 카테고리 순회 대기열 — 데이터랩 트리 순서(1차 → 그 하위 2차 → 그 하위 3차 …)로
-     * "아직 다 못 비운 첫 분류"의 미수집 키워드를 준다. 분류 하나를 싹 끝내고 다음으로 넘어간다.
-     * 진행 위치를 따로 저장하지 않아도 '미수집이 남은 첫 분류'가 곧 이어할 지점이라, 멈췄다 다시 시작해도 그대로 이어진다.
+     * 카테고리 순회 대기열 — **1개마다 다른 1차 분류**(라운드 로빈, 사용자 확정 2026-07-22).
+     * 배치 안에서도 패션의류→패션잡화→화장품… 순으로 한 키워드씩 섞어 내준다(대분류 하나만 파고드는 것 방지).
+     * 각 분류 안에서는 미수집 우선(전 분류 소진 후 재수집)·검색량 큰 순. 시작 분류는 커서로 이어간다.
      */
     private function queueByCategory(int $limit, int $days)
     {
@@ -70,89 +70,100 @@ class ExtKeywordShopSerpController extends Controller
         $lease = \Illuminate\Support\Facades\Cache::get('shop_queue_lease', []);
         $lease = array_filter($lease, fn ($exp) => $exp > time());
 
-        // 트리 DFS 순서(1차 sort → 그 자식 → 그 손자) — 카테고리는 정적이라 캐시
-        $order = \Illuminate\Support\Facades\Cache::remember('shop_cat_dfs', 3600, function () {
+        // 1차 분류 + 각 분류의 후손 카테고리 id 묶음(정적이라 캐시)
+        $roots = \Illuminate\Support\Facades\Cache::remember('shop_root_subtrees', 3600, function () {
             $cats = \App\Models\KeywordCategory::where('type', 'shopping')
                 ->orderBy('sort')->orderBy('id')->get(['id', 'parent_id', 'name']);
+            $byParent = $cats->groupBy('parent_id');
             $out = [];
-            $walk = function ($pid, string $path) use (&$walk, $cats, &$out) {
-                foreach ($cats->where('parent_id', $pid) as $c) {
-                    $full = $path === '' ? $c->name : $path.' > '.$c->name;
-                    $out[] = ['id' => $c->id, 'path' => $full];
-                    $walk($c->id, $full);
+            foreach ($cats->whereNull('parent_id') as $root) {
+                $ids = [$root->id];
+                $frontier = [$root->id];
+                while ($frontier) {
+                    $children = collect($frontier)->flatMap(fn ($pid) => ($byParent[$pid] ?? collect())->pluck('id'))->all();
+                    if (! $children) {
+                        break;
+                    }
+                    $ids = array_merge($ids, $children);
+                    $frontier = $children;
                 }
-            };
-            $walk(null, '');
+
+                $out[] = ['name' => $root->name, 'ids' => array_values(array_unique($ids))];
+            }
 
             return $out;
         });
+        if ($roots === []) {
+            return response()->json(['data' => ['keywords' => [], 'category' => null, 'category_index' => 0, 'category_total' => 0, 'remaining' => 0]]);
+        }
 
-        // ① 아직 '한 번도' 수집 안 된 키워드를 먼저 준다(스냅샷 자체가 없는 것) — 전 분류 소진 전엔 재수집 안 함.
         $never = fn ($q) => $q->whereNotExists(fn ($s) => $s->selectRaw('1')
             ->from('keyword_shop_serps')->whereColumn('keyword_shop_serps.keyword', 'keyword_candidates.keyword'));
-        $r = $this->pickCategoryQueue($order, $lease, $limit, $never, 'new');
-        if ($r !== null) {
-            return $r;
-        }
+        $freshKw = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
+        $stale = fn ($q) => $q->whereNotIn('keyword', $freshKw);
 
-        // ② 전부 최소 1회 수집됨 → days(기본 1일) 지난 것부터 재수집.
-        $fresh = KeywordShopSerp::where('collected_at', '>=', now()->subDays($days))->pluck('keyword');
-        $stale = fn ($q) => $q->whereNotIn('keyword', $fresh);
-        $r = $this->pickCategoryQueue($order, $lease, $limit, $stale, 'refresh');
-        if ($r !== null) {
-            return $r;
-        }
+        $n = count($roots);
+        $cursor = (int) \Illuminate\Support\Facades\Cache::get('shop_queue_root_cursor', 0) % $n;
+        $perRootLimit = (int) ceil($limit / $n) + 2;
 
-        return response()->json(['data' => [
-            'keywords' => [], 'category' => null,
-            'category_index' => count($order), 'category_total' => count($order), 'remaining' => 0,
-        ]]);
-    }
+        foreach ([['new', $never], ['refresh', $stale]] as [$phase, $filter]) {
+            // 분류별 후보를 한 번에 받아 라운드 로빈으로 인터리브 — 1개마다 분류가 바뀐다
+            $perRoot = [];
+            foreach ($roots as $i => $root) {
+                $q = \App\Models\KeywordCandidate::whereIn('category_id', $root['ids']);
+                $filter($q);
+                $perRoot[$i] = $q
+                    ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))
+                    ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
+                    ->distinct()->limit($perRootLimit)->pluck('keyword')->values();
+            }
 
-    /**
-     * DFS 순서로 첫 '남은 키워드가 있는 분류'에서 $limit 개를 내준다($filter 로 대상 한정).
-     * 못 찾으면 null(다음 단계로).
-     */
-    private function pickCategoryQueue(array $order, array &$lease, int $limit, callable $filter, string $phase)
-    {
-        $allCatIds = collect($order)->pluck('id');
-        $doneCats = 0;
-        foreach ($order as $c) {
-            $query = \App\Models\KeywordCandidate::where('category_id', $c['id']);
-            $filter($query);   // whereNotExists(미수집) 또는 whereNotIn(오래된 것) — 쿼리를 직접 변형
-            $kws = $query
-                ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))   // 내준 것 제외
-                ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
-                ->distinct()->limit($limit)->pluck('keyword')->values();
+            $picked = [];
+            $seen = [];
+            for ($round = 0; $round < $perRootLimit && count($picked) < $limit; $round++) {
+                for ($i = 0; $i < $n && count($picked) < $limit; $i++) {
+                    $idx = ($cursor + $i) % $n;
+                    $kw = $perRoot[$idx][$round] ?? null;
+                    if ($kw === null || isset($seen[$kw])) {
+                        continue;   // 같은 키워드가 여러 분류에 중복 존재 — 한 번만
+                    }
+                    $seen[$kw] = true;
+                    $picked[] = $kw;
+                }
+            }
 
-            if ($kws->isNotEmpty()) {
-                foreach ($kws as $k) {
+            if ($picked !== []) {
+                foreach ($picked as $k) {
                     $lease[$k] = time() + 300;   // 5분간 재발급 금지
                 }
                 \Illuminate\Support\Facades\Cache::put('shop_queue_lease', $lease, 600);
+                \Illuminate\Support\Facades\Cache::put('shop_queue_root_cursor', ($cursor + 1) % $n, 3600);
 
                 // 남은 수는 표시용 — 무거우니 짧게 캐시(정확도보다 응답 속도)
+                $allIds = collect($roots)->flatMap(fn ($r) => $r['ids']);
                 $remaining = \Illuminate\Support\Facades\Cache::remember("shop_queue_remaining:{$phase}", 180,
-                    function () use ($allCatIds, $filter) {
-                        $q = \App\Models\KeywordCandidate::whereIn('category_id', $allCatIds);
+                    function () use ($allIds, $filter) {
+                        $q = \App\Models\KeywordCandidate::whereIn('category_id', $allIds);
                         $filter($q);
 
                         return $q->distinct()->count('keyword');
                     });
 
                 return response()->json(['data' => [
-                    'keywords' => $kws,
-                    'category' => $c['path'],                       // 지금 수집 중인 분류(화면 표시)
-                    'category_index' => $doneCats + 1,
-                    'category_total' => count($order),
+                    'keywords' => collect($picked),
+                    'category' => '전 분류 순회('.$roots[$cursor]['name'].'부터 1개씩)',
+                    'category_index' => $cursor + 1,
+                    'category_total' => $n,
                     'phase' => $phase === 'new' ? '미수집 우선' : '재수집',
                     'remaining' => $remaining,
                 ]]);
             }
-            $doneCats++;
         }
 
-        return null;
+        return response()->json(['data' => [
+            'keywords' => [], 'category' => null,
+            'category_index' => $n, 'category_total' => $n, 'remaining' => 0,
+        ]]);
     }
 
     public function store(Request $request)
