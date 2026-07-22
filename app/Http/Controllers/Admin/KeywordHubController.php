@@ -192,8 +192,9 @@ class KeywordHubController extends Controller
             // count() 는 120만 행에서 수 초 — exists() 로 즉시 판정한다(시작 버튼 무반응 실사고).
             if (! HubAutoRun::query($type)->exists()) {
                 return response()->json(['data' => $this->autoPayload() + [
+                    // 쇼핑: 화면 JS 가 이 hint 를 받으면 확장 수집을 자동 시작한다(확장 미연결 시에만 이 문구가 그대로 보인다)
                     'hint' => $type === 'shopping'
-                        ? "발행 가능한 쇼핑 후보가 없습니다. 대기 키워드는 아직 문서 내용(시장분석)이 수집되지 않은 상태입니다 — 아래 '쇼핑 시장 수집'을 시작하면 수집되는 키워드부터 자동 발행됩니다."
+                        ? '발행할 시장분석 데이터가 없습니다 — 확장이 연결돼 있으면 수집이 자동 시작됩니다. 안 되면 chrome://extensions 에서 확장 새로고침(v0.3.7)·로그인 후 이 페이지를 새로고침하세요.'
                         : '발행 가능한 후보가 없습니다 — 후보 수집(승인 포함)을 먼저 진행하세요.',
                 ]])->header('Cache-Control', 'no-store, max-age=0');
             }

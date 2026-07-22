@@ -67,31 +67,30 @@
     </div>
 </div>
 
-{{-- 쇼핑 시장 수집(확장 대량 수집) — 쇼핑 발행의 재료(시장분석: 판매량·매출)를 만드는 단계.
-     admin-bridge(bulkStart)로 확장을 여기서 바로 구동한다(키워드 탐색과 동일 프로토콜). --}}
+{{-- 쇼핑 시장 수집 상태 — 별도 시작 버튼 없음. 위 '쇼핑만/동시 시작'이 발행과 수집을 함께 구동한다
+     (admin-bridge bulkStart — 확장이 대기 쇼핑 키워드의 시장분석을 자동 수집 = 쇼핑 발행의 재료). --}}
 <div class="card p-5 mb-5">
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
-            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 시장 수집 <span class="text-muted-soft font-normal">(확장 대량 수집)</span></div>
-            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">대기 쇼핑 키워드를 확장이 자동으로 돌며 시장분석(판매량·매출)을 만듭니다 — <b>쇼핑 발행의 재료</b>입니다. 브라우저를 켜둔 채 진행하세요(확장 v0.3.7+ 로그인 필요).</div>
+            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 시장 수집 <span class="text-muted-soft font-normal">(자동 — 위 시작 버튼에 포함)</span></div>
+            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">'쇼핑만 시작' 또는 '동시 시작'을 누르면 확장이 대기 키워드의 시장분석(판매량·매출)을 자동 수집하고, 수집되는 대로 발행이 따라갑니다. 브라우저를 켜둔 채 두세요(확장 v0.3.7+ 로그인 필요).</div>
         </div>
         <div class="flex items-center gap-2 flex-none">
-            <button type="button" id="kh-collect-start" class="btn btn-primary btn-sm">쇼핑 시장 수집 시작</button>
             <button type="button" id="kh-collect-stop" class="btn btn-secondary btn-sm kh-stop-live" hidden>수집 중단</button>
         </div>
     </div>
-    <div id="kh-collect-msg" class="text-muted mt-2" style="font-size:var(--fs-xs);"></div>
+    <div id="kh-collect-msg" class="text-muted mt-2" style="font-size:var(--fs-xs);">대기 — 위 '쇼핑만 시작' 또는 '동시 시작'을 누르면 수집이 자동 시작됩니다.</div>
 </div>
 
 <script>
 (function () {
-    const start = document.getElementById('kh-collect-start');
     const stop = document.getElementById('kh-collect-stop');
     const msg = document.getElementById('kh-collect-msg');
     const statusUrl = '{{ route('admin.keyword-hub.collect-market-status') }}';
     let poll = null;
     let statPoll = null;
     let lastStat = null;
+    let autoPubAt = 0;   // 시장분석 생성 감지 시 쇼핑 발행 자동 시작(2분 간격 재시도 가드)
 
     const send = (type, extra) => window.postMessage(Object.assign({ source: 'rankfree-admin', type }, extra || {}), '*');
     const hasExt = () => document.documentElement.getAttribute('data-rf-ext') === '1';
@@ -101,6 +100,12 @@
             const r = await fetch(statusUrl + '?t=' + Date.now(), { headers: { Accept: 'application/json' }, cache: 'no-store' });
             if (r.ok) lastStat = (await r.json()).data;
         } catch (e) { /* noop */ }
+        // 시장분석이 생기기 시작했고 발행이 꺼져 있으면 쇼핑 발행을 자동 시작한다 — 버튼 하나 흐름의 뒷단
+        if (lastStat && lastStat.market_10m > 0 && !window.__khPublishRunning
+            && Date.now() - autoPubAt > 120000 && window.__khStartPublish) {
+            autoPubAt = Date.now();
+            window.__khStartPublish('shopping');
+        }
     }
     function statLine() {
         if (!lastStat) return '';
@@ -112,7 +117,6 @@
     }
     function live() {
         stop.hidden = false;
-        start.disabled = true;
         if (!poll) poll = setInterval(() => send('bulkStatus'), 1500);
         if (!statPoll) { fetchStat(); statPoll = setInterval(fetchStat, 20000); }
     }
@@ -120,14 +124,13 @@
         if (poll) { clearInterval(poll); poll = null; }
         if (statPoll) { clearInterval(statPoll); statPoll = null; }
         stop.hidden = true;
-        start.disabled = false;
     }
 
     window.addEventListener('message', (e) => {
         const m = e.data;
         if (!m || m.source !== 'rankfree-ext') return;
         if (m.type === 'bulkStartResult') {
-            if (!m.ok) { msg.style.color = 'var(--color-error)'; msg.textContent = m.message || '시작 실패 — 확장 설치·로그인을 확인하세요.'; start.disabled = false; return; }
+            if (!m.ok) { msg.style.color = 'var(--color-error)'; msg.textContent = m.message || '수집 시작 실패 — 확장 설치·로그인을 확인하세요.'; return; }
             msg.style.color = '';
             live();
         }
@@ -148,17 +151,19 @@
         if (m.type === 'bulkStopResult') { msg.textContent = '중단 요청됨 — 현재 키워드까지 마치고 멈춥니다.'; }
     });
 
-    start.addEventListener('click', () => {
+    /** 수집 시작 — 위 '쇼핑만/동시 시작' 버튼이 호출한다(별도 수집 버튼 없음). 성공 여부 반환. */
+    function startCollect() {
         if (!hasExt()) {
             msg.style.color = 'var(--color-error)';
-            msg.textContent = '랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인(v0.3.7+) 후 페이지를 새로고침하세요.';
-            return;
+            msg.textContent = '랭크프리 확장이 이 페이지에 연결되지 않았습니다 — chrome://extensions 에서 확장 새로고침(v0.3.7)·로그인 후 이 페이지를 새로고침하세요.';
+            return false;
         }
-        start.disabled = true;
         msg.style.color = '';
-        msg.textContent = '시작하는 중…';
+        msg.textContent = '수집 시작하는 중…';
         send('bulkStart', { limit: 0, delayMs: 6000, concurrency: 2 });
-    });
+        return true;
+    }
+    window.__khStartCollect = startCollect;
     stop.addEventListener('click', () => send('bulkStop'));
 
     // 이미 수집이 돌고 있으면 이어서 표시(브릿지가 붙을 때까지 잠깐 재시도)
@@ -312,6 +317,7 @@
     function render(d) {
         d = d || {};
         const running = !!d.running;
+        window.__khPublishRunning = running;   // 수집 카드가 발행 자동 시작 여부를 판단할 때 사용
         startBtns.forEach((b) => { b.disabled = running || stopping; });
 
         if (stopping) {
@@ -362,16 +368,20 @@
                 const d = (await res.json()).data;
                 stopping = false;
                 render(d);
-                if (d.hint) {   // 발행 가능 후보 0 등 — 시작 안 된 이유 + 다음 액션 링크
-                    statusEl.textContent = d.hint + ' ';
-                    if (d.hint_url) {
-                        const a = document.createElement('a');
-                        a.href = d.hint_url;
-                        a.textContent = '수집 상품 열기 →';
-                        a.className = 'text-ink font-semibold';
-                        statusEl.appendChild(a);
+                const wantsShopping = on && (type === 'shopping' || !type);
+                if (d.hint) {
+                    // 쇼핑 발행 재고(시장분석 데이터)가 없음 — 안내만 하지 않고 **수집을 자동 시작**한다.
+                    // 시장분석이 생기면 수집 카드 폴링이 발행도 자동 시작한다(버튼 하나 흐름).
+                    if (wantsShopping && window.__khStartCollect && window.__khStartCollect()) {
+                        statusEl.textContent = '발행할 시장분석 데이터가 없어 수집을 자동 시작했습니다 — 시장분석이 생기는 대로 발행이 자동 시작됩니다(아래 수집 카드에서 진행 확인).';
+                    } else {
+                        statusEl.textContent = d.hint;
                     }
-                } else if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
+                } else {
+                    if (!on) statusEl.textContent = fmt(d) + ' · 중단됨(진행 중이던 작업까지만 처리)';
+                    // 쇼핑이 포함된 발행을 시작했으면 수집도 함께 켠다 — 발행이 소진돼도 계속 공급되게
+                    if (on && d.running && wantsShopping && window.__khStartCollect) window.__khStartCollect();
+                }
                 return;
             }
             throw new Error('HTTP ' + res.status);
@@ -385,6 +395,7 @@
     startBtns.forEach((b) => b.addEventListener('click', () => toggle(true, b.dataset.type || null)));
     stopBtn.addEventListener('click', () => toggle(false));
     barStop.addEventListener('click', () => toggle(false));
+    window.__khStartPublish = (t) => toggle(true, t);   // 수집 카드가 시장분석 생성 감지 시 발행 자동 시작
 
     render(@json($auto));
 })();
