@@ -140,7 +140,7 @@
                     </div>
                     <div style="flex:1;min-width:140px;">
                         <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">시트(탭) 이름</label>
-                        <input name="gsheet_tab" id="vd-gsheet-tab" class="input" maxlength="120" placeholder="시트1">
+                        <input name="gsheet_tab" id="vd-gsheet-tab" class="input" maxlength="120" placeholder="비우면 첫 번째 탭 사용">
                     </div>
                 </div>
                 <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">

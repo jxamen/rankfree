@@ -57,23 +57,42 @@ class VendorController extends Controller
             return response()->json(['error' => '구글 서비스 계정 인증 실패 — .env GOOGLE_SERVICE_ACCOUNT_JSON(키 파일 경로)을 확인하세요.'], 422);
         }
 
-        $tab = trim((string) $vendor->gsheet_tab) ?: '시트1';
+        // 1) 탭 목록 조회 — 탭 미설정이면 첫 탭 자동 사용, 설정돼 있으면 실존 검증(불일치가 400 의 주원인)
+        $meta = \Illuminate\Support\Facades\Http::timeout(15)->withToken($token)
+            ->get("https://sheets.googleapis.com/v4/spreadsheets/{$vendor->gsheet_id}?fields=sheets.properties.title");
+        if (! $meta->successful()) {
+            $hint = match ($meta->status()) {
+                403 => ' — 시트를 서비스 계정 이메일에 공유했는지 확인하세요.',
+                404 => ' — 시트 ID를 확인하세요.',
+                default => '',
+            };
+
+            return response()->json(['error' => '시트 조회 실패 (HTTP '.$meta->status().')'.$hint], 422);
+        }
+        $tabs = collect($meta->json('sheets', []))->pluck('properties.title')
+            ->filter(fn ($t) => trim((string) $t) !== '')->values();
+        $tab = trim((string) $vendor->gsheet_tab);
+        if ($tab === '') {
+            $tab = (string) ($tabs->first() ?? '');
+        }
+        if ($tab === '') {
+            return response()->json(['error' => '시트에 탭이 없습니다.'], 422);
+        }
+        if (! $tabs->contains($tab)) {
+            return response()->json(['error' => "시트에 '{$tab}' 탭이 없습니다 — 사용 가능한 탭: ".$tabs->implode(', ').' (업체 관리에서 탭 이름을 고치세요)'], 422);
+        }
+
+        // 2) 해당 탭 1행(헤더) 조회
         $range = rawurlencode("'{$tab}'!1:1");
         $res = \Illuminate\Support\Facades\Http::timeout(15)->withToken($token)
             ->get("https://sheets.googleapis.com/v4/spreadsheets/{$vendor->gsheet_id}/values/{$range}");
         if (! $res->successful()) {
-            $hint = match ($res->status()) {
-                403 => ' — 시트를 서비스 계정 이메일에 공유했는지 확인하세요.',
-                404 => ' — 시트 ID·탭 이름을 확인하세요.',
-                default => '',
-            };
-
-            return response()->json(['error' => '시트 조회 실패 (HTTP '.$res->status().')'.$hint], 422);
+            return response()->json(['error' => '시트 조회 실패 (HTTP '.$res->status().')'], 422);
         }
 
         $cols = array_map(fn ($c) => trim((string) $c), $res->json('values.0', []) ?? []);
 
-        return response()->json(['tab' => $tab, 'columns' => $cols]);
+        return response()->json(['tab' => $tab, 'tabs' => $tabs, 'columns' => $cols]);
     }
 
     public function destroy(Vendor $vendor)

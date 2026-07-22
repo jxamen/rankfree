@@ -199,7 +199,13 @@ class OrderDispatchService
             return false;
         }
 
-        $tab = trim((string) $v->gsheet_tab) ?: '시트1';
+        // 탭 미설정이면 첫 번째 탭 자동 사용(탭 이름 불일치 400 방지). 메타 조회 실패 시 종전 기본값 유지.
+        $tab = trim((string) $v->gsheet_tab);
+        if ($tab === '') {
+            $meta = Http::timeout(15)->withToken($token)
+                ->get("https://sheets.googleapis.com/v4/spreadsheets/{$v->gsheet_id}?fields=sheets.properties.title");
+            $tab = trim((string) ($meta->json('sheets.0.properties.title') ?? '')) ?: '시트1';
+        }
         $range = rawurlencode("'{$tab}'!A1");
         $row = array_map(fn ($x) => is_scalar($x) || $x === null ? $x : json_encode($x, JSON_UNESCAPED_UNICODE), array_values((array) $d->payload));
         $res = Http::timeout(20)->withToken($token)->post(
