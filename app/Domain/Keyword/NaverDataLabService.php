@@ -34,7 +34,23 @@ class NaverDataLabService
             return null;
         }
 
-        return Cache::remember('kw:weekday:'.md5(mb_strtoupper(str_replace(' ', '', $kw))), now()->addHours(24), function () use ($kw, $keys) {
+        // 실패도 30분 네거티브 캐시 — 키 쿼터 소진(429) 중에 공유 페이지가 매 요청 라이브 호출로 느려지지 않게.
+        // Cache::remember 는 null 을 저장하지 못해(다음 요청 재호출) 래퍼 배열로 감싼다.
+        $ck = 'kw:weekday:v2:'.md5(mb_strtoupper(str_replace(' ', '', $kw)));
+        $hit = Cache::get($ck);
+        if (is_array($hit) && array_key_exists('v', $hit)) {
+            return $hit['v'];
+        }
+        $out = $this->computeWeekday($kw, $keys);
+        Cache::put($ck, ['v' => $out], $out !== null ? now()->addHours(24) : now()->addMinutes(30));
+
+        return $out;
+    }
+
+    /** @return list<array{w: string, pct: float}>|null */
+    private function computeWeekday(string $kw, array $keys): ?array
+    {
+        return (function () use ($kw, $keys) {
             $end = CarbonImmutable::yesterday();
             $start = $end->subDays(90);
             $body = json_encode([
@@ -66,7 +82,7 @@ class NaverDataLabService
             }
 
             return $out;
-        });
+        })();
     }
 
     /** datalab/search POST — 스코프 있는 키가 나올 때까지 로테이션. results.0.data 반환. */

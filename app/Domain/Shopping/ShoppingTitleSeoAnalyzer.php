@@ -133,9 +133,9 @@ class ShoppingTitleSeoAnalyzer
             )));
             break;
         }
-        if ($titles) {
-            Cache::put($ck, $titles, 6 * 3600); // 성공만 캐시(실패는 다음 호출에 재시도)
-        }
+        // 실패(빈 결과)도 10분 네거티브 캐시 — 쿼터 소진(429) 중 공유 페이지가 매 요청 키 수만큼
+        // 라이브 재시도(최대 키×10초)로 느려지던 문제 방지. 성공은 6시간.
+        Cache::put($ck, $titles, $titles ? 6 * 3600 : 600);
 
         return $titles;
     }
