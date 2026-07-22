@@ -47,6 +47,9 @@ class OrderController extends Controller
             // 이 상품에 지금 쓸 수 있는 쿠폰(미사용·미만료·활성·기간 내·상품 적용 가능)
             'coupons' => $request->user()->usableCoupons()
                 ->filter(fn (UserCoupon $uc) => $uc->coupon->appliesTo($product->id))->values(),
+            // 이 상품에 대한 내 주문 접수 내역(최근 20건 + 전체 건수)
+            'myOrders' => $product->orders()->where('user_id', $request->user()->id)->latest()->limit(20)->get(),
+            'myOrdersTotal' => $product->orders()->where('user_id', $request->user()->id)->count(),
         ]);
     }
 

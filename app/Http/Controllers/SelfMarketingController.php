@@ -16,6 +16,7 @@ class SelfMarketingController extends Controller
     {
         $type = $request->query('type');
         $q = trim((string) $request->query('q', ''));
+        $view = $request->query('view') === 'list' ? 'list' : 'card';
 
         $products = MarketingProduct::where('is_active', true)
             ->when($type, fn ($query) => $query->where('product_type', $type))
@@ -34,6 +35,7 @@ class SelfMarketingController extends Controller
             'activeTypeCodes' => $activeTypeCodes,
             'type' => $type,
             'q' => $q,
+            'view' => $view,
         ]);
     }
 }

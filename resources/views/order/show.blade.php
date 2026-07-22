@@ -177,6 +177,48 @@
             </div>
         @endif
     </form>
+
+    {{-- 이 상품에 대한 내 주문 접수 내역 — 최근 20건 --}}
+    @if (($myOrders ?? collect())->isNotEmpty())
+        @php
+            $orderStatuses = \App\Models\MarketingOrder::STATUSES;
+            $orderStatusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
+        @endphp
+        <div class="card overflow-hidden mt-6">
+            <div class="px-5 pt-5 pb-3 flex items-baseline gap-2">
+                <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 접수 내역</span>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 대한 내 주문 {{ number_format($myOrdersTotal) }}건{{ $myOrdersTotal > $myOrders->count() ? ' · 최근 '.$myOrders->count().'건 표시' : '' }}</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="w-full" style="min-width:640px;">
+                    <thead>
+                        <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
+                            <th class="text-left px-5 py-3 font-semibold" style="width:160px;">주문번호</th>
+                            <th class="text-right px-3 py-3 font-semibold" style="width:120px;">수량 · 기간</th>
+                            <th class="text-right px-3 py-3 font-semibold" style="width:120px;">금액</th>
+                            <th class="text-center px-3 py-3 font-semibold" style="width:90px;">상태</th>
+                            <th class="text-right px-5 py-3 font-semibold" style="width:140px;">주문일시</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($myOrders as $o)
+                            <tr style="border-top:1px solid var(--color-hairline-soft);">
+                                <td class="px-5 py-3 text-ink font-medium" style="font-size:var(--fs-xs);">{{ $o->order_no }}</td>
+                                <td class="px-3 py-3 text-right text-muted" style="font-size:var(--fs-xs);">
+                                    {{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif
+                                </td>
+                                <td class="px-3 py-3 text-right text-ink font-medium" style="font-size:var(--fs-xs);">{{ number_format($o->total_price) }}원</td>
+                                <td class="px-3 py-3 text-center">
+                                    <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $orderStatusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $orderStatuses[$o->status] ?? $o->status }}</span>
+                                </td>
+                                <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 </section>
 
 <style>
