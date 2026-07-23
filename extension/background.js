@@ -1071,13 +1071,15 @@ const handlers = {
       // (실측: 가격비교 많은 의류 키워드에서 카탈로그를 다 읽다 초과 → 창엔 차단 메시지가 없었다).
       const looksBlocked = (msg) => /차단|429|일시적으로 제한|데이터를 찾지 못|페이지가 열리지 않/.test(String(msg || ''));
 
-      // 탭은 '순서대로' 열되 기다리지 않는다 — 앞 탭이 열리면 바로 다음 탭을 연다.
-      // (gap 만큼 직렬 대기시키면 동시 N개가 무의미해져 사실상 순차가 된다)
+      // 탭 여는 간격(stagger) — 예전엔 0.3초 고정이라, 동시 4~5개가 콜드스타트에 1초 남짓 안에 몰려 열려
+      //   네이버가 429로 막았다(실측). → 오픈을 벌린다: 아무리 몰려도 baseGap/conc 간격 이상으로 열어
+      //   집계 오픈율이 대략 conc개/baseGap(기본 6초) 를 넘지 않게 하고, 최소 1초는 보장한다(높은 conc 버스트 방지).
+      //   gap 만큼(6초) 직렬 대기시키면 동시성이 무의미해지므로, conc 로 나눠 '몰림만' 막고 병렬은 유지한다.
+      const openGap = Math.max(1000, Math.round(baseGap / Math.max(1, conc)));
       let openChain = Promise.resolve();
       const openSlot = () => {
-        const my = openChain.then(() => sleep(300));   // 탭 생성만 0.3초 간격으로 겹치지 않게
+        const my = openChain.then(() => sleep(openGap));
         openChain = my;
-
         return my;
       };
 
@@ -1237,37 +1239,83 @@ const handlers = {
     return new Promise((resolve) => {
       let tabId = null;
       let done = false;
+      let loaded = false;    // tabs.onUpdated status:complete — 페이지가 실제로 떴다
+      let started = false;   // content script(document_idle) 시작 신호 — 수집 스크립트가 돈다
+      let stall = null;      // '떴는데 수집 스크립트가 안 붙음'(에러 페이지 등) 판정용
+
       // 상품 5페이지(약 20초) + 가격비교 카탈로그 확장(예산 20초) + 여유
       const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), 75000);
-      // 네이버가 429/차단으로 막으면 크롬 에러 페이지라 content script 가 아예 안 돈다.
-      // 그때는 살아있음 신호가 없다 — 75초를 기다리지 말고 12초에 차단으로 판정해 바로 쉰다
-      // (계속 두드리면 네이버가 더 오래 막는다).
+
+      // '안 열림 = 차단' 판정. 예전엔 시작 신호를 12초 안 받으면 차단으로 봤으나, 동시 수집(백그라운드 탭 N개)에서는
+      //   크롬이 background 탭의 document_idle content script 주입을 뒤로 미뤄, 페이지는 3~4초에 떠도 시작 신호가
+      //   12초를 넘겨 도착 → 멀쩡한 페이지를 차단으로 오판했다(실측: 동시 4에서 다발, 로딩은 12초도 안 걸림).
+      //   → 열림 판정을 시작 신호가 아니라 '실제 페이지 로드 완료(tabs.onUpdated status:complete)'로 바꾼다.
+      //     이 신호는 content script 주입 스케줄링과 무관하게 네트워크/렌더 완료 시점에 온다.
+      //   alive: complete·시작신호 둘 다 30초 없으면 진짜 미로딩(연결 실패·차단)으로 보고 차단 처리(백오프).
+      //     동시수를 상한(10)까지 올리거나 회선이 느리면 complete 가 20초대에 오기도 해 30초로 여유를 둔다.
       const alive = setTimeout(() => {
-        finish({ ok: false, message: '페이지가 열리지 않았습니다 — 차단(429)으로 보입니다.' });
-      }, 12000);
+        if (!loaded && !started) finish({ ok: false, message: '페이지가 열리지 않았습니다 — 차단(429)으로 보입니다.' });
+      }, 30000);
+      const clearBlockTimers = () => { clearTimeout(alive); if (stall) { clearTimeout(stall); stall = null; } };
+      const isGateUrl = (u) => !!u && /^https:\/\/(nid\.naver\.com|captcha\.naver\.com|ncpt\.naver\.com)\//i.test(u);
+
+      // 페이지가 실제로 떴다(complete) — '안 열림' 판정 해제. 떴는데도 수집 스크립트가 30초 안 붙으면(에러 페이지·과부하)
+      //   건너뛴다. 단 이건 '차단'이 아니라 '단순 실패'로 계상한다 — 메시지에 차단 토큰(차단/열리지 않 등)을 넣지 않아
+      //   looksBlocked 에 안 걸리므로, 정상 로드된 페이지 하나 때문에 함대 전체가 백오프·동시수 반토막 되지 않는다.
+      const markLoaded = () => {
+        if (loaded || started) return;
+        loaded = true;
+        clearTimeout(alive);
+        if (!stall) stall = setTimeout(() => {
+          if (!started) finish({ ok: false, message: '페이지는 떴으나 수집 스크립트가 응답하지 않습니다 — 건너뜁니다(시간 초과).' });
+        }, 30000);
+      };
+
+      // 탭 상태 감시 — 캡차/로그인 리다이렉트(진짜 차단)는 즉시, 로드 완료는 '열림'으로 본다.
+      const onUpd = (id, info) => {
+        if (!tabId || id !== tabId || !info) return;
+        if (isGateUrl(info.url || '')) {
+          // 네이버가 보안(캡차/로그인) 게이트로 돌렸다 — 확실한 차단. 타이머 안 기다리고 즉시 판정.
+          finish({ ok: false, message: '네이버 보안(캡차) 감지 — 차단으로 보입니다.' });
+          return;
+        }
+        if (info.status === 'complete') markLoaded();
+      };
+
       function finish(res) {
         if (done) return;
         done = true;
         clearTimeout(to);
-        clearTimeout(alive);
+        clearBlockTimers();
         chrome.runtime.onMessage.removeListener(onMsg);
+        try { chrome.tabs.onUpdated.removeListener(onUpd); } catch (e) { /* noop */ }
         removeTab(tabId);
         resolve(res);
       }
       function onMsg(msg, sender) {
         if (!sender || !sender.tab || sender.tab.id !== tabId || !msg) return;
-        // 수집 스크립트가 떴다 — 페이지는 정상이니 살아있음 타이머만 끈다(수집 자체는 계속 기다린다)
-        if (msg.type === '__shoppingCollectStarted') { clearTimeout(alive); return; }
+        // 수집 스크립트가 떴다 — 페이지는 정상이니 차단 판정 타이머를 모두 끈다(수집 자체는 계속 기다린다)
+        if (msg.type === '__shoppingCollectStarted') { started = true; clearBlockTimers(); return; }
         if (msg.type === '__shoppingCollected') {
           finish({ ok: !!msg.ok, products: msg.products || [], total: msg.total || 0, relatedTags: msg.relatedTags || [], message: msg.message || '' });
         }
       }
       chrome.runtime.onMessage.addListener(onMsg);
+      try { chrome.tabs.onUpdated.addListener(onUpd); } catch (e) { /* noop */ }
       try {
         const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(String(keyword || '')) + '#rfcollect=' + (Number(count) || 80);
         chrome.tabs.create({ url, active: false }, (tab) => {
           if (chrome.runtime.lastError || !tab) { finish({ ok: false, message: 'tab_create_failed' }); return; }
           tabId = tab.id;
+          if (done) { removeTab(tab.id); return; }   // 콜백 전에 이미 끝났으면(타이머 등) 고아 탭 정리
+          // ★ 콜백 이전에 도착해 !tabId 가드로 놓쳤을 수 있는 캡차 리다이렉트/complete 를 1회 보정(경합 하드닝)
+          try {
+            chrome.tabs.get(tab.id, (t) => {
+              if (chrome.runtime.lastError || !t || done) return;
+              if (isGateUrl(t.url || t.pendingUrl || '')) { finish({ ok: false, message: '네이버 보안(캡차) 감지 — 차단으로 보입니다.' }); return; }
+              if (t.status === 'complete') markLoaded();
+            });
+          } catch (e) { /* noop */ }
         });
       } catch (e) {
         finish({ ok: false, message: String(e && e.message || e) });
