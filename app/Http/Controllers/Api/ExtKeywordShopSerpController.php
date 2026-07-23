@@ -221,9 +221,8 @@ class ExtKeywordShopSerpController extends Controller
         }
 
         if ($drop !== []) {
+            // remaining 캐시는 건드리지 않는다 — 배치마다 삭제가 나면 61만 행 count 재계산이 반복된다(표시용 3분 지연 무방)
             \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)->whereIn('keyword', $drop)->delete();
-            \Illuminate\Support\Facades\Cache::forget('shop_queue_remaining:new');
-            \Illuminate\Support\Facades\Cache::forget('shop_queue_remaining:refresh');
         }
 
         return $keywords->reject(fn ($k) => in_array($k, $drop, true))->values();
