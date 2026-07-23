@@ -480,11 +480,31 @@ const handlers = {
     } catch (e) {
       return { ok: false, message: '탭 열기 실패: ' + String((e && e.message) || e) };
     }
+    // 네이버 로그인·캡차 게이트 감지(2026-07-23) — 자동 열림 탭을 네이버가 nid/captcha 로 돌리면
+    // 수집이 영영 안 끝난다. 탭을 앞으로 가져와 사용자가 직접 확인하게 하고, 그 탭은 닫지 않는다.
+    let gate = false;
+    const onUpd = (tabId, info) => {
+      if (!tab || tabId !== tab.id || !info.url) return;
+      if (/^https:\/\/(nid\.naver\.com|captcha\.naver\.com|ncpt\.naver\.com)\//i.test(info.url)) {
+        gate = true;
+        try { chrome.tabs.update(tab.id, { active: true }); } catch (e) { /* noop */ }
+        const w = productInfoWaiters.get(pid);
+        if (w) w({ ok: false, needLogin: true });
+      }
+    };
+    try { chrome.tabs.onUpdated.addListener(onUpd); } catch (e) { /* noop */ }
     const result = await new Promise((resolve) => {
       const timer = setTimeout(() => resolve(null), 25000);
       productInfoWaiters.set(pid, (r) => { clearTimeout(timer); resolve(r); });
     });
+    try { chrome.tabs.onUpdated.removeListener(onUpd); } catch (e) { /* noop */ }
     productInfoWaiters.delete(pid);
+
+    if (gate) {
+      // 로그인 확인 탭은 유지 — 사용자가 로그인(확인)한 뒤 다시 수집하면 정상 진행
+      return { ok: false, product_id: pid, needLogin: true,
+        message: '네이버가 로그인(보안) 확인을 요구했습니다 — 방금 열린 탭에서 확인·로그인한 뒤 "상품정보 다시 수집"을 다시 눌러주세요.' };
+    }
     removeTab(tab && tab.id);
 
     if (!result) return { ok: false, product_id: pid, message: '상품정보 수집 시간 초과 — 상품 페이지를 한 번 직접 열어주세요.' };
