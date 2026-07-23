@@ -30,7 +30,7 @@
 
 ## 매핑 (`field_map` = `[{key, src, value}]`)
 
-- src: `alloc:quantity`(배분 수량) · `order:quantity|order_no|days|unit_price|total_price|orderer_name|orderer_contact|created_at` · `product:title` · `field:<field_key>`(동적 필드) · `static`(고정값=value)
+- src: `alloc:quantity`(배분 수량) · `order:quantity|order_no|days|unit_price|total_price|orderer_name|orderer_contact|created_at` · `product:title` · `field:<field_key>`(동적 필드) · `static`(고정값=value) · `skip`(**보내지 않음** — 빈 값 전송. 구글시트 전용 UI: 행 순서=열 순서라 중간 행을 지우면 뒤 열이 당겨지므로, 건너뛸 열은 삭제 대신 skip. 자동 생성 행 기본값)
 - 매핑이 비어 있으면 기본 페이로드 `{order_no, product, quantity(배분), days, fields(전체)}` 전송.
 - **구글시트는 매핑 순서 = 열 순서(A, B, C…)**, append(USER_ENTERED).
 

@@ -126,6 +126,7 @@ class OrderDispatchService
         [$type, $key] = array_pad(explode(':', $src, 2), 2, '');
 
         return match ($type) {
+            'skip' => '',                                           // 보내지 않음 — 구글시트 열 위치만 차지(빈 셀)
             'alloc' => $qty,                                        // 이 업체에 배분된 수량
             'order' => match ($key) {
                 'order_no' => $order->order_no,

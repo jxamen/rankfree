@@ -214,7 +214,8 @@
             </div>
             <div class="vx-map-rows flex flex-col gap-2"></div>
             <div class="flex items-center justify-between mt-2">
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 기본 페이로드(주문번호·상품명·수량·입력값 전체)로 전송됩니다.</span>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 기본 페이로드(주문번호·상품명·수량·입력값 전체)로 전송됩니다.
+                    구글시트는 <b class="text-muted">행 순서 = 열 순서</b> — 특정 열을 건너뛰려면 행을 지우지 말고 <b class="text-muted">'보내지 않음'</b>을 선택하세요(지우면 뒤 열이 앞으로 당겨집니다).</span>
                 <button type="button" class="btn btn-ghost btn-sm vx-map-add">＋ 매핑 행</button>
             </div>
         </div>
@@ -294,8 +295,8 @@
                     <input class="input fx-contains-msg" placeholder="예: 네이버 플레이스(m.place.naver.com) URL을 입력하세요" style="width:100%;">
                 </div>
                 <div style="flex:1;min-width:200px;">
-                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">자동 채움 (유입키워드 수집값)</label>
-                    <select class="input fx-autofill" style="width:100%;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">자동 채움 <span class="text-muted-soft">— 쇼핑 유입키워드 분석의 확장 수집값</span></label>
+                    <select class="input fx-autofill" style="width:100%;" title="주문 상세 [수집요청] → 쇼핑 유입키워드 분석 → 크롬 확장이 스마트스토어 상품 페이지에서 수집한 값이 이 필드에 자동 저장됩니다">
                         <option value="">안 함(수동)</option>
                         @foreach (\App\Models\ProductField::AUTOFILL_SOURCES as $code => $name)
                             <option value="{{ $code }}">{{ $name }}</option>
@@ -308,7 +309,8 @@
                 </div>
             </div>
             <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">필수 포함 값을 설정하면 주문 입력값에 해당 문자열이 없을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다.
-                자동 채움을 고르면 주문에 연결된 쇼핑 유입키워드 분석에서 확장이 수집한 값이 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).
+                <b class="text-muted">자동 채움 값의 출처</b>: 주문 접수 후 관리자가 <b class="text-muted">주문 상세 › [수집요청]</b>을 누르면 쇼핑 유입키워드 분석이 만들어지고,
+                <b class="text-muted">크롬 확장이 스마트스토어 상품 페이지에서 수집</b>한 상품명·상점명·가격·정답태그·이미지가 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).
                 고정값은 <b class="text-muted">숨김 필드</b>에서 주문 생성 시 그대로 저장되는 값입니다 — 항상 같은 값을 발주에 전달할 때 쓰고, 주문 상세에서 건별 수정도 가능합니다.</div>
         </div>
     </div>
@@ -494,20 +496,27 @@
         out.push(['static', '고정값 직접 입력']);
         return out;
     }
-    function fillSrc(sel, cur) {
-        sel.innerHTML = fieldSources().map(function (s) {
+    function fillSrc(sel, cur, gs) {
+        // 구글시트는 행 순서 = 열 순서라 중간 행 삭제 시 뒤 열이 당겨진다 —
+        // 특정 열을 건너뛸 땐 삭제 대신 '보내지 않음'(빈 값 전송, 열 위치 유지)을 쓴다.
+        var list = gs ? [['skip', '보내지 않음 (이 열은 비워서 전송)']].concat(fieldSources()) : fieldSources();
+        sel.innerHTML = list.map(function (s) {
             return '<option value="' + s[0] + '"' + (s[0] === cur ? ' selected' : '') + '>' + s[1] + '</option>';
         }).join('');
+        if (sel.value !== cur && cur) sel.value = list.some(function (s) { return s[0] === cur; }) ? cur : sel.value;
     }
-    function addMapRow(wrap, data) {
+    function addMapRow(wrap, data, gs) {
         data = data || {};
         var row = vmapTpl.content.firstElementChild.cloneNode(true);
         row.querySelector('.vm-key').value = data.key || '';
         var src = row.querySelector('.vm-src');
-        fillSrc(src, data.src || 'alloc:quantity');
+        fillSrc(src, data.src || (gs ? 'skip' : 'alloc:quantity'), gs);
         var val = row.querySelector('.vm-value');
         val.value = data.value || '';
-        function syncStatic() { val.style.display = src.value === 'static' ? '' : 'none'; }
+        function syncStatic() {
+            val.style.display = src.value === 'static' ? '' : 'none';
+            row.style.opacity = src.value === 'skip' ? '.55' : '';   // 건너뛰는 열은 흐리게
+        }
         src.addEventListener('change', syncStatic); syncStatic();
         row.querySelector('.vm-del').addEventListener('click', function () { row.remove(); });
         wrap.appendChild(row);
@@ -524,7 +533,6 @@
         var map = node.querySelector('.vx-map');
         var mapRows = node.querySelector('.vx-map-rows');
         var vendorSel = node.querySelector('.vx-vendor');
-        (Array.isArray(data.map) ? data.map : []).forEach(function (m) { addMapRow(mapRows, m); });
         var mapBtn = node.querySelector('.vx-map-toggle');
         var sheetBar = node.querySelector('.vx-sheet-bar');
         var sheetInfo = node.querySelector('.vx-sheet-info');
@@ -532,6 +540,7 @@
             var opt = vendorSel.options[vendorSel.selectedIndex];
             return !!opt && opt.textContent.indexOf('구글시트') !== -1;
         }
+        (Array.isArray(data.map) ? data.map : []).forEach(function (m) { addMapRow(mapRows, m, isGsheet()); });
         // 구글시트 업체는 매핑 행 = 시트 열(A, B, C…) — 행마다 대상 열 표시
         function syncCols() {
             var gs = isGsheet();
@@ -565,7 +574,8 @@
             }
             cols.forEach(function (title, i) {
                 var row = mapRows.querySelectorAll('.vmap-row')[i];
-                if (!row) { addMapRow(mapRows, { src: 'static', value: '' }); row = mapRows.querySelectorAll('.vmap-row')[i]; }
+                // 새 행 기본값 = 보내지 않음(빈 열) — 소스를 고르기 전엔 아무 값도 안 나가게
+                if (!row) { addMapRow(mapRows, { src: 'skip' }, true); row = mapRows.querySelectorAll('.vmap-row')[i]; }
                 row.querySelector('.vm-key').value = title || ('열 ' + colLetter(i));
             });
             sheetInfo.textContent = "'" + data.tab + "' 탭 열 " + cols.length + "개 불러옴 — 각 열에 보낼 값을 선택하세요."
@@ -609,18 +619,19 @@
         }
         vendorSel.addEventListener('change', function () {
             syncCols();
+            mapRows.querySelectorAll('.vm-src').forEach(function (s) { fillSrc(s, s.value, isGsheet()); });   // 채널별 소스 목록(보내지 않음) 갱신
             if (map.style.display !== 'none') loadSheetCols();   // 매핑 패널이 열려 있으면 새 업체 시트 즉시 로드
         });
         mapBtn.addEventListener('click', function () {
             var open = map.style.display !== 'none';
             map.style.display = open ? 'none' : 'block';
             if (!open) {
-                mapRows.querySelectorAll('.vm-src').forEach(function (s) { fillSrc(s, s.value); });   // 필드 목록 최신화
+                mapRows.querySelectorAll('.vm-src').forEach(function (s) { fillSrc(s, s.value, isGsheet()); });   // 필드 목록 최신화
                 syncCols();
                 loadSheetCols();   // 구글시트면 열 이름 자동 로드
             }
         });
-        node.querySelector('.vx-map-add').addEventListener('click', function () { addMapRow(mapRows, {}); syncMapBtn(); });
+        node.querySelector('.vx-map-add').addEventListener('click', function () { addMapRow(mapRows, {}, isGsheet()); syncMapBtn(); });
         map.addEventListener('click', function () { setTimeout(syncMapBtn, 0); });   // ✕ 삭제 후 카운트 갱신
         syncMapBtn();
         node.querySelector('.vx-del').addEventListener('click', function () { node.remove(); vRefreshEmpty(); });
