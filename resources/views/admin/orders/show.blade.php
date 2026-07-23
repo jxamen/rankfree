@@ -20,9 +20,9 @@
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    {{-- 좌: 주문 정보 --}}
-    <div class="lg:col-span-2 flex flex-col gap-4">
+<div class="flex flex-col gap-4">
+    {{-- 상단 1줄: 주문 정보 · 주문자 · 상태 변경(3카드) — 이하 콘텐츠는 전체 폭 사용(2026-07-23 좁은 2/3 컬럼 제거) --}}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="card p-6">
             <div class="flex items-start justify-between flex-wrap gap-2 mb-4">
                 <div>
@@ -48,6 +48,67 @@
                 @endforeach
             </div>
         </div>
+
+        {{-- 주문자 --}}
+        <div class="card p-6">
+            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">주문자</div>
+            <div class="text-ink" style="font-size:var(--fs-sm);">{{ $order->orderer_name }}</div>
+            <div class="text-muted mt-0.5" style="font-size:var(--fs-xs);">{{ $order->orderer_contact }}</div>
+            @if ($order->user)
+                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">회원: {{ $order->user->name }} ({{ $order->user->email }})</div>
+            @else
+                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">비회원 주문</div>
+            @endif
+            <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">주문일시: {{ $order->created_at?->format('Y.m.d H:i') }}</div>
+        </div>
+
+        {{-- 상태 변경 --}}
+        <div class="card p-6">
+            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">상태 변경</div>
+            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
+                @csrf @method('PUT')
+                <select name="status" class="input" style="width:100%;font-size:var(--fs-xs);">
+                    @foreach ($statuses as $code => $label)
+                        <option value="{{ $code }}" {{ $order->status === $code ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm w-full mt-3">상태 저장</button>
+            </form>
+            <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" class="mt-3" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
+                @csrf @method('DELETE')
+                <button type="submit" class="btn btn-ghost btn-sm w-full" style="color:var(--color-error);">주문 삭제</button>
+            </form>
+        </div>
+    </div>
+
+    {{-- 승인 · 외부 발주(1회성 주문만) — 세부주문서 주문은 회차별 [발주]가 대체(2026-07-23) --}}
+    @if ($order->items->isEmpty())
+    <div class="card p-6">
+        <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">승인 · 외부 발주</div>
+        @if (! empty($allocPreview))
+            <div class="flex flex-col gap-1.5 mb-3">
+                @foreach ($allocPreview as [$pv, $qty])
+                    <div class="flex items-center justify-between" style="font-size:var(--fs-xs);">
+                        <span class="text-body">{{ $pv->vendor->name }} <span class="text-muted-soft">({{ \App\Models\Vendor::CHANNELS[$pv->vendor->channel] }} · {{ $pv->alloc_type === 'ratio' ? $pv->alloc_value.'%' : '고정 '.number_format($pv->alloc_value) }})</span></span>
+                        <span class="font-mono text-ink">{{ number_format($qty) }}</span>
+                    </div>
+                @endforeach
+            </div>
+            @php $hasActiveDispatch = $order->dispatches->where('status', '!=', 'canceled')->isNotEmpty(); @endphp
+            @if (! $hasActiveDispatch)
+                <form method="POST" action="{{ route('admin.orders.approve', $order) }}"
+                      data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="위 배분대로 각 업체에 즉시 전송됩니다." data-confirm-ok="{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}">
+                    @csrf
+                    <button type="submit" class="btn btn-primary btn-sm" style="min-width:220px;">{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}</button>
+                </form>
+            @else
+                <p class="text-muted-soft" style="font-size:var(--fs-xs);">발주 완료 — 결과는 "외부 발주 현황"에서 확인하세요. 다시 넣으려면 현황에서 발주를 <b class="text-ink">취소</b>한 뒤 재발주하세요.</p>
+            @endif
+        @else
+            <p class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 활성화된 업체 배분 설정이 없습니다. <a href="{{ $order->product ? route('admin.products.edit', $order->product) : '#' }}" class="text-accent hover:underline">상품 편집</a>에서 설정하세요.</p>
+        @endif
+    </div>
+    @endif
 
         {{-- 쇼핑 유입키워드 분석 연결(2026-07-22) — 발주 시 분석의 Short URL 을 쓴다 --}}
         @if ($order->shopKeywordAnalyses->isNotEmpty() || $order->shopKeywordSource())
@@ -78,7 +139,8 @@
         </div>
         @endif
 
-        {{-- 주문 입력값 (동적 필드) --}}
+        {{-- 주문 입력값 + 내부 필드 — 1줄 2카드(2026-07-23) --}}
+        <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4 items-start">
         <div class="card p-6">
             <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">주문 입력 정보</div>
             @if (empty($order->field_values))
@@ -147,6 +209,7 @@
             </form>
         </div>
         @endif
+        </div>
 
         {{-- 세부주문서(일할, 2026-07-23) — 기간형 주문의 회차별 관리: 업체 분산·Short URL 순차·개별 발주/취소 --}}
         @if ($order->items->isNotEmpty())
@@ -303,68 +366,5 @@
                 </div>
             @endif
         </div>
-    </div>
-
-    {{-- 우: 주문자 + 상태 관리 --}}
-    <div class="flex flex-col gap-4">
-        <div class="card p-6">
-            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">주문자</div>
-            <div class="text-ink" style="font-size:var(--fs-sm);">{{ $order->orderer_name }}</div>
-            <div class="text-muted mt-0.5" style="font-size:var(--fs-xs);">{{ $order->orderer_contact }}</div>
-            @if ($order->user)
-                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">회원: {{ $order->user->name }} ({{ $order->user->email }})</div>
-            @else
-                <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">비회원 주문</div>
-            @endif
-            <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">주문일시: {{ $order->created_at?->format('Y.m.d H:i') }}</div>
-        </div>
-
-        {{-- 승인 · 외부 발주 — 세부주문서가 있는 주문은 회차별 [발주]로 관리하므로 이 카드를 숨긴다(2026-07-23) --}}
-        @if ($order->items->isEmpty())
-        <div class="card p-6">
-            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">승인 · 외부 발주</div>
-            @if (! empty($allocPreview))
-                <div class="flex flex-col gap-1.5 mb-3">
-                    @foreach ($allocPreview as [$pv, $qty])
-                        <div class="flex items-center justify-between" style="font-size:var(--fs-xs);">
-                            <span class="text-body">{{ $pv->vendor->name }} <span class="text-muted-soft">({{ \App\Models\Vendor::CHANNELS[$pv->vendor->channel] }} · {{ $pv->alloc_type === 'ratio' ? $pv->alloc_value.'%' : '고정 '.number_format($pv->alloc_value) }})</span></span>
-                            <span class="font-mono text-ink">{{ number_format($qty) }}</span>
-                        </div>
-                    @endforeach
-                </div>
-                @php $hasActiveDispatch = $order->dispatches->where('status', '!=', 'canceled')->isNotEmpty(); @endphp
-                @if (! $hasActiveDispatch)
-                    {{-- 발주 전 또는 전체 취소 후 — 다시 발주 가능 --}}
-                    <form method="POST" action="{{ route('admin.orders.approve', $order) }}"
-                          data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="{{ $order->items->isNotEmpty() ? '오늘까지 진행일인 세부주문을 즉시 전송하고, 나머지 회차는 진행일 아침에 자동 발주됩니다.' : '위 배분대로 각 업체에 즉시 전송됩니다.' }}" data-confirm-ok="{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}">
-                        @csrf
-                        <button type="submit" class="btn btn-primary btn-sm w-full">{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}</button>
-                    </form>
-                @else
-                    <p class="text-muted-soft" style="font-size:var(--fs-xs);">발주 완료 — 결과는 좌측 "외부 발주 현황"에서 확인하세요. 다시 넣으려면 현황에서 발주를 <b class="text-ink">취소</b>한 뒤 재발주하세요.</p>
-                @endif
-            @else
-                <p class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 활성화된 업체 배분 설정이 없습니다. <a href="{{ $order->product ? route('admin.products.edit', $order->product) : '#' }}" class="text-accent hover:underline">상품 편집</a>에서 설정하세요.</p>
-            @endif
-        </div>
-        @endif
-
-        <div class="card p-6">
-            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">상태 변경</div>
-            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
-                @csrf @method('PUT')
-                <select name="status" class="input" style="width:100%;font-size:var(--fs-xs);">
-                    @foreach ($statuses as $code => $label)
-                        <option value="{{ $code }}" {{ $order->status === $code ? 'selected' : '' }}>{{ $label }}</option>
-                    @endforeach
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm w-full mt-3">상태 저장</button>
-            </form>
-            <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" class="mt-3" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
-                @csrf @method('DELETE')
-                <button type="submit" class="btn btn-ghost btn-sm w-full" style="color:var(--color-error);">주문 삭제</button>
-            </form>
-        </div>
-    </div>
 </div>
 @endsection
