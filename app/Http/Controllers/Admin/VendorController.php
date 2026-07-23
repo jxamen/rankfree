@@ -72,7 +72,7 @@ class VendorController extends Controller
         $tabs = collect($meta->json('sheets', []))->pluck('properties.title')
             ->filter(fn ($t) => trim((string) $t) !== '')->values();
         // ?tab= — 상품 단위 탭 미리보기(2026-07-22): 배분별 탭 오버라이드 UI 가 특정 탭의 열을 조회할 때 사용.
-        // 미지정이면 종전대로 업체 기본 탭 → 첫 탭 순.
+        // 미지정이면 업체 기본 탭(레거시 — 설정 UI 는 제거됨, 기존 값만 폴백) → 첫 탭 순.
         $tab = trim((string) request()->query('tab', ''));
         if ($tab === '') {
             $tab = trim((string) $vendor->gsheet_tab);
@@ -84,7 +84,7 @@ class VendorController extends Controller
             return response()->json(['error' => '시트에 탭이 없습니다.'], 422);
         }
         if (! $tabs->contains($tab)) {
-            return response()->json(['error' => "시트에 '{$tab}' 탭이 없습니다 — 사용 가능한 탭: ".$tabs->implode(', ').' (업체 관리에서 탭 이름을 고치세요)'], 422);
+            return response()->json(['error' => "시트에 '{$tab}' 탭이 없습니다 — 사용 가능한 탭: ".$tabs->implode(', ').' (상품 편집의 시트 탭에서 다시 선택하세요)'], 422);
         }
 
         // 2) 해당 탭 1행(헤더) 조회
@@ -98,15 +98,6 @@ class VendorController extends Controller
         $cols = array_map(fn ($c) => trim((string) $c), $res->json('values.0', []) ?? []);
 
         return response()->json(['tab' => $tab, 'tabs' => $tabs, 'columns' => $cols]);
-    }
-
-    /** 매핑 패널에서 시트 탭 선택 저장 (ajax) — 업체 설정(gsheet_tab)에 반영되어 열 조회·발주 전송이 같은 탭을 쓴다. */
-    public function updateGsheetTab(Request $request, Vendor $vendor)
-    {
-        $data = $request->validate(['tab' => ['required', 'string', 'max:120']]);
-        $vendor->update(['gsheet_tab' => $data['tab']]);
-
-        return response()->json(['success' => true]);
     }
 
     public function destroy(Vendor $vendor)
@@ -127,7 +118,6 @@ class VendorController extends Controller
             'api_headers' => ['nullable', 'string', 'max:2000'],
             'api_format' => ['nullable', 'in:json,form'],
             'gsheet_id' => ['nullable', 'string', 'max:120'],
-            'gsheet_tab' => ['nullable', 'string', 'max:120'],
             'memo' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
         ]);

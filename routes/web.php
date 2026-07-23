@@ -438,7 +438,6 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::put('/vendors/{vendor}', [\App\Http\Controllers\Admin\VendorController::class, 'update'])->name('vendors.update');
     Route::post('/vendors/{vendor}/toggle', [\App\Http\Controllers\Admin\VendorController::class, 'toggle'])->name('vendors.toggle');
     Route::get('/vendors/{vendor}/sheet-columns', [\App\Http\Controllers\Admin\VendorController::class, 'sheetColumns'])->name('vendors.sheet-columns');
-    Route::put('/vendors/{vendor}/gsheet-tab', [\App\Http\Controllers\Admin\VendorController::class, 'updateGsheetTab'])->name('vendors.gsheet-tab');
     Route::delete('/vendors/{vendor}', [\App\Http\Controllers\Admin\VendorController::class, 'destroy'])->name('vendors.destroy');
 
     // 회원 관리

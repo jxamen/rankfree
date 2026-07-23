@@ -46,7 +46,7 @@
                         </td>
                         <td class="px-3 py-3 text-center text-body" style="font-size:var(--fs-xs);">{{ \App\Models\Vendor::CHANNELS[$v->channel] ?? $v->channel }}</td>
                         <td class="px-3 py-3 text-muted" style="font-size:var(--fs-xs);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                            {{ $v->channel === 'gsheet' ? ('시트 '.$v->gsheet_id.($v->gsheet_tab ? ' · '.$v->gsheet_tab : '')) : ($v->api_method.' '.$v->api_url) }}
+                            {{ $v->channel === 'gsheet' ? ('시트 '.$v->gsheet_id) : ($v->api_method.' '.$v->api_url) }}
                         </td>
                         <td class="px-3 py-3 text-center text-muted" style="font-size:var(--fs-xs);">{{ $v->product_vendors_count }}</td>
                         <td class="px-3 py-3 text-center">
@@ -59,7 +59,7 @@
                             <div class="flex items-center justify-end gap-1" style="white-space:nowrap;">
                                 <button type="button" class="btn btn-secondary btn-sm vd-edit"
                                         data-action="{{ route('admin.vendors.update', $v) }}"
-                                        data-vendor="{{ json_encode(['name' => $v->name, 'channel' => $v->channel, 'api_url' => $v->api_url, 'api_method' => $v->api_method, 'api_headers' => $v->api_headers, 'api_format' => $v->api_format, 'gsheet_id' => $v->gsheet_id, 'gsheet_tab' => $v->gsheet_tab, 'memo' => $v->memo, 'is_active' => $v->is_active], JSON_UNESCAPED_UNICODE) }}">수정</button>
+                                        data-vendor="{{ json_encode(['name' => $v->name, 'channel' => $v->channel, 'api_url' => $v->api_url, 'api_method' => $v->api_method, 'api_headers' => $v->api_headers, 'api_format' => $v->api_format, 'gsheet_id' => $v->gsheet_id, 'memo' => $v->memo, 'is_active' => $v->is_active], JSON_UNESCAPED_UNICODE) }}">수정</button>
                                 <form method="POST" action="{{ route('admin.vendors.destroy', $v) }}" class="inline" data-confirm="이 업체를 삭제할까요?" data-confirm-text="상품의 배분 설정도 함께 삭제됩니다(전송 이력은 보존).">@csrf @method('DELETE')
                                     <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button>
                                 </form>
@@ -133,18 +133,13 @@
 
             {{-- 구글시트 채널 설정 --}}
             <div id="vd-gsheet" class="mt-3" style="display:none;">
-                <div class="flex gap-3 flex-wrap">
-                    <div style="flex:2;min-width:240px;">
-                        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">스프레드시트 ID</label>
-                        <input name="gsheet_id" id="vd-gsheet-id" class="input" maxlength="120" placeholder="URL의 /d/ 와 /edit 사이 값">
-                    </div>
-                    <div style="flex:1;min-width:140px;">
-                        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">시트(탭) 이름</label>
-                        <input name="gsheet_tab" id="vd-gsheet-tab" class="input" maxlength="120" placeholder="비우면 첫 번째 탭 사용">
-                    </div>
+                <div>
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">스프레드시트 ID</label>
+                    <input name="gsheet_id" id="vd-gsheet-id" class="input" maxlength="120" placeholder="URL의 /d/ 와 /edit 사이 값">
                 </div>
                 <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">
                     서비스 계정(.env <b>GOOGLE_SERVICE_ACCOUNT_JSON</b>=키 파일 경로)으로 인증하며, 시트를 서비스 계정 이메일에 <b>편집자로 공유</b>해야 합니다. 매핑 순서대로 열(A, B, C…)에 기록됩니다.
+                    전송할 <b>탭은 상품 편집의 매핑에서 상품별로 선택</b>합니다(미선택 시 첫 번째 탭).
                 </p>
             </div>
 
@@ -233,7 +228,7 @@
         method.disabled = true;
         title.textContent = '업체 등록';
         submit.textContent = '등록';
-        ['vd-name', 'vd-api-url', 'vd-api-headers', 'vd-gsheet-id', 'vd-gsheet-tab', 'vd-memo'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['vd-name', 'vd-api-url', 'vd-api-headers', 'vd-gsheet-id', 'vd-memo'].forEach(function (id) { document.getElementById(id).value = ''; });
         channel.value = 'api';
         document.getElementById('vd-api-method').value = 'POST';
         document.getElementById('vd-api-format').value = 'json';
@@ -256,7 +251,6 @@
         setHeaderRows(d.api_headers || '');
         document.getElementById('vd-api-format').value = d.api_format || 'json';
         document.getElementById('vd-gsheet-id').value = d.gsheet_id || '';
-        document.getElementById('vd-gsheet-tab').value = d.gsheet_tab || '';
         document.getElementById('vd-memo').value = d.memo || '';
         document.getElementById('vd-active').checked = !!d.is_active;
         syncChannel();
@@ -273,7 +267,7 @@
 
     @if ($errors->any())
         openCreate();
-        ['name', 'api_url', 'gsheet_id', 'gsheet_tab', 'memo'].forEach(function (k) {
+        ['name', 'api_url', 'gsheet_id', 'memo'].forEach(function (k) {
             var el = form.querySelector('[name="' + k + '"]');
             if (el) el.value = @json(old()) [k] || '';
         });
