@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "네이버 마케팅을 위한 무료 분석 도구 — 쇼핑·플레이스·키워드·블로그·상품 리뷰를 한 곳에서 분석. 사장님·마케터·셀러가 내 순위와 시장을 빠르게 파악하도록 돕습니다. rankfree.kr 무료 로그인.",
   "icons": {
     "16": "icons/icon16.png",
@@ -11,6 +11,7 @@
   "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://rankfree.kr/*",
+    "https://*.rankfree.co.kr/*",
     "http://127.0.0.1:8000/*",
     "http://localhost:8000/*",
     "https://search.shopping.naver.com/*",
@@ -43,6 +44,7 @@
       "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단). 로컬 개발 주소 포함",
       "matches": [
         "https://rankfree.kr/admin/*",
+        "https://*.rankfree.co.kr/admin/*",
         "http://127.0.0.1:8000/admin/*",
         "http://localhost:8000/admin/*"
       ],
@@ -53,6 +55,7 @@
       "comment": "쇼핑 노출 키워드 ↔ 확장 브릿지 — 순위체크용 m.search HTML·상품정보를 브라우저에서 대신 가져온다(서버는 IP 한도). 2026-07-21 콘솔→관리자 이동(구 console 경로는 배포 전 prod 호환용 유지)",
       "matches": [
         "https://rankfree.kr/admin/shop-keyword*",
+        "https://*.rankfree.co.kr/admin/shop-keyword*",
         "http://127.0.0.1:8000/admin/shop-keyword*",
         "http://localhost:8000/admin/shop-keyword*",
         "https://rankfree.kr/console/shop-keyword*",
