@@ -1210,8 +1210,8 @@
         if (state.tab === 'history') loadHistory(true);
         render();
       };
+      // 클릭으로만 전환(2026-07-24) — mouseenter 전환은 스치기만 해도 다른 메뉴(수집 등)가 실행되던 문제
       btn.addEventListener('click', go);
-      btn.addEventListener('mouseenter', go);
     });
     // 세부 탭
     wrap.querySelectorAll('.rf-subtab').forEach((btn) => {
