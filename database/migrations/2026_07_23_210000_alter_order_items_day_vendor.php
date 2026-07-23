@@ -13,17 +13,22 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // MySQL 1553 방지 — order_id FK 가 유니크를 지지 인덱스로 쓰므로, 대체 인덱스를 먼저 만들고 지운다
+        Schema::table('marketing_order_items', function (Blueprint $t) {
+            $t->index(['order_id', 'day_no']);
+        });
         Schema::table('marketing_order_items', function (Blueprint $t) {
             $t->dropUnique(['order_id', 'day_no']);
-            $t->index(['order_id', 'day_no']);
         });
     }
 
     public function down(): void
     {
         Schema::table('marketing_order_items', function (Blueprint $t) {
-            $t->dropIndex(['order_id', 'day_no']);
             $t->unique(['order_id', 'day_no']);
+        });
+        Schema::table('marketing_order_items', function (Blueprint $t) {
+            $t->dropIndex(['order_id', 'day_no']);
         });
     }
 };
