@@ -168,11 +168,12 @@
                 </div>
                 <form id="items-bulk-form" method="POST" action="{{ route('admin.orders.items.update', $order) }}">@csrf @method('PUT')</form>
                 <div style="overflow-x:auto;">
-                    <table class="w-full" style="min-width:820px;font-size:var(--fs-xs);border-collapse:collapse;">
+                    <table class="w-full" style="min-width:960px;font-size:var(--fs-xs);border-collapse:collapse;">
                         <thead>
                             <tr class="text-muted" style="border-bottom:1px solid var(--color-hairline-soft);">
                                 <th class="text-center py-2 pr-3 font-semibold" style="width:50px;">회차</th>
-                                <th class="text-left py-2 px-3 font-semibold" style="width:150px;">진행일</th>
+                                <th class="text-left py-2 px-3 font-semibold" style="width:145px;">시작일</th>
+                                <th class="text-left py-2 px-3 font-semibold" style="width:145px;">종료일</th>
                                 <th class="text-right py-2 px-3 font-semibold" style="width:95px;">수량</th>
                                 <th class="text-left py-2 px-3 font-semibold">Short URL</th>
                                 <th class="text-left py-2 px-3 font-semibold" style="width:150px;">업체</th>
@@ -186,6 +187,10 @@
                                     <td class="py-2 pr-3 text-center text-ink font-mono">{{ $it->day_no }}</td>
                                     <td class="py-2 px-3">
                                         <input form="items-bulk-form" type="date" name="items[{{ $it->id }}][work_date]" value="{{ $it->work_date?->format('Y-m-d') }}"
+                                               class="input" style="width:100%;height:30px;font-size:var(--fs-xs);">
+                                    </td>
+                                    <td class="py-2 px-3">
+                                        <input form="items-bulk-form" type="date" name="items[{{ $it->id }}][end_date]" value="{{ ($it->end_date ?? $it->work_date)?->format('Y-m-d') }}"
                                                class="input" style="width:100%;height:30px;font-size:var(--fs-xs);">
                                     </td>
                                     <td class="py-2 px-3">

@@ -19,13 +19,14 @@ class MarketingOrderItem extends Model
     ];
 
     protected $fillable = [
-        'order_id', 'day_no', 'work_date', 'quantity', 'short_url', 'vendor_id', 'status', 'dispatch_id',
+        'order_id', 'day_no', 'work_date', 'end_date', 'quantity', 'short_url', 'vendor_id', 'status', 'dispatch_id',
     ];
 
     protected $casts = [
         'day_no' => 'integer',
         'quantity' => 'integer',
         'work_date' => 'date',
+        'end_date' => 'date',
     ];
 
     public function order(): BelongsTo

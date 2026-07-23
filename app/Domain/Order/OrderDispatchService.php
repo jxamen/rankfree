@@ -184,6 +184,7 @@ class OrderDispatchService
             'item' => match ($key) {
                 'short_url' => (string) ($item?->short_url ?? ''),
                 'date' => $item?->work_date?->toDateString() ?? '',
+                'end_date' => ($item?->end_date ?? $item?->work_date)?->toDateString() ?? '',   // 미설정 시 시작일과 동일
                 'day_no' => $item?->day_no ?? '',
                 'quantity' => $item?->quantity ?? '',
                 default => null,

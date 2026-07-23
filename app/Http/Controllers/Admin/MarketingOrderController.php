@@ -133,9 +133,14 @@ class MarketingOrderController extends Controller
                 $vid = (int) $row['vendor_id'];
                 $upd['vendor_id'] = $vid && in_array($vid, $vendorIds, true) ? $vid : null;
             }
-            // 진행일 — 유효한 날짜만 반영(스케줄러 발주 시점 결정값)
+            // 시작일 — 유효한 날짜만 반영(스케줄러 발주 시점 결정값)
             if (($d = trim((string) ($row['work_date'] ?? ''))) !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
                 $upd['work_date'] = $d;
+            }
+            // 종료일 — 시작일보다 빠르면 시작일로 보정
+            if (($e = trim((string) ($row['end_date'] ?? ''))) !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $e)) {
+                $start = $upd['work_date'] ?? $item->work_date?->toDateString();
+                $upd['end_date'] = ($start && $e < $start) ? $start : $e;
             }
             // 수량 — 1 이상 정수만(일별 합 캡은 생성 시 규칙이며 수동 조정은 관리자 재량)
             if (($q = (int) ($row['quantity'] ?? 0)) >= 1) {

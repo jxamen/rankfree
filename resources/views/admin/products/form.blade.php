@@ -498,7 +498,8 @@
             ['product:title', '상품명'],
             // 세부주문(일할) — 기간형 주문의 회차별 값. 1회성 발주에는 빈 값으로 나간다
             ['item:short_url', '세부주문: Short URL (회차 순차 배정)'],
-            ['item:date', '세부주문: 진행일'],
+            ['item:date', '세부주문: 시작일(진행일)'],
+            ['item:end_date', '세부주문: 종료일'],
             ['item:day_no', '세부주문: 회차 번호'],
             ['item:quantity', '세부주문: 일수량'],
         ];

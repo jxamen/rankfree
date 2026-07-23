@@ -54,7 +54,7 @@ class OrderItemPlanner
             $date = $startDate->copy()->addDays($i - 1)->toDateString();
             if ($rows->isEmpty()) {
                 // 배분 미설정 — 업체 미지정 1건(발주 시 배분 1순위 필요)
-                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date,
+                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date, 'end_date' => $date,
                     'quantity' => $dailyBase, 'status' => 'pending']);
                 $n++;
 
@@ -64,7 +64,7 @@ class OrderItemPlanner
                 if ($q < 1) {
                     continue;   // 배분 0 업체는 그 날 세부주문 없음
                 }
-                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date,
+                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date, 'end_date' => $date,
                     'quantity' => $q, 'vendor_id' => $pv->vendor->id, 'status' => 'pending']);
                 $n++;
             }
