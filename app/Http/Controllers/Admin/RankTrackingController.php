@@ -21,6 +21,8 @@ class RankTrackingController extends Controller
         $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
         $slots = PlaceRankSlot::with('user:id,name,email')
+            // 최근 2일 기록 — 콘솔과 동일한 순위 표기(현재 순위 + 전일 대비 변화)용
+            ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
             ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
             ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                 ->where('keyword', 'like', $this->like($q))
@@ -53,6 +55,7 @@ class RankTrackingController extends Controller
         $userId = (int) $request->query('user', 0);
 
         $slots = ShopRankSlot::with('user:id,name,email')
+            ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
             ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
             ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                 ->where('keyword', 'like', $this->like($q))

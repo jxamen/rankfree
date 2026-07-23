@@ -123,7 +123,26 @@
                                 <div class="text-muted-soft">{{ $s->target_type === 'product' ? '상품' : ($s->target_type === 'mall' ? '업체' : $s->target_type) }}</div>
                             @endif
                         </td>
-                        <td class="r"><span class="{{ $s->last_rank ? 'trk-rank' : '' }}">{{ $s->last_rank ? $fmt($s->last_rank).'위' : '—' }}</span></td>
+                        {{-- 현재 순위 — 콘솔 순위 카드와 동일 스타일: N위 + 전일 대비(+초록/−빨강), 미노출 300+/1000+, 차단(2026-07-24) --}}
+                        <td class="r">
+                            @php
+                                $r0 = $s->records[0] ?? null; $r1 = $s->records[1] ?? null;
+                                $rmax = $isPlace ? 300 : 1000;
+                                $v0 = $r0 && $r0->rank > 0 && $r0->rank < $rmax;
+                                $v1 = $r1 && $r1->rank > 0 && $r1->rank < $rmax;
+                                $rdiff = ($v0 && $v1) ? $r1->rank - $r0->rank : null;
+                            @endphp
+                            @if ($v0)
+                                <b class="text-ink font-display" style="font-size:var(--fs-sm);">{{ $fmt($r0->rank) }}위</b>
+                                @if ($rdiff)<span style="font-weight:700;color:{{ $rdiff > 0 ? 'var(--color-success)' : 'var(--color-error)' }};">{{ $rdiff > 0 ? '+'.$rdiff : $rdiff }}</span>@endif
+                            @elseif ($r0 && $r0->rank < 0)
+                                <span style="color:var(--color-error);">차단</span>
+                            @elseif ($r0)
+                                <span class="text-muted-soft">{{ $rmax }}+</span>
+                            @else
+                                <span class="text-muted-soft">—</span>
+                            @endif
+                        </td>
                         <td class="r">
                             @if ($isPlace)
                                 {{ $s->last_review_count ? $fmt($s->last_review_count) : '—' }}
