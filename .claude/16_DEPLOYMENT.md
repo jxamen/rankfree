@@ -29,6 +29,7 @@
 **API 키만으로 되는 기능** — 로컬 `.env` 값 그대로 복사:
 - 키워드 검색량·경쟁: `NAVER_SEARCHAD_API_KEY` `NAVER_SEARCHAD_SECRET` `NAVER_SEARCHAD_CUSTOMER_ID`
 - 쇼핑 순위·셀러력·시장분석: `NAVER_SHOPPING_API_KEYS`
+- **어드민 비밀 호스트**: `ADMIN_HOST=ops-…rankfree.co.kr`(운영 설정됨, 2026-07-24) — `/admin` 라우트가 이 도메인 전용이 되고 타 호스트는 404. 와일드카드 `*.rankfree.co.kr`(DNS·SSL·vhost)라 서브도메인 무작업. **변경 시 config:cache + route:cache 필수**. 값은 시크릿 취급(문서에 전체 host 기록 금지 — 운영 .env 참조)
 - 외부 발주 구글시트(전송·열 조회): `GOOGLE_SERVICE_ACCOUNT_JSON=storage/app/google-service-account.json` 절대경로 —
   키 파일은 git 미포함(storage gitignore)이라 **scp 로 별도 업로드**(jcurve 소유·600). 로컬은 shopitrend 서비스 계정 키 사용(2026-07-22 설정),
   발주 시트는 `id-615@shopitrend.iam.gserviceaccount.com` 에 **편집자 공유** 필수
