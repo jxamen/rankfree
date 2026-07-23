@@ -175,6 +175,10 @@ return [
         'discover_min_impressions' => (int) env('HUB_DISCOVER_MIN_IMPRESSIONS', 30),
         // 데이터랩 쇼핑 인기검색어 수집 페이지 수(hub:shopping-collect, 페이지당 20개 · 실측 최대 25=500위)
         'datalab_pages' => (int) env('HUB_DATALAB_PAGES', 25),
+        // 쇼핑 수집에서 제외할 1차 분류 이름(콤마 구분). 도서는 쇼핑 SERP 구조가 달라(가격비교·판매량 산식 부적합)
+        // 수집 대상에서 뺀다(사용자 확정 2026-07-24). 큐(queueByCategory)의 root 목록에서 걸러진다.
+        'shop_exclude_roots' => array_values(array_filter(array_map('trim',
+            explode(',', (string) env('HUB_SHOP_EXCLUDE_ROOTS', '도서'))))),
         // 순위 매핑(keyword_place_ranks·keyword_shop_ranks) 보존 개월 수(현재 월 포함) —
         // hub:partition-rotate 가 이 기간 지난 월 파티션을 DROP. 0 이하 = 파기 안 함(선생성만 수행)
         'rank_retention_months' => (int) env('HUB_RANK_RETENTION_MONTHS', 13),

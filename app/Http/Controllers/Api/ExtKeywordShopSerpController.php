@@ -99,6 +99,12 @@ class ExtKeywordShopSerpController extends Controller
 
             return $out;
         });
+        // 제외 분류(도서 등) — 쇼핑 SERP 구조가 달라 수집 대상에서 뺀다(config: hub.shop_exclude_roots).
+        //   캐시 뒤에서 걸러 config 변경이 즉시 반영되게 한다(캐시 만료 안 기다림).
+        $excludeRoots = (array) config('rankfree.hub.shop_exclude_roots', []);
+        if ($excludeRoots !== []) {
+            $roots = array_values(array_filter($roots, fn ($r) => ! in_array($r['name'], $excludeRoots, true)));
+        }
         if ($roots === []) {
             return response()->json(['data' => ['keywords' => [], 'category' => null, 'category_index' => 0, 'category_total' => 0, 'remaining' => 0]]);
         }
