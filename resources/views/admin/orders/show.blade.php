@@ -198,9 +198,7 @@
                                             @endforeach
                                         </select>
                                     </td>
-                                    <td class="py-2 px-3 text-center">
-                                        <span class="badge" style="font-size:var(--fs-xs);color:{{ $itemColor[$it->status] ?? 'var(--color-muted)' }};">{{ \App\Models\MarketingOrderItem::STATUSES[$it->status] ?? $it->status }}</span>
-                                    </td>
+                                    <td class="py-2 px-3 text-center" style="font-size:var(--fs-xs);color:{{ $itemColor[$it->status] ?? 'var(--color-muted)' }};">{{ \App\Models\MarketingOrderItem::STATUSES[$it->status] ?? $it->status }}</td>
                                     <td class="py-2 pl-3 text-center" style="white-space:nowrap;">
                                         @if ($it->status !== 'sent')
                                             <button type="submit" form="item-d-{{ $it->id }}" class="btn btn-secondary btn-sm">{{ in_array($it->status, ['failed', 'canceled'], true) ? '재발주' : '발주' }}</button>
@@ -214,13 +212,13 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">발주 순서: 승인 시 오늘까지 진행일인 회차 즉시 전송 → 나머지는 진행일 아침 자동. 취소한 발주의 시트 행은 직접 정리하세요.</p>
+                <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">첫 회차를 [발주]하면 주문이 진행중으로 바뀌고, 이후 회차는 진행일 아침(09:00) 자동 발주됩니다. 취소한 발주의 시트 행은 직접 정리하세요.</p>
             </div>
-            {{-- 행별 발주/취소 폼 — 테이블 폼 중첩 방지를 위해 밖에 두고 버튼이 form 속성으로 참조 --}}
+            {{-- 행별 발주/취소 폼 — 테이블 폼 중첩 방지를 위해 밖에 두고 버튼이 form 속성으로 참조(display:none — 카드 사이 공백 방지) --}}
             @foreach ($order->items as $it)
-                <form id="item-d-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.dispatch', $it) }}"
-                      data-confirm="{{ $it->day_no }}일차를 지금 발주할까요?" data-confirm-text="배정 업체로 즉시 전송됩니다." data-confirm-ok="발주">@csrf</form>
-                <form id="item-c-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.cancel', $it) }}"
+                <form id="item-d-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.dispatch', $it) }}" style="display:none;"
+                      data-confirm="{{ $it->day_no }}일차를 지금 발주할까요?" data-confirm-text="배정 업체로 즉시 전송됩니다. 첫 발주 시 주문이 진행중으로 바뀌고 이후 회차는 진행일 아침 자동 발주됩니다." data-confirm-ok="발주">@csrf</form>
+                <form id="item-c-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.cancel', $it) }}" style="display:none;"
                       data-confirm="{{ $it->day_no }}일차를 취소할까요?" data-confirm-text="전송 기록도 취소로 표시됩니다. 시트에 적힌 행은 자동으로 지워지지 않습니다." data-confirm-ok="세부주문 취소">@csrf</form>
             @endforeach
         @elseif (($order->product?->quantity_mode ?? '') === 'daily' && (int) $order->days >= 1)
@@ -241,7 +239,13 @@
         <div class="card p-6">
             <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">외부 발주 현황</div>
             @if ($order->dispatches->isEmpty())
-                <p class="text-muted-soft" style="font-size:var(--fs-xs);">아직 발주되지 않았습니다. 우측 <b class="text-ink">[승인 · 발주]</b> 를 누르면 업체 배분 설정대로 자동 전송됩니다.</p>
+                <p class="text-muted-soft" style="font-size:var(--fs-xs);">
+                    @if ($order->items->isNotEmpty())
+                        아직 발주되지 않았습니다. 위 <b class="text-ink">세부주문서</b>에서 회차별 [발주]를 누르거나, 첫 발주 후 진행일 아침 자동 전송을 기다리세요.
+                    @else
+                        아직 발주되지 않았습니다. 우측 <b class="text-ink">[승인 · 발주]</b> 를 누르면 업체 배분 설정대로 자동 전송됩니다.
+                    @endif
+                </p>
             @else
                 <div style="overflow-x:auto;">
                     <table class="w-full" style="min-width:560px;font-size:var(--fs-xs);border-collapse:collapse;">
@@ -304,7 +308,8 @@
             <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">주문일시: {{ $order->created_at?->format('Y.m.d H:i') }}</div>
         </div>
 
-        {{-- 승인 · 외부 발주 --}}
+        {{-- 승인 · 외부 발주 — 세부주문서가 있는 주문은 회차별 [발주]로 관리하므로 이 카드를 숨긴다(2026-07-23) --}}
+        @if ($order->items->isEmpty())
         <div class="card p-6">
             <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">승인 · 외부 발주</div>
             @if (! empty($allocPreview))
@@ -331,6 +336,7 @@
                 <p class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 활성화된 업체 배분 설정이 없습니다. <a href="{{ $order->product ? route('admin.products.edit', $order->product) : '#' }}" class="text-accent hover:underline">상품 편집</a>에서 설정하세요.</p>
             @endif
         </div>
+        @endif
 
         <div class="card p-6">
             <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">상태 변경</div>

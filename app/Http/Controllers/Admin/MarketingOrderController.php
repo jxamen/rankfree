@@ -153,6 +153,11 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['items' => "{$item->day_no}일차: Short URL 이 배정되지 않아 발주할 수 없습니다."]);
         }
         $r = $dispatcher->dispatchItem($item);
+        // 첫 발주로 주문 활성화 — 접수 상태면 진행중 전환(이후 회차는 스케줄러가 자동 발주)
+        if ($r['ok'] && $order && $order->status === 'pending') {
+            $order->update(['status' => 'processing']);
+            $r['message'] .= ' · 주문을 진행중으로 전환했습니다(남은 회차는 진행일 아침 자동 발주).';
+        }
 
         return $r['ok'] ? back()->with('status', $r['message']) : back()->withErrors(['items' => $r['message']]);
     }
