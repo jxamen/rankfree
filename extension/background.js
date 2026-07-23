@@ -1072,13 +1072,13 @@ const handlers = {
       const looksBlocked = (msg) => /차단|429|일시적으로 제한|데이터를 찾지 못|페이지가 열리지 않/.test(String(msg || ''));
 
       // 탭 여는 간격(stagger) — 예전엔 0.3초 고정이라, 동시 4~5개가 콜드스타트에 1초 남짓 안에 몰려 열려
-      //   네이버가 429로 막았다(실측). → 오픈을 벌린다: 아무리 몰려도 baseGap/conc 간격 이상으로 열어
-      //   집계 오픈율이 대략 conc개/baseGap(기본 6초) 를 넘지 않게 하고, 최소 1초는 보장한다(높은 conc 버스트 방지).
-      //   gap 만큼(6초) 직렬 대기시키면 동시성이 무의미해지므로, conc 로 나눠 '몰림만' 막고 병렬은 유지한다.
-      const openGap = Math.max(1000, Math.round(baseGap / Math.max(1, conc)));
+      //   네이버가 429로 막았다(실측). → 매 오픈마다 현재 gap(차단 시 증가)·liveConc(차단 시 감소)로 간격을 계산해
+      //   벌린다: 평상시 baseGap/conc(기본 6초/5≈1.2초), 차단이 뜨면 자동으로 더 벌어진다(예: gap 10초·동시 2 → 5초).
+      //   최소 1초 보장. gap 통째로(6초) 직렬 대기시키면 동시성이 무의미하므로 동시수로 나눠 '몰림'만 막는다.
       let openChain = Promise.resolve();
       const openSlot = () => {
-        const my = openChain.then(() => sleep(openGap));
+        const wait = Math.max(1000, Math.round(gap / Math.max(1, liveConc)));
+        const my = openChain.then(() => sleep(wait));
         openChain = my;
         return my;
       };
@@ -1259,16 +1259,18 @@ const handlers = {
       const clearBlockTimers = () => { clearTimeout(alive); if (stall) { clearTimeout(stall); stall = null; } };
       const isGateUrl = (u) => !!u && /^https:\/\/(nid\.naver\.com|captcha\.naver\.com|ncpt\.naver\.com)\//i.test(u);
 
-      // 페이지가 실제로 떴다(complete) — '안 열림' 판정 해제. 떴는데도 수집 스크립트가 30초 안 붙으면(에러 페이지·과부하)
-      //   건너뛴다. 단 이건 '차단'이 아니라 '단순 실패'로 계상한다 — 메시지에 차단 토큰(차단/열리지 않 등)을 넣지 않아
-      //   looksBlocked 에 안 걸리므로, 정상 로드된 페이지 하나 때문에 함대 전체가 백오프·동시수 반토막 되지 않는다.
+      // 페이지가 실제로 떴다(complete) — '안 열림' 판정 해제. 단, 떴는데도 수집 스크립트가 15초 안 붙으면
+      //   대개 네이버 429 에러 페이지다("HTTP ERROR 429" — 크롬 에러 페이지라 status:complete 는 뜨지만
+      //   content script 가 주입되지 않아 시작 신호가 영영 안 온다). → 차단으로 보고 백오프시킨다(메시지에
+      //   429·차단 토큰을 넣어 looksBlocked 매칭). 정상 페이지는 complete 후 시작 신호가 수 초 내 오므로 15초면
+      //   오탐이 없다(원 버그는 create→complete 지연이 컸던 것이지 complete→started 간격은 짧다).
       const markLoaded = () => {
         if (loaded || started) return;
         loaded = true;
         clearTimeout(alive);
         if (!stall) stall = setTimeout(() => {
-          if (!started) finish({ ok: false, message: '페이지는 떴으나 수집 스크립트가 응답하지 않습니다 — 건너뜁니다(시간 초과).' });
-        }, 30000);
+          if (!started) finish({ ok: false, message: '페이지는 떴으나 수집 스크립트 미응답 — 429 차단으로 보입니다.' });
+        }, 15000);
       };
 
       // 탭 상태 감시 — 캡차/로그인 리다이렉트(진짜 차단)는 즉시, 로드 완료는 '열림'으로 본다.
