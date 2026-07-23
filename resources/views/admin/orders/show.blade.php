@@ -53,19 +53,23 @@
                 $hasDc = (float) $order->discount_amount > 0;
                 $totalQty = $order->quantity * max(1, (int) ($order->days ?: 1));
             @endphp
-            <div class="grid grid-cols-2 {{ $hasDc ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4 mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
                 @foreach (array_filter([
                     ['총 수량', number_format($totalQty)],
                     ['단가', number_format($order->unit_price).'원'],
                     ['주문 금액', number_format((float) $order->total_price + (float) $order->discount_amount).'원'],
                     $hasDc ? ['쿠폰 할인', '-'.number_format($order->discount_amount).'원'.($order->userCoupon?->coupon ? ' · '.$order->userCoupon->coupon->name : '')] : null,
-                    ['합계', number_format($order->total_price).'원'],
                 ]) as [$lab, $val])
                     <div>
                         <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
                         <div class="text-ink mt-0.5" style="font-size:var(--fs-sm);">{{ $val }}</div>
                     </div>
                 @endforeach
+            </div>
+            {{-- 합계 — 아래줄에 크게(2026-07-23) --}}
+            <div class="flex justify-end items-baseline gap-2 mt-3">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">합계</span>
+                <span class="text-ink font-display" style="font-size:var(--fs-xl);">{{ number_format($order->total_price) }}원</span>
             </div>
         </div>
 
