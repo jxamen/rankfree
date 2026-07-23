@@ -14,7 +14,9 @@ class MarketingOrderController extends Controller
     {
         $q = MarketingOrder::with('product.fields', 'user')
             // 유입키워드 연결 + 수집 정보(상점명·가격·상품ID) 표시용
-            ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,mall_name,product_price,exposed_count,status')
+            ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,product_url,mall_name,product_price,exposed_count,status')
+            // 발주 취소 버튼 노출용 — 활성(미취소) 발주 수
+            ->withCount(['dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled')])
             ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {
@@ -156,6 +158,9 @@ class MarketingOrderController extends Controller
         if ($missing->isNotEmpty()) {
             return back()->withErrors(['place' => "주문 {$order->order_no}: 필수 값이 비어 있어 발주할 수 없습니다 — [".$missing->join(', ').'] 수집이 끝나길 기다리거나 주문 상세에서 직접 채워주세요.']);
         }
+        if ($err = $this->shortUrlGuard($order)) {
+            return back()->withErrors(['place' => $err]);
+        }
 
         $result = $dispatcher->dispatch($order);
         if (! $result['ok']) {
@@ -178,6 +183,9 @@ class MarketingOrderController extends Controller
         if ($missing->isNotEmpty()) {
             return back()->withErrors(['approve' => '필수 내부 필드가 비어 있어 승인할 수 없습니다: '.$missing->implode(', ').' — 수집값 채우기 또는 직접 입력 후 승인하세요.']);
         }
+        if ($err = $this->shortUrlGuard($order)) {
+            return back()->withErrors(['approve' => $err]);
+        }
 
         $result = $dispatcher->dispatch($order);
         if (! $result['ok']) {
@@ -190,12 +198,68 @@ class MarketingOrderController extends Controller
         return back()->with('status', "주문 {$order->order_no} 승인 — ".$result['message']);
     }
 
+    /**
+     * 발주 전 Short URL 가드 — 유입키워드 분석이 연결된 주문은 Short URL(랜딩)이 생성돼 있어야 발주 가능.
+     * 없으면 업체가 받을 랜딩이 없는 채로 나가므로 차단한다(2026-07-23).
+     */
+    private function shortUrlGuard(MarketingOrder $order): ?string
+    {
+        $analysis = $order->shopKeywordAnalyses()->latest('id')->first();
+        if ($analysis && ! $analysis->shortLinks()->exists()) {
+            return "주문 {$order->order_no}: Short URL 이 아직 없어 발주할 수 없습니다 — 유입키워드 분석에서 Short URL 을 먼저 생성하세요.";
+        }
+
+        return null;
+    }
+
     /** 실패한 업체 전송 건 재전송. */
     public function retryDispatch(\App\Models\OrderDispatch $dispatch, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
         $d = $dispatcher->retry($dispatch);
 
         return back()->with('status', "'{$d->vendor_name}' 재전송 — ".\App\Models\OrderDispatch::STATUSES[$d->status]);
+    }
+
+    /**
+     * 발주 취소(개별) — 전송 기록만 취소로 표시한다. 시트에 이미 적힌 행은 지우지 않는다(수동 정리).
+     * 활성 발주가 모두 없어지면 주문을 접수 상태로 되돌려 다시 발주할 수 있게 한다.
+     */
+    public function cancelDispatch(\App\Models\OrderDispatch $dispatch)
+    {
+        if ($dispatch->status === 'canceled') {
+            return back()->withErrors(['dispatch' => '이미 취소된 발주입니다.']);
+        }
+        $dispatch->update(['status' => 'canceled']);
+
+        $msg = "'{$dispatch->vendor_name}' 발주를 취소했습니다.";
+        if ($dispatch->channel === 'gsheet' && $dispatch->getOriginal('status') !== 'failed') {
+            $msg .= ' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요.';
+        }
+        $order = $dispatch->order;
+        if ($order && $order->status === 'processing' && ! $order->dispatches()->where('status', '!=', 'canceled')->exists()) {
+            $order->update(['status' => 'pending']);
+            $msg .= ' 활성 발주가 없어 접수 상태로 되돌렸습니다 — 다시 발주할 수 있습니다.';
+        }
+
+        return back()->with('status', $msg);
+    }
+
+    /** 발주 전체 취소(목록용) — 주문의 활성 발주를 모두 취소하고 접수 상태로 되돌린다(재발주용). */
+    public function cancelDispatches(MarketingOrder $order)
+    {
+        $active = $order->dispatches()->where('status', '!=', 'canceled')->get();
+        if ($active->isEmpty()) {
+            return back()->withErrors(['dispatch' => "주문 {$order->order_no}: 취소할 발주가 없습니다."]);
+        }
+        foreach ($active as $d) {
+            $d->update(['status' => 'canceled']);
+        }
+        if ($order->status === 'processing') {
+            $order->update(['status' => 'pending']);
+        }
+
+        return back()->with('status', "주문 {$order->order_no} 발주 {$active->count()}건을 취소하고 접수 상태로 되돌렸습니다."
+            .' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요. 이제 다시 발주할 수 있습니다.');
     }
 
     public function updateStatus(Request $request, MarketingOrder $order)

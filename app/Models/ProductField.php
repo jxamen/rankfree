@@ -37,6 +37,7 @@ class ProductField extends Model
         'product_price' => '상품 가격(수집)',
         'seller_tags' => '정답 태그 목록(수집)',
         'thumbnail_url' => '상품 이미지 URL(수집)',
+        'short_url' => 'Short URL 목록(생성 후)',
     ];
 
     protected $fillable = [

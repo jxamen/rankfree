@@ -179,10 +179,16 @@
                                         {{ $d->response ?: '—' }}
                                         <div style="font-size:var(--fs-xs);">{{ $d->sent_at?->format('m.d H:i') }}</div>
                                     </td>
-                                    <td class="py-2 pl-3 text-center">
-                                        @if ($d->status !== 'sent')
+                                    <td class="py-2 pl-3 text-center" style="white-space:nowrap;">
+                                        @if (in_array($d->status, ['failed', 'pending'], true))
                                             <form method="POST" action="{{ route('admin.orders.dispatch.retry', $d) }}" class="inline">@csrf
                                                 <button type="submit" class="btn btn-secondary btn-sm">재전송</button>
+                                            </form>
+                                        @endif
+                                        @if ($d->status !== 'canceled')
+                                            <form method="POST" action="{{ route('admin.orders.dispatch.cancel', $d) }}" class="inline"
+                                                  data-confirm="이 발주를 취소할까요?" data-confirm-text="{{ $d->vendor_name }} — 전송 기록이 취소로 표시됩니다.{{ $d->channel === 'gsheet' ? ' 시트에 이미 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요.' : '' }} 모든 발주가 취소되면 다시 발주할 수 있습니다." data-confirm-ok="발주 취소">@csrf
+                                                <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">취소</button>
                                             </form>
                                         @endif
                                     </td>
@@ -221,14 +227,16 @@
                         </div>
                     @endforeach
                 </div>
-                @if ($order->dispatches->isEmpty())
+                @php $hasActiveDispatch = $order->dispatches->where('status', '!=', 'canceled')->isNotEmpty(); @endphp
+                @if (! $hasActiveDispatch)
+                    {{-- 발주 전 또는 전체 취소 후 — 다시 발주 가능 --}}
                     <form method="POST" action="{{ route('admin.orders.approve', $order) }}"
-                          data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="위 배분대로 각 업체에 즉시 전송됩니다." data-confirm-ok="승인 · 발주">
+                          data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="위 배분대로 각 업체에 즉시 전송됩니다." data-confirm-ok="{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}">
                         @csrf
-                        <button type="submit" class="btn btn-primary btn-sm w-full">승인 · 발주</button>
+                        <button type="submit" class="btn btn-primary btn-sm w-full">{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}</button>
                     </form>
                 @else
-                    <p class="text-muted-soft" style="font-size:var(--fs-xs);">발주 완료 — 결과는 좌측 "외부 발주 현황"에서 확인하세요.</p>
+                    <p class="text-muted-soft" style="font-size:var(--fs-xs);">발주 완료 — 결과는 좌측 "외부 발주 현황"에서 확인하세요. 다시 넣으려면 현황에서 발주를 <b class="text-ink">취소</b>한 뒤 재발주하세요.</p>
                 @endif
             @else
                 <p class="text-muted-soft" style="font-size:var(--fs-xs);">이 상품에 활성화된 업체 배분 설정이 없습니다. <a href="{{ $order->product ? route('admin.products.edit', $order->product) : '#' }}" class="text-accent hover:underline">상품 편집</a>에서 설정하세요.</p>

@@ -377,6 +377,8 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::put('/orders/{order}/internal-fields', [MarketingOrderController::class, 'updateInternalFields'])->name('orders.internal-fields');
     Route::post('/orders/{order}/autofill', [MarketingOrderController::class, 'autofillInternalFields'])->name('orders.autofill');
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
+    Route::post('/orders/dispatches/{dispatch}/cancel', [MarketingOrderController::class, 'cancelDispatch'])->name('orders.dispatch.cancel');
+    Route::post('/orders/{order}/cancel-dispatches', [MarketingOrderController::class, 'cancelDispatches'])->name('orders.dispatches.cancel');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
 
     // 구글 계정 OAuth 연동 (서치 콘솔·GA4 공용)

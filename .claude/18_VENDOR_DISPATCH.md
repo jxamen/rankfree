@@ -58,8 +58,15 @@
   - **내부(숨김) 필드 — 자동 채움 + 고정값(2026-07-22)** — `product_fields.is_hidden`(고객 주문 폼 미노출)·`autofill_source`(유입키워드 수집값 매핑: 핵심키워드/상품URL/상품ID/상품명/상점명/가격/정답태그/썸네일)·`default_value`(**고정값** — 주문 생성 시 OrderPlacer 가 field_values 에 시드, 항상 같은 값을 발주에 전달할 때. 빌더 [옵션]에서 입력). 값 채움 순서: 고정값(생성 시) → 수집 반영(OrderFieldAutofill, 빈 필드만) → 주문 상세 수동 입력/다시 채우기(강제). 발주는 기존 `field:<key>` 매핑으로 전달, **필수 내부 필드가 비면 승인 차단**.
 - **주문 상세** — 우측 [승인 · 발주] 카드(배분 미리보기 → SweetAlert 확인 → 발주), 좌측 [외부 발주 현황] 테이블(상태·응답·재전송).
 
+## 발주 취소 · 재발주 (2026-07-23)
+
+- **dispatch status 에 `canceled` 추가** — 취소는 기록만 표시, **시트에 적힌 행은 지우지 않는다**(사용자 확정: 수동 정리).
+- 주문 상세: 발주 행별 [취소](sent/failed/pending 모두 가능) · [재전송]은 failed/pending 만. 목록(/admin/orders): [발주취소] = 활성 발주 전체 취소.
+- 활성(미취소) 발주가 모두 없어지면 **주문을 접수(pending)로 되돌려** [다시 발주]·[주문넣기] 재사용 가능. dispatch() 가드는 활성 발주 기준.
+- **Short URL 가드** — 유입키워드 분석이 연결된 주문은 분석에 Short URL 이 없으면 발주 차단(승인·주문넣기 공통, `shortUrlGuard`). autofill 소스 `short_url`(그룹 순 콤마 목록, [ShopKeywordShortLink::url()](../app/Models/ShopKeywordShortLink.php)) 추가, Short URL 생성 시 연결 주문 빈 필드 자동 반영.
+
 ## 주의
 
-- 승인은 **1회만**(이미 dispatch 존재 시 거부) — 실패 건은 개별 재전송.
+- 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송.
 - 업체 삭제 시 배분 설정은 cascade 삭제, 전송 이력은 vendor_name 으로 보존(vendor_id null).
 - API 헤더에 인증키가 들어감 — 화면 노출 주의(수정 모달에서만 표시).

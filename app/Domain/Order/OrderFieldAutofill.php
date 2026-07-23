@@ -40,6 +40,8 @@ class OrderFieldAutofill
             'product_price' => $analysis->product_price !== null ? (string) $analysis->product_price : (string) ($info?->price ?? ''),
             'seller_tags' => implode(', ', array_filter(array_map('strval', (array) ($info?->seller_tags ?? [])))),
             'thumbnail_url' => (string) ($info?->thumbnail_url ?? ''),
+            // Short URL 목록 — 생성돼 있어야 채워진다(없으면 발주 가드가 막는다). 그룹 순서대로 콤마 구분.
+            'short_url' => $analysis->shortLinks()->orderBy('group_no')->get()->map(fn ($l) => $l->url())->implode(', '),
         ];
 
         $fv = (array) $order->field_values;

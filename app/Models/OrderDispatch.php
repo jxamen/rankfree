@@ -12,6 +12,7 @@ class OrderDispatch extends Model
         'pending' => '대기',
         'sent' => '전송됨',
         'failed' => '실패',
+        'canceled' => '취소',   // 발주 취소 — 시트에 적힌 행은 지우지 않는다(수동 정리). 전부 취소되면 재발주 가능
     ];
 
     protected $fillable = [

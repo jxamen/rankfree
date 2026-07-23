@@ -91,7 +91,13 @@
                                     <span class="text-muted-soft">
                                         @if ($dMall)상점 <b class="text-muted">{{ $dMall }}</b>@endif
                                         @if ($dPrice) · <b class="text-muted font-mono">{{ number_format($dPrice) }}원</b>@endif
-                                        @if ($dPid) · ID <span class="font-mono">{{ $dPid }}</span>@endif
+                                        @if ($dPid) · ID
+                                            @if ($ska?->product_url)
+                                                <a href="{{ $ska->product_url }}" target="_blank" rel="noopener nofollow" class="font-mono text-accent hover:underline" title="상품 페이지 새창 열기">{{ $dPid }} ↗</a>
+                                            @else
+                                                <span class="font-mono">{{ $dPid }}</span>
+                                            @endif
+                                        @endif
                                     </span>
                                 </div>
                             @endif
@@ -128,6 +134,14 @@
                                 </form>
                             @else
                                 <span class="text-muted-soft">—</span>
+                            @endif
+                            {{-- 발주 취소(2026-07-23) — 활성 발주 전체 취소 후 접수로 되돌려 재발주 가능 --}}
+                            @if (($o->active_dispatch_count ?? 0) > 0)
+                                <form method="POST" action="{{ route('admin.orders.dispatches.cancel', $o) }}" class="mt-1"
+                                      data-confirm="발주를 취소할까요?" data-confirm-text="{{ $o->order_no }} — 발주 {{ $o->active_dispatch_count }}건을 취소하고 접수 상태로 되돌립니다. 구글시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요." data-confirm-ok="발주 취소">
+                                    @csrf
+                                    <button type="submit" class="btn btn-ghost btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);color:var(--color-error);">발주취소</button>
+                                </form>
                             @endif
                         </td>
                         <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>

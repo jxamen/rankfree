@@ -14,11 +14,11 @@ use Illuminate\Support\Facades\Http;
  */
 class OrderDispatchService
 {
-    /** 승인 시 호출 — 배분 계산 → 전송 기록 생성 → 즉시 전송. 이미 발주된 주문이면 건너뜀. */
+    /** 승인 시 호출 — 배분 계산 → 전송 기록 생성 → 즉시 전송. 활성(미취소) 발주가 있으면 건너뜀(취소 후 재발주 허용). */
     public function dispatch(MarketingOrder $order): array
     {
-        if ($order->dispatches()->exists()) {
-            return ['ok' => false, 'message' => '이미 발주된 주문입니다. 실패 건은 개별 재전송하세요.'];
+        if ($order->dispatches()->where('status', '!=', 'canceled')->exists()) {
+            return ['ok' => false, 'message' => '이미 발주된 주문입니다. 실패 건은 개별 재전송하거나, 발주를 취소한 뒤 다시 발주하세요.'];
         }
 
         $rows = $order->product->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()

@@ -26,4 +26,12 @@ class ShopKeywordShortLink extends Model
     {
         return $this->belongsTo(ShopKeywordAnalysis::class, 'analysis_id');
     }
+
+    /** 공개 Short URL — 커스텀 도메인 우선(관리 화면·발주 자동 채움 공용). */
+    public function url(): string
+    {
+        return $this->domain
+            ? 'https://'.$this->domain.'/s/'.$this->token
+            : route('shop-keyword.short', $this->token);
+    }
 }

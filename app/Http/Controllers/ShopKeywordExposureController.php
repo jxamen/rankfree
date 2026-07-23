@@ -287,6 +287,9 @@ class ShopKeywordExposureController extends Controller
             }
         });
 
+        // 연결 주문의 Short URL 자동 채움 필드 반영(빈 필드만) — 발주 전달값
+        app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
+
         return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
     }
 
