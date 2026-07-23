@@ -154,7 +154,7 @@ class OrderPlacer
             }
         }
 
-        return DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon) {
+        $order = DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon) {
             // 동시 제출로 같은 쿠폰이 두 번 쓰이지 않게 잠금 후 미사용 재확인
             if ($userCoupon) {
                 $locked = UserCoupon::whereKey($userCoupon->id)->whereNull('used_at')->lockForUpdate()->first();
@@ -181,6 +181,11 @@ class OrderPlacer
 
             return $order;
         });
+
+        // 잔디 웹훅 주문 알림 — 큐 발송(설정 없으면 잡이 조용히 종료). 알림 실패는 주문에 영향 없음.
+        \App\Jobs\SendJandiOrderNotification::dispatch($order);
+
+        return $order;
     }
 
     /** 필수 파일 필드 목록 — 있으면 API 주문 불가(파일 업로드는 웹 전용). */

@@ -93,6 +93,7 @@ class SettingsController extends Controller
             'gaPropertyId' => AppSetting::read('ga.property_id'),
             // 서울 열린데이터광장 — 신규 개업(인허가) 수집 인증키(24)
             'seoulOpenapiKey' => AppSetting::read('seoul.openapi_key'),
+            'jandiOrderWebhookUrl' => AppSetting::read('jandi.order_webhook_url'),
             'seoulKeyLive' => (string) config('rankfree.newbiz.seoul_key', 'sample'),
             // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
             'googleConnected' => \App\Support\GoogleToken::oauthConnected(),
@@ -115,6 +116,7 @@ class SettingsController extends Controller
         'gsc.property' => 'gsc_property',
         'ga.property_id' => 'ga_property_id',
         'seoul.openapi_key' => 'seoul_openapi_key',
+        'jandi.order_webhook_url' => 'jandi_order_webhook_url',   // 주문 접수 알림 웹훅(잔디 Incoming Webhook)
         'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
         'quiz.solve_timeout' => 'quiz_solve_timeout',   // 확장 정답 대기 시간(초) → services.gemini.quiz_timeout
         'quiz.thinking' => 'quiz_thinking',   // 캡차 풀이 추론(thinking) on/off → services.gemini.quiz_thinking

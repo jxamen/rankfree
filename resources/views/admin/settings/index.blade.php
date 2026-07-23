@@ -69,6 +69,21 @@
             'rows' => $openapiRows,
             'live' => $liveOpenapi,
         ])
+
+        {{-- 잔디(JANDI) 웹훅 — 주문 접수 알림 --}}
+        <div class="card p-5 mb-4 mt-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">
+                잔디(JANDI) 웹훅 <span class="text-muted-soft" style="font-weight:400;">주문 접수 알림</span>
+                @if (trim((string) $jandiOrderWebhookUrl) !== '')
+                    <span class="badge" style="font-size:var(--fs-xs);margin-left:6px;background:color-mix(in srgb,var(--color-success) 14%,var(--color-canvas));color:var(--color-success);">적용중</span>
+                @endif
+            </div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);line-height:1.6;">
+                잔디 커넥트 → <b>Webhook 수신(Incoming Webhook)</b>에서 발급받은 URL을 넣으면
+                <b>주문이 접수될 때마다</b> 지정한 대화방으로 주문번호(클릭 시 주문 상세)·상품·수량·기간·금액·주문자·회원 누적 알림이 전송됩니다(웹·API 주문 공통, 큐 발송). 비우면 알림을 보내지 않습니다.
+            </p>
+            @include('admin.settings._simplefield', ['name' => 'jandi_order_webhook_url', 'label' => '웹훅 URL (주문 접수 알림)', 'value' => $jandiOrderWebhookUrl, 'secret' => true, 'placeholder' => 'https://wh.jandi.com/connect-api/webhook/…'])
+        </div>
     </div>
 
     {{-- ── API 설정: AI 모델 키 ─────────────────────────────────────── --}}

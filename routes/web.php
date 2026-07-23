@@ -119,8 +119,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/order-resolve-place', [OrderController::class, 'resolvePlace'])->middleware('throttle:30,1')->name('order.resolve-place');
 });
 
-// API 문서 — 콘솔로 통합(2026-07-23). 기존 공개 URL·해시(#start 등)는 콘솔 문서로 301
-Route::redirect('/developers', '/console/developers', 301)->name('developers');
+// API 문서 — 공개 페이지(외부 파트너 공유용, 비로그인 열람 · 2026-07-23 콘솔 301 → 공개 복원). 본문은 콘솔 문서와 공용 partial.
+Route::view('/developers', 'site.developers')->name('developers');
 
 // 개인정보처리방침 (공개 — 크롬 웹스토어 심사 필수)
 Route::view('/privacy', 'site.privacy')->name('privacy');
