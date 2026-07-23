@@ -73,9 +73,13 @@
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 시장 수집 <span class="text-muted-soft font-normal">(자동 — 위 시작 버튼에 포함)</span></div>
-            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">'쇼핑만 시작' 또는 '동시 시작'을 누르면 확장이 대기 키워드의 시장분석(판매량·매출)을 자동 수집하고, 수집되는 대로 발행이 따라갑니다. 브라우저를 켜둔 채 두세요(확장 v0.3.8+ 로그인 필요).</div>
+            <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">'쇼핑만 시작' 또는 '동시 시작'을 누르면 확장이 대기 키워드의 시장분석(판매량·매출)을 자동 수집하고, 수집되는 대로 발행이 따라갑니다. 브라우저를 켜둔 채 두세요(확장 v0.3.8+ 로그인 필요). 동시 수집 수량은 우측에서 조절합니다 — 차단 방지를 위해 2개로 시작해 목표까지 자동으로 올라갑니다.</div>
         </div>
         <div class="flex items-center gap-2 flex-none">
+            <label for="kh-collect-conc" class="text-muted-soft" style="font-size:var(--fs-xs);">동시 수집</label>
+            <input type="number" id="kh-collect-conc" class="input" min="1" max="10" step="1" value="4"
+                   title="동시에 여는 수집 탭 수(1~10). 많을수록 빠르지만 네이버 차단 위험이 커집니다 — 낮게 시작해 자동으로 올라갑니다."
+                   style="width:64px;padding:4px 10px;font-size:var(--fs-xs);text-align:center;">
             <button type="button" id="kh-collect-stop" class="btn btn-secondary btn-sm kh-stop-live" hidden>수집 중단</button>
         </div>
     </div>
@@ -86,6 +90,20 @@
 (function () {
     const stop = document.getElementById('kh-collect-stop');
     const msg = document.getElementById('kh-collect-msg');
+    const concInput = document.getElementById('kh-collect-conc');
+
+    // 동시 수집 수량 — 마지막 값 기억(localStorage), 1~10 클램프(확장 상한과 동일)
+    const savedConc = parseInt(localStorage.getItem('khCollectConc') || '', 10);
+    if (savedConc >= 1 && savedConc <= 10) concInput.value = savedConc;
+    function collectConc() {
+        let v = parseInt(concInput.value, 10);
+        if (isNaN(v)) v = 4;
+        v = Math.min(10, Math.max(1, v));
+        concInput.value = v;
+        localStorage.setItem('khCollectConc', String(v));
+        return v;
+    }
+    concInput.addEventListener('change', collectConc);
     const statusUrl = '{{ route('admin.keyword-hub.collect-market-status') }}';
     let poll = null;
     let statPoll = null;
@@ -141,6 +159,7 @@
             msg.style.color = '';
             msg.textContent = (!b.running ? '수집 종료 — ' : (waiting ? '차단 감지 — 대기 중… ' : '수집 중… '))
                 + '성공 ' + (b.done || 0) + ' · 실패 ' + (b.failed || 0)
+                + (b.running && b.target ? ' · 동시 ' + (b.conc || 1) + '/' + b.target : '')
                 + (b.category ? ' · 분류: ' + b.category + (b.categoryTotal ? ' (' + b.categoryIndex + '/' + b.categoryTotal + ')' : '') : '')
                 + (b.running && b.current ? ' · 현재: ' + b.current : '')
                 + (b.remaining ? ' · 남은 ' + Number(b.remaining).toLocaleString() : '')
@@ -160,7 +179,7 @@
         }
         msg.style.color = '';
         msg.textContent = '수집 시작하는 중…';
-        send('bulkStart', { limit: 0, delayMs: 6000, concurrency: 2 });
+        send('bulkStart', { limit: 0, delayMs: 6000, concurrency: collectConc() });
         return true;
     }
     window.__khStartCollect = startCollect;
