@@ -12,6 +12,9 @@ use Illuminate\Http\Request;
  */
 class ExtKeywordShopSerpController extends Controller
 {
+    /** 이하 월 조회수는 수집 가치 없음 — 후보 리스트에서 삭제(사용자 확정 2026-07-23, 플레이스 has_volume 거부와 짝). */
+    private const MIN_VOLUME = 10;
+
     /**
      * 수집 대기열 — 아직 수집 안 했거나 오래된 쇼핑 키워드를 검색량 큰 순으로 준다.
      * 확장이 이 목록을 받아 한 건씩 연속 수집한다(수만 개를 사람이 클릭할 수 없으므로).
@@ -42,6 +45,7 @@ class ExtKeywordShopSerpController extends Controller
         //   수집은 키워드 단위라 중복을 제거하지 않으면 같은 키워드를 7번 수집하게 된다.
         $keywords = \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
             ->whereNotIn('keyword', $fresh)
+            ->where(fn ($q) => $q->whereNull('monthly_total')->orWhere('monthly_total', '>', self::MIN_VOLUME))
             ->select('keyword')
             ->selectRaw('MAX(monthly_total) as vol')
             ->groupBy('keyword')
@@ -52,9 +56,11 @@ class ExtKeywordShopSerpController extends Controller
             ->values();
 
         return response()->json(['data' => [
-            'keywords' => $keywords,
+            'keywords' => $this->volumeGate($keywords),
             'remaining' => \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
-                ->whereNotIn('keyword', $fresh)->distinct()->count('keyword'),
+                ->whereNotIn('keyword', $fresh)
+                ->where(fn ($q) => $q->whereNull('monthly_total')->orWhere('monthly_total', '>', self::MIN_VOLUME))
+                ->distinct()->count('keyword'),
         ]]);
     }
 
@@ -114,6 +120,7 @@ class ExtKeywordShopSerpController extends Controller
                 $filter($q);
                 $perRoot[$i] = $q
                     ->when($lease !== [], fn ($x) => $x->whereNotIn('keyword', array_keys($lease)))
+                    ->where(fn ($x) => $x->whereNull('monthly_total')->orWhere('monthly_total', '>', self::MIN_VOLUME))
                     ->orderByRaw('monthly_total is null')->orderByDesc('monthly_total')
                     ->distinct()->limit($perRootLimit)->pluck('keyword')->values();
             }
@@ -133,6 +140,10 @@ class ExtKeywordShopSerpController extends Controller
             }
 
             if ($picked !== []) {
+                // 조회수 게이트 — 검색량 미상 키워드는 여기서 조회해 10 이하를 삭제·제외한 뒤 내준다
+                $picked = $this->volumeGate(collect($picked))->all();
+            }
+            if ($picked !== []) {
                 foreach ($picked as $k) {
                     $lease[$k] = time() + 300;   // 5분간 재발급 금지
                 }
@@ -143,7 +154,8 @@ class ExtKeywordShopSerpController extends Controller
                 $allIds = collect($roots)->flatMap(fn ($r) => $r['ids']);
                 $remaining = \Illuminate\Support\Facades\Cache::remember("shop_queue_remaining:{$phase}", 180,
                     function () use ($allIds, $filter) {
-                        $q = \App\Models\KeywordCandidate::whereIn('category_id', $allIds);
+                        $q = \App\Models\KeywordCandidate::whereIn('category_id', $allIds)
+                            ->where(fn ($x) => $x->whereNull('monthly_total')->orWhere('monthly_total', '>', self::MIN_VOLUME));
                         $filter($q);
 
                         return $q->distinct()->count('keyword');
@@ -164,6 +176,57 @@ class ExtKeywordShopSerpController extends Controller
             'keywords' => [], 'category' => null,
             'category_index' => $n, 'category_total' => $n, 'remaining' => 0,
         ]]);
+    }
+
+    /**
+     * 조회수 게이트(사용자 확정 2026-07-23) — 수집 전에 검색량부터 확인해 월 조회수 10 이하는
+     * **후보 리스트에서 삭제**하고 수집하지 않는다(플레이스 발행의 has_volume 거부와 짝).
+     * 검색량 미상은 keywordstool(5개 배치)로 조회해 후보에 저장하고, 응답에서 빠진 키워드는
+     * 무데이터(=조회수 없음)로 보고 삭제한다. 청크가 통째로 빈 응답이면 API 실패 가능성이 있어
+     * 삭제하지 않고 이번 배치는 그대로 수집한다(다음 라운드에 재시도).
+     */
+    private function volumeGate(\Illuminate\Support\Collection $keywords): \Illuminate\Support\Collection
+    {
+        if ($keywords->isEmpty()) {
+            return $keywords;
+        }
+        $shopCatIds = \App\Models\KeywordCategory::where('type', 'shopping')->pluck('id');
+
+        // 이미 검색량을 아는 키워드(후보 최대값 기준) — 10 이하는 즉시 탈락
+        $known = \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)
+            ->whereIn('keyword', $keywords)->whereNotNull('monthly_total')
+            ->groupBy('keyword')->selectRaw('keyword, MAX(monthly_total) as vol')->pluck('vol', 'keyword');
+        $drop = $known->filter(fn ($v) => (int) $v <= self::MIN_VOLUME)->keys()->all();
+
+        $svc = app(\App\Domain\Keyword\NaverKeywordService::class);
+        foreach ($keywords->reject(fn ($k) => $known->has($k))->values()->chunk(5) as $chunk) {
+            $got = $svc->volumes($chunk->values()->all());
+            if ($got === []) {
+                continue;   // 청크 통실패(계정 장애 등) 가능성 — 삭제 없이 통과
+            }
+            foreach ($chunk as $kw) {
+                if (isset($got[$kw])) {
+                    \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)->where('keyword', $kw)->update([
+                        'monthly_total' => (int) $got[$kw]['monthly_total'],
+                        'comp_idx' => $got[$kw]['comp_idx'] ?? null,
+                        'volume_checked_at' => now(),
+                    ]);
+                    if ((int) $got[$kw]['monthly_total'] <= self::MIN_VOLUME) {
+                        $drop[] = $kw;
+                    }
+                } else {
+                    $drop[] = $kw;   // keywordstool 은 무데이터 키워드를 응답에서 생략한다
+                }
+            }
+        }
+
+        if ($drop !== []) {
+            \App\Models\KeywordCandidate::whereIn('category_id', $shopCatIds)->whereIn('keyword', $drop)->delete();
+            \Illuminate\Support\Facades\Cache::forget('shop_queue_remaining:new');
+            \Illuminate\Support\Facades\Cache::forget('shop_queue_remaining:refresh');
+        }
+
+        return $keywords->reject(fn ($k) => in_array($k, $drop, true))->values();
     }
 
     public function store(Request $request)

@@ -22,6 +22,30 @@ class MarketKeywordDataEnricher
         private SearchAdWebClient $web,
     ) {}
 
+    /** 보강할 게 남았는지 — 검색량과 상세(성별·연령·월별) 둘 다 있으면 완료. */
+    public function needs(MarketAnalysis $a): bool
+    {
+        $kd = (array) (((array) $a->snapshot)['keyword_data'] ?? []);
+
+        return trim((string) $a->keyword) !== ''
+            && ((int) ($kd['monthly_total'] ?? 0) <= 0 || empty($kd['detail']));
+    }
+
+    /**
+     * 백그라운드 보강 예약(2026-07-23) — 공유 페이지 첫 열람이 검색광고 크롤을 기다리지 않게
+     * 잡만 걸고 즉시 반환한다. 15분 중복 예약 가드.
+     */
+    public function ensureAsync(MarketAnalysis $a): void
+    {
+        if (! $this->needs($a) || Cache::get('market:kd-enrich-fail:'.md5(mb_strtoupper(trim((string) $a->keyword))))) {
+            return;
+        }
+        if (! Cache::add('market:kd-enrich-queued:'.$a->id, 1, 900)) {
+            return;
+        }
+        \App\Jobs\EnrichMarketKeywordData::dispatch($a->id);
+    }
+
     public function ensure(MarketAnalysis $a): MarketAnalysis
     {
         $kw = trim((string) $a->keyword);

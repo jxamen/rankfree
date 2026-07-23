@@ -36,6 +36,18 @@ class RelatedDocsService
     ];
 
     /**
+     * 타입별 경량 컬럼 — 행마다 실린 대용량 스냅샷(JSON, 평균 17KB)을 읽지 않기 위한 select 목록.
+     * item() 렌더 + shareUrl(slug) 에 필요한 것만. 컬럼을 늘리면 여기도 함께 갱신.
+     */
+    private const COLS = [
+        'keyword' => ['id', 'keyword', 'monthly_total', 'slug', 'retired_at', 'category_id'],
+        'market' => ['id', 'keyword', 'sales_6m', 'slug'],
+        'product' => ['id', 'name', 'total_reviews', 'avg_score', 'slug'],
+        'seller' => ['id', 'product_name', 'keyword', 'score', 'grade', 'slug'],
+        'store' => ['id', 'name', 'keyword', 'rank', 'slug'],
+    ];
+
+    /**
      * 문서 하단 추천 섹션 목록.
      * $extraKeywords — 연관 키워드 등 정확 일치로 매칭할 추가 후보(키워드 문서의 vm.related 등).
      *
@@ -85,6 +97,7 @@ class RelatedDocsService
                 ->whereNull('retired_at')
                 ->where('category_id', $catId)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->select(self::COLS['keyword'])
                 ->orderByDesc('monthly_total')->limit(12)->get();
             $items = $this->uniqueItems($catDocs, 'keyword', self::SELF_LIMIT, $seen);
             if ($items) {
@@ -99,9 +112,10 @@ class RelatedDocsService
             [$cls, $cols, $title, $fallbackTitle] = self::TYPES[$prefix];
             $isSelf = $prefix === $self;
 
-            $matched = $cls::query()->latest('id')
-                ->when($cls === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at'))
-                ->when($doc instanceof $cls, fn ($q) => $q->where($doc->getKeyName(), '!=', $doc->getKey()))
+            // ★ 2단계 조회 — LIKE 매칭을 ORDER BY 없이 id 만 뽑는다(커버링 인덱스 스캔).
+            //   ORDER BY id 를 SQL 에 두면 옵티마이저가 PRIMARY(평균 17KB 행) 풀스캔을 골라
+            //   keyword_searches 38k 행에서 2.2초가 걸린다(실측). 무정렬 id 스캔은 13~35ms.
+            $matchedIds = \Illuminate\Support\Facades\DB::table((new $cls)->getTable())
                 ->where(function ($w) use ($cols, $terms, $extras) {
                     foreach ($cols as $col) {
                         if ($extras) {
@@ -112,7 +126,14 @@ class RelatedDocsService
                         }
                     }
                 })
-                ->limit(30)->get();
+                ->pluck('id')->all();
+            rsort($matchedIds);
+            $matched = $matchedIds === [] ? collect() : $cls::query()
+                ->whereIn('id', array_slice($matchedIds, 0, 100))
+                ->when($cls === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at'))
+                ->when($doc instanceof $cls, fn ($q) => $q->where($doc->getKeyName(), '!=', $doc->getKey()))
+                ->select(self::COLS[$prefix])
+                ->orderByDesc('id')->limit(30)->get();
 
             $sectionTitle = $title;
             if ($isSelf) {
@@ -124,6 +145,7 @@ class RelatedDocsService
                     $pad = ($prefix === 'keyword' ? $cls::query()->orderByDesc('monthly_total') : $cls::query()->latest('id'))
                         ->when($cls === KeywordSearch::class, fn ($q) => $q->whereNull('retired_at'))
                         ->when($doc instanceof $cls, fn ($q) => $q->where($doc->getKeyName(), '!=', $doc->getKey()))
+                        ->select(self::COLS[$prefix])
                         ->limit(12)->get();
                     $matched = $matched->concat($pad);
                 }
@@ -253,6 +275,7 @@ class RelatedDocsService
             ->whereNotNull('place_x')->whereNotNull('place_y')
             ->whereBetween('place_x', [$lng - $dLng, $lng + $dLng])
             ->whereBetween('place_y', [$lat - $dLat, $lat + $dLat])
+            ->select(array_merge(self::COLS['keyword'], ['place_x', 'place_y']))
             ->with('category:id,name,type')
             ->limit(80)->get();
         if ($cands->isEmpty()) {

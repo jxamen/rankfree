@@ -49,8 +49,9 @@ class MarketAnalysisController extends Controller
         $display = MarketAnalysis::where('keyword', $a->keyword)
             ->orderByDesc('updated_at')->orderByDesc('id')->first() ?? $a;
 
-        // 대량 수집 발행분은 keyword_data 가 비어 '키워드 분석' 섹션이 빠진다 — 첫 열람 때 1회 보강·저장
-        $display = app(\App\Domain\Shopping\MarketKeywordDataEnricher::class)->ensure($display);
+        // 대량 수집 발행분은 keyword_data 가 비어 '키워드 분석' 섹션이 빠진다 — 백그라운드 큐로 보강
+        // (2026-07-23: 첫 열람이 검색광고 크롤을 기다리며 수 초 걸리던 문제 → 잡만 걸고 즉시 렌더)
+        app(\App\Domain\Shopping\MarketKeywordDataEnricher::class)->ensureAsync($display);
 
         // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
         $weekday = $display->keyword ? $datalab->weekdayRatio($display->keyword) : null;
