@@ -217,6 +217,7 @@
                             <th class="text-right px-3 py-3 font-semibold" style="width:120px;">수량 · 기간</th>
                             <th class="text-right px-3 py-3 font-semibold" style="width:120px;">금액</th>
                             <th class="text-center px-3 py-3 font-semibold" style="width:90px;">상태</th>
+                            <th class="text-center px-3 py-3 font-semibold" style="width:110px;">순위</th>
                             <th class="text-right px-5 py-3 font-semibold" style="width:140px;">주문일시</th>
                         </tr>
                     </thead>
@@ -237,11 +238,21 @@
                                 <td class="px-3 py-3 text-center">
                                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $orderStatusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $orderStatuses[$o->status] ?? $o->status }}</span>
                                 </td>
+                                {{-- 순위 — 진행중 전환 시 자동 등록된 쇼핑 순위추적(2026-07-23). 리포트 새창 --}}
+                                <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);">
+                                    @if ($o->shopRankSlot)
+                                        <a href="{{ $o->shopRankSlot->shareUrl() }}" target="_blank" rel="noopener" class="text-accent hover:underline font-mono" title="{{ $o->shopRankSlot->keyword }} 순위 리포트 새창">
+                                            {{ $o->shopRankSlot->last_rank ? number_format($o->shopRankSlot->last_rank).'위 ↗' : '수집중 ↗' }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted-soft">—</span>
+                                    @endif
+                                </td>
                                 <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
                             </tr>
                             {{-- 상세 주문 내역 — 주문번호 클릭 시 펼침 --}}
                             <tr id="od-{{ $o->id }}" hidden>
-                                <td colspan="6" class="px-5 py-4" style="background:var(--color-surface-soft);border-top:1px solid var(--color-hairline-soft);">
+                                <td colspan="7" class="px-5 py-4" style="background:var(--color-surface-soft);border-top:1px solid var(--color-hairline-soft);">
                                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                         @foreach (array_filter([
                                             ['단가', number_format($o->unit_price).'원'],

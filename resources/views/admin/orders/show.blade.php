@@ -24,9 +24,9 @@
     {{-- 상단 1줄: 주문 정보(2/3) · 주문자+상태(1/3) — 이하 콘텐츠는 전체 폭 사용(2026-07-23) --}}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="card p-6 lg:col-span-2">
-            {{-- 주문번호는 카드 제목으로(페이지 제목은 '주문 상세'만, 2026-07-23) --}}
+            {{-- 주문번호 = 카드 제목(크게) · 페이지 제목은 '주문 상세'만(2026-07-23) --}}
             <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 상세 — <span class="font-mono">{{ $order->order_no }}</span></div>
+                <div class="text-ink font-display" style="font-size:var(--fs-lg);">{{ $order->order_no }}</div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
             {{-- 1줄: 상품 정보 (+ 주문 시작일·종료일 — 단가 좌측) --}}
@@ -145,6 +145,7 @@
             </div>
             {{-- 쇼핑 유입키워드 수집 — 연결 분석 요약(카드 통합, 2026-07-23) --}}
             @if ($order->shopKeywordAnalyses->isNotEmpty())
+                <div class="text-muted font-semibold mb-2" style="font-size:var(--fs-xs);">쇼핑 유입키워드</div>
                 <div class="flex flex-col gap-2 mb-4 pb-1" style="border-bottom:1px solid var(--color-hairline-soft);">
                     @foreach ($order->shopKeywordAnalyses as $a)
                         <div class="flex items-center gap-3 flex-wrap" style="font-size:var(--fs-xs);padding-bottom:8px;">

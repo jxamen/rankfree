@@ -21,7 +21,7 @@ class MarketingOrder extends Model
     protected $fillable = [
         'order_no', 'product_id', 'user_id', 'quantity', 'days', 'field_values',
         'unit_price', 'total_price', 'status', 'orderer_name', 'orderer_contact',
-        'user_coupon_id', 'discount_amount',
+        'user_coupon_id', 'discount_amount', 'shop_rank_slot_id',
     ];
 
     protected $casts = [
@@ -35,6 +35,18 @@ class MarketingOrder extends Model
         static::creating(function (self $o) {
             if (! $o->order_no) {
                 $o->order_no = 'MO'.now()->format('ymd').strtoupper(Str::random(6));
+            }
+        });
+
+        // 진행중 전환 시 쇼핑 순위추적 자동 등록(2026-07-23) — 광고주가 주문 내역에서 순위 확인.
+        // 실패해도 주문 흐름에 영향 없음(내부에서 로그만).
+        static::updated(function (self $o) {
+            if ($o->wasChanged('status') && $o->status === 'processing') {
+                try {
+                    app(\App\Domain\Order\OrderRankTracker::class)->register($o);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('주문 순위추적 등록 오류', ['order' => $o->order_no, 'e' => $e->getMessage()]);
+                }
             }
         });
     }
@@ -58,6 +70,12 @@ class MarketingOrder extends Model
     public function items(): HasMany
     {
         return $this->hasMany(MarketingOrderItem::class, 'order_id')->orderBy('day_no')->orderBy('id');
+    }
+
+    /** 자동 등록된 쇼핑 순위추적 슬롯(진행중 전환 시, 2026-07-23) — 광고주 주문 내역 순위 표기. */
+    public function shopRankSlot(): BelongsTo
+    {
+        return $this->belongsTo(ShopRankSlot::class, 'shop_rank_slot_id');
     }
 
     /** 사용된 쿠폰 발급분(할인 적용 시). */
