@@ -38,10 +38,9 @@
                     ['수량', number_format($order->quantity).($order->days ? ' × '.$order->days.'일' : '')],
                     $ordStart !== '' ? ['시작일', $ordStart] : null,
                     $ordEnd !== '' ? ['종료일', $ordEnd] : null,
-                    ['단가', number_format($order->unit_price).'원'],
                 ]);
             @endphp
-            <div class="grid grid-cols-2 {{ count($row1) >= 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 @foreach ($row1 as [$lab, $val])
                     <div>
                         <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
@@ -49,11 +48,16 @@
                     </div>
                 @endforeach
             </div>
-            {{-- 2줄(금액): 주문 금액(할인 전) → 쿠폰 할인 → 합계 (2026-07-23) --}}
-            @php $hasDc = (float) $order->discount_amount > 0; @endphp
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
+            {{-- 2줄(금액): 총 수량 → 단가 → 주문 금액(할인 전) → 쿠폰 할인 → 합계 (2026-07-23) --}}
+            @php
+                $hasDc = (float) $order->discount_amount > 0;
+                $totalQty = $order->quantity * max(1, (int) ($order->days ?: 1));
+            @endphp
+            <div class="grid grid-cols-2 {{ $hasDc ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4 mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
                 @foreach (array_filter([
-                    $hasDc ? ['주문 금액', number_format((float) $order->total_price + (float) $order->discount_amount).'원'] : null,
+                    ['총 수량', number_format($totalQty)],
+                    ['단가', number_format($order->unit_price).'원'],
+                    ['주문 금액', number_format((float) $order->total_price + (float) $order->discount_amount).'원'],
                     $hasDc ? ['쿠폰 할인', '-'.number_format($order->discount_amount).'원'.($order->userCoupon?->coupon ? ' · '.$order->userCoupon->coupon->name : '')] : null,
                     ['합계', number_format($order->total_price).'원'],
                 ]) as [$lab, $val])
@@ -65,9 +69,15 @@
             </div>
         </div>
 
-        {{-- 주문자 + 상태 변경(카드 통합, 2026-07-23) --}}
+        {{-- 주문자 + 상태 변경(카드 통합, 2026-07-23) — 삭제 버튼은 상단 우측 --}}
         <div class="card p-6">
-            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">주문자</div>
+            <div class="flex items-center justify-between gap-2 mb-3">
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문자</div>
+                <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">주문 삭제</button>
+                </form>
+            </div>
             <div class="text-ink" style="font-size:var(--fs-sm);">{{ $order->orderer_name }}</div>
             <div class="text-muted mt-0.5" style="font-size:var(--fs-xs);">{{ $order->orderer_contact }}</div>
             @if ($order->user)
@@ -79,18 +89,14 @@
 
             <div class="mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
                 <div class="text-muted font-semibold mb-2" style="font-size:var(--fs-xs);">상태 변경</div>
-                <form method="POST" action="{{ route('admin.orders.status', $order) }}" class="flex items-center gap-2">
+                {{-- 선택 즉시 반영(저장 버튼 없음) --}}
+                <form method="POST" action="{{ route('admin.orders.status', $order) }}">
                     @csrf @method('PUT')
-                    <select name="status" class="input" style="flex:1;font-size:var(--fs-xs);">
+                    <select name="status" class="input" style="width:100%;font-size:var(--fs-xs);" onchange="this.form.submit()">
                         @foreach ($statuses as $code => $label)
                             <option value="{{ $code }}" {{ $order->status === $code ? 'selected' : '' }}>{{ $label }}</option>
                         @endforeach
                     </select>
-                    <button type="submit" class="btn btn-primary btn-sm flex-none">저장</button>
-                </form>
-                <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" class="mt-2" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
-                    @csrf @method('DELETE')
-                    <button type="submit" class="btn btn-ghost btn-sm w-full" style="color:var(--color-error);">주문 삭제</button>
                 </form>
             </div>
         </div>
