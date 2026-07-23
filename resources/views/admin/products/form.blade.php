@@ -215,7 +215,8 @@
             <div class="vx-map-rows flex flex-col gap-2"></div>
             <div class="flex items-center justify-between mt-2">
                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">비워두면 기본 페이로드(주문번호·상품명·수량·입력값 전체)로 전송됩니다.
-                    구글시트는 <b class="text-muted">행 순서 = 열 순서</b> — 특정 열을 건너뛰려면 행을 지우지 말고 <b class="text-muted">'보내지 않음'</b>을 선택하세요(지우면 뒤 열이 앞으로 당겨집니다).</span>
+                    구글시트는 <b class="text-muted">행 순서 = 열 순서</b> — 특정 열을 건너뛰려면 행을 지우지 말고 <b class="text-muted">'보내지 않음'</b>을 선택하세요(지우면 뒤 열이 앞으로 당겨집니다).
+                    세부주문(회차) 발주 시 <b class="text-muted">필드: 시작일·종료일·일수량은 그 회차의 값으로 자동 대체</b>됩니다.</span>
                 <button type="button" class="btn btn-ghost btn-sm vx-map-add">＋ 매핑 행</button>
             </div>
         </div>

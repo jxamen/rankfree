@@ -179,7 +179,14 @@ class OrderDispatchService
                 default => null,
             },
             'product' => $order->product->title,
-            'field' => $order->field_values[$key] ?? null,          // 동적 주문 필드 값
+            // 동적 주문 필드 값 — 세부주문(회차) 발주 시 시스템 필드(시작일·종료일·일수량)는
+            // 주문 전체 기간이 아니라 **그 회차의 값**으로 자동 대체(2026-07-23 사용자 확정: 주문 기준이라 헷갈리던 문제)
+            'field' => $item ? match ($key) {
+                'start_date' => $item->work_date?->toDateString(),
+                'end_date' => ($item->end_date ?? $item->work_date)?->toDateString(),
+                'daily_qty' => $item->quantity,
+                default => $order->field_values[$key] ?? null,
+            } : ($order->field_values[$key] ?? null),
             // 세부주문(일할) — 회차 배정값. 1회성 발주에는 빈 값
             'item' => match ($key) {
                 'short_url' => (string) ($item?->short_url ?? ''),
