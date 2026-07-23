@@ -145,6 +145,8 @@ class MarketingProductController extends Controller
                     'options' => $f->options_json ?? [], 'group' => $groupNames->get($f->group_id, ''), 'sort_order' => $f->sort_order,
                     'contains' => $f->validation_json['contains'] ?? '',
                     'contains_message' => $f->validation_json['contains_message'] ?? '',
+                    'not_contains' => $f->validation_json['not_contains'] ?? '',
+                    'not_contains_message' => $f->validation_json['not_contains_message'] ?? '',
                 ])->values()->toArray();
         }
 
@@ -259,9 +261,13 @@ class MarketingProductController extends Controller
                         ? (string) $f['autofill'] : null,
                     'default_value' => trim((string) ($f['default_value'] ?? '')) !== '' ? trim((string) $f['default_value']) : null,
                     'options_json' => in_array($type, ['SELECT', 'MULTI_SELECT'], true) ? $this->normOptions($opts) : null,
-                    'validation_json' => trim((string) ($f['contains'] ?? '')) !== ''
-                        ? ['contains' => trim((string) $f['contains']), 'contains_message' => trim((string) ($f['contains_message'] ?? ''))]
-                        : null,
+                    'validation_json' => array_filter([
+                        // 필수 포함 값 · 금지 포함 값(있으면 접수 거부) — 실수 주문 방지
+                        'contains' => trim((string) ($f['contains'] ?? '')),
+                        'contains_message' => trim((string) ($f['contains'] ?? '')) !== '' ? trim((string) ($f['contains_message'] ?? '')) : '',
+                        'not_contains' => trim((string) ($f['not_contains'] ?? '')),
+                        'not_contains_message' => trim((string) ($f['not_contains'] ?? '')) !== '' ? trim((string) ($f['not_contains_message'] ?? '')) : '',
+                    ], fn ($v) => $v !== '') ?: null,
                     'sort_order' => $i,
                     'is_active' => true,
                 ],

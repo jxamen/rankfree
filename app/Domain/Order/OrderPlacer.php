@@ -77,6 +77,14 @@ class OrderPlacer
 
                 throw new OrderInputException('f_'.$f->field_key, $msg);
             }
+            // 금지 포함 값 — 설정 문자열이 입력에 있으면 반려(엉뚱한 URL·값 실수 접수 방지)
+            $notContains = trim((string) ($f->validation_json['not_contains'] ?? ''));
+            if ($notContains !== '' && is_string($val) && trim($val) !== '' && str_contains($val, $notContains)) {
+                $msg = trim((string) ($f->validation_json['not_contains_message'] ?? ''))
+                    ?: "'{$f->label}' 항목에는 '{$notContains}' 이(가) 포함될 수 없습니다.";
+
+                throw new OrderInputException('f_'.$f->field_key, $msg);
+            }
             $values[$f->field_key] = $val;
         }
 

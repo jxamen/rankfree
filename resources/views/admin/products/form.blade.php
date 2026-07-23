@@ -294,6 +294,14 @@
                     <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">미포함 시 안내 메시지</label>
                     <input class="input fx-contains-msg" placeholder="예: 네이버 플레이스(m.place.naver.com) URL을 입력하세요" style="width:100%;">
                 </div>
+                <div style="flex:1;min-width:160px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">금지 포함 값 <span class="text-muted-soft">(있으면 접수 거부)</span></label>
+                    <input class="input fx-not-contains" placeholder="예: smartstore.naver.com" style="width:100%;">
+                </div>
+                <div style="flex:1.4;min-width:220px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">포함 시 안내 메시지</label>
+                    <input class="input fx-not-contains-msg" placeholder="예: 스마트스토어 URL이 아닌 플레이스 URL을 입력하세요" style="width:100%;">
+                </div>
                 <div style="flex:1;min-width:200px;">
                     <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">자동 채움 <span class="text-muted-soft">— 쇼핑 유입키워드 분석의 확장 수집값</span></label>
                     <select class="input fx-autofill" style="width:100%;" title="주문 상세 [수집요청] → 쇼핑 유입키워드 분석 → 크롬 확장이 스마트스토어 상품 페이지에서 수집한 값이 이 필드에 자동 저장됩니다">
@@ -303,12 +311,12 @@
                         @endforeach
                     </select>
                 </div>
-                <div style="flex:1;min-width:200px;">
+                <div style="flex:none;width:150px;">
                     <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">고정값 (주문 생성 시 자동 입력)</label>
                     <input class="input fx-default" placeholder="예: 아웃랜딩 Y" style="width:100%;">
                 </div>
             </div>
-            <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">필수 포함 값을 설정하면 주문 입력값에 해당 문자열이 없을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다.
+            <div class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);"><b class="text-muted">필수 포함 값</b>은 입력값에 해당 문자열이 없을 때, <b class="text-muted">금지 포함 값</b>은 해당 문자열이 있을 때 주문이 접수되지 않고 안내 메시지가 표시됩니다 — 엉뚱한 URL·값이 실수로 접수되는 것을 막습니다.
                 <b class="text-muted">자동 채움 값의 출처</b>: 주문 접수 후 관리자가 <b class="text-muted">주문 상세 › [수집요청]</b>을 누르면 쇼핑 유입키워드 분석이 만들어지고,
                 <b class="text-muted">크롬 확장이 스마트스토어 상품 페이지에서 수집</b>한 상품명·상점명·가격·정답태그·이미지가 이 필드에 자동 저장됩니다(숨김 필드의 발주 전달값에 사용).
                 고정값은 <b class="text-muted">숨김 필드</b>에서 주문 생성 시 그대로 저장되는 값입니다 — 항상 같은 값을 발주에 전달할 때 쓰고, 주문 상세에서 건별 수정도 가능합니다.</div>
@@ -382,10 +390,12 @@
         node.querySelector('.fx-ph').value = data.placeholder || '';
         node.querySelector('.fx-contains').value = data.contains || '';
         node.querySelector('.fx-contains-msg').value = data.contains_message || '';
+        node.querySelector('.fx-not-contains').value = data.not_contains || '';
+        node.querySelector('.fx-not-contains-msg').value = data.not_contains_message || '';
         node.querySelector('.fx-autofill').value = data.autofill || '';
         node.querySelector('.fx-default').value = data.default_value || '';
         function syncMore() {
-            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg', '.fx-autofill', '.fx-default'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
+            var has = ['.fx-ph', '.fx-contains', '.fx-contains-msg', '.fx-not-contains', '.fx-not-contains-msg', '.fx-autofill', '.fx-default'].some(function (s) { return node.querySelector(s).value.trim() !== ''; });
             moreBtn.classList.toggle('btn-secondary', has);
             moreBtn.classList.toggle('btn-ghost', !has);
             moreBtn.textContent = has ? '옵션 ●' : '옵션';
@@ -634,6 +644,8 @@
         node.querySelector('.vx-map-add').addEventListener('click', function () { addMapRow(mapRows, {}, isGsheet()); syncMapBtn(); });
         map.addEventListener('click', function () { setTimeout(syncMapBtn, 0); });   // ✕ 삭제 후 카운트 갱신
         syncMapBtn();
+        // 저장된 매핑이 있으면 처음부터 펼쳐 보여준다(구글시트면 열 이름도 즉시 로드)
+        if (Array.isArray(data.map) && data.map.length) { mapBtn.click(); }
         node.querySelector('.vx-del').addEventListener('click', function () { node.remove(); vRefreshEmpty(); });
         vlist.appendChild(node); vRefreshEmpty();
     }
@@ -665,6 +677,8 @@
                 placeholder: r.querySelector('.fx-ph').value.trim() || null,
                 contains: r.querySelector('.fx-contains').value.trim() || null,
                 contains_message: r.querySelector('.fx-contains-msg').value.trim() || null,
+                not_contains: r.querySelector('.fx-not-contains').value.trim() || null,
+                not_contains_message: r.querySelector('.fx-not-contains-msg').value.trim() || null,
             });
         });
         document.getElementById('fields_json').value = JSON.stringify(rows);
