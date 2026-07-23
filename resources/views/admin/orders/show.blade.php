@@ -21,9 +21,9 @@
 @endif
 
 <div class="flex flex-col gap-4">
-    {{-- 상단 1줄: 주문 정보 · 주문자 · 상태 변경(3카드) — 이하 콘텐츠는 전체 폭 사용(2026-07-23 좁은 2/3 컬럼 제거) --}}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="card p-6">
+    {{-- 상단 1줄: 주문 정보(2/3) · 주문자+상태(1/3) — 이하 콘텐츠는 전체 폭 사용(2026-07-23) --}}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div class="card p-6 lg:col-span-2">
             <div class="flex items-start justify-between flex-wrap gap-2 mb-4">
                 <div>
                     <div class="text-muted-soft" style="font-size:var(--fs-xs);">주문번호</div>
@@ -31,7 +31,8 @@
                 </div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {{-- 쿠폰 할인이 있으면 5열 — 합계가 줄바꿈되지 않고 쿠폰 우측에 붙는다 --}}
+            <div class="grid grid-cols-2 {{ (float) $order->discount_amount > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4">
                 @foreach (array_filter([
                     ['상품', $order->product?->title ?? '(삭제됨)'],
                     ['수량', number_format($order->quantity).($order->days ? ' × '.$order->days.'일' : '')],
@@ -49,7 +50,7 @@
             </div>
         </div>
 
-        {{-- 주문자 --}}
+        {{-- 주문자 + 상태 변경(카드 통합, 2026-07-23) --}}
         <div class="card p-6">
             <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">주문자</div>
             <div class="text-ink" style="font-size:var(--fs-sm);">{{ $order->orderer_name }}</div>
@@ -60,24 +61,23 @@
                 <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">비회원 주문</div>
             @endif
             <div class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">주문일시: {{ $order->created_at?->format('Y.m.d H:i') }}</div>
-        </div>
 
-        {{-- 상태 변경 --}}
-        <div class="card p-6">
-            <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-sm);">상태 변경</div>
-            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
-                @csrf @method('PUT')
-                <select name="status" class="input" style="width:100%;font-size:var(--fs-xs);">
-                    @foreach ($statuses as $code => $label)
-                        <option value="{{ $code }}" {{ $order->status === $code ? 'selected' : '' }}>{{ $label }}</option>
-                    @endforeach
-                </select>
-                <button type="submit" class="btn btn-primary btn-sm w-full mt-3">상태 저장</button>
-            </form>
-            <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" class="mt-3" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
-                @csrf @method('DELETE')
-                <button type="submit" class="btn btn-ghost btn-sm w-full" style="color:var(--color-error);">주문 삭제</button>
-            </form>
+            <div class="mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
+                <div class="text-muted font-semibold mb-2" style="font-size:var(--fs-xs);">상태 변경</div>
+                <form method="POST" action="{{ route('admin.orders.status', $order) }}" class="flex items-center gap-2">
+                    @csrf @method('PUT')
+                    <select name="status" class="input" style="flex:1;font-size:var(--fs-xs);">
+                        @foreach ($statuses as $code => $label)
+                            <option value="{{ $code }}" {{ $order->status === $code ? 'selected' : '' }}>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm flex-none">저장</button>
+                </form>
+                <form method="POST" action="{{ route('admin.orders.destroy', $order) }}" class="mt-2" data-confirm="이 주문을 삭제할까요?" data-confirm-text="발주 이력도 함께 삭제됩니다.">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="btn btn-ghost btn-sm w-full" style="color:var(--color-error);">주문 삭제</button>
+                </form>
+            </div>
         </div>
     </div>
 
