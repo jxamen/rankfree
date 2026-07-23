@@ -31,15 +31,25 @@
                 </div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
-            {{-- 쿠폰 할인이 있으면 5열 — 합계가 줄바꿈되지 않고 쿠폰 우측에 붙는다 --}}
-            <div class="grid grid-cols-2 {{ (float) $order->discount_amount > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4">
-                @foreach (array_filter([
+            {{-- 1줄: 상품 정보 --}}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                @foreach ([
                     ['상품', $order->product?->title ?? '(삭제됨)'],
                     ['수량', number_format($order->quantity).($order->days ? ' × '.$order->days.'일' : '')],
                     ['단가', number_format($order->unit_price).'원'],
-                    (float) $order->discount_amount > 0
-                        ? ['쿠폰 할인', '-'.number_format($order->discount_amount).'원'.($order->userCoupon?->coupon ? ' · '.$order->userCoupon->coupon->name : '')]
-                        : null,
+                ] as [$lab, $val])
+                    <div>
+                        <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
+                        <div class="text-ink mt-0.5" style="font-size:var(--fs-sm);">{{ $val }}</div>
+                    </div>
+                @endforeach
+            </div>
+            {{-- 2줄(금액): 주문 금액(할인 전) → 쿠폰 할인 → 합계 (2026-07-23) --}}
+            @php $hasDc = (float) $order->discount_amount > 0; @endphp
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4" style="border-top:1px solid var(--color-hairline-soft);">
+                @foreach (array_filter([
+                    $hasDc ? ['주문 금액', number_format((float) $order->total_price + (float) $order->discount_amount).'원'] : null,
+                    $hasDc ? ['쿠폰 할인', '-'.number_format($order->discount_amount).'원'.($order->userCoupon?->coupon ? ' · '.$order->userCoupon->coupon->name : '')] : null,
                     ['합계', number_format($order->total_price).'원'],
                 ]) as [$lab, $val])
                     <div>
