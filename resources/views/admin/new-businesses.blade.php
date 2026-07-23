@@ -19,7 +19,7 @@
 {{-- 현황 + 실행 --}}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="card p-5">
-        <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-sm);">현황 <span class="text-muted-soft" style="font-weight:400;">최근 {{ $days }}일</span></div>
+        <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-sm);">현황 <span class="text-muted-soft" style="font-weight:400;">{{ $days > 0 ? '최근 '.$days.'일' : '전체' }}</span></div>
         <div class="text-muted" style="font-size:var(--fs-xs);">영업 중 신규 <b class="font-mono text-ink">{{ number_format($total) }}</b>건</div>
         <div class="flex flex-wrap gap-1.5 mt-2">
             @foreach ($placeLabel as $k => $label)
@@ -90,7 +90,7 @@
     <form method="GET" action="{{ route('admin.new-businesses') }}" id="nb-form" class="flex items-center gap-2" style="flex-wrap:nowrap;overflow-x:auto;">
         <span class="text-ink font-semibold flex-none" style="font-size:var(--fs-xs);">기간</span>
         <select name="days" class="input" style="height:36px;min-width:110px;" onchange="nbGo(this, [])">
-            @foreach ([7 => '최근 7일', 14 => '최근 14일', 30 => '최근 30일', 90 => '최근 90일'] as $d => $label)
+            @foreach ([0 => '전체', 7 => '최근 7일', 14 => '최근 14일', 30 => '최근 30일', 90 => '최근 90일'] as $d => $label)
                 <option value="{{ $d }}" @selected($days === $d)>{{ $label }}</option>
             @endforeach
         </select>

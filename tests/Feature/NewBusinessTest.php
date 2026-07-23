@@ -347,4 +347,26 @@ class NewBusinessTest extends TestCase
         $client->fetch('LOCALDATA_072404', '2026-07-15', 1, 5);
         Http::assertSent(fn ($r) => str_contains($r->url(), '/테스트인증키1234/json/') || str_contains(rawurldecode($r->url()), '/테스트인증키1234/json/'));
     }
+
+    /** 목록 기본은 전체(기간 제한 없음, 2026-07-24) — 기간을 고르면 그때만 좁힌다. */
+    public function test_index_lists_all_by_default_and_filters_by_days(): void
+    {
+        NewBusiness::create(['source' => 'seoul', 'svc' => 'LOCALDATA_072404', 'svc_label' => '일반음식점',
+            'mgt_no' => 'OLD1', 'bplc_nm' => '아주오래된식당', 'trd_state_nm' => '영업/정상',
+            'apv_perm_ymd' => now()->subDays(60)->toDateString()]);
+        NewBusiness::create(['source' => 'seoul', 'svc' => 'LOCALDATA_072404', 'svc_label' => '일반음식점',
+            'mgt_no' => 'NEW1', 'bplc_nm' => '갓개업식당', 'trd_state_nm' => '영업/정상',
+            'apv_perm_ymd' => now()->subDays(3)->toDateString()]);
+
+        // 기본(전체) — 60일 전 것도 나온다
+        $html = $this->actingAs($this->admin())->get('/admin/new-businesses')->assertOk()->getContent();
+        $this->assertStringContainsString('아주오래된식당', $html);
+        $this->assertStringContainsString('갓개업식당', $html);
+        $this->assertStringContainsString('>전체</option>', $html);
+
+        // 최근 7일 필터 — 오래된 것은 빠진다
+        $html = $this->actingAs($this->admin())->get('/admin/new-businesses?days=7')->assertOk()->getContent();
+        $this->assertStringNotContainsString('아주오래된식당', $html);
+        $this->assertStringContainsString('갓개업식당', $html);
+    }
 }

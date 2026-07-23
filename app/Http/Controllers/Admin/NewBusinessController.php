@@ -21,8 +21,9 @@ class NewBusinessController extends Controller
 {
     public function index(Request $request)
     {
-        $days = (int) $request->query('days', 7);
-        $days = in_array($days, [7, 14, 30, 90], true) ? $days : 7;
+        // 기본은 전체(0 = 기간 제한 없음, 2026-07-24 사용자 요청) — 기간 선택 시에만 좁힌다
+        $days = (int) $request->query('days', 0);
+        $days = in_array($days, [0, 7, 14, 30, 90], true) ? $days : 0;
         $sido = trim((string) $request->query('sido', ''));
         $sgg = trim((string) $request->query('sgg', ''));
         $svc = trim((string) $request->query('svc', ''));
@@ -30,7 +31,7 @@ class NewBusinessController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         $base = fn () => NewBusiness::open()
-            ->whereDate('apv_perm_ymd', '>=', now()->subDays($days)->toDateString())
+            ->when($days > 0, fn ($x) => $x->whereDate('apv_perm_ymd', '>=', now()->subDays($days)->toDateString()))
             ->when($sido !== '', fn ($x) => $x->where('sido', $sido))
             ->when($sgg !== '', fn ($x) => $x->where('sgg', $sgg))
             ->when($svc !== '', fn ($x) => $x->where('svc', $svc))
@@ -47,7 +48,8 @@ class NewBusinessController extends Controller
             'services' => (array) config('rankfree.newbiz.services', []),
             'sidos' => $base()->whereNotNull('sido')->selectRaw('sido, count(*) c')->groupBy('sido')->orderByDesc('c')->pluck('c', 'sido'),
             'sggs' => $sido !== ''
-                ? NewBusiness::open()->whereDate('apv_perm_ymd', '>=', now()->subDays($days)->toDateString())
+                ? NewBusiness::open()
+                    ->when($days > 0, fn ($x) => $x->whereDate('apv_perm_ymd', '>=', now()->subDays($days)->toDateString()))
                     ->where('sido', $sido)->whereNotNull('sgg')
                     ->selectRaw('sgg, count(*) c')->groupBy('sgg')->orderByDesc('c')->pluck('c', 'sgg')
                 : collect(),
