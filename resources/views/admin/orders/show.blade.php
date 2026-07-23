@@ -31,13 +31,20 @@
                 </div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
-            {{-- 1줄: 상품 정보 --}}
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                @foreach ([
+            {{-- 1줄: 상품 정보 (+ 주문 시작일·종료일 — 단가 좌측) --}}
+            @php
+                $ordStart = trim((string) ($order->field_values['start_date'] ?? ''));
+                $ordEnd = trim((string) ($order->field_values['end_date'] ?? ''));
+                $row1 = array_filter([
                     ['상품', $order->product?->title ?? '(삭제됨)'],
                     ['수량', number_format($order->quantity).($order->days ? ' × '.$order->days.'일' : '')],
+                    $ordStart !== '' ? ['시작일', $ordStart] : null,
+                    $ordEnd !== '' ? ['종료일', $ordEnd] : null,
                     ['단가', number_format($order->unit_price).'원'],
-                ] as [$lab, $val])
+                ]);
+            @endphp
+            <div class="grid grid-cols-2 {{ count($row1) >= 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-4">
+                @foreach ($row1 as [$lab, $val])
                     <div>
                         <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
                         <div class="text-ink mt-0.5" style="font-size:var(--fs-sm);">{{ $val }}</div>
