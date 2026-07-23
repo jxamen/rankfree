@@ -20,18 +20,19 @@ class RankTrackingController extends Controller
         $active = (string) $request->query('active', '');   // ''=전체 · '1'=활성 · '0'=중지
         $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
-        $slots = PlaceRankSlot::with('user:id,name,email')
-            // 회원 필터(업체별 보기)는 콘솔과 동일한 날짜별 카드 렌더 — 전체 기록, 목록 테이블은 최근 2일(현재 순위+변화)만
-            ->with($userId > 0 ? 'records' : ['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
-            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
-            ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
-                ->where('keyword', 'like', $this->like($q))
-                ->orWhere('place_name', 'like', $this->like($q))
-                ->orWhereHas('user', fn ($u) => $u
-                    ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
-            ->when($active === '1', fn ($x) => $x->where('is_active', true))
-            ->when($active === '0', fn ($x) => $x->where('is_active', false))
-            ->latest('id')->paginate(30)->withQueryString();
+        // 회원(업체) 보기 — 검색·페이지네이션 없이 그 업체의 전체 키워드를 콘솔형 카드로 전부 표시
+        $slots = $userId > 0
+            ? PlaceRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
+            : PlaceRankSlot::with('user:id,name,email')
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
+                ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
+                    ->where('keyword', 'like', $this->like($q))
+                    ->orWhere('place_name', 'like', $this->like($q))
+                    ->orWhereHas('user', fn ($u) => $u
+                        ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
+                ->when($active === '1', fn ($x) => $x->where('is_active', true))
+                ->when($active === '0', fn ($x) => $x->where('is_active', false))
+                ->latest('id')->paginate(30)->withQueryString();
 
         return view('admin.tracking.index', [
             'mode' => 'place',
@@ -54,18 +55,19 @@ class RankTrackingController extends Controller
         $active = (string) $request->query('active', '');
         $userId = (int) $request->query('user', 0);
 
-        $slots = ShopRankSlot::with('user:id,name,email')
-            ->with($userId > 0 ? 'records' : ['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
-            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
-            ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
-                ->where('keyword', 'like', $this->like($q))
-                ->orWhere('product_title', 'like', $this->like($q))
-                ->orWhere('mall_name', 'like', $this->like($q))
-                ->orWhereHas('user', fn ($u) => $u
-                    ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
-            ->when($active === '1', fn ($x) => $x->where('is_active', true))
-            ->when($active === '0', fn ($x) => $x->where('is_active', false))
-            ->latest('id')->paginate(30)->withQueryString();
+        $slots = $userId > 0
+            ? ShopRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
+            : ShopRankSlot::with('user:id,name,email')
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
+                ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
+                    ->where('keyword', 'like', $this->like($q))
+                    ->orWhere('product_title', 'like', $this->like($q))
+                    ->orWhere('mall_name', 'like', $this->like($q))
+                    ->orWhereHas('user', fn ($u) => $u
+                        ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
+                ->when($active === '1', fn ($x) => $x->where('is_active', true))
+                ->when($active === '0', fn ($x) => $x->where('is_active', false))
+                ->latest('id')->paginate(30)->withQueryString();
 
         return view('admin.tracking.index', [
             'mode' => 'shop',

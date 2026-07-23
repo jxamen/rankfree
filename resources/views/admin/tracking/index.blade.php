@@ -40,13 +40,15 @@
 {{-- 회원 필터 배너 — 아이디 클릭으로 진입한 업체별 추적 리스트 --}}
 @if ($filterUser ?? null)
     <div class="card-soft px-4 py-3 mb-4 flex items-center gap-2" style="font-size:var(--fs-xs);">
-        <span class="text-muted">회원 필터:</span>
+        <span class="text-muted">업체:</span>
         <b class="text-ink">{{ $filterUser->name }}</b>
         <span class="text-muted-soft">{{ $filterUser->email }}</span>
-        <a href="{{ route($routeName, array_filter(['q' => $q ?: null, 'active' => $active !== '' ? $active : null])) }}" class="btn btn-ghost btn-sm" style="margin-left:auto;">필터 해제 ✕</a>
+        <span class="text-muted">· 키워드 <b class="text-ink">{{ $slots->count() }}</b>개</span>
+        <a href="{{ route($routeName) }}" class="btn btn-ghost btn-sm" style="margin-left:auto;">← 전체 목록</a>
     </div>
 @endif
 
+@unless ($filterUser ?? null)
 {{-- 통계 --}}
 <div class="trk-stats">
     @foreach ([
@@ -78,6 +80,7 @@
                placeholder="키워드 · {{ $isPlace ? '플레이스명' : '상품명·몰' }} · 회원(이름/이메일)">
     </div>
 </form>
+@endunless
 
 {{-- 회원(업체) 보기 — 콘솔 순위추적과 동일: 키워드 슬롯 카드 + 날짜별 순위 그리드(2026-07-24) --}}
 @if ($filterUser ?? null)
@@ -95,6 +98,13 @@
                     @if ($slot->last_checked_at)
                         <span class="text-muted-soft" style="font-size:var(--fs-xs);">최종 수집 {{ $kst($slot->last_checked_at) }}</span>
                     @endif
+                    {{-- 추적 주소 전체 표기(2026-07-24) — 자르지 않고 전부 --}}
+                    @php $slotUrl = $isPlace ? $slot->place_url : $slot->product_url; @endphp
+                    @if ($slotUrl)
+                        <div class="w-full" style="font-size:var(--fs-xs);word-break:break-all;">
+                            <a href="{{ $slotUrl }}" target="_blank" rel="noopener" class="text-muted-soft hover:text-ink hover:underline">{{ $slotUrl }}</a>
+                        </div>
+                    @endif
                 </div>
                 {{-- 날짜별 순위 카드 — 콘솔·공개 리포트와 공용 파셜 --}}
                 @include(($isPlace ? 'rank' : 'shop-rank').'.partials.cells', ['slot' => $slot, 'from' => null, 'to' => null])
@@ -103,7 +113,6 @@
             <div class="card text-center text-muted-soft" style="padding:56px 20px;font-size:var(--fs-xs);">이 회원의 추적 슬롯이 없습니다.</div>
         @endforelse
     </div>
-    <div class="mt-4">{{ $slots->links() }}</div>
 @else
 {{-- 목록 --}}
 <div class="card overflow-hidden">
