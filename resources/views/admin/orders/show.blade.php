@@ -313,6 +313,67 @@
                 <form id="item-c-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.cancel', $it) }}" style="display:none;"
                       data-confirm="{{ $it->day_no }}일차를 취소할까요?" data-confirm-text="전송 기록도 취소로 표시됩니다. 시트에 적힌 행은 자동으로 지워지지 않습니다." data-confirm-ok="세부주문 취소">@csrf</form>
             @endforeach
+            {{-- URL 효과 분석(2026-07-23) — 회차별 사용 URL(키워드 조합) × 순위 변화(진행일 → 익일) --}}
+            @if (! empty($urlEffect))
+                @php $fmtDelta = function ($d) { return $d === null ? ['확인 대기', 'var(--color-muted-soft)'] : ($d > 0 ? ['▲ '.$d, 'var(--color-success)'] : ($d < 0 ? ['▼ '.abs($d), 'var(--color-error)'] : ['— 0', 'var(--color-muted)'])); }; @endphp
+                <div class="card p-6">
+                    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+                        <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">URL 효과 분석
+                            <span class="text-muted-soft" style="font-weight:400;">회차별 사용 URL(키워드 조합) → 순위 변화</span></span>
+                        <a href="{{ $urlEffect['slot']->shareUrl() }}" target="_blank" rel="noopener" class="text-accent hover:underline" style="font-size:var(--fs-xs);">
+                            '{{ $urlEffect['slot']->keyword }}' 현재 {{ $urlEffect['slot']->last_rank ? number_format($urlEffect['slot']->last_rank).'위' : '수집중' }} · 리포트 ↗</a>
+                    </div>
+                    <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">변화 = 진행일 순위 → 익일 순위(▲ 상승 · ▼ 하락). 오늘 진행한 회차는 내일 순위가 수집된 뒤 표시됩니다.</p>
+
+                    {{-- URL(그룹)별 요약 --}}
+                    @if ($urlEffect['summary']->isNotEmpty())
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 mb-4">
+                            @foreach ($urlEffect['summary'] as $s)
+                                @php [$dTxt, $dColor] = $fmtDelta($s['avg_delta']); @endphp
+                                <div class="card-soft px-4 py-3 flex items-center gap-3" style="font-size:var(--fs-xs);">
+                                    <span class="badge flex-none" style="font-size:var(--fs-xs);">URL {{ $s['group_no'] ?? '?' }}</span>
+                                    <span class="text-muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $s['keywords']->implode(', ') }}">{{ $s['keywords']->implode(', ') ?: '(키워드 없음)' }}</span>
+                                    <span class="text-muted-soft flex-none">{{ $s['uses'] }}회 · {{ number_format($s['qty']) }}</span>
+                                    <span class="font-mono flex-none" style="color:{{ $dColor }};">평균 {{ $dTxt }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    {{-- 회차별 상세 --}}
+                    <div style="overflow-x:auto;">
+                        <table class="w-full" style="min-width:900px;font-size:var(--fs-xs);border-collapse:collapse;">
+                            <thead>
+                                <tr class="text-muted" style="border-bottom:1px solid var(--color-hairline-soft);">
+                                    <th class="text-center py-2 pr-3 font-semibold" style="width:50px;">회차</th>
+                                    <th class="text-left py-2 px-3 font-semibold" style="width:100px;">진행일</th>
+                                    <th class="text-center py-2 px-3 font-semibold" style="width:70px;">URL</th>
+                                    <th class="text-left py-2 px-3 font-semibold">배정 키워드</th>
+                                    <th class="text-right py-2 px-3 font-semibold" style="width:80px;">수량</th>
+                                    <th class="text-right py-2 px-3 font-semibold" style="width:100px;">진행일 순위</th>
+                                    <th class="text-right py-2 px-3 font-semibold" style="width:100px;">익일 순위</th>
+                                    <th class="text-center py-2 pl-3 font-semibold" style="width:90px;">변화</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($urlEffect['rows'] as $r)
+                                    @php [$dTxt, $dColor] = $fmtDelta($r['delta']); @endphp
+                                    <tr style="border-top:1px solid var(--color-hairline-soft);">
+                                        <td class="py-2 pr-3 text-center text-ink font-mono">{{ $r['item']->day_no }}</td>
+                                        <td class="py-2 px-3 text-body font-mono">{{ $r['item']->work_date?->format('Y-m-d') }}</td>
+                                        <td class="py-2 px-3 text-center">{{ $r['group_no'] ? 'URL '.$r['group_no'] : '—' }}</td>
+                                        <td class="py-2 px-3 text-muted" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ $r['keywords']->implode(', ') }}">{{ $r['keywords']->implode(', ') ?: '—' }}</td>
+                                        <td class="py-2 px-3 text-right font-mono">{{ number_format($r['item']->quantity) }}</td>
+                                        <td class="py-2 px-3 text-right font-mono">{{ $r['r0'] ? number_format($r['r0']).'위' : '—' }}</td>
+                                        <td class="py-2 px-3 text-right font-mono">{{ $r['r1'] ? number_format($r['r1']).'위' : '—' }}</td>
+                                        <td class="py-2 pl-3 text-center font-mono" style="color:{{ $dColor }};">{{ $dTxt }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
         @elseif (($order->product?->quantity_mode ?? '') === 'daily' && (int) $order->days >= 1)
             <div class="card p-6 mb-6">
                 <div class="flex items-center justify-between flex-wrap gap-2">

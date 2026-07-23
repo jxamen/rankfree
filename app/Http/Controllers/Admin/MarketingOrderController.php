@@ -93,7 +93,54 @@ class MarketingOrderController extends Controller
             'allocPreview' => $allocPreview,
             // 세부주문서 업체 셀렉트 옵션 — 이 상품 배분에 등록된 활성 업체
             'itemVendors' => $allocRows->pluck('vendor')->filter()->unique('id')->values(),
+            'urlEffect' => $this->urlEffect($order),
         ]);
+    }
+
+    /**
+     * URL 효과 분석(2026-07-23) — 세부주문 회차별 사용 Short URL(배정 키워드 조합)에
+     * 연결 순위추적 기록을 붙여 진행일 순위 → 익일 순위 변화를 계산한다(오늘 진행분은 내일 확인).
+     */
+    private function urlEffect(MarketingOrder $order): ?array
+    {
+        $slot = $order->shopRankSlot;
+        if (! $slot || $order->items->isEmpty()) {
+            return null;
+        }
+        $records = $slot->records()->get()->keyBy(fn ($r) => $r->checked_date->format('Y-m-d'));
+        $links = $order->shopKeywordAnalyses->first()?->shortLinks->keyBy('token') ?? collect();
+
+        $rows = [];
+        foreach ($order->items as $it) {
+            $token = preg_match('#/s/([A-Za-z0-9]+)#', (string) $it->short_url, $m) ? $m[1] : null;
+            $link = $token ? $links->get($token) : null;
+            $d0 = $it->work_date?->format('Y-m-d');
+            $d1 = $it->work_date?->copy()->addDay()->format('Y-m-d');
+            $r0 = ($d0 && isset($records[$d0]) && $records[$d0]->rank > 0) ? $records[$d0]->rank : null;
+            $r1 = ($d1 && isset($records[$d1]) && $records[$d1]->rank > 0) ? $records[$d1]->rank : null;
+            $rows[] = [
+                'item' => $it, 'token' => $token, 'group_no' => $link?->group_no,
+                'keywords' => collect((array) ($link?->keywords ?? []))->filter()->values(),
+                'r0' => $r0, 'r1' => $r1,
+                'delta' => ($r0 !== null && $r1 !== null) ? $r0 - $r1 : null,   // +N = N계단 상승
+            ];
+        }
+
+        // URL(그룹)별 요약 — 사용 회차·수량 합·평균 변화
+        $summary = collect($rows)->filter(fn ($r) => $r['token'])->groupBy('token')->map(function ($g, $token) {
+            $deltas = $g->pluck('delta')->filter(fn ($d) => $d !== null)->values();
+
+            return [
+                'token' => $token,
+                'group_no' => $g->first()['group_no'],
+                'keywords' => $g->first()['keywords'],
+                'uses' => $g->count(),
+                'qty' => $g->sum(fn ($r) => (int) $r['item']->quantity),
+                'avg_delta' => $deltas->isEmpty() ? null : round($deltas->avg(), 1),
+            ];
+        })->sortBy('group_no')->values();
+
+        return ['rows' => $rows, 'summary' => $summary, 'slot' => $slot];
     }
 
     /** 세부주문서 수동 생성/재생성 — 기간형 주문용. 재생성은 전송된 회차가 없을 때만(대기·실패·취소분 삭제 후 새 기준). */
