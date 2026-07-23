@@ -26,6 +26,8 @@
     .trk-chip { display:inline-block; font-size:var(--fs-xs); padding:1px 8px; border-radius:99px; background:var(--color-surface-strong); color:var(--color-muted); white-space:nowrap; }
     .trk-chip.ok { background:color-mix(in srgb,var(--color-success) 14%,var(--color-canvas)); color:var(--color-success); }
     .trk-rank { color:var(--color-ink); font-weight:650; }
+    /* 회원(업체) 보기 — 콘솔 순위추적과 동일한 날짜별 카드(rank/shop-rank partials.cells 공용) */
+    .rf-cell { width:{{ $isPlace ? 104 : 100 }}px; padding:10px 8px 8px; }
 </style>
 @endpush
 
@@ -77,6 +79,32 @@
     </div>
 </form>
 
+{{-- 회원(업체) 보기 — 콘솔 순위추적과 동일: 키워드 슬롯 카드 + 날짜별 순위 그리드(2026-07-24) --}}
+@if ($filterUser ?? null)
+    <div class="flex flex-col gap-4">
+        @forelse ($slots as $slot)
+            <div class="card overflow-hidden rf-slot">
+                <div class="px-4 pt-4 pb-3 flex items-center gap-3 flex-wrap" style="border-bottom:1px solid var(--color-hairline-soft);">
+                    <span class="text-ink" style="font-size:var(--fs-sm);font-weight:700;">{{ $slot->keyword }}</span>
+                    <a href="{{ $slot->shareUrl() }}" target="_blank" rel="noopener" class="text-muted hover:text-ink truncate" style="font-size:var(--fs-xs);max-width:380px;" title="공유 리포트 열기">
+                        {{ $isPlace ? ($slot->place_name ?: '—') : ($slot->product_title ?: ($slot->mall_name ?: '—')) }} ↗</a>
+                    @unless ($slot->is_active)
+                        <span class="trk-chip" style="color:var(--color-error);">체크 중단됨</span>
+                    @endunless
+                    <div class="flex-1"></div>
+                    @if ($slot->last_checked_at)
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">최종 수집 {{ $kst($slot->last_checked_at) }}</span>
+                    @endif
+                </div>
+                {{-- 날짜별 순위 카드 — 콘솔·공개 리포트와 공용 파셜 --}}
+                @include(($isPlace ? 'rank' : 'shop-rank').'.partials.cells', ['slot' => $slot, 'from' => null, 'to' => null])
+            </div>
+        @empty
+            <div class="card text-center text-muted-soft" style="padding:56px 20px;font-size:var(--fs-xs);">이 회원의 추적 슬롯이 없습니다.</div>
+        @endforelse
+    </div>
+    <div class="mt-4">{{ $slots->links() }}</div>
+@else
 {{-- 목록 --}}
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
@@ -163,4 +191,5 @@
 </div>
 
 <div class="mt-4">{{ $slots->links() }}</div>
+@endif
 @endsection
