@@ -993,10 +993,13 @@ const handlers = {
       let stopped = false;
       let blocked = false;      // 차단 상태 — 모든 워커가 대기한다
       let liveConc = warmStart; // 실제 동시 수 — 낮게 시작(warmStart)해 성공하면 올리고 차단되면 줄인다
+      let ceiling = conc;       // 동시 수 상한(sticky) — 429 뜬 수보다 낮춰 잡고 그 아래로만 램프업.
+                                //   자꾸 상한까지 올라 재차단되는 진동(5→429→2→5→429…)을 끊어 지속 가능한 수에서 안정시킨다.
       let blockHits = 0;        // 연속 차단 횟수
       let okStreak = 0;         // 연속 성공 횟수 — 일정 이상이면 동시 수를 1 올린다(램프업)
+      let cleanStreak = 0;      // 마지막 차단 이후 연속 성공 — 충분히 쌓이면 상한을 아주 천천히 한 단계만 복구(재탐색)
       let exhausted = false;    // 모든 분류 소진 — 대기 중이던 워커도 이걸 보고 종료한다
-      const RAMP_EVERY = 3;     // 연속 성공 N회마다 동시 수 +1 (target = conc 까지)
+      const RAMP_EVERY = 4;     // 연속 성공 N회마다 동시 수 +1 (ceiling 까지 — 조금 천천히 올려 오버슛 줄임)
 
       const patch = async (o) => {
         const cur = (await chrome.storage.local.get(['rfBulk'])).rfBulk || {};
@@ -1114,15 +1117,19 @@ const handlers = {
             done++;
             gap = Math.max(baseGap, gap - 1000);            // 성공하면 1초씩 되돌린다(하한 = 설정값)
             blockHits = 0;                                  // 잘 돌고 있다 — 연속 차단 카운터 초기화
-            // ★ 램프업 — 성공이 이어지면 동시 수를 target(conc)까지 1씩 천천히 올린다.
+            // ★ 램프업 — 성공이 이어지면 동시 수를 ceiling(차단 학습된 상한)까지 1씩 천천히 올린다.
             //   (콜드스타트에 10개를 한꺼번에 열지 않고, 네이버가 받아주는 만큼만 서서히 늘린다)
             okStreak++;
+            cleanStreak++;
+            // 상한 복구 — 차단 없이 아주 오래(40회) 잘 돌면 상한을 1만 올려 재탐색(네이버가 잠잠해졌을 수 있다).
+            //   보수적으로: 자꾸 상한까지 올라 재차단되는 걸 사용자가 싫어하므로 드물게만 위로 떠본다.
+            if (cleanStreak >= 40 && ceiling < conc) { ceiling++; cleanStreak = 0; }
             // 성공했으면 직전 실패/차단 사유를 지운다 — 안 지우면 failed 누적 때문에
             // "차단 감지, N초 대기 후 재개" 가 수집이 잘 돼도 화면에 계속 남는다(실측)
-            if (okStreak >= RAMP_EVERY && liveConc < conc) {
+            if (okStreak >= RAMP_EVERY && liveConc < ceiling) {
               liveConc++;
               okStreak = 0;
-              await patch({ done, failed, gap, conc: liveConc, blockedUntil: 0, lastError: '' });
+              await patch({ done, failed, gap, conc: liveConc, target: ceiling, blockedUntil: 0, lastError: '' });
             } else {
               await patch({ done, failed, gap, blockedUntil: 0, lastError: '' });
             }
@@ -1135,21 +1142,23 @@ const handlers = {
               blocked = true;
               blockHits++;
               okStreak = 0;                                 // 차단됨 — 램프업 진행도 초기화(다시 낮은 데서 올린다)
+              cleanStreak = 0;
 
-              // ★ 차단이 이어지면 동시 수를 줄인다 — 간격만 늘려봐야 탭 N개가 한꺼번에 몰리는 건 그대로다.
-              //   (동시 10으로 돌리면 네이버가 429로 막는다 — 실측). 최소 2까지 절반씩 줄이고,
-              //   줄인 워커는 스스로 빠진다(quota 초과분).
+              // ★ 상한(ceiling)을 sticky 하게 낮춘다 — 방금 열려던 동시 수보다 낮게 잡아, 램프업이 다시 그 위로
+              //   올라가 재차단되는 진동(5→429→2→5→429…)을 끊는다. 몇 번 부딪히면 지속 가능한 낮은 수에서 안정.
+              ceiling = Math.max(2, Math.min(ceiling - 1, liveConc - 1));
+              if (liveConc > ceiling) liveConc = ceiling;
+              // 차단이 이어지면 더 빠르게(절반) 줄여 탈출한다(줄인 워커는 정원 밖이라 스스로 빠진다)
               if (blockHits >= 2 && liveConc > 2) {
                 liveConc = Math.max(2, Math.floor(liveConc / 2));
                 blockHits = 0;
-                await patch({ conc: liveConc });
               }
 
               // 차단이 반복될수록 더 오래 쉰다(429 는 계속 두드리면 더 길어진다)
               const rest = Math.min(60000, gap * (1 + blockHits));
               const until = Date.now() + rest;
-              await patch({ done, failed, gap, conc: liveConc,
-                lastError: lastError + ' — 차단 감지, ' + Math.round(rest / 1000) + '초 대기 후 재개(동시 ' + liveConc + ')',
+              await patch({ done, failed, gap, conc: liveConc, target: ceiling,
+                lastError: lastError + ' — 차단 감지, ' + Math.round(rest / 1000) + '초 대기 후 재개(동시 ' + liveConc + '/' + ceiling + ')',
                 blockedUntil: until });
               await sleep(rest);
               blocked = false;
