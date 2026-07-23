@@ -164,6 +164,8 @@ Route::get('/api/keywords/suggest', …)->middleware('throttle:60,1');   // rout
 - 문서 본문은 1차 **결정적 템플릿**(데이터→문장), LLM은 선택 보강만
 - 추천은 실시간 쿼리 + 6h 캐시(사전 계산 컬럼 없음) — 문서 수가 커지면(1만+) 재검토
 - **규모 대응은 샤딩이 아니라 파티션 로테이션 + 인덱스**(2026-07-18 결정): 순위 매핑(keyword_place_ranks·keyword_shop_ranks)은 이미 마스터 정규화+월별 RANGE 파티션. 여기에 `hub:partition-rotate`(매일 05:50 KST)가 이번 달~2개월 뒤 파티션 선생성(pmax REORGANIZE) + 보존 개월 수(`HUB_RANK_RETENTION_MONTHS`, 기본 13, 0 이하=파기 안 함) 지난 월 DROP PARTITION. sqlite(로컬/테스트)는 DELETE 폴백. 공개 허브 인기순은 `ks_origin_vol(origin, monthly_total)` 인덱스가 filesort 제거
+- **공유 페이지 첫 로드는 요청 안에서 외부 크롤 금지**(2026-07-23): /market 첫 열람 6초+ 실사고 — ① RelatedDocsService LIKE 매칭이 PRIMARY(평균 17KB 행) 풀스캔을 타던 것을 **2단계 조회**(무정렬 id 커버링 스캔 13~35ms + whereIn 경량 컬럼 로드, `COLS` 상수)로 수정(ORDER BY id 를 SQL 에 두면 옵티마이저가 PRIMARY 를 고른다 — 실측 2.2s), ② 시장분석 keyword_data 보강(검색광고 크롤, 실측 15초)은 `EnrichMarketKeywordData` 큐 잡으로 — 열람 시 `ensureAsync()` 가 잡만 예약(15분 중복 가드)하고 즉시 렌더, 요일 비율(데이터랩 24h 캐시)도 잡에서 예열. 실측: 콜드 1.4~1.8s → 워밍 후 46~116ms
+- **쇼핑 수집 조회수 게이트**(2026-07-23 사용자 확정): 수집 대기열이 **검색량부터 확인**해 월 조회수 10 이하·무데이터(keywordstool 응답 생략) 키워드는 **후보 리스트에서 삭제**하고 수집하지 않는다(플레이스 발행 has_volume 거부와 짝). `ExtKeywordShopSerpController::volumeGate()` — 미상은 keywordstool 5개 배치로 조회해 후보에 저장(volume_checked_at), 청크 통실패(API 장애)는 삭제 없이 통과. 픽 쿼리·remaining 카운트도 `monthly_total > 10 OR null` 조건. 기존 저조 후보 105건은 2026-07-23 일괄 삭제
 
 ## 코드 (Phase 0)
 
