@@ -155,7 +155,7 @@ class SitemapController extends Controller
         $add(route('self-marketing'), 'weekly', '0.7');
         $add(route('community'), 'hourly', '0.8', $communityFresh);
         $add(route('support'), 'monthly', '0.6');
-        $add(url('/developers'), 'monthly', '0.6');
+        // /developers 는 콘솔 문서로 301 통합(2026-07-23) — 사이트맵 제외
         $add(url('/privacy'), 'yearly', '0.3');
         $add(route('register'), 'monthly', '0.5');
         foreach (CommunityCategory::where('is_active', true)->orderBy('sort_order')->get() as $cat) {

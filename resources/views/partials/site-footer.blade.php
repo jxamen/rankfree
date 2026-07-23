@@ -50,7 +50,7 @@
                     <li><a href="/#keyword" class="hover:text-on-dark transition">키워드 분석</a></li>
                     <li><a href="/#keyword" class="hover:text-on-dark transition">키워드 추천 · 대량</a></li>
                     <li><a href="/#blog" class="hover:text-on-dark transition">블로그 지수 분석</a></li>
-                    @if ($menuOn('developers'))<li><a href="/developers" class="hover:text-on-dark transition">순위 API</a></li>@endif
+                    @if ($menuOn('developers'))<li><a href="/console/developers" class="hover:text-on-dark transition">순위 API</a></li>@endif
                 </ul>
             </div>
 

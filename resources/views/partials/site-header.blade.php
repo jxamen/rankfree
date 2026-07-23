@@ -57,7 +57,7 @@
                             <a href="/#keyword" class="nav-mega-link">키워드 추천 · 대량 분석</a>
                             <a href="{{ route('keywords.index') }}" class="nav-mega-link">키워드 인사이트</a>
                             <a href="/#blog" class="nav-mega-link">블로그 지수 분석</a>
-                            @if ($menuOn('developers'))<a href="/developers" class="nav-mega-link">순위 API</a>@endif
+                            @if ($menuOn('developers'))<a href="/console/developers" class="nav-mega-link">순위 API</a>@endif
                         </div>
                     </div>
                 </div>
@@ -142,7 +142,7 @@
                     <a href="/#keyword" class="rf-mnav-sub">키워드 분석</a>
                     <a href="/#keyword" class="rf-mnav-sub">키워드 추천 · 대량 분석</a>
                     <a href="/#blog" class="rf-mnav-sub">블로그 지수 분석</a>
-                    @if ($menuOn('developers'))<a href="/developers" class="rf-mnav-sub">순위 API</a>@endif
+                    @if ($menuOn('developers'))<a href="/console/developers" class="rf-mnav-sub">순위 API</a>@endif
                 </div>
             </details>
             {{-- 마케팅 — 세부 메뉴 포함 --}}

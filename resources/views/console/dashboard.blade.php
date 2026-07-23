@@ -43,7 +43,7 @@
                 @if ($isPaid)
                     <a href="{{ route('console.qna.create') }}" class="btn btn-secondary btn-sm w-full" style="background:rgba(255,255,255,.14);color:#fff;border:0;">구독 문의</a>
                 @else
-                    <a href="{{ route('developers') }}" class="btn btn-sm btn-on-dark w-full">요금제 보기 →</a>
+                    <a href="{{ route('console.developers') }}" class="btn btn-sm btn-on-dark w-full">요금제 보기 →</a>
                 @endif
             </div>
         </div>

@@ -9,7 +9,7 @@
         ['순위·점수 데이터는 네이버 공식 데이터인가요?', '아닙니다. 랭크프리의 순위와 N1·N2·N3 등 점수는 자체 수집·분석 기반 추정치로, 네이버 공식 지표가 아닙니다. 실제 모바일 검색 순위와 유사하도록 서울 기준으로 설계되어 있습니다.'],
         ['쇼핑 순위추적은 어떻게 동작하나요?', '스마트스토어·가격비교 상품 URL(또는 업체명)과 키워드를 등록하면 네이버 쇼핑 검색 결과 최대 1,000위까지 순위를 매일 자동 기록합니다. 가격 변동과 노출 수도 함께 저장됩니다.'],
         ['경쟁 분석의 N1·N2·N3 점수는 무엇인가요?', 'N1(유사도)은 키워드와 매장 정보의 일치도, N2(관련성)는 리뷰·정보충실도 등 품질 신호, N3(랭킹)는 현재 순위 기반 점수입니다. 상위 노출 업체와 내 매장의 차이를 항목별로 비교해 순위 변동의 근거를 확인할 수 있습니다.'],
-        ['데이터를 API로 받을 수 있나요?', '네. REST API를 제공합니다. 콘솔에서 API 키를 발급받으면 순위추적·경쟁분석·키워드 분석 데이터를 내 서비스에 연동할 수 있습니다. 문서는 /developers 페이지에 있습니다.'],
+        ['데이터를 API로 받을 수 있나요?', '네. REST API를 제공합니다. 콘솔에서 API 키를 발급받으면 순위추적·경쟁분석·키워드 분석 데이터를 내 서비스에 연동할 수 있습니다. 문서는 콘솔의 API 문서 메뉴에서 볼 수 있습니다.'],
     ];
 @endphp
 <script type="application/ld+json">{!! json_encode([
@@ -525,7 +525,7 @@
                     <p class="mt-3 text-body" style="font-size:var(--fs-base);line-height:1.7;max-width:460px;">
                         키 발급 한 번으로 플레이스·쇼핑 순위를 API로 받아보세요. 허용 IP·일일 한도·기간을 직접 관리할 수 있습니다.
                     </p>
-                    <a href="/developers" class="btn btn-secondary btn-sm mt-5">API 문서 보기 →</a>
+                    <a href="/console/developers" class="btn btn-secondary btn-sm mt-5">API 문서 보기 →</a>
                 </div>
                 <div class="rounded-lg border border-hairline bg-surface-soft overflow-hidden" style="font-family:var(--font-mono);font-size:var(--fs-xs);">
                     <div class="flex items-center gap-1.5 px-4 border-b border-hairline-soft" style="height:32px;">
