@@ -331,7 +331,13 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
 });
 
 // 관리자 (운영자 전용)
-Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(function () {
+// 어드민 — ADMIN_HOST 설정 시 비밀 서브도메인 전용(2026-07-24): 타 호스트에선 라우트 자체가 매칭되지 않아
+// 로그인 리다이렉트 없이 즉시 404(존재 은닉). route('admin.*') URL 도 비밀 호스트 절대주소로 생성된다.
+$__admin = Route::middleware([\App\Http\Middleware\AdminHostOnly::class, 'auth', 'operator'])->prefix('admin')->name('admin.');
+if (($__adminHost = trim((string) config('rankfree.admin_host'))) !== '') {
+    $__admin->domain($__adminHost);
+}
+$__admin->group(function () {
     // 관리자 대시보드 — /admin 진입 시 핵심 지표(방문·가입·추적·문의·커뮤니티·발행 등)
     Route::get('/', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('home');
     Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');

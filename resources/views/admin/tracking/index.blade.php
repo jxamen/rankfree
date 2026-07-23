@@ -31,8 +31,19 @@
 
 @section('admin-content')
 <x-console.page-head :title="$title" :desc="$desc">
-    <a href="{{ route('admin.'.($isPlace ? 'shop-tracking' : 'place-tracking')) }}" class="btn btn-secondary btn-sm">{{ $isPlace ? '쇼핑 추적 보기' : '플레이스 추적 보기' }}</a>
+    {{-- 전환 시 회원 필터 유지 — 같은 회원의 플레이스·쇼핑 추적을 오가며 볼 수 있게(2026-07-24) --}}
+    <a href="{{ route('admin.'.($isPlace ? 'shop-tracking' : 'place-tracking'), array_filter(['user' => $userId ?: null])) }}" class="btn btn-secondary btn-sm">{{ $isPlace ? '쇼핑 추적 보기' : '플레이스 추적 보기' }}</a>
 </x-console.page-head>
+
+{{-- 회원 필터 배너 — 아이디 클릭으로 진입한 업체별 추적 리스트 --}}
+@if ($filterUser ?? null)
+    <div class="card-soft px-4 py-3 mb-4 flex items-center gap-2" style="font-size:var(--fs-xs);">
+        <span class="text-muted">회원 필터:</span>
+        <b class="text-ink">{{ $filterUser->name }}</b>
+        <span class="text-muted-soft">{{ $filterUser->email }}</span>
+        <a href="{{ route($routeName, array_filter(['q' => $q ?: null, 'active' => $active !== '' ? $active : null])) }}" class="btn btn-ghost btn-sm" style="margin-left:auto;">필터 해제 ✕</a>
+    </div>
+@endif
 
 {{-- 통계 --}}
 <div class="trk-stats">
@@ -52,6 +63,7 @@
 {{-- 검색·필터 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
+        @if (($userId ?? 0) > 0)<input type="hidden" name="user" value="{{ $userId }}">@endif
         <select name="active" class="input" style="width:130px;font-size:var(--fs-xs);">
             <option value="">전체 상태</option>
             <option value="1" @selected($active === '1')>활성</option>
@@ -71,6 +83,7 @@
         <table class="trk-tbl" style="min-width:{{ $isPlace ? 900 : 960 }}px;">
             <thead>
                 <tr>
+                    <th style="width:56px;">No</th>
                     <th>회원</th>
                     <th>키워드</th>
                     <th>{{ $isPlace ? '플레이스' : '상품' }}</th>
@@ -85,9 +98,18 @@
             <tbody>
                 @forelse ($slots as $s)
                     <tr>
+                        {{-- No — 최신이 가장 큰 번호(desc, 페이지 걸쳐 연속) --}}
+                        <td class="text-muted-soft" style="font-family:var(--font-mono);">{{ $slots->total() - $slots->firstItem() + 1 - $loop->index }}</td>
                         <td>
-                            <div class="text-ink" style="font-weight:500;">{{ $s->user?->name ?? '—' }}</div>
-                            <div class="text-muted-soft" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $s->user?->email }}</div>
+                            {{-- 아이디 클릭 → 이 회원의 추적 리스트(플레이스·쇼핑 전환 시 필터 유지) --}}
+                            @if ($s->user)
+                                <a href="{{ route($routeName, ['user' => $s->user_id]) }}" title="{{ $s->user->name }} 회원의 추적만 보기">
+                                    <div class="text-ink hover:underline" style="font-weight:500;">{{ $s->user->name }}</div>
+                                    <div class="text-muted-soft" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $s->user->email }}</div>
+                                </a>
+                            @else
+                                <div class="text-muted-soft">—</div>
+                            @endif
                         </td>
                         <td><span class="kw">{{ $s->keyword }}</span></td>
                         <td>
@@ -114,7 +136,7 @@
                         <td class="r">{{ $kst($s->created_at) }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" class="text-center" style="padding:56px 20px;color:var(--color-muted);">{{ $q !== '' || $active !== '' ? '조건에 맞는 슬롯이 없습니다.' : '등록된 순위추적 슬롯이 없습니다.' }}</td></tr>
+                    <tr><td colspan="10" class="text-center" style="padding:56px 20px;color:var(--color-muted);">{{ $q !== '' || $active !== '' || ($userId ?? 0) > 0 ? '조건에 맞는 슬롯이 없습니다.' : '등록된 순위추적 슬롯이 없습니다.' }}</td></tr>
                 @endforelse
             </tbody>
         </table>

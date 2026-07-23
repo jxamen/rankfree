@@ -18,8 +18,10 @@ class RankTrackingController extends Controller
     {
         $q = trim((string) $request->query('q', ''));
         $active = (string) $request->query('active', '');   // ''=전체 · '1'=활성 · '0'=중지
+        $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
         $slots = PlaceRankSlot::with('user:id,name,email')
+            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
             ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                 ->where('keyword', 'like', $this->like($q))
                 ->orWhere('place_name', 'like', $this->like($q))
@@ -38,6 +40,8 @@ class RankTrackingController extends Controller
             'stats' => $this->stats(PlaceRankSlot::query()),
             'q' => $q,
             'active' => $active,
+            'userId' => $userId,
+            'filterUser' => $userId > 0 ? \App\Models\User::find($userId, ['id', 'name', 'email']) : null,
         ]);
     }
 
@@ -46,8 +50,10 @@ class RankTrackingController extends Controller
     {
         $q = trim((string) $request->query('q', ''));
         $active = (string) $request->query('active', '');
+        $userId = (int) $request->query('user', 0);
 
         $slots = ShopRankSlot::with('user:id,name,email')
+            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
             ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                 ->where('keyword', 'like', $this->like($q))
                 ->orWhere('product_title', 'like', $this->like($q))
@@ -67,6 +73,8 @@ class RankTrackingController extends Controller
             'stats' => $this->stats(ShopRankSlot::query()),
             'q' => $q,
             'active' => $active,
+            'userId' => $userId,
+            'filterUser' => $userId > 0 ? \App\Models\User::find($userId, ['id', 'name', 'email']) : null,
         ]);
     }
 

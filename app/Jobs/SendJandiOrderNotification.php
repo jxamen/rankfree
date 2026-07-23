@@ -65,10 +65,14 @@ class SendJandiOrderNotification implements ShouldQueue
             $info[] = ['title' => '키워드', 'description' => $kw];
         }
 
-        // 주문 상세 링크 — 수신자는 항상 운영 화면을 본다. 로컬(localhost)에서 테스트 발송해도 실도메인으로 연결.
-        $orderUrl = route('admin.orders.show', $o->id);
-        if (str_contains($orderUrl, 'localhost') || str_contains($orderUrl, '127.0.0.1')) {
-            $orderUrl = 'https://rankfree.kr/admin/orders/'.$o->id;
+        // 주문 상세 링크 — 어드민 비밀 호스트(ADMIN_HOST) 우선, 없으면 앱 URL(로컬 테스트는 실도메인 보정).
+        if (($ah = trim((string) config('rankfree.admin_host'))) !== '') {
+            $orderUrl = 'https://'.$ah.'/admin/orders/'.$o->id;
+        } else {
+            $orderUrl = route('admin.orders.show', $o->id);
+            if (str_contains($orderUrl, 'localhost') || str_contains($orderUrl, '127.0.0.1')) {
+                $orderUrl = 'https://rankfree.kr/admin/orders/'.$o->id;
+            }
         }
 
         $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])

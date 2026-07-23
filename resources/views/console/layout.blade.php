@@ -230,7 +230,8 @@
                 @yield('page-actions')
                 {{-- 관리자 진입점 (운영자 전용) — 헤더 우측 --}}
                 @if (auth()->user()?->isOperator())
-                <a href="{{ route('admin.home') }}" class="btn btn-secondary btn-sm inline-flex items-center gap-1.5" title="관리자">
+                {{-- ADMIN_HOST 설정 시 비밀 서브도메인으로 이동(메인 도메인의 /admin 은 404) --}}
+                <a href="{{ ($__ah = config('rankfree.admin_host')) ? 'https://'.$__ah.'/admin' : route('admin.home') }}" class="btn btn-secondary btn-sm inline-flex items-center gap-1.5" title="관리자">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     관리자
                 </a>
