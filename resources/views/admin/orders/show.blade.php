@@ -24,11 +24,9 @@
     {{-- 상단 1줄: 주문 정보(2/3) · 주문자+상태(1/3) — 이하 콘텐츠는 전체 폭 사용(2026-07-23) --}}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div class="card p-6 lg:col-span-2">
-            <div class="flex items-start justify-between flex-wrap gap-2 mb-4">
-                <div>
-                    <div class="text-muted-soft" style="font-size:var(--fs-xs);">주문번호</div>
-                    <div class="text-ink font-display" style="font-size:var(--fs-lg);">{{ $order->order_no }}</div>
-                </div>
+            {{-- 주문번호는 페이지 제목에 이미 표시 — 카드 안에서는 상태 배지만(2026-07-23) --}}
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 정보</div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
             {{-- 1줄: 상품 정보 (+ 주문 시작일·종료일 — 단가 좌측) --}}
