@@ -12,8 +12,9 @@ class MarketingOrderController extends Controller
 {
     public function index(Request $request)
     {
-        $q = MarketingOrder::with('product', 'user')
-            ->with('shopKeywordAnalyses:id,marketing_order_id,exposed_count,status')   // 유입키워드 연결 표시용
+        $q = MarketingOrder::with('product.fields', 'user')
+            // 유입키워드 연결 + 수집 정보(상점명·가격·상품ID) 표시용
+            ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,mall_name,product_price,exposed_count,status')
             ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {
@@ -30,8 +31,18 @@ class MarketingOrderController extends Controller
             });
         }
 
+        $orders = $q->paginate(20)->withQueryString();
+
+        // 수집 정보(대표이미지·제목 폴백) 일괄 조회 — 행별 N+1 방지. 키 = "user|channel_product_id"
+        $analyses = $orders->getCollection()->flatMap->shopKeywordAnalyses->filter(fn ($a) => $a->product_id);
+        $productInfos = $analyses->isEmpty() ? collect() : \App\Models\ShopProductInfo::query()
+            ->whereIn('user_id', $analyses->pluck('user_id')->unique())
+            ->whereIn('channel_product_id', $analyses->pluck('product_id')->unique())
+            ->get()->keyBy(fn ($i) => $i->user_id.'|'.$i->channel_product_id);
+
         return view('admin.orders.index', [
-            'orders' => $q->paginate(20)->withQueryString(),
+            'orders' => $orders,
+            'productInfos' => $productInfos,
             'products' => MarketingProduct::orderBy('title')->get(['id', 'title']),
             'statuses' => MarketingOrder::STATUSES,
             'counts' => MarketingOrder::selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status'),
@@ -119,6 +130,42 @@ class MarketingOrderController extends Controller
     }
 
     /** 승인 — 상품의 업체 배분 설정대로 외부 발주(API/구글시트) 후 진행중으로 전환. */
+    /**
+     * 목록 '주문넣기'(2026-07-23) — 수집이 끝난 쇼핑 주문을 매핑된 업체로 바로 발주.
+     * 발주 필수 값(활성 필수 필드 — 자동수집되는 숨김 필드 포함)이 비어 있으면 경고와 함께 차단한다.
+     */
+    public function placeVendorOrder(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
+    {
+        if ($order->status !== 'pending') {
+            return back()->withErrors(['place' => "주문 {$order->order_no}: 접수 상태에서만 발주할 수 있습니다(현재 ".(MarketingOrder::STATUSES[$order->status] ?? $order->status).')']);
+        }
+        if (! $order->product) {
+            return back()->withErrors(['place' => "주문 {$order->order_no}: 상품 정보가 없어 발주할 수 없습니다."]);
+        }
+
+        // 필수값 검증 — 활성 필수 필드 중 field_values 가 빈 항목이 하나라도 있으면 발주하지 않는다
+        $fv = (array) $order->field_values;
+        $missing = $order->product->fields
+            ->where('is_active', true)->where('is_required', true)
+            ->filter(function ($f) use ($fv) {
+                $v = $fv[$f->field_key] ?? null;
+
+                return is_null($v) || $v === '' || $v === [];
+            })
+            ->pluck('label')->values();
+        if ($missing->isNotEmpty()) {
+            return back()->withErrors(['place' => "주문 {$order->order_no}: 필수 값이 비어 있어 발주할 수 없습니다 — [".$missing->join(', ').'] 수집이 끝나길 기다리거나 주문 상세에서 직접 채워주세요.']);
+        }
+
+        $result = $dispatcher->dispatch($order);
+        if (! $result['ok']) {
+            return back()->withErrors(['place' => "주문 {$order->order_no}: ".$result['message']]);
+        }
+        $order->update(['status' => 'processing']);
+
+        return back()->with('status', "주문 {$order->order_no} 발주 완료 — ".$result['message']);
+    }
+
     public function approve(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
         // 필수 내부(숨김) 필드가 비어 있으면 발주 차단 — 수집·수동 입력으로 채운 뒤 승인

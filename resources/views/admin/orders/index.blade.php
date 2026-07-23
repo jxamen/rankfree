@@ -11,6 +11,9 @@
 @if (session('status'))
     <div class="card-soft px-4 py-3 mb-4 text-muted" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
 @endif
+@if ($errors->any())
+    <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
+@endif
 
 {{-- 상태 필터 pill --}}
 <div class="flex items-center gap-2 mb-4 flex-wrap">
@@ -64,11 +67,33 @@
                         <td class="px-3 py-3">
                             <a href="{{ route('admin.orders.show', $o) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $o->order_no }}</a>
                         </td>
+                        @php
+                            // 수집 정보(2026-07-23) — 연결 분석 + 확장 수집 상품정보에서 상점명·가격·상품ID·이미지
+                            $ska = $o->shopKeywordAnalyses->first();
+                            $pi = $ska && $ska->product_id ? ($productInfos[$ska->user_id.'|'.$ska->product_id] ?? null) : null;
+                            $dMall = $ska?->mall_name ?: $pi?->mall_name;
+                            $dPrice = $ska?->product_price ?: $pi?->price;
+                            $dPid = $ska?->product_id;
+                            $dThumb = $pi?->thumbnail_url;
+                        @endphp
                         <td class="px-3 py-3" style="font-size:var(--fs-xs);">
                             <div class="text-body">{{ $o->product?->title ?? '(삭제된 상품)' }}</div>
                             {{-- 주문 키워드(입력값에서 추출, 2026-07-22) --}}
                             @if ($kw = $o->keywordFromFields())
                                 <div class="text-muted-soft">키워드: <b class="text-muted">{{ $kw }}</b></div>
+                            @endif
+                            {{-- 수집 완료 정보 — 상점명 · 가격 · 상품ID · 대표이미지(2026-07-23) --}}
+                            @if ($dMall || $dPrice || $dPid || $dThumb)
+                                <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                    @if ($dThumb)
+                                        <a href="{{ $dThumb }}" target="_blank" rel="noopener nofollow"><img src="{{ $dThumb }}" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid var(--color-hairline);vertical-align:middle;"></a>
+                                    @endif
+                                    <span class="text-muted-soft">
+                                        @if ($dMall)상점 <b class="text-muted">{{ $dMall }}</b>@endif
+                                        @if ($dPrice) · <b class="text-muted font-mono">{{ number_format($dPrice) }}원</b>@endif
+                                        @if ($dPid) · ID <span class="font-mono">{{ $dPid }}</span>@endif
+                                    </span>
+                                </div>
                             @endif
                         </td>
                         <td class="px-3 py-3" style="font-size:var(--fs-xs);">
@@ -83,12 +108,19 @@
                         <td class="px-3 py-3 text-center">
                             <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $statusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $statuses[$o->status] ?? $o->status }}</span>
                         </td>
-                        {{-- 쇼핑 유입키워드 — 연결된 분석이 있으면 열기, 없고 쇼핑 주문이면 수집요청 --}}
+                        {{-- 쇼핑 유입키워드 — 수집요청 → 분석 링크 → 접수 상태면 '주문넣기'(매핑 업체 발주, 2026-07-23) --}}
                         <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);white-space:nowrap;">
                             @if ($a = $o->shopKeywordAnalyses->first())
                                 <a href="{{ route('admin.shop-keyword.show', $a) }}" class="text-ink font-semibold" title="연결된 노출 키워드 분석 열기">
                                     노출 {{ number_format($a->exposed_count) }} ↗
                                 </a>
+                                @if ($o->status === 'pending')
+                                    <form method="POST" action="{{ route('admin.orders.place', $o) }}" class="mt-1"
+                                          data-confirm="매핑된 업체로 발주할까요?" data-confirm-text="{{ $o->order_no }} — 업체 배분 설정대로 자동 전송됩니다. 필수 값이 비어 있으면 발주되지 않습니다." data-confirm-ok="발주">
+                                        @csrf
+                                        <button type="submit" class="btn btn-primary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">주문넣기</button>
+                                    </form>
+                                @endif
                             @elseif ($o->shopKeywordSource())
                                 <form method="POST" action="{{ route('admin.orders.shop-keyword', $o) }}" style="display:inline;">
                                     @csrf
