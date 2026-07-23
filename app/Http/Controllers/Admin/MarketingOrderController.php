@@ -114,7 +114,7 @@ class MarketingOrderController extends Controller
         return back()->with('status', "세부주문 {$n}건을 생성했습니다 — 일 발주량 = 일수량 × 이행률, 업체 비율로 분배(일별 합이 일 발주량을 넘지 않음).");
     }
 
-    /** 세부주문 일괄 수정 — 회차별 업체·Short URL(수동 교체). */
+    /** 세부주문 일괄 수정 — 회차별 진행일·수량·업체·Short URL 전부 편집 가능(2026-07-23). */
     public function updateItems(Request $request, MarketingOrder $order)
     {
         $input = (array) $request->input('items', []);
@@ -132,6 +132,14 @@ class MarketingOrderController extends Controller
             if (array_key_exists('vendor_id', $row)) {
                 $vid = (int) $row['vendor_id'];
                 $upd['vendor_id'] = $vid && in_array($vid, $vendorIds, true) ? $vid : null;
+            }
+            // 진행일 — 유효한 날짜만 반영(스케줄러 발주 시점 결정값)
+            if (($d = trim((string) ($row['work_date'] ?? ''))) !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                $upd['work_date'] = $d;
+            }
+            // 수량 — 1 이상 정수만(일별 합 캡은 생성 시 규칙이며 수동 조정은 관리자 재량)
+            if (($q = (int) ($row['quantity'] ?? 0)) >= 1) {
+                $upd['quantity'] = $q;
             }
             if ($upd) {
                 $item->update($upd);

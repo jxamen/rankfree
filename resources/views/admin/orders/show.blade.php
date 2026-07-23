@@ -172,8 +172,8 @@
                         <thead>
                             <tr class="text-muted" style="border-bottom:1px solid var(--color-hairline-soft);">
                                 <th class="text-center py-2 pr-3 font-semibold" style="width:50px;">회차</th>
-                                <th class="text-left py-2 px-3 font-semibold" style="width:110px;">진행일</th>
-                                <th class="text-right py-2 px-3 font-semibold" style="width:80px;">수량</th>
+                                <th class="text-left py-2 px-3 font-semibold" style="width:150px;">진행일</th>
+                                <th class="text-right py-2 px-3 font-semibold" style="width:95px;">수량</th>
                                 <th class="text-left py-2 px-3 font-semibold">Short URL</th>
                                 <th class="text-left py-2 px-3 font-semibold" style="width:150px;">업체</th>
                                 <th class="text-center py-2 px-3 font-semibold" style="width:70px;">상태</th>
@@ -184,8 +184,14 @@
                             @foreach ($order->items as $it)
                                 <tr style="border-top:1px solid var(--color-hairline-soft);">
                                     <td class="py-2 pr-3 text-center text-ink font-mono">{{ $it->day_no }}</td>
-                                    <td class="py-2 px-3 text-body font-mono">{{ $it->work_date?->format('Y-m-d') }}</td>
-                                    <td class="py-2 px-3 text-right font-mono">{{ number_format($it->quantity) }}</td>
+                                    <td class="py-2 px-3">
+                                        <input form="items-bulk-form" type="date" name="items[{{ $it->id }}][work_date]" value="{{ $it->work_date?->format('Y-m-d') }}"
+                                               class="input" style="width:100%;height:30px;font-size:var(--fs-xs);">
+                                    </td>
+                                    <td class="py-2 px-3">
+                                        <input form="items-bulk-form" type="number" min="1" name="items[{{ $it->id }}][quantity]" value="{{ $it->quantity }}"
+                                               class="input text-right" style="width:100%;height:30px;font-size:var(--fs-xs);">
+                                    </td>
                                     <td class="py-2 px-3">
                                         <input form="items-bulk-form" name="items[{{ $it->id }}][short_url]" value="{{ $it->short_url }}"
                                                class="input" style="width:100%;height:30px;font-size:var(--fs-xs);" placeholder="미배정 — Short URL 생성 시 자동 배정">
