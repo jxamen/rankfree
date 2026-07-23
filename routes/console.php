@@ -36,6 +36,9 @@ Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->
 // 쇼핑 순위추적 — 매시간. 활성 슬롯 순위 조회·기록(openapi shop.json).
 Schedule::command('shop:track-run')->hourly()->withoutOverlapping()->runInBackground();
 
+// 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
+Schedule::command('orders:dispatch-due')->timezone('Asia/Seoul')->dailyAt('09:00')->withoutOverlapping()->runInBackground();
+
 // 스마트플레이스 리포트 수집 + 세션 유지 — 매일 새벽 3시(KST). (crm cron/smartplace_collect.php 이식)
 Schedule::command('smartplace:collect')->timezone('Asia/Seoul')->dailyAt('03:00')->withoutOverlapping()->runInBackground();
 

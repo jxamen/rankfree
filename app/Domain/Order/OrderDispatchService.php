@@ -95,8 +95,47 @@ class OrderDispatchService
         return $out;
     }
 
-    /** field_map [{key, src, value}] → 전송 페이로드. src: order:*, product:title, field:<field_key>, alloc:quantity, static. */
-    public function buildPayload(MarketingOrder $order, ProductVendor $pv, int $qty): array
+    /**
+     * 세부주문(일할) 1건 발주 — 회차 배정 업체(미지정이면 배분 1순위)로 그 회차 수량·URL·진행일을 전송.
+     * 승인 시 진행일 도래분과, 스케줄러(orders:dispatch-due)가 매일 호출한다.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function dispatchItem(\App\Models\MarketingOrderItem $item): array
+    {
+        $order = $item->order()->with('product')->first();
+        if (! $order || ! $order->product) {
+            return ['ok' => false, 'message' => '주문·상품 정보가 없습니다.'];
+        }
+
+        $rows = $order->product->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()
+            ->filter(fn ($p) => $p->vendor && $p->vendor->is_active)->values();
+        $pv = $item->vendor_id ? $rows->firstWhere('vendor_id', $item->vendor_id) : $rows->first();
+        if (! $pv) {
+            return ['ok' => false, 'message' => "{$item->day_no}일차: 발주할 업체(배분 설정)가 없습니다."];
+        }
+        if (! $item->vendor_id) {
+            $item->update(['vendor_id' => $pv->vendor->id]);   // 자동 배정 결과를 기록
+        }
+
+        $d = OrderDispatch::create([
+            'order_id' => $order->id,
+            'vendor_id' => $pv->vendor->id,
+            'vendor_name' => $pv->vendor->name.' ('.$item->day_no.'일차)',
+            'channel' => $pv->vendor->channel,
+            'quantity' => $item->quantity,
+            'payload' => $this->buildPayload($order, $pv, $item->quantity, $item),
+            'status' => 'pending',
+        ]);
+        $this->send($d);
+        $d->refresh();
+        $item->update(['status' => $d->status, 'dispatch_id' => $d->id]);
+
+        return ['ok' => $d->status === 'sent', 'message' => "{$item->day_no}일차 → '{$pv->vendor->name}' ".OrderDispatch::STATUSES[$d->status]];
+    }
+
+    /** field_map [{key, src, value}] → 전송 페이로드. src: order:*, product:title, field:<field_key>, alloc:quantity, item:*, static, skip. */
+    public function buildPayload(MarketingOrder $order, ProductVendor $pv, int $qty, ?\App\Models\MarketingOrderItem $item = null): array
     {
         $map = collect((array) $pv->field_map)->filter(fn ($m) => trim((string) ($m['key'] ?? '')) !== '');
         if ($map->isEmpty()) {
@@ -112,13 +151,13 @@ class OrderDispatchService
 
         $out = [];
         foreach ($map as $m) {
-            $out[trim($m['key'])] = $this->resolve($order, $qty, (string) ($m['src'] ?? 'static'), (string) ($m['value'] ?? ''));
+            $out[trim($m['key'])] = $this->resolve($order, $qty, (string) ($m['src'] ?? 'static'), (string) ($m['value'] ?? ''), $item);
         }
 
         return $out;
     }
 
-    private function resolve(MarketingOrder $order, int $qty, string $src, string $static)
+    private function resolve(MarketingOrder $order, int $qty, string $src, string $static, ?\App\Models\MarketingOrderItem $item = null)
     {
         if ($src === 'static') {
             return $static;
@@ -141,6 +180,14 @@ class OrderDispatchService
             },
             'product' => $order->product->title,
             'field' => $order->field_values[$key] ?? null,          // 동적 주문 필드 값
+            // 세부주문(일할) — 회차 배정값. 1회성 발주에는 빈 값
+            'item' => match ($key) {
+                'short_url' => (string) ($item?->short_url ?? ''),
+                'date' => $item?->work_date?->toDateString() ?? '',
+                'day_no' => $item?->day_no ?? '',
+                'quantity' => $item?->quantity ?? '',
+                default => null,
+            },
             default => null,
         };
     }

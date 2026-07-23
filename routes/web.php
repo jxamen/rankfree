@@ -379,6 +379,11 @@ Route::middleware(['auth', 'operator'])->prefix('admin')->name('admin.')->group(
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
     Route::post('/orders/dispatches/{dispatch}/cancel', [MarketingOrderController::class, 'cancelDispatch'])->name('orders.dispatch.cancel');
     Route::post('/orders/{order}/cancel-dispatches', [MarketingOrderController::class, 'cancelDispatches'])->name('orders.dispatches.cancel');
+    // 세부주문서(일할) — 생성·일괄수정·개별 발주/취소
+    Route::post('/orders/{order}/items/generate', [MarketingOrderController::class, 'generateItems'])->name('orders.items.generate');
+    Route::put('/orders/{order}/items', [MarketingOrderController::class, 'updateItems'])->name('orders.items.update');
+    Route::post('/orders/items/{item}/dispatch', [MarketingOrderController::class, 'dispatchItem'])->name('orders.items.dispatch');
+    Route::post('/orders/items/{item}/cancel', [MarketingOrderController::class, 'cancelItem'])->name('orders.items.cancel');
     Route::delete('/orders/{order}', [MarketingOrderController::class, 'destroy'])->name('orders.destroy');
 
     // 구글 계정 OAuth 연동 (서치 콘솔·GA4 공용)

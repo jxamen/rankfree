@@ -54,6 +54,12 @@ class MarketingOrder extends Model
         return $this->hasMany(OrderDispatch::class, 'order_id');
     }
 
+    /** 세부주문서(일할) — 기간형 주문의 회차(1일 1건) 단위. */
+    public function items(): HasMany
+    {
+        return $this->hasMany(MarketingOrderItem::class, 'order_id')->orderBy('day_no');
+    }
+
     /** 사용된 쿠폰 발급분(할인 적용 시). */
     public function userCoupon(): BelongsTo
     {

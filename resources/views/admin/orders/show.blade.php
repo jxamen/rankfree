@@ -148,6 +148,86 @@
         </div>
         @endif
 
+        {{-- 세부주문서(일할, 2026-07-23) — 기간형 주문의 회차별 관리: 업체 분산·Short URL 순차·개별 발주/취소 --}}
+        @if ($order->items->isNotEmpty())
+            @php $itemColor = ['pending' => 'var(--color-muted)', 'sent' => 'var(--color-success)', 'failed' => 'var(--color-error)', 'canceled' => 'var(--color-muted-soft)']; @endphp
+            <div class="card p-6 mb-6">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">세부주문서
+                        <span class="text-muted-soft" style="font-weight:400;">1일 1건 발주 · 진행일 아침(09:00) 자동 전송 · 업체/URL 수정 후 저장</span></span>
+                    <button type="submit" form="items-bulk-form" class="btn btn-secondary btn-sm">세부주문 저장</button>
+                </div>
+                <form id="items-bulk-form" method="POST" action="{{ route('admin.orders.items.update', $order) }}">@csrf @method('PUT')</form>
+                <div style="overflow-x:auto;">
+                    <table class="w-full" style="min-width:820px;font-size:var(--fs-xs);border-collapse:collapse;">
+                        <thead>
+                            <tr class="text-muted" style="border-bottom:1px solid var(--color-hairline-soft);">
+                                <th class="text-center py-2 pr-3 font-semibold" style="width:50px;">회차</th>
+                                <th class="text-left py-2 px-3 font-semibold" style="width:110px;">진행일</th>
+                                <th class="text-right py-2 px-3 font-semibold" style="width:80px;">수량</th>
+                                <th class="text-left py-2 px-3 font-semibold">Short URL</th>
+                                <th class="text-left py-2 px-3 font-semibold" style="width:150px;">업체</th>
+                                <th class="text-center py-2 px-3 font-semibold" style="width:70px;">상태</th>
+                                <th class="text-center py-2 pl-3 font-semibold" style="width:130px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($order->items as $it)
+                                <tr style="border-top:1px solid var(--color-hairline-soft);">
+                                    <td class="py-2 pr-3 text-center text-ink font-mono">{{ $it->day_no }}</td>
+                                    <td class="py-2 px-3 text-body font-mono">{{ $it->work_date?->format('Y-m-d') }}</td>
+                                    <td class="py-2 px-3 text-right font-mono">{{ number_format($it->quantity) }}</td>
+                                    <td class="py-2 px-3">
+                                        <input form="items-bulk-form" name="items[{{ $it->id }}][short_url]" value="{{ $it->short_url }}"
+                                               class="input" style="width:100%;height:30px;font-size:var(--fs-xs);" placeholder="미배정 — Short URL 생성 시 자동 배정">
+                                    </td>
+                                    <td class="py-2 px-3">
+                                        <select form="items-bulk-form" name="items[{{ $it->id }}][vendor_id]" class="input" style="width:100%;height:30px;font-size:var(--fs-xs);">
+                                            <option value="">자동(배분 1순위)</option>
+                                            @foreach ($itemVendors as $v)
+                                                <option value="{{ $v->id }}" @selected($it->vendor_id === $v->id)>{{ $v->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td class="py-2 px-3 text-center">
+                                        <span class="badge" style="font-size:var(--fs-xs);color:{{ $itemColor[$it->status] ?? 'var(--color-muted)' }};">{{ \App\Models\MarketingOrderItem::STATUSES[$it->status] ?? $it->status }}</span>
+                                    </td>
+                                    <td class="py-2 pl-3 text-center" style="white-space:nowrap;">
+                                        @if ($it->status !== 'sent')
+                                            <button type="submit" form="item-d-{{ $it->id }}" class="btn btn-secondary btn-sm">{{ in_array($it->status, ['failed', 'canceled'], true) ? '재발주' : '발주' }}</button>
+                                        @endif
+                                        @if ($it->status !== 'canceled')
+                                            <button type="submit" form="item-c-{{ $it->id }}" class="btn btn-ghost btn-sm" style="color:var(--color-error);">취소</button>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">발주 순서: 승인 시 오늘까지 진행일인 회차 즉시 전송 → 나머지는 진행일 아침 자동. 취소한 발주의 시트 행은 직접 정리하세요.</p>
+            </div>
+            {{-- 행별 발주/취소 폼 — 테이블 폼 중첩 방지를 위해 밖에 두고 버튼이 form 속성으로 참조 --}}
+            @foreach ($order->items as $it)
+                <form id="item-d-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.dispatch', $it) }}"
+                      data-confirm="{{ $it->day_no }}일차를 지금 발주할까요?" data-confirm-text="배정 업체로 즉시 전송됩니다." data-confirm-ok="발주">@csrf</form>
+                <form id="item-c-{{ $it->id }}" method="POST" action="{{ route('admin.orders.items.cancel', $it) }}"
+                      data-confirm="{{ $it->day_no }}일차를 취소할까요?" data-confirm-text="전송 기록도 취소로 표시됩니다. 시트에 적힌 행은 자동으로 지워지지 않습니다." data-confirm-ok="세부주문 취소">@csrf</form>
+            @endforeach
+        @elseif (($order->product?->quantity_mode ?? '') === 'daily' && (int) $order->days >= 1)
+            <div class="card p-6 mb-6">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                        <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">세부주문서</span>
+                        <p class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">기간 {{ $order->days }}일 주문입니다 — 세부주문을 만들면 회차별(1일 1건)로 업체 분산·Short URL 순차 배정·자동 발주로 관리됩니다.</p>
+                    </div>
+                    <form method="POST" action="{{ route('admin.orders.items.generate', $order) }}">@csrf
+                        <button type="submit" class="btn btn-primary btn-sm">세부주문 {{ $order->days }}건 생성</button>
+                    </form>
+                </div>
+            </div>
+        @endif
+
         {{-- 외부 발주 현황 — 승인 시 업체 배분대로 전송된 기록 --}}
         <div class="card p-6">
             <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">외부 발주 현황</div>
@@ -231,7 +311,7 @@
                 @if (! $hasActiveDispatch)
                     {{-- 발주 전 또는 전체 취소 후 — 다시 발주 가능 --}}
                     <form method="POST" action="{{ route('admin.orders.approve', $order) }}"
-                          data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="위 배분대로 각 업체에 즉시 전송됩니다." data-confirm-ok="{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}">
+                          data-confirm="주문을 승인하고 발주할까요?" data-confirm-text="{{ $order->items->isNotEmpty() ? '오늘까지 진행일인 세부주문을 즉시 전송하고, 나머지 회차는 진행일 아침에 자동 발주됩니다.' : '위 배분대로 각 업체에 즉시 전송됩니다.' }}" data-confirm-ok="{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}">
                         @csrf
                         <button type="submit" class="btn btn-primary btn-sm w-full">{{ $order->dispatches->isEmpty() ? '승인 · 발주' : '다시 발주' }}</button>
                     </form>

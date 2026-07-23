@@ -70,6 +70,13 @@ class OrderFieldAutofill
             $order->update(['field_values' => $fv]);
         }
 
+        // 세부주문(일할) Short URL 순차 배정 — 링크 생성·재수집 시 빈 회차에 반영(수동 교체 보존, force 시 재배정)
+        try {
+            app(OrderItemPlanner::class)->assignShortUrls($order->fresh('items'), $force);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('세부주문 Short URL 배정 실패', ['order' => $order->order_no, 'e' => $e->getMessage()]);
+        }
+
         return $filled;
     }
 }

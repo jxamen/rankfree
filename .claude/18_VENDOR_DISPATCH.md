@@ -65,8 +65,16 @@
 - 활성(미취소) 발주가 모두 없어지면 **주문을 접수(pending)로 되돌려** [다시 발주]·[주문넣기] 재사용 가능. dispatch() 가드는 활성 발주 기준.
 - **Short URL 가드** — 유입키워드 분석이 연결된 주문은 분석에 Short URL 이 없으면 발주 차단(승인·주문넣기 공통, `shortUrlGuard`). autofill 소스 `short_url`(그룹 순 콤마 목록, [ShopKeywordShortLink::url()](../app/Models/ShopKeywordShortLink.php)) 추가, Short URL 생성 시 연결 주문 빈 필드 자동 반영.
 
+## 세부주문서 — 일할 발주 (2026-07-23)
+
+- **기간형(daily) 주문은 접수 시 `marketing_order_items`(세부주문서, 1일 1건) 자동 생성** — 회차·진행일·일수량. 기존 접수분은 주문 상세 [세부주문 N건 생성] 버튼. 1회성(total) 상품은 종전 흐름 그대로.
+- **업체 분산**: 배분(비율/고정)을 **일수에 적용**해 배분 순서대로 연속 블록 배정(예: 60/40·5일 → A 3일+B 2일, [OrderItemPlanner](../app/Domain/Order/OrderItemPlanner.php)). 회차별 셀렉트로 수동 변경 가능.
+- **Short URL 순차 배정**: 분석 링크를 회차 순서대로(부족하면 순환), 링크 생성·재수집 시 빈 회차 자동 반영(수동 교체 보존). 매핑 소스 `item:short_url|date|day_no|quantity` (payload 는 회차 값).
+- **발주**: 승인 시 진행일 도래 회차 즉시 전송 + 나머지는 `orders:dispatch-due`(매일 09:00 KST 스케줄)가 자동 발주(승인된 주문만). 회차별 [발주]/[취소], 발주 취소 시 연결 회차는 대기로 복귀.
+- **Short URL 가드(개정)**: **업체 매핑이 Short URL 항목을 실제로 쓸 때만** 검사(사용자 확정 — `mappingUsesShortUrl`). 세부주문 주문은 회차별 URL 미배정 시 차단, 스케줄러는 해당 회차 스킵+경고.
+
 ## 주의
 
-- 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송.
+- 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송. 세부주문 주문의 승인은 "도래 회차 전송+예약 활성화"로 동작.
 - 업체 삭제 시 배분 설정은 cascade 삭제, 전송 이력은 vendor_name 으로 보존(vendor_id null).
 - API 헤더에 인증키가 들어감 — 화면 노출 주의(수정 모달에서만 표시).

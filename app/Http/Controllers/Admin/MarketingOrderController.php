@@ -79,7 +79,7 @@ class MarketingOrderController extends Controller
 
     public function show(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
-        $order->load('product.fields', 'product.vendorAllocations.vendor', 'user', 'dispatches', 'shopKeywordAnalyses.shortLinks');
+        $order->load('product.fields', 'product.vendorAllocations.vendor', 'user', 'dispatches', 'shopKeywordAnalyses.shortLinks', 'items.vendor');
 
         // 승인 전 배분 미리보기 — 활성 업체 배분에 이 주문 수량을 적용한 결과
         $allocRows = $order->product
@@ -91,7 +91,77 @@ class MarketingOrderController extends Controller
             'order' => $order,
             'statuses' => MarketingOrder::STATUSES,
             'allocPreview' => $allocPreview,
+            // 세부주문서 업체 셀렉트 옵션 — 이 상품 배분에 등록된 활성 업체
+            'itemVendors' => $allocRows->pluck('vendor')->filter()->unique('id')->values(),
         ]);
+    }
+
+    /** 세부주문서 수동 생성 — 기간형인데 아직 없는 기존 주문용(예: 세부주문 도입 전 접수분). */
+    public function generateItems(MarketingOrder $order, \App\Domain\Order\OrderItemPlanner $planner)
+    {
+        $n = $planner->generate($order);
+        if ($n < 1) {
+            return back()->withErrors(['items' => '세부주문을 만들 수 없습니다 — 기간형(일수량×기간) 주문이 아니거나 이미 생성돼 있습니다.']);
+        }
+
+        return back()->with('status', "세부주문 {$n}건을 생성했습니다(업체 분산·Short URL 순차 배정 포함).");
+    }
+
+    /** 세부주문 일괄 수정 — 회차별 업체·Short URL(수동 교체). */
+    public function updateItems(Request $request, MarketingOrder $order)
+    {
+        $input = (array) $request->input('items', []);
+        $vendorIds = $order->product?->vendorAllocations()->where('is_active', true)->pluck('vendor_id')->all() ?? [];
+        $n = 0;
+        foreach ($order->items as $item) {
+            if (! isset($input[$item->id])) {
+                continue;
+            }
+            $row = (array) $input[$item->id];
+            $upd = [];
+            if (array_key_exists('short_url', $row)) {
+                $upd['short_url'] = trim((string) $row['short_url']) ?: null;
+            }
+            if (array_key_exists('vendor_id', $row)) {
+                $vid = (int) $row['vendor_id'];
+                $upd['vendor_id'] = $vid && in_array($vid, $vendorIds, true) ? $vid : null;
+            }
+            if ($upd) {
+                $item->update($upd);
+                $n++;
+            }
+        }
+
+        return back()->with('status', "세부주문 {$n}건을 저장했습니다.");
+    }
+
+    /** 세부주문 개별 발주 — 진행일과 무관하게 관리자가 수동 전송(실패·취소 회차 재발주 포함). */
+    public function dispatchItem(\App\Models\MarketingOrderItem $item, \App\Domain\Order\OrderDispatchService $dispatcher, \App\Domain\Order\OrderItemPlanner $planner)
+    {
+        if ($item->status === 'sent') {
+            return back()->withErrors(['items' => "{$item->day_no}일차는 이미 전송됐습니다 — 다시 보내려면 먼저 취소하세요."]);
+        }
+        $order = $item->order;
+        if ($order && $planner->mappingUsesShortUrl($order->product) && trim((string) $item->short_url) === '') {
+            return back()->withErrors(['items' => "{$item->day_no}일차: Short URL 이 배정되지 않아 발주할 수 없습니다."]);
+        }
+        $r = $dispatcher->dispatchItem($item);
+
+        return $r['ok'] ? back()->with('status', $r['message']) : back()->withErrors(['items' => $r['message']]);
+    }
+
+    /** 세부주문 취소 — 회차 취소 + 연결 전송 기록도 취소 표시(시트 행은 수동 정리). */
+    public function cancelItem(\App\Models\MarketingOrderItem $item)
+    {
+        if ($item->status === 'canceled') {
+            return back()->withErrors(['items' => '이미 취소된 세부주문입니다.']);
+        }
+        $item->update(['status' => 'canceled']);
+        if ($item->dispatch && $item->dispatch->status !== 'canceled') {
+            $item->dispatch->update(['status' => 'canceled']);
+        }
+
+        return back()->with('status', "{$item->day_no}일차 세부주문을 취소했습니다. 시트에 이미 적힌 행은 직접 정리하세요.");
     }
 
     /** 내부(숨김) 필드 값 수동 저장 — 수집이 안 채운 항목을 관리자가 직접 입력. */
@@ -162,7 +232,9 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['place' => $err]);
         }
 
-        $result = $dispatcher->dispatch($order);
+        $result = $order->items()->exists()
+            ? $this->dispatchDueItems($order, $dispatcher)
+            : $dispatcher->dispatch($order);
         if (! $result['ok']) {
             return back()->withErrors(['place' => "주문 {$order->order_no}: ".$result['message']]);
         }
@@ -187,7 +259,9 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['approve' => $err]);
         }
 
-        $result = $dispatcher->dispatch($order);
+        $result = $order->items()->exists()
+            ? $this->dispatchDueItems($order, $dispatcher)
+            : $dispatcher->dispatch($order);
         if (! $result['ok']) {
             return back()->withErrors(['approve' => $result['message']]);
         }
@@ -199,17 +273,52 @@ class MarketingOrderController extends Controller
     }
 
     /**
-     * 발주 전 Short URL 가드 — 유입키워드 분석이 연결된 주문은 Short URL(랜딩)이 생성돼 있어야 발주 가능.
-     * 없으면 업체가 받을 랜딩이 없는 채로 나가므로 차단한다(2026-07-23).
+     * 발주 전 Short URL 가드 — **업체 매핑이 Short URL 항목을 실제로 쓸 때만** 검사한다(2026-07-23 확정).
+     * 세부주문이 있으면 회차별 배정 URL, 없으면 분석의 링크 존재 여부를 본다.
      */
     private function shortUrlGuard(MarketingOrder $order): ?string
     {
+        $order->loadMissing('product.fields');
+        if (! $order->product || ! app(\App\Domain\Order\OrderItemPlanner::class)->mappingUsesShortUrl($order->product)) {
+            return null;   // 매핑이 Short URL 을 안 쓰는 상품 — 없어도 발주 가능
+        }
+        if ($order->items()->exists()) {
+            $missing = $order->items()->where('status', '!=', 'canceled')
+                ->where(fn ($q) => $q->whereNull('short_url')->orWhere('short_url', ''))->count();
+
+            return $missing > 0
+                ? "주문 {$order->order_no}: Short URL 미배정 세부주문 {$missing}건 — 분석에서 Short URL 생성(또는 세부주문에 직접 입력) 후 발주하세요."
+                : null;
+        }
         $analysis = $order->shopKeywordAnalyses()->latest('id')->first();
         if ($analysis && ! $analysis->shortLinks()->exists()) {
             return "주문 {$order->order_no}: Short URL 이 아직 없어 발주할 수 없습니다 — 유입키워드 분석에서 Short URL 을 먼저 생성하세요.";
         }
 
         return null;
+    }
+
+    /** 세부주문 주문의 승인 발주 — 진행일 도래분 즉시 전송, 나머지는 예약(스케줄러가 매일 발주). */
+    private function dispatchDueItems(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher): array
+    {
+        $due = $order->items()->where('status', 'pending')->whereDate('work_date', '<=', today())->orderBy('day_no')->get();
+        $future = $order->items()->where('status', 'pending')->whereDate('work_date', '>', today())->count();
+        if ($due->isEmpty() && $future === 0) {
+            return ['ok' => false, 'message' => '발주할 대기 세부주문이 없습니다(모두 전송·취소됨). 재발주는 회차별 [발주]를 쓰세요.'];
+        }
+
+        $sent = 0;
+        $failedMsgs = [];
+        foreach ($due as $item) {
+            $r = $dispatcher->dispatchItem($item);
+            $r['ok'] ? $sent++ : $failedMsgs[] = $r['message'];
+        }
+        $msg = "세부주문 발주 — 오늘까지분 {$due->count()}건(성공 {$sent}".($failedMsgs ? ' · '.implode(' / ', $failedMsgs) : '').')';
+        if ($future > 0) {
+            $msg .= " · 예약 {$future}건은 진행일 아침(09:00)에 자동 발주됩니다";
+        }
+
+        return ['ok' => true, 'message' => $msg];
     }
 
     /** 실패한 업체 전송 건 재전송. */
@@ -230,6 +339,9 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['dispatch' => '이미 취소된 발주입니다.']);
         }
         $dispatch->update(['status' => 'canceled']);
+        // 연결 세부주문은 대기로 되돌려 재발주 가능하게
+        \App\Models\MarketingOrderItem::where('dispatch_id', $dispatch->id)->where('status', '!=', 'canceled')
+            ->update(['status' => 'pending']);
 
         $msg = "'{$dispatch->vendor_name}' 발주를 취소했습니다.";
         if ($dispatch->channel === 'gsheet' && $dispatch->getOriginal('status') !== 'failed') {
@@ -254,6 +366,8 @@ class MarketingOrderController extends Controller
         foreach ($active as $d) {
             $d->update(['status' => 'canceled']);
         }
+        // 전송·실패 세부주문은 대기로 되돌려 재발주 가능하게(취소 회차는 유지)
+        $order->items()->whereIn('status', ['sent', 'failed'])->update(['status' => 'pending']);
         if ($order->status === 'processing') {
             $order->update(['status' => 'pending']);
         }

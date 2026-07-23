@@ -182,6 +182,13 @@ class OrderPlacer
             return $order;
         });
 
+        // 기간형(daily) 주문 — 세부주문서(1일 1건) 자동 생성 + 업체 분산·Short URL 배정
+        try {
+            app(OrderItemPlanner::class)->generate($order);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('세부주문 생성 실패', ['order' => $order->order_no, 'e' => $e->getMessage()]);
+        }
+
         // 잔디 웹훅 주문 알림 — 큐 발송(설정 없으면 잡이 조용히 종료). 알림 실패는 주문에 영향 없음.
         \App\Jobs\SendJandiOrderNotification::dispatch($order);
 
