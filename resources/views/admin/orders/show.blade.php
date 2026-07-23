@@ -131,24 +131,23 @@
     </div>
     @endif
 
-        {{-- 쇼핑 유입키워드 분석 연결(2026-07-22) — 발주 시 분석의 Short URL 을 쓴다 --}}
-        @if ($order->shopKeywordAnalyses->isNotEmpty() || $order->shopKeywordSource())
+        {{-- 주문 입력값(+쇼핑 유입키워드 수집 통합) + 내부 필드 — 1줄 2카드(2026-07-23) --}}
+        <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4 items-start">
         <div class="card p-6">
-            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">쇼핑 유입키워드 수집</div>
-                @if ($order->shopKeywordAnalyses->isEmpty())
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 입력 정보</div>
+                @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
                     <form method="POST" action="{{ route('admin.orders.shop-keyword', $order) }}">
                         @csrf
                         <button type="submit" class="btn btn-primary btn-sm">유입키워드 수집 요청</button>
                     </form>
                 @endif
             </div>
-            @if ($order->shopKeywordAnalyses->isEmpty())
-                <p class="text-muted-soft" style="font-size:var(--fs-xs);">주문의 키워드·상품 URL 로 노출 키워드 분석을 만들고 이 주문과 연결합니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 씁니다.</p>
-            @else
-                <div class="flex flex-col gap-2">
+            {{-- 쇼핑 유입키워드 수집 — 연결 분석 요약(카드 통합, 2026-07-23) --}}
+            @if ($order->shopKeywordAnalyses->isNotEmpty())
+                <div class="flex flex-col gap-2 mb-4 pb-1" style="border-bottom:1px solid var(--color-hairline-soft);">
                     @foreach ($order->shopKeywordAnalyses as $a)
-                        <div class="flex items-center gap-3 flex-wrap" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);padding-bottom:8px;">
+                        <div class="flex items-center gap-3 flex-wrap" style="font-size:var(--fs-xs);padding-bottom:8px;">
                             <a href="{{ route('admin.shop-keyword.show', $a) }}" class="text-ink font-semibold">{{ $a->core_keyword }} ↗</a>
                             <span class="text-muted">노출 <b class="font-mono text-success">{{ number_format($a->exposed_count) }}</b> / 확인 <span class="font-mono">{{ number_format($a->checked_count) }}</span></span>
                             <span class="text-muted">Short URL <b class="font-mono">{{ $a->shortLinks->count() }}</b>개</span>
@@ -156,14 +155,9 @@
                         </div>
                     @endforeach
                 </div>
+            @elseif ($order->shopKeywordSource())
+                <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집 요청 시 주문의 키워드·상품 URL 로 노출 키워드 분석을 만들고 이 주문과 연결합니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 씁니다.</p>
             @endif
-        </div>
-        @endif
-
-        {{-- 주문 입력값 + 내부 필드 — 1줄 2카드(2026-07-23) --}}
-        <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4 items-start">
-        <div class="card p-6">
-            <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">주문 입력 정보</div>
             @if (empty($order->field_values))
                 <p class="text-muted-soft" style="font-size:var(--fs-xs);">입력 항목이 없습니다.</p>
             @else
