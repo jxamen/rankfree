@@ -14,7 +14,7 @@
     $hiddenKeys = $hiddenFields->pluck('field_key')->all();
 @endphp
 
-<x-console.page-head :title="'주문 상세'.($order->order_no ? ' — '.$order->order_no : '')" desc="주문 정보·입력 값 확인 및 진행 상태 변경" />
+<x-console.page-head title="주문 상세" desc="주문 정보·입력 값 확인 및 진행 상태 변경" />
 
 @if ($errors->any())
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
@@ -22,11 +22,11 @@
 
 <div class="flex flex-col gap-4">
     {{-- 상단 1줄: 주문 정보(2/3) · 주문자+상태(1/3) — 이하 콘텐츠는 전체 폭 사용(2026-07-23) --}}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="card p-6 lg:col-span-2">
-            {{-- 주문번호는 페이지 제목에 이미 표시 — 카드 안에서는 상태 배지만(2026-07-23) --}}
+            {{-- 주문번호는 카드 제목으로(페이지 제목은 '주문 상세'만, 2026-07-23) --}}
             <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 정보</div>
+                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 상세 — <span class="font-mono">{{ $order->order_no }}</span></div>
                 <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:{{ $statusColor[$order->status] ?? 'var(--color-muted)' }};">{{ $statuses[$order->status] ?? $order->status }}</span>
             </div>
             {{-- 1줄: 상품 정보 (+ 주문 시작일·종료일 — 단가 좌측) --}}
@@ -132,7 +132,7 @@
     @endif
 
         {{-- 주문 입력값(+쇼핑 유입키워드 수집 통합) + 내부 필드 — 1줄 2카드(2026-07-23) --}}
-        <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4 items-start">
+        <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4">
         <div class="card p-6">
             <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
                 <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 입력 정보</div>
@@ -191,26 +191,27 @@
         <div class="card p-6">
             <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
                 <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">내부 필드 <span class="text-muted-soft font-normal">(발주 전달용 · 고객에게 안 보임)</span></div>
-                @if ($order->shopKeywordAnalyses->isNotEmpty())
-                    <form method="POST" action="{{ route('admin.orders.autofill', $order) }}">
-                        @csrf
-                        <button type="submit" class="btn btn-secondary btn-sm">수집값 다시 채우기</button>
-                    </form>
-                @endif
+                <div class="flex items-center gap-1.5">
+                    @if ($order->shopKeywordAnalyses->isNotEmpty())
+                        <form method="POST" action="{{ route('admin.orders.autofill', $order) }}">
+                            @csrf
+                            <button type="submit" class="btn btn-secondary btn-sm">수집값 다시 채우기</button>
+                        </form>
+                    @endif
+                    <button type="submit" form="internal-fields-form" class="btn btn-primary btn-sm">저장</button>
+                </div>
             </div>
             <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집(확장 상품정보)이 반영될 때 매핑된 값이 자동 저장됩니다. 비어 있는 항목은 직접 입력할 수 있습니다.</p>
-            <form method="POST" action="{{ route('admin.orders.internal-fields', $order) }}" class="flex flex-col gap-3">
+            <form id="internal-fields-form" method="POST" action="{{ route('admin.orders.internal-fields', $order) }}" class="flex flex-col gap-3">
                 @csrf
                 @method('PUT')
                 @foreach ($hiddenFields as $f)
                     @php $cur = $order->field_values[$f->field_key] ?? null; @endphp
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
-                        <div style="font-size:var(--fs-xs);">
-                            <span class="text-muted font-semibold">{{ $f->label }}</span>
-                            @if ($f->is_required)<span class="text-error">*</span>@endif
-                            @if ($f->autofill_source)
-                                <div class="text-muted-soft mt-0.5">자동: {{ \App\Models\ProductField::AUTOFILL_SOURCES[$f->autofill_source] ?? $f->autofill_source }}</div>
-                            @endif
+                        {{-- 타이틀 1줄 — 자동 채움 상세는 title 툴팁으로(2026-07-23) --}}
+                        <div style="font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                             @if ($f->autofill_source) title="자동 채움: {{ \App\Models\ProductField::AUTOFILL_SOURCES[$f->autofill_source] ?? $f->autofill_source }}" @endif>
+                            <span class="text-muted font-semibold">{{ $f->label }}</span>@if ($f->is_required)<span class="text-error">*</span>@endif
                         </div>
                         <div class="sm:col-span-3">
                             <input type="text" name="internal[{{ $f->field_key }}]" value="{{ is_array($cur) ? implode(', ', $cur) : $cur }}"
@@ -218,9 +219,6 @@
                         </div>
                     </div>
                 @endforeach
-                <div class="flex justify-end">
-                    <button type="submit" class="btn btn-primary btn-sm">내부 필드 저장</button>
-                </div>
             </form>
         </div>
         @endif
@@ -324,7 +322,8 @@
             </div>
         @endif
 
-        {{-- 외부 발주 현황 — 승인 시 업체 배분대로 전송된 기록 --}}
+        {{-- 외부 발주 현황 — 1회성 주문만(세부주문서 주문은 회차 상태가 대체, 2026-07-23 중복 제거) --}}
+        @if ($order->items->isEmpty())
         <div class="card p-6">
             <div class="text-ink font-semibold mb-4" style="font-size:var(--fs-sm);">외부 발주 현황</div>
             @if ($order->dispatches->isEmpty())
@@ -381,5 +380,6 @@
                 </div>
             @endif
         </div>
+        @endif
 </div>
 @endsection
