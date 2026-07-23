@@ -16,7 +16,14 @@ class OrderItemPlanner
 {
     public function __construct(private OrderDispatchService $dispatcher) {}
 
-    /** 세부주문 생성 — 기간형(daily)·days>=1 주문만. 이미 있으면 0. @return 생성 수 */
+    /**
+     * 세부주문 생성 — 기간형(daily)·days>=1 주문만. 이미 있으면 0.
+     * 일 발주량 = 고객 일수량 × 상품 기본 이행률(%) (예: 300 × 40% = 120 — 그 날의 맥스).
+     * 업체 배분(비율/고정)은 그 일 발주량에 적용해 **일×업체** 세부주문을 만든다 —
+     * allocate() 가 잔여 한도로 캡핑하므로 하루 합이 일 발주량을 절대 초과하지 않는다.
+     *
+     * @return int 생성 수
+     */
     public function generate(MarketingOrder $order): int
     {
         $order->loadMissing('product');
@@ -25,53 +32,58 @@ class OrderItemPlanner
             return 0;
         }
 
+        // 이행률 — 미설정·0 이하는 100% 취급
+        $rate = (float) ($order->product->default_fulfillment ?? 100);
+        if ($rate <= 0) {
+            $rate = 100.0;
+        }
+        $dailyBase = (int) floor($order->quantity * $rate / 100);
+        if ($dailyBase < 1) {
+            return 0;
+        }
+
+        $rows = $order->product->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()
+            ->filter(fn ($pv) => $pv->vendor && $pv->vendor->is_active)->values();
+
         $fv = (array) $order->field_values;
         $start = trim((string) ($fv['start_date'] ?? ''));
         $startDate = $start !== '' ? Carbon::parse($start) : $order->product->earliestStartDate();
 
+        $n = 0;
         for ($i = 1; $i <= $days; $i++) {
-            MarketingOrderItem::create([
-                'order_id' => $order->id,
-                'day_no' => $i,
-                'work_date' => $startDate->copy()->addDays($i - 1)->toDateString(),
-                'quantity' => (int) $order->quantity,
-                'status' => 'pending',
-            ]);
+            $date = $startDate->copy()->addDays($i - 1)->toDateString();
+            if ($rows->isEmpty()) {
+                // 배분 미설정 — 업체 미지정 1건(발주 시 배분 1순위 필요)
+                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date,
+                    'quantity' => $dailyBase, 'status' => 'pending']);
+                $n++;
+
+                continue;
+            }
+            foreach ($this->dispatcher->allocate($dailyBase, $rows) as [$pv, $q]) {
+                if ($q < 1) {
+                    continue;   // 배분 0 업체는 그 날 세부주문 없음
+                }
+                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date,
+                    'quantity' => $q, 'vendor_id' => $pv->vendor->id, 'status' => 'pending']);
+                $n++;
+            }
         }
 
-        $this->assignVendors($order);
         $this->assignShortUrls($order);
 
-        return $days;
+        return $n;
     }
 
-    /** 업체 자동 배정 — 배분 규칙(비율/고정)을 일수에 적용, 배분 순서대로 연속 블록. 이미 지정된 회차는 유지. */
-    public function assignVendors(MarketingOrder $order): void
+    /** 재생성 — 전송된 회차가 없을 때만(대기·실패·취소 전부 삭제 후 새 기준으로). @return -1 = 전송분 존재 */
+    public function regenerate(MarketingOrder $order): int
     {
-        $rows = $order->product?->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()
-            ->filter(fn ($pv) => $pv->vendor && $pv->vendor->is_active)->values();
-        if (! $rows || $rows->isEmpty()) {
-            return;
+        if ($order->items()->where('status', 'sent')->exists()) {
+            return -1;
         }
+        $order->items()->delete();
 
-        $items = $order->items()->whereNull('vendor_id')->orderBy('day_no')->get();
-        if ($items->isEmpty()) {
-            return;
-        }
-
-        // 비율/고정을 "회차 수"에 적용(기존 수량 배분과 동일 규칙) → [업체, 일수] 블록
-        $allocs = $this->dispatcher->allocate($items->count(), $rows);
-        $queue = [];
-        foreach ($allocs as [$pv, $dayCount]) {
-            for ($i = 0; $i < $dayCount; $i++) {
-                $queue[] = $pv->vendor->id;
-            }
-        }
-        foreach ($items as $idx => $item) {
-            if (isset($queue[$idx])) {
-                $item->update(['vendor_id' => $queue[$idx]]);
-            }
-        }
+        return $this->generate($order->fresh());
     }
 
     /** 상품의 활성 업체 매핑이 Short URL 항목을 실제로 쓰는지 — 쓸 때만 발주 가드를 건다(2026-07-23 확정). */

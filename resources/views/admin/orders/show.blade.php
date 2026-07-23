@@ -154,8 +154,17 @@
             <div class="card p-6 mb-6">
                 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">세부주문서
-                        <span class="text-muted-soft" style="font-weight:400;">1일 1건 발주 · 진행일 아침(09:00) 자동 전송 · 업체/URL 수정 후 저장</span></span>
-                    <button type="submit" form="items-bulk-form" class="btn btn-secondary btn-sm">세부주문 저장</button>
+                        <span class="text-muted-soft" style="font-weight:400;">일 발주량(일수량×이행률)을 업체 비율로 분배 · 진행일 아침(09:00) 자동 전송</span></span>
+                    <span class="flex items-center gap-1.5">
+                        @if ($order->items->where('status', 'sent')->isEmpty())
+                            <form method="POST" action="{{ route('admin.orders.items.generate', $order) }}"
+                                  data-confirm="세부주문을 다시 생성할까요?" data-confirm-text="기존 세부주문(대기·실패·취소분)을 지우고 현재 이행률·업체 배분 기준으로 새로 만듭니다. 수동 수정한 URL·업체는 사라집니다." data-confirm-ok="재생성">
+                                @csrf<input type="hidden" name="regenerate" value="1">
+                                <button type="submit" class="btn btn-ghost btn-sm">재생성</button>
+                            </form>
+                        @endif
+                        <button type="submit" form="items-bulk-form" class="btn btn-secondary btn-sm">세부주문 저장</button>
+                    </span>
                 </div>
                 <form id="items-bulk-form" method="POST" action="{{ route('admin.orders.items.update', $order) }}">@csrf @method('PUT')</form>
                 <div style="overflow-x:auto;">

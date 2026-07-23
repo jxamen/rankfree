@@ -96,15 +96,22 @@ class MarketingOrderController extends Controller
         ]);
     }
 
-    /** 세부주문서 수동 생성 — 기간형인데 아직 없는 기존 주문용(예: 세부주문 도입 전 접수분). */
-    public function generateItems(MarketingOrder $order, \App\Domain\Order\OrderItemPlanner $planner)
+    /** 세부주문서 수동 생성/재생성 — 기간형 주문용. 재생성은 전송된 회차가 없을 때만(대기·실패·취소분 삭제 후 새 기준). */
+    public function generateItems(Request $request, MarketingOrder $order, \App\Domain\Order\OrderItemPlanner $planner)
     {
-        $n = $planner->generate($order);
+        if ($request->boolean('regenerate')) {
+            $n = $planner->regenerate($order);
+            if ($n === -1) {
+                return back()->withErrors(['items' => '이미 전송된 회차가 있어 재생성할 수 없습니다 — 발주 취소 후 다시 시도하세요.']);
+            }
+        } else {
+            $n = $planner->generate($order);
+        }
         if ($n < 1) {
-            return back()->withErrors(['items' => '세부주문을 만들 수 없습니다 — 기간형(일수량×기간) 주문이 아니거나 이미 생성돼 있습니다.']);
+            return back()->withErrors(['items' => '세부주문을 만들 수 없습니다 — 기간형(일수량×기간) 주문이 아니거나 이미 생성돼 있거나, 이행률 적용 일 발주량이 0입니다.']);
         }
 
-        return back()->with('status', "세부주문 {$n}건을 생성했습니다(업체 분산·Short URL 순차 배정 포함).");
+        return back()->with('status', "세부주문 {$n}건을 생성했습니다 — 일 발주량 = 일수량 × 이행률, 업체 비율로 분배(일별 합이 일 발주량을 넘지 않음).");
     }
 
     /** 세부주문 일괄 수정 — 회차별 업체·Short URL(수동 교체). */
