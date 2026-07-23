@@ -157,6 +157,16 @@ class RankSlotService
             'last_checked_at' => now(),
         ]);
 
+        // 3일 연속 미노출(순위 0 = 300위 밖) 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
+        // 삭제 아님 — 목록 [재개] 버튼으로 다시 켤 수 있다.
+        if ((int) $r['rank'] === 0 && $slot->is_active) {
+            $recent = PlaceRankRecord::where('slot_id', $slot->id)
+                ->orderByDesc('checked_date')->limit(3)->pluck('rank');
+            if ($recent->count() === 3 && $recent->every(fn ($v) => (int) $v === 0)) {
+                $slot->update(['is_active' => false]);
+            }
+        }
+
         return $r;
     }
 }

@@ -71,6 +71,12 @@
             <div class="flex-1"></div>
             {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 업체명 옆) --}}
             <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
+                @unless ($slot->is_active)
+                    <span class="badge" style="font-size:var(--fs-xs);color:var(--color-error);" title="3일 연속 미노출(300위 밖) 시 자동 중단됩니다 — [재개]로 다시 켤 수 있어요">체크 중단됨</span>
+                @endunless
+                <form method="POST" action="{{ route('console.rank.toggle', $slot) }}">@csrf
+                    <button type="submit" class="btn btn-ghost btn-sm" title="{{ $slot->is_active ? '자동 순위체크 일시 중단(기록 유지)' : '자동 순위체크 재개' }}">{{ $slot->is_active ? '중단' : '재개' }}</button>
+                </form>
                 <form method="POST" action="{{ route('console.rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
                 <button type="button" class="btn btn-ghost btn-sm rf-metrics-toggle" title="리뷰·저장 접기/펼치기">접기</button>
                 @if ($slot->slug)

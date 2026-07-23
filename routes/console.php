@@ -33,8 +33,9 @@ if (config('rankfree.community.schedule_enabled', true)) {
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->withoutOverlapping()->runInBackground();
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->withoutOverlapping()->runInBackground();
 
-// 쇼핑 순위추적 — 매시간. 활성 슬롯 순위 조회·기록(openapi shop.json).
-Schedule::command('shop:track-run')->hourly()->withoutOverlapping()->runInBackground();
+// 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST, 2026-07-24 매시간→2회 축소). 활성 슬롯 순위 조회·기록(openapi shop.json).
+Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
+Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
 
 // 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
 Schedule::command('orders:dispatch-due')->timezone('Asia/Seoul')->dailyAt('09:00')->withoutOverlapping()->runInBackground();

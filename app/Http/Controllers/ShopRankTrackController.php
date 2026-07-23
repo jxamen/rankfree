@@ -177,6 +177,15 @@ class ShopRankTrackController extends Controller
         return redirect()->route('console.shop-rank')->with('status', '추적을 수정했습니다.');
     }
 
+    /** 순위체크 중단/재개(2026-07-24) — 3일 연속 미노출 자동 중단분을 다시 켜거나 수동 중단. 삭제 아님. */
+    public function toggle(Request $request, ShopRankSlot $slot)
+    {
+        abort_unless($slot->user_id === $request->user()->id, 403);
+        $slot->update(['is_active' => ! $slot->is_active]);
+
+        return back()->with('status', "'{$slot->keyword}' 순위체크를 ".($slot->is_active ? '재개했습니다.' : '중단했습니다(기록 유지 — 언제든 재개 가능).'));
+    }
+
     public function run(Request $request, ShopRankSlot $slot)
     {
         abort_unless($slot->user_id === $request->user()->id, 403);

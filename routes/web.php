@@ -219,6 +219,7 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/rank/export', [RankTrackController::class, 'export'])->name('rank.export');
     Route::post('/rank', [RankTrackController::class, 'store'])->name('rank.store');
     Route::post('/rank/{slot}/run', [RankTrackController::class, 'run'])->name('rank.run');
+    Route::post('/rank/{slot}/toggle', [RankTrackController::class, 'toggle'])->name('rank.toggle');
     Route::put('/rank/{slot}', [RankTrackController::class, 'update'])->name('rank.update');
     Route::delete('/rank/{slot}', [RankTrackController::class, 'destroy'])->name('rank.destroy');
 
@@ -237,6 +238,7 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     Route::get('/shop-rank/export', [ShopRankTrackController::class, 'export'])->name('shop-rank.export');
     Route::post('/shop-rank', [ShopRankTrackController::class, 'store'])->name('shop-rank.store');
     Route::post('/shop-rank/{slot}/run', [ShopRankTrackController::class, 'run'])->name('shop-rank.run');
+    Route::post('/shop-rank/{slot}/toggle', [ShopRankTrackController::class, 'toggle'])->name('shop-rank.toggle');
     Route::put('/shop-rank/{slot}', [ShopRankTrackController::class, 'update'])->name('shop-rank.update');
     Route::delete('/shop-rank/{slot}', [ShopRankTrackController::class, 'destroy'])->name('shop-rank.destroy');
 

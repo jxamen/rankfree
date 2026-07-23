@@ -238,11 +238,12 @@
                                 <td class="px-3 py-3 text-center">
                                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $orderStatusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $orderStatuses[$o->status] ?? $o->status }}</span>
                                 </td>
-                                {{-- 순위 — 진행중 전환 시 자동 등록된 쇼핑 순위추적(2026-07-23). 리포트 새창 --}}
+                                {{-- 순위 — 진행중 전환 시 자동 등록된 순위추적(쇼핑/플레이스). 리포트 새창 --}}
+                                @php $rankSlot = $o->shopRankSlot ?? $o->placeRankSlot; @endphp
                                 <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);">
-                                    @if ($o->shopRankSlot)
-                                        <a href="{{ $o->shopRankSlot->shareUrl() }}" target="_blank" rel="noopener" class="text-accent hover:underline font-mono" title="{{ $o->shopRankSlot->keyword }} 순위 리포트 새창">
-                                            {{ $o->shopRankSlot->last_rank ? number_format($o->shopRankSlot->last_rank).'위 ↗' : '수집중 ↗' }}
+                                    @if ($rankSlot)
+                                        <a href="{{ $rankSlot->shareUrl() }}" target="_blank" rel="noopener" class="text-accent hover:underline font-mono" title="{{ $rankSlot->keyword }} 순위 리포트 새창">
+                                            {{ $rankSlot->last_rank ? number_format($rankSlot->last_rank).'위 ↗' : '수집중 ↗' }}
                                         </a>
                                     @else
                                         <span class="text-muted-soft">—</span>
@@ -257,6 +258,8 @@
                                         @foreach (array_filter([
                                             ['단가', number_format($o->unit_price).'원'],
                                             ['수량', number_format($o->quantity).($o->days ? ' × '.$o->days.'일' : '')],
+                                            $o->days ? ['총 수량', number_format($o->quantity * $o->days)] : null,
+                                            (float) $o->discount_amount > 0 ? ['주문 금액', number_format((float) $o->total_price + (float) $o->discount_amount).'원'] : null,
                                             (float) $o->discount_amount > 0 ? ['쿠폰 할인', '-'.number_format($o->discount_amount).'원'] : null,
                                             ['합계', number_format($o->total_price).'원'],
                                         ]) as [$lab, $val])
@@ -271,6 +274,8 @@
                                         <div class="flex flex-col gap-1">
                                             @foreach ($o->field_values as $key => $val)
                                                 @php $f = $fieldMap->get($key); @endphp
+                                                {{-- 내부(숨김) 필드는 발주 전달용 — 고객 화면에 노출하지 않는다(2026-07-24) --}}
+                                                @continue((bool) ($f->is_hidden ?? false))
                                                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-1" style="font-size:var(--fs-xs);">
                                                     <div class="text-muted-soft">{{ $f->label ?? $key }}</div>
                                                     <div class="sm:col-span-3 text-body" style="word-break:break-all;">

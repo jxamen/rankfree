@@ -21,7 +21,7 @@ class MarketingOrder extends Model
     protected $fillable = [
         'order_no', 'product_id', 'user_id', 'quantity', 'days', 'field_values',
         'unit_price', 'total_price', 'status', 'orderer_name', 'orderer_contact',
-        'user_coupon_id', 'discount_amount', 'shop_rank_slot_id',
+        'user_coupon_id', 'discount_amount', 'shop_rank_slot_id', 'place_rank_slot_id',
     ];
 
     protected $casts = [
@@ -76,6 +76,36 @@ class MarketingOrder extends Model
     public function shopRankSlot(): BelongsTo
     {
         return $this->belongsTo(ShopRankSlot::class, 'shop_rank_slot_id');
+    }
+
+    /** 자동 등록된 플레이스 순위추적 슬롯(진행중 전환 시, 2026-07-24). */
+    public function placeRankSlot(): BelongsTo
+    {
+        return $this->belongsTo(PlaceRankSlot::class, 'place_rank_slot_id');
+    }
+
+    /**
+     * 플레이스 주문 재료 추출 — 주문 입력값에서 키워드와 플레이스 URL(표준 키 place_url, 없으면 휴리스틱).
+     *
+     * @return array{keyword: string, url: string}|null
+     */
+    public function placeSource(): ?array
+    {
+        $fv = (array) $this->field_values;
+        $keyword = (string) $this->keywordFromFields();
+
+        $url = trim((string) ($fv['place_url'] ?? ''));
+        if (! preg_match('#^https?://#i', $url)) {
+            $url = '';
+            foreach ($fv as $v) {
+                if (is_string($v) && preg_match('#https?://(m\.place|place|map)\.naver\.com/\S+#i', $v, $m)) {
+                    $url = trim($m[0]);
+                    break;
+                }
+            }
+        }
+
+        return ($keyword !== '' && $url !== '') ? ['keyword' => $keyword, 'url' => $url] : null;
     }
 
     /** 사용된 쿠폰 발급분(할인 적용 시). */

@@ -133,6 +133,16 @@ class ShopRankSlotService
         }
         $slot->save();
 
+        // 3일 연속 미노출(순위 0 = 1000위 밖) 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
+        // 삭제 아님 — 목록 [재개] 버튼으로 다시 켤 수 있다. 차단(-1) 기록은 판정에 안 쓴다.
+        if ($rank === 0 && $slot->is_active) {
+            $recent = ShopRankRecord::where('slot_id', $slot->id)->where('rank', '>=', 0)
+                ->orderByDesc('checked_date')->limit(3)->pluck('rank');
+            if ($recent->count() === 3 && $recent->every(fn ($v) => (int) $v === 0)) {
+                $slot->update(['is_active' => false]);
+            }
+        }
+
         return $res + ['stored_rank' => $rank];
     }
 }

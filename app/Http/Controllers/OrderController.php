@@ -49,7 +49,7 @@ class OrderController extends Controller
             'coupons' => $request->user()->usableCoupons()
                 ->filter(fn (UserCoupon $uc) => $uc->coupon->appliesTo($product->id))->values(),
             // 이 상품에 대한 내 주문 접수 내역(최근 20건 + 전체 건수) — 순위 표기용 슬롯 포함
-            'myOrders' => $product->orders()->where('user_id', $request->user()->id)->with('shopRankSlot')->latest()->limit(20)->get(),
+            'myOrders' => $product->orders()->where('user_id', $request->user()->id)->with('shopRankSlot', 'placeRankSlot')->latest()->limit(20)->get(),
             'myOrdersTotal' => $product->orders()->where('user_id', $request->user()->id)->count(),
         ]);
     }
