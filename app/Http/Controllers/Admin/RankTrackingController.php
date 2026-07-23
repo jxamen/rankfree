@@ -83,6 +83,22 @@ class RankTrackingController extends Controller
         ]);
     }
 
+    /** 플레이스 순위체크 중단/재개 — 자동 중단(3일 미노출)분 재개 포함, 삭제 아님. */
+    public function togglePlace(PlaceRankSlot $slot)
+    {
+        $slot->update(['is_active' => ! $slot->is_active]);
+
+        return back()->with('status', "'{$slot->keyword}' 순위체크를 ".($slot->is_active ? '재개했습니다.' : '중단했습니다(기록 유지).'));
+    }
+
+    /** 쇼핑 순위체크 중단/재개. */
+    public function toggleShop(ShopRankSlot $slot)
+    {
+        $slot->update(['is_active' => ! $slot->is_active]);
+
+        return back()->with('status', "'{$slot->keyword}' 순위체크를 ".($slot->is_active ? '재개했습니다.' : '중단했습니다(기록 유지).'));
+    }
+
     /** 목록 상단 통계 — 전체·활성·등록 회원 수·최근 7일 확인. */
     private function stats($query): array
     {

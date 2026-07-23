@@ -345,6 +345,9 @@ $__admin->group(function () {
     // 순위추적 관리 — 전 회원의 플레이스·쇼핑 순위추적 슬롯 열람
     Route::get('/place-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'place'])->name('place-tracking');
     Route::get('/shop-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'shop'])->name('shop-tracking');
+    // 순위체크 중단/재개(2026-07-24) — 관리자가 임의 회원 슬롯을 토글(3일 미노출 자동 중단분 재개 포함)
+    Route::post('/place-tracking/{slot}/toggle', [\App\Http\Controllers\Admin\RankTrackingController::class, 'togglePlace'])->name('place-tracking.toggle');
+    Route::post('/shop-tracking/{slot}/toggle', [\App\Http\Controllers\Admin\RankTrackingController::class, 'toggleShop'])->name('shop-tracking.toggle');
 
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');

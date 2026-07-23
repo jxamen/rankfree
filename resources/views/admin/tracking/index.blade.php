@@ -94,6 +94,10 @@
                     @unless ($slot->is_active)
                         <span class="trk-chip" style="color:var(--color-error);">체크 중단됨</span>
                     @endunless
+                    <form method="POST" action="{{ route('admin.'.($isPlace ? 'place' : 'shop').'-tracking.toggle', $slot) }}" style="display:inline;">
+                        @csrf
+                        <button type="submit" class="btn btn-ghost btn-sm" title="{{ $slot->is_active ? '순위체크 일시 중단(기록 유지)' : '순위체크 재개' }}">{{ $slot->is_active ? '중단' : '재개' }}</button>
+                    </form>
                     <div class="flex-1"></div>
                     @if ($slot->last_checked_at)
                         <span class="text-muted-soft" style="font-size:var(--fs-xs);">최종 수집 {{ $kst($slot->last_checked_at) }}</span>
@@ -187,7 +191,15 @@
                                 {{ $s->last_price ? $fmt($s->last_price).'원' : '—' }}
                             @endif
                         </td>
-                        <td><span class="trk-chip {{ $s->is_active ? 'ok' : '' }}">{{ $s->is_active ? '활성' : '중지' }}</span></td>
+                        {{-- 상태 + 중단/재개 토글(2026-07-24) --}}
+                        <td style="white-space:nowrap;">
+                            <span class="trk-chip {{ $s->is_active ? 'ok' : '' }}">{{ $s->is_active ? '활성' : '중지' }}</span>
+                            <form method="POST" action="{{ route('admin.'.($isPlace ? 'place' : 'shop').'-tracking.toggle', $s) }}" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-ghost btn-sm" style="height:24px;padding:0 8px;font-size:var(--fs-xs);"
+                                        title="{{ $s->is_active ? '순위체크 일시 중단(기록 유지)' : '순위체크 재개' }}">{{ $s->is_active ? '중단' : '재개' }}</button>
+                            </form>
+                        </td>
                         <td class="r">{{ $kst($s->last_checked_at) ?? '미확인' }}</td>
                         <td class="r">{{ $kst($s->created_at) }}</td>
                     </tr>
