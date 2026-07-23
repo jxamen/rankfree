@@ -38,14 +38,17 @@
                 @include('admin.partials.icon-picker', ['name' => 'icon', 'value' => '', 'uid' => 'addgrp'])
                 <button type="submit" class="btn btn-primary mt-3">대분류 추가</button>
             </form>
-            {{-- 미분류 항목 (SEO 포함) --}}
-            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="align-self:flex-start;max-width:520px;">
+            {{-- 그룹 없는 최상위 메뉴 (SEO 포함) — 내부 라우트 또는 외부 URL(새창 지원, 2026-07-23) --}}
+            <form method="POST" action="{{ route('admin.menus.store') }}" class="flex gap-2 items-end flex-wrap" style="align-self:flex-start;max-width:640px;">
                 @csrf
                 <input type="hidden" name="area" value="{{ $area }}"><input type="hidden" name="kind" value="item">
-                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">＋ {{ $area === 'site' ? '페이지' : '미분류 항목' }}</label><input name="name" class="input" placeholder="메뉴명" required></div>
-                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" placeholder="{{ $area === 'site' ? 'community' : 'console.rank' }}"></div>
-                <button type="submit" class="btn btn-secondary">저장</button>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">＋ {{ $area === 'site' ? '페이지' : '메뉴 (그룹 없이 최상위)' }}</label><input name="name" class="input" placeholder="메뉴명" required></div>
+                <div><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라우트명</label><input name="route" class="input" style="width:150px;" placeholder="{{ $area === 'site' ? 'community' : 'console.rank' }}"></div>
+                <div style="flex:1;min-width:220px;"><label class="block text-muted mb-1" style="font-size:var(--fs-xs);">또는 외부/내부 URL</label><input name="url" class="input" placeholder="https://chromewebstore.google.com/… 또는 /path"></div>
+                <span class="flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);height:40px;"><label class="rf-switch"><input type="checkbox" name="target" value="_blank"><span class="rf-track"></span></label> 새창</span>
+                <button type="submit" class="btn btn-primary">메뉴 추가</button>
                 @include('admin.partials.menu-seo-fields', ['menu' => null])
+                <div class="text-muted-soft" style="flex-basis:100%;font-size:var(--fs-xs);">라우트명 또는 URL 중 하나만 채우면 됩니다. 외부 링크(크롬 웹스토어 등)는 URL에 전체 주소를 넣고 '새창'을 켜세요. 만든 뒤 드래그로 그룹 안에 넣을 수도 있습니다.</div>
             </form>
         </div>
     </details>
