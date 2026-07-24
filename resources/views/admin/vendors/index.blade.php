@@ -43,6 +43,7 @@
                         <td class="px-5 py-3">
                             <div class="text-ink font-semibold" style="font-size:var(--fs-xs);">{{ $v->name }}</div>
                             @if ($v->memo)<div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $v->memo }}</div>@endif
+                            @if ($v->weekend_batch_dispatch)<div class="text-muted mt-0.5" style="font-size:var(--fs-xs);">주말 몰아 발주 · 토·일·월 → 금요일 자동</div>@endif
                         </td>
                         <td class="px-3 py-3 text-center text-body" style="font-size:var(--fs-xs);">{{ \App\Models\Vendor::CHANNELS[$v->channel] ?? $v->channel }}</td>
                         <td class="px-3 py-3 text-muted" style="font-size:var(--fs-xs);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
@@ -59,7 +60,7 @@
                             <div class="flex items-center justify-end gap-1" style="white-space:nowrap;">
                                 <button type="button" class="btn btn-secondary btn-sm vd-edit"
                                         data-action="{{ route('admin.vendors.update', $v) }}"
-                                        data-vendor="{{ json_encode(['name' => $v->name, 'channel' => $v->channel, 'api_url' => $v->api_url, 'api_method' => $v->api_method, 'api_headers' => $v->api_headers, 'api_format' => $v->api_format, 'gsheet_id' => $v->gsheet_id, 'memo' => $v->memo, 'is_active' => $v->is_active], JSON_UNESCAPED_UNICODE) }}">수정</button>
+                                        data-vendor="{{ json_encode(['name' => $v->name, 'channel' => $v->channel, 'api_url' => $v->api_url, 'api_method' => $v->api_method, 'api_headers' => $v->api_headers, 'api_format' => $v->api_format, 'gsheet_id' => $v->gsheet_id, 'memo' => $v->memo, 'is_active' => $v->is_active, 'weekend_batch_dispatch' => $v->weekend_batch_dispatch], JSON_UNESCAPED_UNICODE) }}">수정</button>
                                 <form method="POST" action="{{ route('admin.vendors.destroy', $v) }}" class="inline" data-confirm="이 업체를 삭제할까요?" data-confirm-text="상품의 배분 설정도 함께 삭제됩니다(전송 이력은 보존).">@csrf @method('DELETE')
                                     <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button>
                                 </form>
@@ -148,6 +149,16 @@
                 <input name="memo" id="vd-memo" class="input" maxlength="500" placeholder="담당자·정산 조건 등">
             </div>
 
+            {{-- 주말 몰아 발주(2026-07-24) — 켜면 주말 미접수 업체로 보고 토·일·월 회차를 직전 금요일에 자동 몰아 발주 --}}
+            <div class="mt-3 rounded-md" style="background:var(--color-surface);padding:12px 14px;">
+                <span class="inline-flex items-center gap-2" style="font-size:var(--fs-xs);">
+                    <input type="hidden" name="weekend_batch_dispatch" value="0">
+                    <label class="rf-switch"><input type="checkbox" name="weekend_batch_dispatch" value="1" id="vd-weekend"><span class="rf-track"></span></label>
+                    <span class="text-ink font-semibold">주말 몰아 발주 (금요일 자동)</span>
+                </span>
+                <p class="text-muted-soft mt-1.5" style="font-size:var(--fs-xs);">켜면 이 업체는 주말에 주문을 받지 않는 것으로 보고, <b class="text-muted">토·일·월 발주분을 직전 금요일에 한꺼번에 자동 전송</b>합니다(승인·발주 및 매일 아침 스케줄러 공통 · 세부주문 회차는 그대로 유지).</p>
+            </div>
+
             <div class="flex items-center justify-between mt-4">
                 <span class="inline-flex items-center gap-2" style="font-size:var(--fs-xs);">
                     <input type="hidden" name="is_active" value="0">
@@ -233,6 +244,7 @@
         document.getElementById('vd-api-method').value = 'POST';
         document.getElementById('vd-api-format').value = 'json';
         document.getElementById('vd-active').checked = true;
+        document.getElementById('vd-weekend').checked = false;   // 주말 몰아 발주 — 기본 꺼짐
         setHeaderRows('');
         syncChannel();
         modal.classList.remove('hidden');
@@ -253,6 +265,7 @@
         document.getElementById('vd-gsheet-id').value = d.gsheet_id || '';
         document.getElementById('vd-memo').value = d.memo || '';
         document.getElementById('vd-active').checked = !!d.is_active;
+        document.getElementById('vd-weekend').checked = !!d.weekend_batch_dispatch;   // 켜면 주말 몰아 발주
         syncChannel();
         modal.classList.remove('hidden');
     }

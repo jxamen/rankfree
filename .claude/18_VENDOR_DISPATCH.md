@@ -75,6 +75,12 @@
 - **발주**: 승인 시 진행일 도래 회차 즉시 전송 + 나머지는 `orders:dispatch-due`(매일 09:00 KST 스케줄)가 자동 발주(승인된 주문만). 회차별 [발주]/[취소], 발주 취소 시 연결 회차는 대기로 복귀.
 - **Short URL 가드(개정)**: **업체 매핑이 Short URL 항목을 실제로 쓸 때만** 검사(사용자 확정 — `mappingUsesShortUrl`). 세부주문 주문은 회차별 URL 미배정 시 차단, 스케줄러는 해당 회차 스킵+경고.
 
+## 주말 몰아 발주 (2026-07-24)
+
+- **업체 설정 `vendors.weekend_batch_dispatch`**(기본 꺼짐) — 켜면 그 업체는 **주말에 주문을 받지 않는 것으로 보고**, 세부주문의 **토·일·월 회차를 직전 금요일에 한꺼번에 발주**한다(사용자 확정: 회차 개별 유지 · 금요일 → 토·일·월). 업체 관리(/admin/vendors) 등록·수정 모달의 "주말 몰아 발주 (금요일 자동)" 토글. **끄면(꺼짐)이 정상 당일 발주** — 켜야 동작(사용자 확정).
+- **발주 도래일 = [MarketingOrderItem::dispatchDueDate()](../app/Models/MarketingOrderItem.php)** — 배정 업체가 `weekend_batch_dispatch`면 회차 요일이 토→금(−1)·일→금(−2)·월→금(−3), 그 외(화~금)는 당일. 일반 업체는 항상 work_date.
+- **적용 지점(사용자 확정: 승인·발주 + 자동 스케줄러 공통)** — 승인·발주(`dispatchDueItems`)와 `orders:dispatch-due` 모두 `dispatchDueDate() <= today` 로 도래 판정. 스케줄러는 몰아 발주가 최대 3일 선발주라 후보를 `work_date <= today+3` 으로 넓혀 온 뒤 도래일로 거른다. 회차별 [발주] 버튼은 종전대로 명시적 즉시 발주. 검증 [OrderWeekendBatchDispatchTest](../tests/Feature/OrderWeekendBatchDispatchTest.php)·[VendorWeekendSettingTest](../tests/Feature/VendorWeekendSettingTest.php).
+
 ## 주의
 
 - 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송. 세부주문 주문의 승인은 "도래 회차 전송+예약 활성화"로 동작.

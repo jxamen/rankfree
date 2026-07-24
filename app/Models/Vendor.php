@@ -15,10 +15,13 @@ class Vendor extends Model
 
     protected $fillable = [
         'name', 'channel', 'api_url', 'api_method', 'api_headers', 'api_format',
-        'gsheet_id', 'gsheet_tab', 'memo', 'is_active',
+        'gsheet_id', 'gsheet_tab', 'memo', 'is_active', 'weekend_batch_dispatch',
     ];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = [
+        'is_active' => 'boolean',
+        'weekend_batch_dispatch' => 'boolean',   // true=주말 미접수 업체 → 토·일·월 발주분을 직전 금요일에 몰아 자동 전송
+    ];
 
     public function productVendors(): HasMany
     {

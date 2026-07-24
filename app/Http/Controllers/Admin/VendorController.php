@@ -120,8 +120,10 @@ class VendorController extends Controller
             'gsheet_id' => ['nullable', 'string', 'max:120'],
             'memo' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
+            'weekend_batch_dispatch' => ['nullable', 'boolean'],
         ]);
         $data['is_active'] = $request->boolean('is_active', true);
+        $data['weekend_batch_dispatch'] = $request->boolean('weekend_batch_dispatch', false);
 
         // 헤더 JSON 유효성 — 비었으면 null, 깨진 JSON 이면 반려
         if (trim((string) ($data['api_headers'] ?? '')) === '') {

@@ -20,12 +20,16 @@ class OrdersDispatchDue extends Command
 
     public function handle(OrderDispatchService $dispatcher, OrderItemPlanner $planner): int
     {
-        $due = MarketingOrderItem::with('order.product')
+        // 주말 몰아 발주 업체는 토·일·월 회차를 최대 3일 미리(직전 금요일) 보내므로,
+        // 후보를 오늘+3일까지 넓혀 온 뒤 회차별 발주 도래일(dispatchDueDate)로 실제 대상만 거른다.
+        $due = MarketingOrderItem::with('order.product', 'vendor')
             ->where('status', 'pending')
-            ->whereDate('work_date', '<=', today())
+            ->whereDate('work_date', '<=', today()->copy()->addDays(3))
             ->whereHas('order', fn ($q) => $q->where('status', 'processing'))
             ->orderBy('order_id')->orderBy('day_no')
-            ->get();
+            ->get()
+            ->filter(fn ($item) => $item->dispatchDueDate()->lte(today()))
+            ->values();
 
         $sent = 0;
         $skipped = 0;

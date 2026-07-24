@@ -373,8 +373,12 @@ class MarketingOrderController extends Controller
     /** 세부주문 주문의 승인 발주 — 진행일 도래분 즉시 전송, 나머지는 예약(스케줄러가 매일 발주). */
     private function dispatchDueItems(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher): array
     {
-        $due = $order->items()->where('status', 'pending')->whereDate('work_date', '<=', today())->orderBy('day_no')->get();
-        $future = $order->items()->where('status', 'pending')->whereDate('work_date', '>', today())->count();
+        // 발주 도래 판정은 회차별 dispatchDueDate() — 주말 몰아 발주 업체의 토·일·월은 직전 금요일이 도래일이라,
+        // 금요일에 승인·발주하면 주말+월 회차가 함께 도래로 잡힌다. (스케줄러 orders:dispatch-due 와 동일 규칙)
+        $order->loadMissing('items.vendor');
+        $pending = $order->items->where('status', 'pending');
+        $due = $pending->filter(fn ($it) => $it->dispatchDueDate()->lte(today()))->sortBy('day_no')->values();
+        $future = $pending->count() - $due->count();
         if ($due->isEmpty() && $future === 0) {
             return ['ok' => false, 'message' => '발주할 대기 세부주문이 없습니다(모두 전송·취소됨). 재발주는 회차별 [발주]를 쓰세요.'];
         }
@@ -385,7 +389,7 @@ class MarketingOrderController extends Controller
             $r = $dispatcher->dispatchItem($item);
             $r['ok'] ? $sent++ : $failedMsgs[] = $r['message'];
         }
-        $msg = "세부주문 발주 — 오늘까지분 {$due->count()}건(성공 {$sent}".($failedMsgs ? ' · '.implode(' / ', $failedMsgs) : '').')';
+        $msg = "세부주문 발주 — 도래분 {$due->count()}건(성공 {$sent}".($failedMsgs ? ' · '.implode(' / ', $failedMsgs) : '').')';
         if ($future > 0) {
             $msg .= " · 예약 {$future}건은 진행일 아침(09:00)에 자동 발주됩니다";
         }
