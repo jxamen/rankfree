@@ -14,6 +14,37 @@ try {
   chrome.tabs.onRemoved.addListener((tabId) => { sellerCaptchaTabs.delete(tabId); });
 } catch (e) { /* noop */ }
 
+// ── 대량 쇼핑 수집 워치독 ─────────────────────────────────────────────────────
+// MV3 서비스워커는 유휴 시 크롬이 종료시켜 bulkShopStart 의 장기 루프가 통째로 죽는다(실측: 돌려두면
+// 수집하다가 꺼짐). 예전엔 재기동 시 running 플래그만 내리고 자동 재개가 없어 그대로 멈췄다.
+// → desired 세션인 동안 chrome.alarms 로 SW 를 주기적으로 깨워, 루프가 죽었으면(이 SW 에 살아있는
+//    루프가 없으면) 원본 파라미터로 재개한다. 알람은 SW 종료·브라우저 재시작을 넘어 살아남는다.
+const BULK_WATCHDOG_ALARM = 'rfBulkWatchdog';
+let bulkLoopActive = false;   // 이 SW 인스턴스에 살아있는 수집 루프가 있는지(동기 플래그 — 중복 시작 방지)
+
+// 워치독/재시작 훅이 호출 — 계속 수집을 원하는(desired) 세션인데 루프가 죽었으면 재개한다.
+async function resumeBulkIfNeeded(reason, ignoreHeartbeat) {
+  try {
+    const b = (await chrome.storage.local.get(['rfBulk'])).rfBulk;
+    if (!b || !b.desired || b.stop) {                       // 원하지 않거나 중단됨 — 알람 정리
+      try { await chrome.alarms.clear(BULK_WATCHDOG_ALARM); } catch (e) { /* noop */ }
+      return;
+    }
+    if (bulkLoopActive) return;                              // 이 SW 에 루프가 살아있다 — 재개 불필요
+    // heartbeat 가 신선하면 방금까지 살아있던 것 — 다음 알람에서 재판정(SW 재시작 훅은 무시하고 즉시 재개).
+    const stale = ignoreHeartbeat || !b.heartbeat || (Date.now() - b.heartbeat) > 45000;
+    if (b.running && !stale) return;
+    const p = b.params || {};
+    await handlers.bulkShopStart({ limit: p.limit, delayMs: p.delayMs, concurrency: p.concurrency, force: true });
+  } catch (e) { /* noop */ }
+}
+
+try {
+  chrome.alarms.onAlarm.addListener((a) => {
+    if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
+  });
+} catch (e) { /* noop */ }
+
 async function getStore() {
   const data = await chrome.storage.local.get(['rfToken', 'rfUser', 'rfApiBase', 'rfApiKey']);
   return {
@@ -129,7 +160,13 @@ const productInfoWaiters = new Map();
   try {
     const s = await chrome.storage.local.get(['rfBulk', 'rfSellerCaptcha']);
     if (s.rfBulk && s.rfBulk.running) {
-      await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { running: false, stop: false, current: '' }) });
+      // 사용자가 계속 수집을 원하는 세션(desired)이면 running 을 내리지 않는다 — 화면이 "수집 종료"로
+      // 깜빡이지 않게 하고, 곧바로 재개를 예약한다(SW 가 방금 떴으니 이전 루프는 확실히 죽어 있다).
+      if (s.rfBulk.desired && !s.rfBulk.stop) {
+        setTimeout(() => { resumeBulkIfNeeded('sw-restart', true); }, 0);
+      } else {
+        await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { running: false, stop: false, current: '' }) });
+      }
     }
     if (s.rfSellerCaptcha && s.rfSellerCaptcha.running) {
       await chrome.storage.local.set({
@@ -951,22 +988,21 @@ const handlers = {
    * 쇼핑 키워드가 수만 개라 사람이 하나씩 클릭할 수 없다. 진행 상황은 rfBulk 로 저장해 화면이 폴링한다.
    */
   async bulkShopStart({ limit, delayMs, concurrency, force }) {
-    const { token, apiBase } = await getStore();
-    if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
-
-    // running 플래그가 영구히 남지 않게 — 확장 리로드/서비스워커 종료로 루프가 죽어도 플래그만 남는다.
-    // 살아있는 루프는 heartbeat 를 갱신하므로, 60초 넘게 갱신이 없으면 죽은 것으로 보고 새로 시작한다.
-    const state = await chrome.storage.local.get(['rfBulk']);
-    const prev = state.rfBulk;
-    if (prev && prev.running) {
-      const alive = prev.heartbeat && (Date.now() - prev.heartbeat) < 60000;
-      if (alive && !force) {
-        return { ok: false, message: '이미 수집이 진행 중입니다. (중단하려면 중단 버튼)' };
-      }
-      // 죽은 세션 정리 후 진행
-      await chrome.storage.local.set({ rfBulk: Object.assign({}, prev, { running: false, stop: true }) });
-      await new Promise((r) => setTimeout(r, 50));
+    // ★ 이 SW 인스턴스에 살아있는 루프가 있으면 중복 시작하지 않는다(동기 선점 — 알람 워치독/재시작 훅이
+    //   같은 순간 재개를 시도해도 두 루프가 뜨지 않게 한다). bulkLoopActive 는 첫 await 전에 세운다.
+    if (bulkLoopActive) {
+      return { ok: !!force, alreadyRunning: true, message: force ? '' : '이미 수집이 진행 중입니다. (중단하려면 중단 버튼)' };
     }
+    bulkLoopActive = true;   // 선점 — 이후 어떤 조기 반환에서도, 루프 종료(finally)에서도 반드시 내린다.
+
+    const { token, apiBase } = await getStore();
+    if (!token) { bulkLoopActive = false; return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' }; }
+
+    // 워치독 재개(force)면 죽은 세션의 진행 수치를 이어받아 0 으로 리셋되지 않게 한다(서버 큐가 이어 수집).
+    const prev = (await chrome.storage.local.get(['rfBulk'])).rfBulk || null;
+    const resuming = !!(force && prev && prev.desired && !prev.stop);
+    const seedDone = resuming ? (Number(prev.done) || 0) : 0;
+    const seedFailed = resuming ? (Number(prev.failed) || 0) : 0;
 
     // limit=0(또는 미지정) = 무제한 — 카테고리를 순서대로 끝까지. 멈춰도 서버 대기열이 이어할 지점을 알려준다.
     const max = Number(limit) > 0 ? Math.min(100000, Number(limit)) : Infinity;
@@ -978,15 +1014,19 @@ const handlers = {
     //   낮게(warmStart) 시작해 성공이 이어지면 1씩 올리고(램프업), 차단되면 절반으로 줄인다.
     const warmStart = conc <= 2 ? conc : 2;
     await chrome.storage.local.set({ rfBulk: {
-      running: true, done: 0, failed: 0, total: (max === Infinity ? 0 : max), current: '', category: '',
+      running: true, done: seedDone, failed: seedFailed, total: (max === Infinity ? 0 : max), current: '', category: '',
       conc: warmStart, target: conc, gap: baseGap, blockedUntil: 0, startedAt: Date.now(), stop: false, lastError: '',
-      heartbeat: Date.now(),   // 살아있음 표시 — 끊기면 죽은 세션으로 보고 재시작 허용
+      heartbeat: Date.now(),   // 살아있음 표시 — 끊기면 죽은 세션으로 보고 워치독이 재개
+      desired: true,           // 사용자가 계속 수집을 원함 — 워치독이 재개 판단에 쓴다(중단·완주 시 false)
+      params: { limit: Number(limit) || 0, delayMs: baseGap, concurrency: conc },   // 워치독 재개용 원본 파라미터
     } });
+    // ★ 워치독 알람 — SW 가 죽어도 이 알람이 SW 를 깨워 루프를 재개한다(desired 인 동안 30~60초 주기).
+    try { chrome.alarms.create(BULK_WATCHDOG_ALARM, { periodInMinutes: 0.5, delayInMinutes: 0.5 }); } catch (e) { /* noop */ }
 
     // 백그라운드로 진행(응답은 즉시) — 화면은 bulkShopStatus 로 폴링
     (async () => {
       const MAX_GAP = 10000;    // 간격 상한 10초
-      let done = 0, failed = 0;
+      let done = seedDone, failed = seedFailed;   // 워치독 재개면 이전 진행 수치를 이어받는다
       let gap = baseGap;        // 차단이 뜨면 1초씩 늘리고, 성공이 이어지면 천천히 되돌린다
       let queue = [];           // 서버 대기열 버퍼
       let category = '';
@@ -1176,8 +1216,11 @@ const handlers = {
         await Promise.all(Array.from({ length: conc }, () => worker()));
       } finally {
         clearInterval(hb);
-        // 어떤 경로로 끝나든 running 을 반드시 내린다(플래그가 남아 재시작이 막히지 않게)
-        await patch({ running: false, current: '', stop: false, finishedAt: Date.now() });
+        bulkLoopActive = false;
+        // 정상 종료(소진·중단·완주)로 여기 왔다 — running·desired 를 내리고 워치독 알람을 해제한다.
+        // (SW 가 죽어 루프가 끊긴 경우엔 finally 가 안 돌아 desired 가 남고, 알람이 재개한다.)
+        await patch({ running: false, current: '', stop: false, desired: false, finishedAt: Date.now() });
+        try { await chrome.alarms.clear(BULK_WATCHDOG_ALARM); } catch (e) { /* noop */ }
       }
     })();
 
@@ -1193,7 +1236,9 @@ const handlers = {
   /** 대량 수집 중단 */
   async bulkShopStop() {
     const s = await chrome.storage.local.get(['rfBulk']);
-    if (s.rfBulk) await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { stop: true }) });
+    // desired 를 내려 워치독이 더는 재개하지 않게 하고, 알람도 정리한다(현재 키워드까지만 마치고 멈춤).
+    if (s.rfBulk) await chrome.storage.local.set({ rfBulk: Object.assign({}, s.rfBulk, { stop: true, desired: false }) });
+    try { await chrome.alarms.clear(BULK_WATCHDOG_ALARM); } catch (e) { /* noop */ }
     return { ok: true };
   },
 
