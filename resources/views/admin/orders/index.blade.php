@@ -50,9 +50,8 @@
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                     <th class="text-left px-5 py-3 font-semibold" style="width:56px;">No</th>
-                    <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문번호</th>
+                    <th class="text-left px-3 py-3 font-semibold" style="width:230px;">주문번호 · 주문자 · 기간</th>
                     <th class="text-left px-3 py-3 font-semibold">상품 · 키워드</th>
-                    <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문자</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:130px;">수량 · 금액</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:100px;">상태</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
@@ -64,8 +63,14 @@
                     <tr style="border-top:1px solid var(--color-hairline-soft);">
                         {{-- No — 최신 주문이 가장 큰 번호(desc, 페이지 걸쳐 연속) --}}
                         <td class="px-5 py-3 text-muted font-mono" style="font-size:var(--fs-xs);">{{ $orders->total() - $orders->firstItem() + 1 - $loop->index }}</td>
-                        <td class="px-3 py-3">
-                            <a href="{{ route('admin.orders.show', $o) }}" class="text-ink font-medium hover:underline" style="font-size:var(--fs-xs);">{{ $o->order_no }}</a>
+                        {{-- 주문번호 · 주문자 · 진행기간(시작일~종료일) — 한 열 3줄(2026-07-24) --}}
+                        <td class="px-3 py-3" style="font-size:var(--fs-xs);">
+                            <div><a href="{{ route('admin.orders.show', $o) }}" class="text-ink font-medium hover:underline">{{ $o->order_no }}</a></div>
+                            <div class="text-muted">{{ $o->orderer_name }}<span class="text-muted-soft"> · {{ $o->orderer_contact }}</span></div>
+                            @php $os = trim((string) ($o->field_values['start_date'] ?? '')); $oe = trim((string) ($o->field_values['end_date'] ?? '')); @endphp
+                            @if ($os || $oe)
+                                <div class="text-muted-soft" style="white-space:nowrap;">기간 <span class="font-mono">{{ $os ?: '—' }} ~ {{ $oe ?: '—' }}</span></div>
+                            @endif
                         </td>
                         @php
                             // 수집 정보(2026-07-23) — 연결 분석 + 확장 수집 상품정보에서 상점명·가격·상품ID·이미지
@@ -101,10 +106,6 @@
                                     </span>
                                 </div>
                             @endif
-                        </td>
-                        <td class="px-3 py-3" style="font-size:var(--fs-xs);">
-                            <div class="text-ink">{{ $o->orderer_name }}</div>
-                            <div class="text-muted-soft">{{ $o->orderer_contact }}</div>
                         </td>
                         {{-- 수량·기간 + 금액 — 한 열 2줄(2026-07-22) --}}
                         <td class="px-3 py-3 text-right" style="font-size:var(--fs-xs);">
@@ -147,7 +148,7 @@
                         <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
+                    <tr><td colspan="7" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
                 @endforelse
             </tbody>
         </table>
