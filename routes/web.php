@@ -351,6 +351,9 @@ $__admin->group(function () {
     // 개별 순위체크(2026-07-24) — 카드 '순위체크' 버튼이 JSON 으로 호출. 전체는 화면 슬롯을 클라이언트에서 순차 호출(콘솔과 동일)
     Route::post('/place-tracking/{slot}/run', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runPlace'])->middleware('throttle:120,1')->name('place-tracking.run');
     Route::post('/shop-tracking/{slot}/run', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runShop'])->middleware('throttle:120,1')->name('shop-tracking.run');
+    // 쇼핑 제목 수집(2026-07-24) — 미노출(순위 밖) 상품은 순위체크로 제목이 안 붙으므로, 확장이 상품페이지에서
+    // 긁어온 제목·가격·이미지를 저장한다(스마트스토어/브랜드). shop-keyword '상품정보 다시 수집' 미러.
+    Route::post('/shop-tracking/{slot}/product-info', [\App\Http\Controllers\Admin\RankTrackingController::class, 'productInfoShop'])->middleware('throttle:60,1')->name('shop-tracking.product-info');
 
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');

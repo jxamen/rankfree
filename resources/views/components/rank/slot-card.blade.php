@@ -57,6 +57,10 @@
         $editTargetVal = $slot->product_url ?: ($slot->mall_name ?: $slot->product_id);
         $stopHint = '3일 연속 미노출(1000위 밖) 시 자동 중단됩니다 — [재개]로 다시 켤 수 있어요';
     }
+
+    // 제목 수집(어드민 쇼핑, 스마트스토어/브랜드 상품만) — 미노출(순위 밖) 상품은 순위체크로 제목이
+    // 안 붙으므로, 확장이 상품페이지를 열어 제목을 긁어온다. 서버는 네이버 상품페이지를 직접 못 가져옴(429).
+    $canCollectTitle = $isAdmin && ! $isPlace && preg_match('#^https?://(smartstore|brand)\.naver\.com/#i', (string) $targetUrl);
 @endphp
 <div id="rf-slot-report-{{ $slot->id }}" class="mb-4">
     {{-- 캡처 전용 상단 브랜딩 --}}
@@ -95,6 +99,12 @@
                     <button type="submit" class="btn btn-ghost btn-sm" title="{{ $slot->is_active ? '자동 순위체크 일시 중단(기록 유지)' : '자동 순위체크 재개' }}">{{ $slot->is_active ? '중단' : '재개' }}</button>
                 </form>
                 <form method="POST" action="{{ route($runRoute, $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
+                @if ($canCollectTitle)
+                    {{-- 제목 수집 — 확장이 상품페이지에서 긁어옴(미노출 상품용). JS는 admin.tracking.index(쇼핑) --}}
+                    <button type="button" class="btn btn-ghost btn-sm rf-title-collect"
+                            data-url="{{ $targetUrl }}" data-endpoint="{{ route('admin.shop-tracking.product-info', $slot) }}"
+                            title="확장으로 상품페이지에서 제목·가격을 수집합니다(순위 밖 상품용)">제목 수집</button>
+                @endif
                 @if ($isPlace)
                     <button type="button" class="btn btn-ghost btn-sm rf-metrics-toggle" title="리뷰·저장 접기/펼치기">접기</button>
                 @endif

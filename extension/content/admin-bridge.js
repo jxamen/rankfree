@@ -18,6 +18,8 @@
   // 페이지 요청 타입 → 확장 핸들러
   const ROUTES = {
     collectShop: (m) => ['collectShopSerp', { keyword: String(m.keyword || ''), count: Number(m.count) || 80 }],
+    // 상품페이지(스마트스토어/브랜드)를 백그라운드 탭으로 열어 제목·가격·이미지를 수집 — 순위추적 관리의 '제목 수집'
+    collectProductPage: (m) => ['collectProductPage', { url: String(m.url || '') }],
     collectSellerCaptchas: (m) => ['sellerCaptchaStart', {
       products: Array.isArray(m.products) ? m.products : [],
       active: !!m.active,

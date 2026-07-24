@@ -149,6 +149,56 @@ class RankTrackingController extends Controller
         return back()->with('status', "「{$slot->keyword}」 {$msg}");
     }
 
+    /**
+     * 쇼핑 제목 수집 — 확장이 상품페이지(스마트스토어/브랜드)에서 긁어온 상품정보를 슬롯에 저장한다.
+     * 미노출(순위 밖) 상품은 순위체크로 제목이 안 붙으므로 이 경로로 채운다. shop-keyword refreshProductInfo 미러.
+     */
+    public function productInfoShop(Request $request, ShopRankSlot $slot)
+    {
+        $data = $request->validate([
+            'info' => 'nullable|array',
+            'info.channel_product_id' => 'nullable|string|max:40',
+            'info.title' => 'nullable|string|max:300',
+            'info.brand' => 'nullable|string|max:120',
+            'info.mall_name' => 'nullable|string|max:150',
+            'info.price' => 'nullable|integer|min:0|max:2000000000',
+            'info.category' => 'nullable|string|max:191',
+            'info.thumbnail_url' => 'nullable|string|max:500',
+            'info.seller_tags' => 'nullable|array|max:60',
+            'info.seller_tags.*' => 'nullable|string|max:80',
+        ]);
+
+        $info = (array) ($data['info'] ?? []);
+        $title = trim((string) ($info['title'] ?? ''));
+        if ($title === '') {
+            return response()->json(['ok' => false, 'message' => '상품 제목을 가져오지 못했습니다 — 스마트스토어/브랜드 상품만 수집됩니다.']);
+        }
+
+        // 명시적 수집이라 기존 값도 덮어쓴다(제목 재수집 겸용). 부가로 몰·가격·카테고리도 있으면 채움.
+        $slot->product_title = mb_substr($title, 0, 300);
+        if (($m = trim((string) ($info['mall_name'] ?? ''))) !== '') {
+            $slot->mall_name = mb_substr($m, 0, 150);
+        }
+        if ((int) ($info['price'] ?? 0) > 0) {
+            $slot->last_price = (int) $info['price'];
+        }
+        if (($c = trim((string) ($info['category'] ?? ''))) !== '') {
+            $slot->category = mb_substr($c, 0, 191);
+        }
+        if (! $slot->product_id && ($pid = trim((string) ($info['channel_product_id'] ?? ''))) !== '') {
+            $slot->product_id = $pid;
+        }
+        $slot->save();
+
+        return response()->json([
+            'ok' => true,
+            'title' => $slot->product_title,
+            'mall' => $slot->mall_name,
+            'price' => $slot->last_price,
+            'message' => "제목을 수집했습니다: {$slot->product_title}",
+        ]);
+    }
+
     /** 목록 상단 통계 — 전체·활성·등록 회원 수·최근 7일 확인. */
     private function stats($query): array
     {

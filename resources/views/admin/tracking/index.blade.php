@@ -91,4 +91,78 @@
 
 @include('console.partials._image-save')
 @include('rank.partials._card-scripts')
+
+@unless ($isPlace)
+{{-- 제목 수집(쇼핑) — 미노출 상품은 순위체크로 제목이 안 붙으므로, 확장(admin-bridge)이 상품페이지에서 긁어와 저장.
+     서버는 네이버 상품페이지를 직접 못 가져옴(429). 스마트스토어/브랜드 상품만. --}}
+<script>
+(function () {
+    var csrf = '{{ csrf_token() }}';
+    // 확장 브릿지 연결 대기(admin-bridge 가 data-rf-ext 를 심는다 — document_idle 레이스 방지)
+    function waitExt(ms) {
+        return new Promise(function (res) {
+            var t0 = Date.now();
+            (function chk() {
+                if (document.documentElement.getAttribute('data-rf-ext') === '1') return res(true);
+                if (Date.now() - t0 > ms) return res(false);
+                setTimeout(chk, 150);
+            })();
+        });
+    }
+    // 확장 호출 왕복(rankfree-admin) — 타임아웃 시 null
+    function extCall(type, payload, timeoutMs) {
+        return new Promise(function (resolve) {
+            var timer = setTimeout(function () { window.removeEventListener('message', on); resolve(null); }, timeoutMs || 45000);
+            function on(e) {
+                if (e.source !== window) return;
+                var m = e.data;
+                if (!m || m.source !== 'rankfree-ext' || m.type !== type + 'Result') return;
+                clearTimeout(timer); window.removeEventListener('message', on); resolve(m);
+            }
+            window.addEventListener('message', on);
+            window.postMessage(Object.assign({ source: 'rankfree-admin', type: type }, payload || {}), '*');
+        });
+    }
+    document.querySelectorAll('.rf-title-collect').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            var url = btn.dataset.url, endpoint = btn.dataset.endpoint;
+            if (!url) { alert('상품 URL이 없어 수집할 수 없습니다.'); return; }
+            var orig = btn.textContent;
+            btn.disabled = true; btn.textContent = '수집 중…';
+            var ok = await waitExt(1500);
+            if (!ok) {
+                btn.disabled = false; btn.textContent = orig;
+                alert('랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인 후 페이지를 새로고침하세요.');
+                return;
+            }
+            var pi = await extCall('collectProductPage', { url: url }, 45000);
+            if (pi && pi.ok && pi.info && pi.info.title) {
+                try {
+                    var r = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ info: pi.info }),
+                    });
+                    var d = await r.json();
+                    if (d.ok) {
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: d.message || '제목 수집 완료', showConfirmButton: false, timer: 1600 })
+                            .then(function () { location.reload(); });
+                        return;
+                    }
+                    btn.disabled = false; btn.textContent = orig;
+                    alert((d && d.message) || '저장에 실패했습니다.');
+                } catch (e) {
+                    btn.disabled = false; btn.textContent = orig;
+                    alert('저장 중 오류가 발생했습니다.');
+                }
+            } else {
+                btn.disabled = false; btn.textContent = orig;
+                // 확장이 원인을 알려주면 그대로(네이버 로그인 게이트 등 — 열린 탭에서 확인 후 재시도)
+                alert((pi && pi.message) || '수집에 실패했습니다 — 상품페이지가 열리지 않았을 수 있어요. 잠시 후 다시 시도하세요.');
+            }
+        });
+    });
+})();
+</script>
+@endunless
 @endsection
