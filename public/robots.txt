@@ -24,7 +24,7 @@ User-agent: ClaudeBot
 User-agent: anthropic-ai
 User-agent: Claude-Web
 User-agent: PerplexityBot
-User-agent: PerplexityBot-User
+User-agent: Perplexity-User
 User-agent: Google-Extended
 User-agent: Applebot-Extended
 User-agent: CCBot

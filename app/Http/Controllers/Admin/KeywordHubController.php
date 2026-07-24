@@ -194,7 +194,7 @@ class KeywordHubController extends Controller
                 return response()->json(['data' => $this->autoPayload() + [
                     // 쇼핑: 화면 JS 가 이 hint 를 받으면 확장 수집을 자동 시작한다(확장 미연결 시에만 이 문구가 그대로 보인다)
                     'hint' => $type === 'shopping'
-                        ? '발행할 시장분석 데이터가 없습니다 — 확장이 연결돼 있으면 수집이 자동 시작됩니다. 안 되면 chrome://extensions 에서 확장 새로고침(v0.3.7)·로그인 후 이 페이지를 새로고침하세요.'
+                        ? '발행할 시장분석 데이터가 없습니다 — 확장이 연결돼 있으면 수집이 자동 시작됩니다. 안 되면 chrome://extensions 에서 확장 새로고침(v0.3.18)·로그인 후 이 페이지를 새로고침하세요.'
                         : '발행 가능한 후보가 없습니다 — 후보 수집(승인 포함)을 먼저 진행하세요.',
                 ]])->header('Cache-Control', 'no-store, max-age=0');
             }
