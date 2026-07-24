@@ -54,7 +54,7 @@
                     <th class="text-left px-3 py-3 font-semibold">상품 · 키워드</th>
                     <th class="text-left px-3 py-3 font-semibold" style="width:150px;">주문자</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:130px;">수량 · 금액</th>
-                    <th class="text-center px-3 py-3 font-semibold" style="width:80px;">상태</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:100px;">상태</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
                     <th class="text-right px-5 py-3 font-semibold" style="width:130px;">주문일시</th>
                 </tr>
@@ -111,8 +111,16 @@
                             <div class="text-muted">{{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif</div>
                             <div class="text-ink font-medium">{{ number_format($o->total_price) }}원</div>
                         </td>
+                        {{-- 상태 — 목록에서 즉시 변경(선택 시 바로 반영, 상세와 동일 패턴, 2026-07-24) --}}
                         <td class="px-3 py-3 text-center">
-                            <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $statusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $statuses[$o->status] ?? $o->status }}</span>
+                            <form method="POST" action="{{ route('admin.orders.status', $o) }}" style="display:inline;">
+                                @csrf @method('PUT')
+                                <select name="status" class="input" style="font-size:var(--fs-xs);height:28px;padding:2px 22px 2px 8px;width:auto;font-weight:600;color:{{ $statusColor[$o->status] ?? 'var(--color-muted)' }};" onchange="this.form.submit()" title="상태 변경">
+                                    @foreach ($statuses as $code => $label)
+                                        <option value="{{ $code }}" {{ $o->status === $code ? 'selected' : '' }} style="color:var(--color-ink);">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </form>
                         </td>
                         {{-- 쇼핑 유입키워드 — 수집요청 → 분석 링크 → 접수 상태면 '주문넣기'(매핑 업체 발주, 2026-07-23) --}}
                         <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);white-space:nowrap;">
