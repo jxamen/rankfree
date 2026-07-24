@@ -348,6 +348,11 @@ $__admin->group(function () {
     // 순위체크 중단/재개(2026-07-24) — 관리자가 임의 회원 슬롯을 토글(3일 미노출 자동 중단분 재개 포함)
     Route::post('/place-tracking/{slot}/toggle', [\App\Http\Controllers\Admin\RankTrackingController::class, 'togglePlace'])->name('place-tracking.toggle');
     Route::post('/shop-tracking/{slot}/toggle', [\App\Http\Controllers\Admin\RankTrackingController::class, 'toggleShop'])->name('shop-tracking.toggle');
+    // 순위체크 즉시 실행(2026-07-24) — 개별 슬롯 동기 조회 + 전체(활성 슬롯) 백그라운드 배치(--user 필터 시 해당 회원만)
+    Route::post('/place-tracking/run-all', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runAllPlace'])->middleware('throttle:20,1')->name('place-tracking.run-all');
+    Route::post('/place-tracking/{slot}/run', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runPlace'])->middleware('throttle:60,1')->name('place-tracking.run');
+    Route::post('/shop-tracking/run-all', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runAllShop'])->middleware('throttle:20,1')->name('shop-tracking.run-all');
+    Route::post('/shop-tracking/{slot}/run', [\App\Http\Controllers\Admin\RankTrackingController::class, 'runShop'])->middleware('throttle:60,1')->name('shop-tracking.run');
 
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');

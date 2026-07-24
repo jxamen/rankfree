@@ -33,6 +33,13 @@
 
 @section('admin-content')
 <x-console.page-head :title="$title" :desc="$desc">
+    {{-- 전체 순위체크(2026-07-24) — 활성 슬롯 배치를 백그라운드로 시작. 회원 필터 중이면 그 회원 슬롯만. 비파괴적이라 primary 확인 --}}
+    <form method="POST" action="{{ route($routeName.'.run-all') }}" class="js-runall inline-flex"
+          data-runall-title="{{ ($filterUser ?? null) ? '이 회원의 활성 슬롯 순위를 지금 체크할까요?' : '활성 슬롯 전체 순위를 지금 체크할까요?' }}">
+        @csrf
+        @if (($userId ?? 0) > 0)<input type="hidden" name="user" value="{{ $userId }}">@endif
+        <button type="submit" class="btn btn-primary btn-sm" @disabled($running ?? false)>{{ ($running ?? false) ? '체크 진행 중…' : '전체 순위체크' }}</button>
+    </form>
     {{-- 전환 시 회원 필터 유지 — 같은 회원의 플레이스·쇼핑 추적을 오가며 볼 수 있게(2026-07-24) --}}
     <a href="{{ route('admin.'.($isPlace ? 'shop-tracking' : 'place-tracking'), array_filter(['user' => $userId ?: null])) }}" class="btn btn-secondary btn-sm">{{ $isPlace ? '쇼핑 추적 보기' : '플레이스 추적 보기' }}</a>
 </x-console.page-head>
@@ -94,6 +101,11 @@
                     @unless ($slot->is_active)
                         <span class="trk-chip" style="color:var(--color-error);">체크 중단됨</span>
                     @endunless
+                    {{-- 개별 순위체크 — 이 슬롯 하나를 지금 동기 조회(2026-07-24) --}}
+                    <form method="POST" action="{{ route($routeName.'.run', $slot) }}" class="js-rankcheck" style="display:inline;">
+                        @csrf
+                        <button type="submit" class="btn btn-secondary btn-sm" title="이 키워드 순위를 지금 조회">지금 체크</button>
+                    </form>
                     <form method="POST" action="{{ route('admin.'.($isPlace ? 'place' : 'shop').'-tracking.toggle', $slot) }}" style="display:inline;">
                         @csrf
                         <button type="submit" class="btn btn-ghost btn-sm" title="{{ $slot->is_active ? '순위체크 일시 중단(기록 유지)' : '순위체크 재개' }}">{{ $slot->is_active ? '중단' : '재개' }}</button>
@@ -191,9 +203,14 @@
                                 {{ $s->last_price ? $fmt($s->last_price).'원' : '—' }}
                             @endif
                         </td>
-                        {{-- 상태 + 중단/재개 토글(2026-07-24) --}}
+                        {{-- 상태 + 개별 체크 + 중단/재개 토글(2026-07-24) --}}
                         <td style="white-space:nowrap;">
                             <span class="trk-chip {{ $s->is_active ? 'ok' : '' }}">{{ $s->is_active ? '활성' : '중지' }}</span>
+                            <form method="POST" action="{{ route($routeName.'.run', $s) }}" class="js-rankcheck" style="display:inline;">
+                                @csrf
+                                <button type="submit" class="btn btn-secondary btn-sm" style="height:24px;padding:0 8px;font-size:var(--fs-xs);"
+                                        title="이 키워드 순위를 지금 조회">체크</button>
+                            </form>
                             <form method="POST" action="{{ route('admin.'.($isPlace ? 'place' : 'shop').'-tracking.toggle', $s) }}" style="display:inline;">
                                 @csrf
                                 <button type="submit" class="btn btn-ghost btn-sm" style="height:24px;padding:0 8px;font-size:var(--fs-xs);"
@@ -214,3 +231,44 @@
 <div class="mt-4">{{ $slots->links() }}</div>
 @endif
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    var css = function (n, f) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f; };
+
+    // 전체 순위체크 — 비파괴적 배치. 오조작 방지 확인(primary 색) 후 백그라운드 시작.
+    document.querySelectorAll('form.js-runall').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            if (f.dataset.ok === '1') return;               // 확인 후 재제출은 통과
+            e.preventDefault();
+            Swal.fire({
+                title: f.getAttribute('data-runall-title') || '전체 순위체크를 시작할까요?',
+                text: '활성 슬롯의 순위를 순차 조회합니다 (완료까지 몇 분 소요).',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '시작',
+                cancelButtonText: '취소',
+                confirmButtonColor: css('--color-primary', '#0052ff'),
+                cancelButtonColor: css('--color-muted', '#8a919e'),
+                reverseButtons: true,
+            }).then(function (r) {
+                if (!r.isConfirmed) return;
+                f.dataset.ok = '1';
+                var b = f.querySelector('button[type=submit]');
+                if (b) { b.disabled = true; b.textContent = '시작 중…'; }
+                f.submit();
+            });
+        });
+    });
+
+    // 개별 순위체크 — 동기 조회는 몇 초 걸린다. 제출 시 버튼 비활성 + 라벨로 진행 표시(중복 제출 방지).
+    document.addEventListener('submit', function (e) {
+        var f = e.target.closest && e.target.closest('form.js-rankcheck');
+        if (!f) return;
+        var b = f.querySelector('button[type=submit]');
+        if (b) { b.disabled = true; b.textContent = '확인 중…'; }
+    });
+})();
+</script>
+@endpush
