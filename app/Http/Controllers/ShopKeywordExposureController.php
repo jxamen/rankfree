@@ -191,9 +191,11 @@ class ShopKeywordExposureController extends Controller
             $r['combo_added'] = $regen['added'];
         }
 
-        // 연결된 주문이 있으면 수집값으로 내부(숨김) 필드 자동 채움 — 외부 발주 전달용(2026-07-22)
+        // 상품정보를 다시 수집하면 최신 수집값으로 연결 주문의 내부(숨김) 필드를 갱신한다(force, 2026-07-24).
+        // 자동채움 필드(autofill_source)는 수집값이 진실 — 과거에 잘못 매핑돼 채워진 값(예: 상점명 자리에 상품명)도
+        // '상품정보 다시 수집' 한 번으로 교정된다. autofill_source 없는 수동 전용 필드는 fillFromAnalysis 가 건드리지 않는다.
         if ($analysis->marketing_order_id) {
-            app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
+            app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh(), force: true);
         }
 
         return response()->json(['data' => $r]);

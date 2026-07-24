@@ -199,6 +199,32 @@ class OrderHiddenFieldAutofillTest extends TestCase
         $this->assertSame('https://img.example/t.jpg', $order->field_values['thumb']);
     }
 
+    public function test_product_info_recollect_overwrites_stale_autofill_but_keeps_manual_fields(): void
+    {
+        $admin = $this->makeAdmin();
+        $product = $this->makeProduct($admin);
+        // 과거에 잘못 매핑돼 상점명 필드에 '상품명'이 채워진 상태 + 수동 전용 필드(메모)에 관리자 입력
+        $order = $this->makeOrder($admin, $product, [
+            'mall_name' => '원목 장롱', 'thumb' => 'https://img.example/old.jpg', 'memo' => '관리자 메모',
+        ]);
+        $analysis = $this->makeAnalysis($admin, $order);
+
+        // '상품정보 다시 수집' — 최신 수집값(상점명=두둘리앙)이 도착
+        $this->actingAs($admin)->post(route('admin.shop-keyword.product-info', $analysis), [
+            'info' => [
+                'channel_product_id' => '123', 'title' => '원목 장롱', 'mall_name' => '두둘리앙',
+                'price' => 129000, 'seller_tags' => ['원목장롱'], 'thumbnail_url' => 'https://img.example/new.jpg',
+            ],
+        ])->assertOk();
+
+        $order->refresh();
+        // 자동채움 필드는 최신 수집값으로 교정된다(상품명 → 상점명)
+        $this->assertSame('두둘리앙', $order->field_values['mall_name']);
+        $this->assertSame('https://img.example/new.jpg', $order->field_values['thumb']);
+        // autofill_source 없는 수동 전용 필드는 보존
+        $this->assertSame('관리자 메모', $order->field_values['memo']);
+    }
+
     public function test_approve_blocked_until_required_hidden_fields_filled(): void
     {
         $admin = $this->makeAdmin();

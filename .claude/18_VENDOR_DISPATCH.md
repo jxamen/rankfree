@@ -55,7 +55,7 @@
     **발주 전송 우선순위**: 배분 sheet_tab → 업체 gsheet_tab → 첫 탭. 검증 [ProductSheetTabTest](../tests/Feature/ProductSheetTabTest.php) 3건.
   - **업체 관리 탭 입력 제거(2026-07-23)** — 탭 지정은 **상품별(배분 sheet_tab)로 일원화**. 업체 관리 폼의 '시트(탭) 이름' 입력, 목록의 탭 표기, 구 탭 저장 엔드포인트(`PUT admin/vendors/{vendor}/gsheet-tab`)를 제거.
     `vendors.gsheet_tab` 컬럼과 전송·열 조회의 폴백(배분 → 업체 gsheet_tab → 첫 탭)은 **레거시 호환용으로 유지** — 기존 운영 데이터(배분 탭 미설정 + 업체 탭 설정)가 첫 탭으로 잘못 가는 사고 방지. 신규 업체는 UI 로 탭을 넣을 수 없으므로 자연히 상품별 지정만 쓰게 된다.
-  - **내부(숨김) 필드 — 자동 채움 + 고정값(2026-07-22)** — `product_fields.is_hidden`(고객 주문 폼 미노출)·`autofill_source`(유입키워드 수집값 매핑: 핵심키워드/상품URL/상품ID/상품명/상점명/가격/정답태그/썸네일)·`default_value`(**고정값** — 주문 생성 시 OrderPlacer 가 field_values 에 시드, 항상 같은 값을 발주에 전달할 때. 빌더 [옵션]에서 입력). 값 채움 순서: 고정값(생성 시) → 수집 반영(OrderFieldAutofill, 빈 필드만) → 주문 상세 수동 입력/다시 채우기(강제). 발주는 기존 `field:<key>` 매핑으로 전달, **필수 내부 필드가 비면 승인 차단**.
+  - **내부(숨김) 필드 — 자동 채움 + 고정값(2026-07-22)** — `product_fields.is_hidden`(고객 주문 폼 미노출)·`autofill_source`(유입키워드 수집값 매핑: 핵심키워드/상품URL/상품ID/상품명/상점명/가격/정답태그/썸네일)·`default_value`(**고정값** — 주문 생성 시 OrderPlacer 가 field_values 에 시드, 항상 같은 값을 발주에 전달할 때. 빌더 [옵션]에서 입력). 값 채움 순서: 고정값(생성 시) → 수집 반영(OrderFieldAutofill, 빈 필드만) → 주문 상세 수동 입력/다시 채우기(강제). **'상품정보 다시 수집'(refreshProductInfo)은 강제 갱신(2026-07-24)** — autofill 필드를 최신 수집값으로 덮어, 과거 잘못 매핑돼 채워진 값(예: 상점명 자리에 상품명)을 교정한다(autofill_source 없는 수동 전용 필드는 미변경). 발주는 기존 `field:<key>` 매핑으로 전달, **필수 내부 필드가 비면 승인 차단**.
 - **주문 상세** — 우측 [승인 · 발주] 카드(배분 미리보기 → SweetAlert 확인 → 발주), 좌측 [외부 발주 현황] 테이블(상태·응답·재전송).
 
 ## 발주 취소 · 재발주 (2026-07-23)
