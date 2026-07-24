@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Domain\Shopping\ShopRankSlotService;
 use App\Models\ShopRankSlot;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
 
 /** 활성 쇼핑 순위 추적 슬롯의 현재 순위를 조회·기록 (스케줄러 — 매시간). */
 class ShopTrackRun extends Command
@@ -14,20 +13,7 @@ class ShopTrackRun extends Command
 
     protected $description = '활성 쇼핑 순위 추적 슬롯의 순위 조회·기록';
 
-    /** 실행 상태 캐시 키 — 어드민 '전체 순위체크' 버튼이 조회·선점, 완료 시 여기서 해제. */
-    public const RUNNING_CACHE = 'shop:track-run:running';
-
     public function handle(ShopRankSlotService $service): int
-    {
-        Cache::put(self::RUNNING_CACHE, now()->toDateTimeString(), now()->addMinutes(30));
-        try {
-            return $this->runTrack($service);
-        } finally {
-            Cache::forget(self::RUNNING_CACHE);
-        }
-    }
-
-    private function runTrack(ShopRankSlotService $service): int
     {
         $q = ShopRankSlot::where('is_active', true);
         if ($this->option('slot')) {

@@ -42,61 +42,7 @@
 
 {{-- 슬롯 목록 — 키워드(슬롯)별로 각각 이미지 저장 --}}
 @forelse ($slots as $slot)
-    <div id="rf-slot-report-{{ $slot->id }}" class="mb-4">
-        {{-- 캡처 전용 상단 브랜딩 --}}
-        <div class="rf-cap-only" style="align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
-            <span class="badge border border-hairline">쇼핑 순위추적 · 랭크프리</span>
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);">rankfree.kr</span>
-        </div>
-    <div class="card overflow-hidden rf-slot" data-slot="{{ $slot->id }}">
-        <div class="flex items-center gap-3 px-5 py-3 border-b border-hairline-soft flex-wrap" style="background:var(--color-surface-soft);">
-            <a href="https://search.shopping.naver.com/search/all?query={{ urlencode($slot->keyword) }}" target="_blank"
-               class="text-ink font-semibold hover:underline" style="font-size:var(--fs-sm);" title="네이버 쇼핑에서 이 키워드 검색">{{ $slot->keyword }}</a>
-            {{-- 모바일 전용 순위체크 — 키워드 우측. 실제 실행은 아래 rf-run-form 제출(전체 순위체크 중복 방지) --}}
-            <button type="button" class="btn btn-secondary btn-sm sm:hidden rf-cap-hide"
-                    onclick="this.closest('.rf-slot').querySelector('.rf-run-form').requestSubmit()">순위체크</button>
-            @php $__title = $slot->product_title ?: ($slot->mall_name ?: ($slot->product_id ? 'ID '.$slot->product_id : '')); @endphp
-            @if ($slot->product_url)
-                <a href="{{ $slot->product_url }}" target="_blank" class="text-muted hover:text-ink truncate" style="font-size:var(--fs-xs);max-width:420px;" title="상품 페이지 열기">{{ $__title }}</a>
-            @else
-                <span class="text-muted truncate" style="font-size:var(--fs-xs);max-width:420px;">{{ $__title }}</span>
-            @endif
-            @if ($slot->last_checked_at)
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);" title="마지막 순위 수집 시각">최종 수집 {{ $slot->last_checked_at->timezone('Asia/Seoul')->format('m-d H:i') }}</span>
-            @endif
-            <div class="flex-1"></div>
-            {{-- 액션 — 모바일에서 잘리지 않게 줄바꿈 허용, 순위체크는 데스크톱만(모바일은 위 상품명 옆) --}}
-            <div class="flex items-center gap-1 flex-wrap rf-cap-hide">
-                @unless ($slot->is_active)
-                    <span class="badge" style="font-size:var(--fs-xs);color:var(--color-error);" title="3일 연속 미노출(1000위 밖) 시 자동 중단됩니다 — [재개]로 다시 켤 수 있어요">체크 중단됨</span>
-                @endunless
-                <form method="POST" action="{{ route('console.shop-rank.toggle', $slot) }}">@csrf
-                    <button type="submit" class="btn btn-ghost btn-sm" title="{{ $slot->is_active ? '자동 순위체크 일시 중단(기록 유지)' : '자동 순위체크 재개' }}">{{ $slot->is_active ? '중단' : '재개' }}</button>
-                </form>
-                <form method="POST" action="{{ route('console.shop-rank.run', $slot) }}" class="rf-run-form hidden sm:block" data-keyword="{{ $slot->keyword }}">@csrf<button type="submit" class="btn btn-secondary btn-sm">순위체크</button></form>
-                @if ($slot->slug)
-                    <button type="button" class="btn btn-ghost btn-sm" title="공유 링크 복사 (로그인 없이 열람)"
-                            onclick="rfCopyShare(this, @js($slot->shareUrl()))">공유</button>
-                @endif
-                <button type="button" class="btn btn-ghost btn-sm" onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js('랭크프리-쇼핑순위-'.$slot->keyword.'.png'), this)" title="이 키워드 쇼핑 순위를 PNG 이미지로 저장">🖼 이미지</button>
-                <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"
-                        data-action="{{ route('console.shop-rank.update', $slot) }}"
-                        data-slot-id="{{ $slot->id }}"
-                        data-keyword="{{ $slot->keyword }}"
-                        data-target="{{ $slot->product_url ?: ($slot->mall_name ?: $slot->product_id) }}"
-                        data-label="{{ $slot->label }}">수정</button>
-                <form method="POST" action="{{ route('console.shop-rank.destroy', $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
-            </div>
-        </div>
-
-        @include('shop-rank.partials.cells', ['slot' => $slot, 'from' => $from ?? null, 'to' => $to ?? null])
-    </div>
-        {{-- 캡처 전용 하단 홍보 문구 --}}
-        <div class="rf-cap-only" style="flex-direction:column;align-items:center;gap:4px;margin-top:12px;border-top:1px solid var(--color-hairline);padding-top:12px;text-align:center;">
-            <span class="text-muted" style="font-size:var(--fs-xs);">이 리포트는 <b class="text-ink">랭크프리</b>에서 쇼핑 순위추적으로 생성되었습니다.</span>
-            <span class="text-muted" style="font-size:var(--fs-xs);">네이버에서 <b class="text-ink">랭크프리</b>를 검색 방문하고 무료로 내 쇼핑 순위를 확인해보세요.</span>
-        </div>
-    </div>
+    <x-rank.slot-card :rank-slot="$slot" mode="shop" area="console" :from="$from ?? null" :to="$to ?? null" />
 @empty
     <div class="card text-center" style="padding:56px 20px;color:var(--color-muted);">
         <div style="font-size:var(--fs-2xl);opacity:.4;">🛒</div>
@@ -104,6 +50,7 @@
     </div>
 @endforelse
 @include('console.partials._image-save')
+@include('rank.partials._card-scripts')
 
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     스마트스토어·가격비교 상품 URL 또는 업체명 1개에 키워드를 여러 개 등록하면 키워드별로 쇼핑 검색 순위를 추적합니다.
@@ -240,50 +187,7 @@
 
     // 공유 링크 복사: 상단 rfCopyShare(버튼 인라인 '복사됨 ✓') 사용 — 별도 핸들러 불필요
 
-    // 전체 순위체크 — 슬롯별 엔드포인트를 순차 호출(진행률)
-    const runAllBtn = document.getElementById('rf-run-all');
-    if (runAllBtn) {
-        runAllBtn.addEventListener('click', async function () {
-            const forms = Array.from(document.querySelectorAll('.rf-run-form'));
-            if (!forms.length) return;
-            let done = 0, found = 0;
-            Swal.fire({
-                title: '전체 순위체크',
-                html: '<div id="rf-ra-prog" style="font-size:var(--fs-xs);color:var(--color-muted);">0 / ' + forms.length + ' 확인 중…</div>',
-                allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); }
-            });
-            const prog = document.getElementById('rf-ra-prog');
-            for (const f of forms) {
-                try {
-                    const r = await fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
-                    if (r.ok) { const d = await r.json(); if (d.found) found++; }
-                } catch (e) {}
-                done++;
-                if (prog) prog.textContent = done + ' / ' + forms.length + ' 확인' + (found ? ' · 노출 ' + found : '');
-            }
-            await Swal.fire({ icon: 'success', title: '전체 순위체크 완료', html: '<span style="font-size:var(--fs-xs);">' + forms.length + '개 중 <b>' + found + '</b>개 노출 확인</span>', timer: 1800, showConfirmButton: false });
-            location.reload();
-        });
-    }
-
-    // 순위체크 AJAX
-    document.querySelectorAll('.rf-run-form').forEach(function (f) {
-        f.addEventListener('submit', function (e) {
-            e.preventDefault();
-            Swal.fire({
-                title: '순위 확인 중…',
-                html: '<span style="font-size:var(--fs-xs);color:var(--color-muted);">‘' + (f.dataset.keyword || '') + '’ 키워드의 쇼핑 순위를 조회하고 있습니다.</span>',
-                allowOutsideClick: false, showConfirmButton: false, didOpen: function () { Swal.showLoading(); }
-            });
-            fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-                .then(function (d) {
-                    Swal.fire({ toast: true, position: 'top-end', icon: d.ok ? (d.found ? 'success' : 'info') : 'warning', title: d.message, showConfirmButton: false, timer: 1600, timerProgressBar: true })
-                        .then(function () { location.reload(); });
-                })
-                .catch(function () { Swal.fire({ icon: 'error', title: '순위 확인에 실패했습니다', text: '잠시 후 다시 시도하세요.' }); });
-        });
-    });
+    // 전체 순위체크 · 순위체크 AJAX 는 공용 파셜(rank.partials._card-scripts)로 이동
 
     // 키워드 행 추가/삭제
     const form = document.getElementById('rf-rank-form');
