@@ -259,18 +259,21 @@ class MarketingOrderController extends Controller
     }
 
     /** 연결된 유입키워드 분석의 수집값으로 내부 필드 다시 채우기(기존 값 덮어씀). */
-    public function autofillInternalFields(MarketingOrder $order, \App\Domain\Order\OrderFieldAutofill $autofill)
+    public function autofillInternalFields(MarketingOrder $order, \App\Domain\Order\OrderFieldAutofill $autofill, \App\Domain\Shopping\ShopKeywordExposureAnalyzer $analyzer)
     {
         $analysis = $order->shopKeywordAnalyses()->latest('id')->first();
         if (! $analysis) {
             return back()->withErrors(['internal' => '연결된 유입키워드 분석이 없습니다 — 먼저 수집요청을 하세요.']);
         }
 
-        $filled = $autofill->fillFromAnalysis($analysis, force: true);
+        // 상품 정보 다시 수집 — 확장이 저장한 최신 상품정보(ShopProductInfo)를 분석에 반영(가격·제목·상점명 갱신, 2026-07-24)
+        $r = $analyzer->refreshProductInfo($analysis);
+        // 갱신된 분석값으로 주문 내부 필드 채움
+        $filled = $autofill->fillFromAnalysis($analysis->fresh(), force: true);
 
-        return back()->with('status', $filled > 0
-            ? "수집값으로 {$filled}개 필드를 채웠습니다."
-            : '채울 수 있는 수집값이 아직 없습니다 — 확장 상품정보 수집 후 다시 시도하세요.');
+        return back()->with('status', ($r['found'] ?? false)
+            ? "상품 정보를 다시 수집했습니다 — 내부 필드 {$filled}개 갱신했습니다."
+            : '확장이 저장한 상품 정보가 없습니다 — 상품 페이지에서 확장으로 수집한 뒤 다시 시도하세요.');
     }
 
     /** 승인 — 상품의 업체 배분 설정대로 외부 발주(API/구글시트) 후 진행중으로 전환. */

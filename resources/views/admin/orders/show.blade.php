@@ -200,7 +200,7 @@
                     @if ($order->shopKeywordAnalyses->isNotEmpty())
                         <form method="POST" action="{{ route('admin.orders.autofill', $order) }}">
                             @csrf
-                            <button type="submit" class="btn btn-secondary btn-sm">수집값 다시 채우기</button>
+                            <button type="submit" class="btn btn-secondary btn-sm">상품 정보 다시 수집</button>
                         </form>
                     @endif
                     <button type="submit" form="internal-fields-form" class="btn btn-primary btn-sm">저장</button>
