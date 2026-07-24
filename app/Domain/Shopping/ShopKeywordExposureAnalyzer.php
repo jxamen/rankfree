@@ -304,6 +304,10 @@ class ShopKeywordExposureAnalyzer
             'brand' => (string) ($pi->brand ?: $pi->mall_name),
             'price' => (int) $pi->price,
         ]);
+        // 재수집은 명시적 새로고침 — 가격은 최신 수집값으로 강제 갱신(정가로 잘못 박힌 기존 분석 교정, 2026-07-24)
+        if ((int) $pi->price > 0 && (int) $pi->price !== (int) $analysis->product_price) {
+            $analysis->update(['product_price' => (int) $pi->price]);
+        }
         $analysis->refresh();
 
         $core = (string) $analysis->core_keyword;

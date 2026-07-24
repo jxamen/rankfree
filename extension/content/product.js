@@ -229,8 +229,9 @@
       const t = s.textContent;
       if (!t || t.length < 500) continue;
       const m =
-        t.match(/"salePrice"\s*:\s*"?(\d{2,})"?/) ||
         t.match(/"discountedSalePrice"\s*:\s*"?(\d{2,})"?/) ||
+        t.match(/"mobileDiscountedSalePrice"\s*:\s*"?(\d{2,})"?/) ||
+        t.match(/"salePrice"\s*:\s*"?(\d{2,})"?/) ||
         t.match(/"price"\s*:\s*"?(\d{3,})"?/);
       if (m) return num(m[1]);
     }
@@ -1930,7 +1931,8 @@
         title: String(A.name || A.dispName || getProductName() || '').slice(0, 300),
         brand: String(nss.brandName || nss.manufacturerName || '').slice(0, 120),
         mall_name: String(channel.channelName || getStoreName() || '').slice(0, 150),
-        price: num(A.salePrice || getProductPrice() || 0) || null,
+        // 즉시할인가 우선(benefitsView.discountedSalePrice) → 없으면 정가(salePrice) → 폴백. 셀러력 스코어러와 동일 필드(2026-07-24)
+        price: num((A.benefitsView && A.benefitsView.discountedSalePrice) || A.salePrice || getProductPrice() || 0) || null,
         seller_tags: tags.slice(0, 60),
         category: String((A.category && A.category.wholeCategoryName) || '').slice(0, 191),
         thumbnail_url: thumb || null,
