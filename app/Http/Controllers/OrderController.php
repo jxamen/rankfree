@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Order\OrderInputException;
+use App\Domain\Order\OrderPlacer;
 use App\Domain\Place\PlaceRankChecker;
 use App\Models\MarketingProduct;
+use App\Models\ProductField;
 use App\Models\ProductType;
 use App\Models\UserCoupon;
+use App\Support\BankAccount;
 use Illuminate\Http\Request;
 
 /** 마케팅 상품 주문 — 콘솔 내 회원 전용 주문 페이지(order_token 기반). */
@@ -51,10 +55,12 @@ class OrderController extends Controller
             // 이 상품에 대한 내 주문 접수 내역(최근 20건 + 전체 건수) — 순위 표기용 슬롯 포함
             'myOrders' => $product->orders()->where('user_id', $request->user()->id)->with('shopRankSlot', 'placeRankSlot')->latest()->limit(20)->get(),
             'myOrdersTotal' => $product->orders()->where('user_id', $request->user()->id)->count(),
+            // 무통장 입금 계좌(주문 완료 시 안내) — 운영자가 환경설정 결제 탭에 저장
+            'bankInfo' => BankAccount::info(),
         ]);
     }
 
-    public function store(Request $request, string $token, \App\Domain\Order\OrderPlacer $placer)
+    public function store(Request $request, string $token, OrderPlacer $placer)
     {
         $product = MarketingProduct::where('order_token', $token)->where('is_active', true)->firstOrFail();
         $product->load('fields');
@@ -78,11 +84,13 @@ class OrderController extends Controller
                 'days' => $request->input('days'),
                 'user_coupon_id' => $request->input('user_coupon_id'),
             ]);
-        } catch (\App\Domain\Order\OrderInputException $e) {
+        } catch (OrderInputException $e) {
             return back()->withInput()->withErrors([$e->field => $e->getMessage()]);
         }
 
-        return redirect()->route('order.show', $token)->with('order_done', $order->order_no);
+        return redirect()->route('order.show', $token)
+            ->with('order_done', $order->order_no)
+            ->with('order_amount', $order->total_price);
     }
 
     /** 붙여넣은 플레이스 URL → 실제 업종별 m.place URL 로 정규화(주문 폼 즉시 반영용). */
@@ -102,7 +110,7 @@ class OrderController extends Controller
      * 상품의 수량·기간 시스템 필드(일수량·시작일·종료일)를 field_key 로 식별.
      * 없으면 null → 주문 페이지가 기본 수량/기간 입력으로 폴백한다.
      *
-     * @return array{qty:?\App\Models\ProductField, start:?\App\Models\ProductField, end:?\App\Models\ProductField}
+     * @return array{qty:?ProductField, start:?ProductField, end:?ProductField}
      */
     private function scheduleFields(MarketingProduct $product): array
     {

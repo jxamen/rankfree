@@ -14,7 +14,7 @@
 @section('admin-content')
 @php
     // 저장/리디렉션 후에도 보던 탭 유지 — ?tab= 파라미터로 초기 활성 탭 결정
-    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'place' => '플레이스 패턴', 'domains' => '2차 도메인', 'custom' => '커스텀 코드'];
+    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'payment' => '결제', 'place' => '플레이스 패턴', 'domains' => '2차 도메인', 'custom' => '커스텀 코드'];
     $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
 @endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
@@ -348,6 +348,38 @@
         <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
             예) 1회당 20 · 최대 200 → 추천 가입 10명까지 슬롯 +200개. 이미 최대치에 도달한 추천인은 추천 관계만 기록되고 더 늘지 않습니다.
         </p>
+    </div>
+
+    {{-- ── 결제: 무통장 입금 계좌 ──────────────────────────────────────── --}}
+    <div class="rf-tabpane" data-tab="payment" @if ($__active !== 'payment') hidden @endif>
+        <p class="text-muted mb-4" style="font-size:var(--fs-xs);">
+            셀프마케팅 <b>주문 완료 화면</b>에 노출되는 무통장 입금 계좌입니다. 은행을 고르고 계좌번호·예금주를 입력하세요.
+            값은 <b>암호화 저장</b>되며, 은행과 계좌번호가 모두 채워져 있어야 주문 후 안내가 표시됩니다.
+        </p>
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">무통장 입금 계좌 <span class="text-muted-soft" style="font-weight:400;">주문 결제 안내</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">주문이 접수되면 고객에게 이 계좌와 결제 금액이 안내됩니다.</p>
+            <div class="flex gap-4 flex-wrap">
+                <div style="width:220px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">은행</label>
+                    @php $__bank = old('bank_name', $bankName); @endphp
+                    <select name="bank_name" class="input" style="width:100%;font-size:var(--fs-xs);">
+                        <option value="">— 은행 선택 —</option>
+                        @foreach ($bankList as $__b)
+                            <option value="{{ $__b }}" @selected($__bank === $__b)>{{ $__b }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div style="width:260px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">계좌번호</label>
+                    <input type="text" name="bank_account" value="{{ old('bank_account', $bankAccount) }}" placeholder="숫자·하이픈(-)만" autocomplete="off" class="input" style="width:100%;font-family:var(--font-mono);font-size:var(--fs-xs);">
+                </div>
+                <div style="width:180px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);font-weight:600;">예금주</label>
+                    <input type="text" name="bank_holder" value="{{ old('bank_holder', $bankHolder) }}" placeholder="예금주명" autocomplete="off" class="input" style="width:100%;font-size:var(--fs-xs);">
+                </div>
+            </div>
+        </div>
     </div>
 
     {{-- ── 커스텀 코드: 모든 페이지 <head> 주입 ─────────────────────────── --}}

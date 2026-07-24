@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Keyword\PlaceKeywordPatterns;
+use App\Domain\Member\ReferralService;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Support\BankAccount;
+use App\Support\GoogleServiceAccount;
+use App\Support\GoogleToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -15,9 +20,13 @@ use Illuminate\Support\Facades\Http;
 class SettingsController extends Controller
 {
     private const SECONDARY_DOMAINS_KEY = 'secondary.domains';
+
     private const CLOUDFLARE_API_TOKEN_KEY = 'cloudflare.api_token';
+
     private const CLOUDFLARE_DNS_TARGET_KEY = 'cloudflare.dns_target';
+
     private const CLOUDFLARE_ZONES_KEY = 'cloudflare.zones';
+
     private const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 
     /** 각 자격증명 그룹 정의: setting키 => [폼접두, 일반필드, 시크릿필드]. */
@@ -35,7 +44,7 @@ class SettingsController extends Controller
         'xai' => 'Grok (xAI)',
     ];
 
-    public function index(\App\Domain\Keyword\PlaceKeywordPatterns $patterns)
+    public function index(PlaceKeywordPatterns $patterns)
     {
         return view('admin.settings.index', [
             // 플레이스 업종별 패턴(지역 × 패턴 조합 시딩에 사용) — 넣고 뺄 수 있게
@@ -68,6 +77,11 @@ class SettingsController extends Controller
             'aligoUserId' => AppSetting::read('aligo.user_id'),
             'aligoApiKey' => AppSetting::read('aligo.api_key'),
             'aligoSender' => AppSetting::read('aligo.sender') ?: '1668-3721',
+            // 무통장 입금 계좌(주문 결제 안내) — 은행 선택 · 계좌번호 · 예금주
+            'bankName' => AppSetting::read('bank.name'),
+            'bankAccount' => AppSetting::read('bank.account'),
+            'bankHolder' => AppSetting::read('bank.holder'),
+            'bankList' => BankAccount::BANKS,
             // 커뮤니티 글 재작성(AI) — SettingsServiceProvider 가 이미 config 에 반영한 값
             'rewriteProvider' => (string) config('rankfree.community.rewrite.provider', 'auto'),
             'rewriteModel' => (string) config('rankfree.community.rewrite.model', ''),
@@ -82,13 +96,13 @@ class SettingsController extends Controller
             'quizThinking' => in_array(strtolower((string) (AppSetting::read('quiz.thinking') ?: config('services.gemini.quiz_thinking'))), ['1', 'true', 'on'], true) ? 'on' : 'off',
             'quizThinking' => AppSetting::read('quiz.thinking') === '1',
             // 회원 — 추천인 보상(순위체크 보너스 슬롯)
-            'referralPer' => \App\Domain\Member\ReferralService::bonusPer(),
-            'referralMax' => \App\Domain\Member\ReferralService::bonusMax(),
+            'referralPer' => ReferralService::bonusPer(),
+            'referralMax' => ReferralService::bonusMax(),
             // 구글 서치 콘솔 — HTML 소유확인 토큰(공개 <head> 메타로 출력)
             'googleSiteVerification' => (string) AppSetting::read('google.site_verification'),
             // 구글 서치 콘솔 — 속성 + 서비스 계정 안내
             'gscProperty' => AppSetting::read('gsc.property') ?: 'sc-domain:rankfree.kr',
-            'gscServiceEmail' => \App\Support\GoogleServiceAccount::clientEmail(),
+            'gscServiceEmail' => GoogleServiceAccount::clientEmail(),
             // GA4 — 속성 ID(숫자)
             'gaPropertyId' => AppSetting::read('ga.property_id'),
             // 서울 열린데이터광장 — 신규 개업(인허가) 수집 인증키(24)
@@ -96,8 +110,8 @@ class SettingsController extends Controller
             'jandiOrderWebhookUrl' => AppSetting::read('jandi.order_webhook_url'),
             'seoulKeyLive' => (string) config('rankfree.newbiz.seoul_key', 'sample'),
             // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
-            'googleConnected' => \App\Support\GoogleToken::oauthConnected(),
-            'googleEmail' => \App\Support\GoogleToken::connectedEmail(),
+            'googleConnected' => GoogleToken::oauthConnected(),
+            'googleEmail' => GoogleToken::connectedEmail(),
         ]);
     }
 
@@ -112,6 +126,9 @@ class SettingsController extends Controller
         'aligo.user_id' => 'aligo_user_id',
         'aligo.api_key' => 'aligo_api_key',
         'aligo.sender' => 'aligo_sender',
+        'bank.name' => 'bank_name',   // 무통장 입금 — 은행(선택)
+        'bank.account' => 'bank_account',   // 무통장 입금 — 계좌번호
+        'bank.holder' => 'bank_holder',   // 무통장 입금 — 예금주
         'google.site_verification' => 'google_site_verification',   // 서치 콘솔 HTML 소유확인 토큰 → services.google.site_verification
         'gsc.property' => 'gsc_property',
         'ga.property_id' => 'ga_property_id',
@@ -122,7 +139,7 @@ class SettingsController extends Controller
         'quiz.thinking' => 'quiz_thinking',   // 캡차 풀이 추론(thinking) on/off → services.gemini.quiz_thinking
     ];
 
-    public function update(Request $request, \App\Domain\Keyword\PlaceKeywordPatterns $patterns)
+    public function update(Request $request, PlaceKeywordPatterns $patterns)
     {
         foreach (self::GROUPS as $key => $def) {
             $this->saveGroup($request, $key, $def['g'], $def['plain'], $def['secret']);
@@ -132,7 +149,7 @@ class SettingsController extends Controller
         // 플레이스 업종별 패턴 — 콤마/줄바꿈 구분 입력을 배열로. 탭을 열어 제출했을 때만 저장한다.
         if ($request->has('place_patterns')) {
             $patterns->save(collect((array) $request->input('place_patterns', []))
-                ->map(fn ($raw) => \App\Domain\Keyword\PlaceKeywordPatterns::parse((string) $raw))->all());
+                ->map(fn ($raw) => PlaceKeywordPatterns::parse((string) $raw))->all());
         }
 
         $this->saveSecondaryDomains($request);
@@ -163,7 +180,7 @@ class SettingsController extends Controller
         AppSetting::write('referral.bonus_max', (string) max(0, (int) $request->input('referral_bonus_max', 200)));
 
         // 저장 후에도 보던 탭 유지
-        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
+        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'payment', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
 
         return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
     }

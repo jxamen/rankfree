@@ -29,10 +29,39 @@
     @endif
 
     @if (session('order_done'))
+        @php $bankConfigured = ! empty($bankInfo['bank']) && ! empty($bankInfo['account']); @endphp
         <div class="card p-6 text-center mb-6" style="border:1px solid var(--color-success);">
             <div style="font-size:var(--fs-2xl);">✅</div>
             <p class="text-ink font-semibold mt-2" style="font-size:var(--fs-base);">주문이 접수되었습니다</p>
-            <p class="text-muted mt-1" style="font-size:var(--fs-xs);">주문번호 <b class="text-ink">{{ session('order_done') }}</b> · 담당자가 확인 후 진행합니다.</p>
+            <p class="text-muted mt-1" style="font-size:var(--fs-xs);">주문번호 <b class="text-ink">{{ session('order_done') }}</b></p>
+
+            @if ($bankConfigured)
+                {{-- 무통장 입금 안내 — 아래 계좌로 입금하시면 확인 후 진행됩니다 --}}
+                <div class="mt-4 mx-auto text-left" style="max-width:420px;border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:18px 20px;background:var(--color-surface-soft);">
+                    <div class="text-muted font-semibold mb-3 text-center" style="font-size:var(--fs-xs);">아래 계좌로 입금해 주세요</div>
+                    <div class="flex items-center justify-between py-1">
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">입금 금액</span>
+                        <span class="text-ink font-bold font-mono" style="font-size:var(--fs-base);color:var(--color-primary);">{{ number_format((float) session('order_amount', 0)) }}원</span>
+                    </div>
+                    <div class="flex items-center justify-between py-1" style="border-top:1px solid var(--color-hairline-soft);margin-top:6px;padding-top:10px;">
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">은행</span>
+                        <span class="text-ink font-medium" style="font-size:var(--fs-xs);">{{ $bankInfo['bank'] }}</span>
+                    </div>
+                    <div class="flex items-center justify-between py-1">
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">계좌번호</span>
+                        <span class="text-ink font-medium font-mono" style="font-size:var(--fs-sm);">{{ $bankInfo['account'] }}</span>
+                    </div>
+                    @if (! empty($bankInfo['holder']))
+                        <div class="flex items-center justify-between py-1">
+                            <span class="text-muted-soft" style="font-size:var(--fs-xs);">예금주</span>
+                            <span class="text-ink font-medium" style="font-size:var(--fs-xs);">{{ $bankInfo['holder'] }}</span>
+                        </div>
+                    @endif
+                </div>
+                <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">입금이 확인되면 담당자가 확인 후 진행합니다.</p>
+            @else
+                <p class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">담당자가 확인 후 진행합니다.</p>
+            @endif
         </div>
     @endif
 
