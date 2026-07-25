@@ -33,6 +33,21 @@ class MarketSharedFastLoadTest extends TestCase
         Queue::assertPushed(EnrichMarketKeywordData::class, 1);
     }
 
+    public function test_crawler_enriches_synchronously_instead_of_queue(): void
+    {
+        Queue::fake();
+        \Illuminate\Support\Facades\Http::fake();   // 외부 크롤 차단 — ensure 는 동기 호출되되 데이터는 못 채움(분기 검증엔 무관)
+        $u = User::create(['name' => 'u', 'email' => 'mfbot@rf.kr', 'password' => 'x1234567']);
+        MarketAnalysis::create(['user_id' => $u->id, 'keyword' => '크롤러키워드', 'sales_6m' => 5,
+            'snapshot' => ['top_products' => [['title' => '상품X', 'price' => 100, 'purchase6m' => 1]]]]);
+
+        // 크롤러(Googlebot) UA — keyword_data 가 비어 있으면 그 자리에서 동기 보강하므로 큐에 잡을 던지지 않는다.
+        $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'])
+            ->get('/market/'.rawurlencode('크롤러키워드'))->assertOk();
+
+        Queue::assertNotPushed(EnrichMarketKeywordData::class);   // 봇은 동기 — 큐 미사용
+    }
+
     public function test_enriched_doc_does_not_dispatch(): void
     {
         Queue::fake();
