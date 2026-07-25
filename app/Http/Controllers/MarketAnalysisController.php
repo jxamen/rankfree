@@ -33,7 +33,7 @@ class MarketAnalysisController extends Controller
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람. */
-    public function shared(string $slug, NaverDataLabService $datalab, RelatedDocsService $related)
+    public function shared(Request $request, string $slug, NaverDataLabService $datalab, RelatedDocsService $related)
     {
         $a = MarketAnalysis::findByShareKey($slug);
         abort_if(! $a, 404);
@@ -49,14 +49,35 @@ class MarketAnalysisController extends Controller
         $display = MarketAnalysis::where('keyword', $a->keyword)
             ->orderByDesc('updated_at')->orderByDesc('id')->first() ?? $a;
 
-        // 대량 수집 발행분은 keyword_data 가 비어 '키워드 분석' 섹션이 빠진다 — 백그라운드 큐로 보강
-        // (2026-07-23: 첫 열람이 검색광고 크롤을 기다리며 수 초 걸리던 문제 → 잡만 걸고 즉시 렌더)
-        app(\App\Domain\Shopping\MarketKeywordDataEnricher::class)->ensureAsync($display);
+        // keyword_data('키워드 분석' 섹션) 보강. 발행분은 발행 시점에 이미 채워지지만(KeywordHubPublisher),
+        // 미완비 문서(1회성·완비 실패분)를 **크롤러(검색엔진·AI)가 첫 방문**에 만나면 빈 thin 문서로
+        // 색인되지 않게 그 자리에서 동기로 채운다. **사람은 기존대로 잡만 예약**(첫 로드 빠르게 — 2026-07-23 성능 사고 회피).
+        $enricher = app(\App\Domain\Shopping\MarketKeywordDataEnricher::class);
+        if ($enricher->needs($display) && $this->isCrawler($request)) {
+            try {
+                $enricher->ensure($display);   // 봇만 대기 — 완비된 HTML 을 색인시킨다
+            } catch (\Throwable $e) {
+                // 크롤 실패 시 기존처럼 빈 섹션 렌더(30분 네거티브 캐시로 반복 크롤 방지)
+            }
+        } else {
+            $enricher->ensureAsync($display);
+        }
 
         // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
         $weekday = $display->keyword ? $datalab->weekdayRatio($display->keyword) : null;
 
         return view('market.share', ['a' => $display, 'weekday' => $weekday, 'related' => $related->sectionsFor($display)]);
+    }
+
+    /** 검색엔진·AI 크롤러 User-Agent 감지 — 이들에겐 keyword_data 를 동기로 완비해 빈 색인을 막는다. */
+    private function isCrawler(Request $request): bool
+    {
+        $ua = (string) $request->userAgent();
+
+        return $ua !== '' && preg_match(
+            '/googlebot|bingbot|petalbot|yeti|daumoa|applebot|perplexitybot|perplexity-user|gptbot|oai-searchbot|chatgpt-user|claudebot|anthropic|google-extended|ccbot|bytespider|slurp|duckduckbot|facebookexternalhit|twitterbot|linkedinbot/i',
+            $ua
+        ) === 1;
     }
 
     public function destroy(Request $request, MarketAnalysis $analysis)

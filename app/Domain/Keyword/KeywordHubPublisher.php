@@ -78,6 +78,14 @@ class KeywordHubPublisher
                 ['user_id' => $this->systemUserId(), 'keyword' => $c->keyword],
                 $this->marketPayloadFromSource($source, $c),
             );
+            // 발행 시점에 keyword_data(검색량·성별/연령·월별)를 동기로 채운다 — 공개 문서가 검색엔진에
+            // 색인되기 전 '키워드 분석' 섹션까지 완비되게(빈 thin 문서 색인 방지). 발행은 백그라운드라
+            // 크롤 수 초를 흡수하고, 열람 lazy(ensureAsync)와 같은 6h 캐시를 공유한다.
+            try {
+                app(\App\Domain\Shopping\MarketKeywordDataEnricher::class)->ensure($doc);
+            } catch (\Throwable $e) {
+                // 보강 실패해도 문서 자체는 발행한다(다음 열람·봇 방문에서 재시도).
+            }
             $c->update([
                 'status' => 'published',
                 'note' => null,
