@@ -7,6 +7,7 @@ use App\Domain\Member\ReferralService;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Support\BankAccount;
+use App\Support\CwsPublisher;
 use App\Support\GoogleServiceAccount;
 use App\Support\GoogleToken;
 use Illuminate\Http\Request;
@@ -112,6 +113,9 @@ class SettingsController extends Controller
             // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
             'googleConnected' => GoogleToken::oauthConnected(),
             'googleEmail' => GoogleToken::connectedEmail(),
+            // 크롬 확장 — 항목 ID + 웹스토어 게시 상태(연동·권한·버전)
+            'extensionChromeId' => AppSetting::read('extension.chrome_id'),
+            'cwsStatus' => CwsPublisher::status(),
         ]);
     }
 
@@ -137,6 +141,7 @@ class SettingsController extends Controller
         'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
         'quiz.solve_timeout' => 'quiz_solve_timeout',   // 확장 정답 대기 시간(초) → services.gemini.quiz_timeout
         'quiz.thinking' => 'quiz_thinking',   // 캡차 풀이 추론(thinking) on/off → services.gemini.quiz_thinking
+        'extension.chrome_id' => 'extension_chrome_id',   // 크롬 확장 항목 ID — 웹스토어 게시(CwsPublisher)·설치 링크
     ];
 
     public function update(Request $request, PlaceKeywordPatterns $patterns)

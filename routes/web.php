@@ -408,6 +408,9 @@ $__admin->group(function () {
     Route::get('/google-connect/callback', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'callback'])->name('google-connect.callback');
     Route::post('/google-connect/disconnect', [\App\Http\Controllers\Admin\GoogleConnectController::class, 'disconnect'])->name('google-connect.disconnect');
 
+    // 크롬 확장 웹스토어 게시 — 항목 ID(환경설정) + 구글 OAuth(chromewebstore)로 서버 업로드·제출
+    Route::post('/extension/publish', [\App\Http\Controllers\Admin\ExtensionPublishController::class, 'publish'])->name('extension.publish');
+
     // 키워드 탐색 — 수집된 키워드를 플레이스/쇼핑별로 검색·조회만(관리는 허브에서)
     Route::get('/keyword-browse', [\App\Http\Controllers\Admin\KeywordBrowseController::class, 'index'])->name('keyword-browse');
     // 키워드 상세 — 그 키워드로 노출되는 업체 수집(플레이스 SERP 최대 300)

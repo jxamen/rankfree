@@ -326,6 +326,35 @@
             </p>
             @include('admin.settings._simplefield', ['name' => 'seoul_openapi_key', 'label' => '일반 인증키', 'value' => $seoulOpenapiKey, 'secret' => true, 'placeholder' => '발급받은 32자 인증키'])
         </div>
+
+        {{-- 크롬 확장 웹스토어 게시 --}}
+        <div class="card p-5 mb-4">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">크롬 확장 웹스토어 게시 <span class="text-muted-soft" style="font-weight:400;">항목 ID · 원클릭 게시</span></div>
+            <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);line-height:1.7;">
+                <a href="https://chrome.google.com/webstore/devconsole" target="_blank" rel="noopener" class="text-ink">웹스토어 대시보드</a>에서 최초 등록 후 <b>항목 ID</b>(32자)를 넣고 저장하세요.
+                게시는 위 <b>구글 데이터 연동</b> 계정(웹스토어 게시 권한 포함)으로 서버가 <code>extension/</code>을 묶어 업로드·심사제출합니다.
+                항목의 <b>게시(publisher) 권한을 가진 구글 계정</b>으로 연동돼 있어야 합니다.
+            </p>
+            @include('admin.settings._simplefield', ['name' => 'extension_chrome_id', 'label' => '항목 ID (32자, a–p)', 'value' => $extensionChromeId, 'secret' => false, 'placeholder' => 'ghlnhbdcbnaennjgghnifboeoghnmfdm'])
+
+            <div class="mb-3" style="font-size:var(--fs-xs);line-height:1.9;">
+                <span class="text-muted">상태</span> —
+                @if ($cwsStatus['has_id'])<span style="color:var(--color-success);">✓ 항목 ID</span>@else<span class="text-muted-soft">항목 ID 미설정</span>@endif ·
+                @if ($cwsStatus['scoped'])<span style="color:var(--color-success);">✓ 게시 권한 연동</span>@else<span style="color:var(--color-warning);">게시 권한 미연동</span>@endif ·
+                <span class="text-muted">패키지</span> <b class="font-mono">v{{ $cwsStatus['version'] }}</b>
+                @unless ($cwsStatus['zip_ok']) · <span style="color:var(--color-error);">서버 zip 확장 없음</span>@endunless
+            </div>
+
+            @if (! $cwsStatus['scoped'])
+                <p class="mb-3" style="font-size:var(--fs-xs);color:var(--color-warning);line-height:1.7;">
+                    게시하려면 위 <b>구글 데이터 연동</b>을 <b>다시</b> 눌러 “Chrome 웹스토어” 권한까지 동의하세요(게시 계정 = 연동 계정이어야 합니다).
+                </p>
+            @endif
+
+            <button type="submit" form="rf-ext-publish" class="btn btn-primary btn-sm" @unless ($cwsStatus['ready']) disabled @endunless>
+                웹스토어에 게시 (v{{ $cwsStatus['version'] }} 심사 제출)
+            </button>
+        </div>
     </div>
 
     {{-- ── 회원: 추천인 보상 ──────────────────────────────────────────── --}}
@@ -551,6 +580,13 @@
     <input type="hidden" name="subdomain" id="rf-cf-create-subdomain">
     <input type="hidden" name="dns_target" id="rf-cf-create-target">
     <input type="hidden" name="count" id="rf-cf-create-count">
+</form>
+
+{{-- 크롬 확장 웹스토어 게시 — 메인 설정 폼과 중첩 금지라 폼 밖에 둔다(integ 탭 '게시' 버튼이 form 속성으로 참조). --}}
+<form id="rf-ext-publish" method="POST" action="{{ route('admin.extension.publish') }}" hidden
+      data-confirm="현재 소스로 확장 v{{ $cwsStatus['version'] }}을(를) 웹스토어에 업로드하고 심사에 제출할까요?"
+      data-confirm-text="심사 승인 후 모든 사용자에게 배포됩니다." data-confirm-ok="게시">
+    @csrf
 </form>
 
 <script>

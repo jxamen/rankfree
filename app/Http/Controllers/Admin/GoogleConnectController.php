@@ -21,6 +21,8 @@ class GoogleConnectController extends Controller
         // readonly 시절 연동 계정은 조회만 되므로 재제출까지 쓰려면 재연동 필요.
         'https://www.googleapis.com/auth/webmasters',
         'https://www.googleapis.com/auth/analytics.readonly',
+        // 크롬 웹스토어 게시 — 관리자 화면 [웹스토어에 게시] 버튼(CwsPublisher). 이 scope 추가 후 재연동 필요.
+        'https://www.googleapis.com/auth/chromewebstore',
     ];
 
     /** 구글 동의 화면으로 리디렉션. */

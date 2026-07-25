@@ -37,6 +37,12 @@ class GoogleToken
         return self::oauthConnected() || GoogleServiceAccount::configured();
     }
 
+    /** 연동 계정이 이 스코프를 승인했는지(상태 표시용 — 예: 웹스토어 게시 권한 확인). */
+    public static function hasScope(string $scope): bool
+    {
+        return self::oauthConnected() && self::grantedCovers($scope);
+    }
+
     /** 스코프에 맞는 액세스 토큰 — OAuth 우선, 서비스 계정 폴백. 실패 시 null. */
     public static function token(string $scope): ?string
     {
