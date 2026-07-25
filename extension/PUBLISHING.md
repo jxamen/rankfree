@@ -22,12 +22,17 @@
    - (여기서 한 번 **제출**해 최초 게시를 마쳐도 되고, API 로 제출해도 된다.)
 
 ### B. GCP OAuth 자격증명
-1. https://console.cloud.google.com 에서 프로젝트 생성(또는 기존 것).
-2. **API 및 서비스 → 라이브러리 → "Chrome Web Store API" 사용 설정**.
-3. **OAuth 동의 화면** 구성(External, 앱 이름/이메일만 채우면 됨. 테스트 사용자에 본인 구글 계정 추가).
-4. **사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID → 유형 "데스크톱 앱"**.
+전부 **GCP 콘솔**(https://console.cloud.google.com)에서 한다. 반드시 **웹스토어를 게시할 구글 계정**으로 로그인.
+
+1. **프로젝트 생성** — 상단 프로젝트 선택기 → "새 프로젝트"(예: `rankfree-ext-publish`).
+2. **Chrome Web Store API 사용 설정** — 직접 링크: https://console.cloud.google.com/apis/library/chromewebstore.googleapis.com → **[사용]**.
+3. **OAuth 동의 화면 구성** — 직접 링크: https://console.cloud.google.com/auth/overview (구 UI: API 및 서비스 → OAuth 동의 화면).
+   - User Type = **외부(External)**, 앱 이름·사용자 지원 이메일·개발자 연락처만 채우면 됨(스코프는 건너뛰어도 됨).
+   - **대상(Audience)/테스트 사용자에 본인 구글 계정 추가**.
+   - ⚠️ **중요(7일 만료 함정)**: 동의 화면을 "테스트(Testing)" 상태로 두면 refresh token 이 **7일 뒤 만료**된다. → **[앱 게시 / Publish app]** 을 눌러 "프로덕션(In production)"으로 올리면 무기한이다. (미검증 앱 경고는 본인만 쓰므로 무시 가능.)
+4. **OAuth 클라이언트 ID 생성** — 직접 링크: https://console.cloud.google.com/apis/credentials → **[사용자 인증 정보 만들기] → [OAuth 클라이언트 ID] → 애플리케이션 유형 "데스크톱 앱"** → 만들기.
    - 데스크톱 앱 유형은 `http://localhost` 임의 포트 리다이렉트를 허용한다(발급 헬퍼가 이걸 쓴다).
-5. 발급된 client_id / client_secret → `.env` 의 `CWS_CLIENT_ID` / `CWS_CLIENT_SECRET`.
+5. 뜨는 **client_id / client_secret** → `.env` 의 `CWS_CLIENT_ID` / `CWS_CLIENT_SECRET`.
 
 ### C. refresh token 발급
 로컬 터미널에서:
