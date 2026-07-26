@@ -22,18 +22,30 @@ class VendorController extends Controller
         ]);
     }
 
+    /** 등록 폼 — 입력 항목이 많아 모달 대신 별도 페이지(2026-07-25). */
+    public function create()
+    {
+        return view('admin.vendors.form', ['vendor' => new Vendor(['channel' => 'api', 'api_method' => 'POST', 'api_format' => 'json', 'shop_link_mode' => 'group'])]);
+    }
+
+    /** 수정 폼. */
+    public function edit(Vendor $vendor)
+    {
+        return view('admin.vendors.form', ['vendor' => $vendor]);
+    }
+
     public function store(Request $request)
     {
         Vendor::create($this->validated($request));
 
-        return back()->with('status', '업체가 등록되었습니다.');
+        return redirect()->route('admin.vendors')->with('status', '업체가 등록되었습니다.');
     }
 
     public function update(Request $request, Vendor $vendor)
     {
         $vendor->update($this->validated($request));
 
-        return back()->with('status', "'{$vendor->name}' 업체 정보를 수정했습니다.");
+        return redirect()->route('admin.vendors')->with('status', "'{$vendor->name}' 업체 정보를 수정했습니다.");
     }
 
     public function toggle(Vendor $vendor)
@@ -121,9 +133,26 @@ class VendorController extends Controller
             'memo' => ['nullable', 'string', 'max:500'],
             'is_active' => ['nullable', 'boolean'],
             'weekend_batch_dispatch' => ['nullable', 'boolean'],
+            // 링크 설정(2026-07-25) — 업체마다 주문 받는 형태가 달라 업체 단위로 둔다. 쇼핑 주문 기준(플레이스는 별도).
+            'shop_link_mode' => ['nullable', 'in:'.implode(',', array_keys(Vendor::LINK_MODES))],
+            'shop_url_patterns' => ['nullable', 'array', 'max:50'],
+            'shop_url_patterns.*' => ['nullable', 'string', 'max:1000'],
+            // 파라미터 값 변경 방식일 때 어떤 파라미터를 바꾸는지(이름만 기록)
+            'shop_param_keys' => ['nullable', 'array', 'max:30'],
+            'shop_param_keys.*' => ['nullable', 'string', 'max:60'],
         ]);
         $data['is_active'] = $request->boolean('is_active', true);
         $data['weekend_batch_dispatch'] = $request->boolean('weekend_batch_dispatch', false);
+        $data['shop_link_mode'] = $data['shop_link_mode'] ?? 'group';
+
+        // 목록형 설정 — 빈 행 제거 후 입력 순서 그대로 보관(순서 = 사용 순서). 전부 비면 null.
+        foreach (['shop_url_patterns', 'shop_param_keys'] as $key) {
+            $rows = array_values(array_filter(
+                array_map(fn ($p) => trim((string) $p), (array) ($data[$key] ?? [])),
+                fn ($p) => $p !== '',
+            ));
+            $data[$key] = $rows ?: null;
+        }
 
         // 헤더 JSON 유효성 — 비었으면 null, 깨진 JSON 이면 반려
         if (trim((string) ($data['api_headers'] ?? '')) === '') {

@@ -391,6 +391,8 @@ $__admin->group(function () {
     Route::post('/orders/{order}/shop-keyword', [MarketingOrderController::class, 'createShopKeyword'])->middleware('throttle:30,1')->name('orders.shop-keyword');
     // 목록 '주문넣기' — 필수값 검증 후 매핑된 업체로 발주(2026-07-23)
     Route::post('/orders/{order}/place', [MarketingOrderController::class, 'placeVendorOrder'])->middleware('throttle:30,1')->name('orders.place');
+    // 주문 정보 수정(2026-07-25) — 잘못 들어온 주문을 관리자가 바로잡는다(수량·기간·고객 입력값). 금액은 단가×수량×기간으로 재계산
+    Route::put('/orders/{order}/info', [MarketingOrderController::class, 'updateInfo'])->name('orders.info');
     Route::put('/orders/{order}/internal-fields', [MarketingOrderController::class, 'updateInternalFields'])->name('orders.internal-fields');
     Route::post('/orders/{order}/autofill', [MarketingOrderController::class, 'autofillInternalFields'])->name('orders.autofill');
     Route::post('/orders/dispatches/{dispatch}/retry', [MarketingOrderController::class, 'retryDispatch'])->name('orders.dispatch.retry');
@@ -461,6 +463,9 @@ $__admin->group(function () {
 
     // 외부 발주 업체 관리 (API/구글시트)
     Route::get('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'index'])->name('vendors');
+    // 등록·수정은 입력 항목이 많아 모달 대신 별도 페이지(2026-07-25) — /create 를 /{vendor}/edit 보다 먼저 둔다
+    Route::get('/vendors/create', [\App\Http\Controllers\Admin\VendorController::class, 'create'])->name('vendors.create');
+    Route::get('/vendors/{vendor}/edit', [\App\Http\Controllers\Admin\VendorController::class, 'edit'])->name('vendors.edit');
     Route::post('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'store'])->name('vendors.store');
     Route::put('/vendors/{vendor}', [\App\Http\Controllers\Admin\VendorController::class, 'update'])->name('vendors.update');
     Route::post('/vendors/{vendor}/toggle', [\App\Http\Controllers\Admin\VendorController::class, 'toggle'])->name('vendors.toggle');

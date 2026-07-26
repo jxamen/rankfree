@@ -47,14 +47,17 @@ class VendorWeekendSettingTest extends TestCase
         $this->assertFalse($vendor->refresh()->weekend_batch_dispatch);
     }
 
-    public function test_index_shows_weekend_batch_toggle_and_flag(): void
+    /** 목록엔 표기, 토글 입력은 별도 폼 페이지(2026-07-25 모달 → 페이지 전환). */
+    public function test_index_shows_flag_and_form_page_has_toggle(): void
     {
         $admin = $this->admin();
-        Vendor::create(['name' => '주말몰아업체', 'channel' => 'api', 'api_method' => 'POST', 'is_active' => true, 'weekend_batch_dispatch' => true]);
+        $vendor = Vendor::create(['name' => '주말몰아업체', 'channel' => 'api', 'api_method' => 'POST', 'is_active' => true, 'weekend_batch_dispatch' => true]);
 
-        $html = $this->actingAs($admin)->get(route('admin.vendors'))->assertOk()->getContent();
-        $this->assertStringContainsString('name="weekend_batch_dispatch"', $html);
-        $this->assertStringContainsString('id="vd-weekend"', $html);
-        $this->assertStringContainsString('주말 몰아 발주', $html);
+        $index = $this->actingAs($admin)->get(route('admin.vendors'))->assertOk()->getContent();
+        $this->assertStringContainsString('주말 몰아 발주', $index);
+
+        $form = $this->actingAs($admin)->get(route('admin.vendors.edit', $vendor))->assertOk()->getContent();
+        $this->assertStringContainsString('name="weekend_batch_dispatch"', $form);
+        $this->assertStringContainsString('id="vd-weekend"', $form);
     }
 }

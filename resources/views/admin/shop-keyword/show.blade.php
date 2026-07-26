@@ -50,14 +50,16 @@
             <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ $analysis->product_url }}" style="border:0;background:none;cursor:pointer;font-size:var(--fs-xs);">복사</button></div>
     @endif
     {{-- 대표이미지(썸네일) — 발주 시 필요. 확장 상품페이지 수집으로 채워진다(2026-07-22) --}}
-    <div class="mt-1 flex items-center gap-2 flex-wrap">
-        <span class="text-muted" style="font-size:var(--fs-xs);">대표이미지</span>
+    {{-- 한 줄 고정 — URL 이 길어도 줄바꿈하지 않고 가운데 링크만 말줄임(2026-07-25) --}}
+    <div class="mt-1 flex items-center gap-2" style="flex-wrap:nowrap;">
+        <span class="text-muted flex-none" style="font-size:var(--fs-xs);">대표이미지</span>
         @if ($thumbnailUrl ?? null)
-            <img src="{{ $thumbnailUrl }}" alt="대표이미지" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--color-hairline);">
-            <a href="{{ $thumbnailUrl }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);word-break:break-all;max-width:520px;">{{ \Illuminate\Support\Str::limit($thumbnailUrl, 80) }}</a>
-            <button type="button" class="sk-short-copy text-muted-soft" data-url="{{ $thumbnailUrl }}" style="border:0;background:none;cursor:pointer;">복사</button>
+            <img src="{{ $thumbnailUrl }}" alt="대표이미지" class="flex-none" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--color-hairline);">
+            <a href="{{ $thumbnailUrl }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" title="{{ $thumbnailUrl }}"
+               style="font-size:var(--fs-xs);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $thumbnailUrl }}</a>
+            <button type="button" class="sk-short-copy text-muted-soft flex-none" data-url="{{ $thumbnailUrl }}" style="border:0;background:none;cursor:pointer;font-size:var(--fs-xs);">복사</button>
         @else
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
+            <span class="text-muted-soft flex-none" style="font-size:var(--fs-xs);">— 확장이 상품페이지를 수집하면 채워집니다</span>
         @endif
     </div>
     {{-- 관련 태그(스마트스토어 상품페이지 하단) — 확장 수집분. 조합 재료(seller_tag)로도 쓰인다(2026-07-22) --}}

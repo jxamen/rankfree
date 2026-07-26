@@ -163,32 +163,103 @@
             @elseif ($order->shopKeywordSource())
                 <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집 요청 시 주문의 키워드·상품 URL 로 노출 키워드 분석을 만들고 이 주문과 연결합니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 씁니다.</p>
             @endif
-            @if (empty($order->field_values))
-                <p class="text-muted-soft" style="font-size:var(--fs-xs);">입력 항목이 없습니다.</p>
-            @else
-                <div class="flex flex-col gap-3">
+            {{-- 주문 수정(2026-07-25) — 잘못 들어온 주문을 관리자가 바로잡는다.
+                 수량·기간과 고객 입력값(상품 URL·키워드 등)을 고칠 수 있고, 금액은 단가×수량×기간으로 재계산된다.
+                 첨부(FILE/IMAGE)는 값을 바꿀 수 없어 링크만 표시한다. 내부(숨김) 필드는 아래 전용 폼 담당. --}}
+            <form id="order-info-form" method="POST" action="{{ route('admin.orders.info', $order) }}" class="flex flex-col gap-3">
+                @csrf
+                @method('PUT')
+
+                {{-- 수량 · 기간 --}}
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
+                    <div class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">수량{{ ($order->product?->quantity_mode ?? '') === 'daily' ? ' · 기간' : '' }}</div>
+                    <div class="sm:col-span-3 flex items-center gap-2 flex-wrap">
+                        <input type="number" name="quantity" min="1" value="{{ old('quantity', $order->quantity) }}" required
+                               class="input" style="width:130px;font-size:var(--fs-xs);">
+                        @if (($order->product?->quantity_mode ?? '') === 'daily')
+                            <span class="text-muted-soft" style="font-size:var(--fs-xs);">×</span>
+                            <input type="number" name="days" min="1" value="{{ old('days', $order->days) }}"
+                                   class="input" style="width:110px;font-size:var(--fs-xs);">
+                            <span class="text-muted-soft" style="font-size:var(--fs-xs);">일</span>
+                        @endif
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">단가 {{ number_format($order->unit_price) }}원 · 저장 시 금액 재계산</span>
+                    </div>
+                </div>
+
+                @if (empty($order->field_values))
+                    <p class="text-muted-soft" style="font-size:var(--fs-xs);">입력 항목이 없습니다.</p>
+                @else
                     @foreach ($order->field_values as $key => $val)
                         @continue(in_array($key, $hiddenKeys, true))
-                        @php $f = $fieldMap->get($key); $label = $f->label ?? $key; $type = $f->field_type ?? 'TEXT'; @endphp
-                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
+                        @php
+                            $f = $fieldMap->get($key);
+                            $label = $f->label ?? $key;
+                            $type = $f->field_type ?? 'TEXT';
+                            $isFile = in_array($type, ['FILE', 'IMAGE'], true);
+                        @endphp
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
                             <div class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $label }}</div>
-                            <div class="sm:col-span-3 text-body" style="font-size:var(--fs-xs);word-break:break-all;">
-                                @if (is_null($val) || $val === '' || $val === [])
-                                    <span class="text-muted-soft">—</span>
-                                @elseif (is_array($val))
-                                    {{ implode(', ', $val) }}
-                                @elseif (in_array($type, ['FILE', 'IMAGE'], true))
-                                    <a href="{{ \Illuminate\Support\Facades\Storage::url($val) }}" target="_blank" class="text-accent hover:underline">첨부파일 보기 ↗</a>
-                                @elseif ($type === 'URL')
-                                    <a href="{{ $val }}" target="_blank" class="text-accent hover:underline">{{ $val }}</a>
+                            <div class="sm:col-span-3" style="font-size:var(--fs-xs);word-break:break-all;">
+                                @if ($isFile)
+                                    {{-- 첨부는 수정 대상이 아니다 --}}
+                                    @if ($val)
+                                        <a href="{{ \Illuminate\Support\Facades\Storage::url($val) }}" target="_blank" class="text-accent hover:underline">첨부파일 보기 ↗</a>
+                                    @else
+                                        <span class="text-muted-soft">—</span>
+                                    @endif
+                                @elseif ($type === 'DATE' || in_array($key, ['start_date', 'end_date'], true))
+                                    {{-- 시작일을 바꾸면 종료일이 기간(일수)만큼 자동 계산된다 --}}
+                                    <input type="date" name="fields[{{ $key }}]" value="{{ $val }}"
+                                           class="input" data-date-key="{{ $key }}" style="width:190px;font-size:var(--fs-xs);">
+                                    @if ($key === 'end_date')
+                                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">시작일·기간에 맞춰 자동 계산</span>
+                                    @endif
                                 @else
-                                    {{ $val }}
+                                    <input type="text" name="fields[{{ $key }}]" value="{{ is_array($val) ? implode(', ', $val) : $val }}"
+                                           class="input w-full" style="font-size:var(--fs-xs);"
+                                           placeholder="{{ is_array($val) ? '콤마로 구분' : '값 입력' }}">
+                                    @if ($type === 'URL' && $val)
+                                        <a href="{{ $val }}" target="_blank" class="text-accent hover:underline" style="font-size:var(--fs-xs);">열기 ↗</a>
+                                    @endif
                                 @endif
                             </div>
                         </div>
                     @endforeach
+                @endif
+
+                <div class="flex items-center justify-end gap-2 flex-wrap">
+                    @if ($order->items()->exists())
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">수량·기간을 바꾸면 세부주문을 다시 만들어야 합니다.</span>
+                    @endif
+                    <button type="submit" class="btn btn-primary btn-sm">주문 정보 저장</button>
                 </div>
-            @endif
+            </form>
+            <script>
+            (function () {
+                // 시작일·기간을 바꾸면 종료일을 즉시 다시 계산(저장 시 서버도 같은 규칙으로 재계산한다)
+                var form = document.getElementById('order-info-form');
+                if (!form) return;
+                var startEl = form.querySelector('[data-date-key="start_date"]');
+                var endEl = form.querySelector('[data-date-key="end_date"]');
+                var daysEl = form.querySelector('input[name="days"]');
+                if (!startEl || !endEl) return;
+
+                function syncEnd() {
+                    var s = (startEl.value || '').trim();
+                    var d = parseInt((daysEl && daysEl.value) || '1', 10);
+                    if (!s || !d || d < 1) return;
+                    var parts = s.split('-').map(Number);
+                    if (parts.length !== 3 || parts.some(isNaN)) return;
+                    var dt = new Date(parts[0], parts[1] - 1, parts[2]);   // 로컬 기준(타임존 밀림 방지)
+                    dt.setDate(dt.getDate() + d - 1);
+                    var mm = String(dt.getMonth() + 1).padStart(2, '0');
+                    var dd = String(dt.getDate()).padStart(2, '0');
+                    endEl.value = dt.getFullYear() + '-' + mm + '-' + dd;
+                }
+                startEl.addEventListener('change', syncEnd);
+                if (daysEl) daysEl.addEventListener('change', syncEnd);
+            })();
+            </script>
         </div>
 
         {{-- 내부(숨김) 필드 — 외부 발주 전달용. 유입키워드 수집값으로 자동 채움 + 수동 입력(2026-07-22) --}}
@@ -346,7 +417,7 @@
                             <thead>
                                 <tr class="text-muted" style="border-bottom:1px solid var(--color-hairline-soft);">
                                     <th class="text-center py-2 pr-3 font-semibold" style="width:50px;">회차</th>
-                                    <th class="text-left py-2 px-3 font-semibold" style="width:100px;">진행일</th>
+                                    <th class="text-left py-2 px-3 font-semibold" style="width:200px;">진행일</th>
                                     <th class="text-center py-2 px-3 font-semibold" style="width:70px;">URL</th>
                                     <th class="text-left py-2 px-3 font-semibold">배정 키워드</th>
                                     <th class="text-right py-2 px-3 font-semibold" style="width:80px;">수량</th>

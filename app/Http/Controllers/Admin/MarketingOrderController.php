@@ -237,6 +237,74 @@ class MarketingOrderController extends Controller
     }
 
     /** 내부(숨김) 필드 값 수동 저장 — 수집이 안 채운 항목을 관리자가 직접 입력. */
+    /**
+     * 주문 정보 수정(2026-07-25) — 잘못 들어온 주문을 관리자가 바로잡는다.
+     * 수량·기간·고객 입력값(상품 URL·키워드 등)을 고치고, 금액은 주문 생성과 같은 공식
+     * (단가 × 수량 × 기간 − 쿠폰 할인)으로 다시 계산한다. 내부(숨김) 필드는 전용 폼이 담당.
+     */
+    public function updateInfo(Request $request, MarketingOrder $order)
+    {
+        $order->loadMissing('product.fields');
+
+        $data = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1', 'max:10000000'],
+            'days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'fields' => ['nullable', 'array'],
+            'fields.*' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $qty = (int) $data['quantity'];
+        // 기간형 상품만 일수를 쓴다(1회성은 null 유지)
+        $isDaily = ($order->product?->quantity_mode ?? '') === 'daily';
+        $days = $isDaily ? max(1, (int) ($data['days'] ?? $order->days ?? 1)) : null;
+
+        // 고객 입력값 반영 — 숨김 필드는 내부 필드 폼이 담당하므로 건드리지 않는다.
+        // 원래 배열이던 값(다중선택 등)은 콤마 분리해 배열로 되돌린다.
+        $fv = (array) $order->field_values;
+        $hiddenKeys = $order->product?->fields->where('is_hidden', true)->pluck('field_key')->all() ?? [];
+        foreach ((array) ($data['fields'] ?? []) as $key => $val) {
+            if (in_array($key, $hiddenKeys, true)) {
+                continue;
+            }
+            $val = trim((string) $val);
+            if (is_array($fv[$key] ?? null)) {
+                $fv[$key] = array_values(array_filter(array_map('trim', explode(',', $val)), fn ($v) => $v !== ''));
+
+                continue;
+            }
+            $fv[$key] = $val !== '' ? $val : null;
+        }
+
+        // 시작일을 바꾸면 종료일을 기간으로 다시 계산한다(주문 생성 OrderPlacer 와 동일 규칙: 시작일 + 기간 − 1).
+        // 종료일 항목이 있는 주문에만 적용한다.
+        $start = trim((string) ($fv['start_date'] ?? ''));
+        if ($isDaily && $days && $start !== '' && array_key_exists('end_date', $fv)) {
+            try {
+                $fv['end_date'] = \Illuminate\Support\Carbon::parse($start)->addDays($days - 1)->toDateString();
+            } catch (\Throwable) {
+                // 날짜 형식이 아니면 입력값 그대로 둔다
+            }
+        }
+
+        // 금액 재계산 — OrderPlacer 와 동일 공식(단가 × 수량 × 일수 − 할인)
+        $gross = (float) $order->unit_price * $qty * max(1, (int) ($days ?: 1));
+        $total = max(0, $gross - (float) $order->discount_amount);
+
+        $order->update([
+            'quantity' => $qty,
+            'days' => $days,
+            'field_values' => $fv,
+            'total_price' => $total,
+        ]);
+
+        $msg = '주문 정보를 수정했습니다 (금액 '.number_format($total).'원 재계산).';
+        if ($order->items()->exists()) {
+            $msg .= ' 세부주문이 이미 있으니 수량·기간을 바꿨다면 [세부주문 재생성]으로 맞추세요.';
+        }
+
+        return back()->with('status', $msg);
+    }
+
     public function updateInternalFields(Request $request, MarketingOrder $order)
     {
         $order->loadMissing('product.fields');
