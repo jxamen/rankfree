@@ -116,6 +116,21 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/orders', [\App\Http\Controllers\Api\OrderApiController::class, 'store'])->middleware('throttle:30,1');
         Route::get('/orders/{orderNo}', [\App\Http\Controllers\Api\OrderApiController::class, 'show']);
     });
+
+    // 쇼핑 유입키워드 (scope: shop_keyword) — 분석 생성(추출·조합) → 순위 확인 자동 완주 → Short URL 그룹 생성.
+    // check_method=api(기본)는 서버가 shop.json 으로 확인해 확장 없이 완결된다(25·28 참조).
+    Route::middleware('auth.apikey:shop_keyword')->group(function (): void {
+        Route::get('/shop-keywords', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'index']);
+        Route::post('/shop-keywords', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/shop-keywords/{analysis}', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'show'])->whereNumber('analysis');
+        // Short URL — 생성(그룹 분배) · 목록 · 재배정(URL 유지, 키워드만 다시 나눔)
+        Route::get('/shop-keywords/{analysis}/short-links', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'shortLinks'])
+            ->whereNumber('analysis');
+        Route::post('/shop-keywords/{analysis}/short-links', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'storeShortLinks'])
+            ->whereNumber('analysis')->middleware('throttle:30,1');
+        Route::post('/shop-keywords/{analysis}/short-links/reassign', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'reassignShortLinks'])
+            ->whereNumber('analysis')->middleware('throttle:30,1');
+    });
 });
 
 /*

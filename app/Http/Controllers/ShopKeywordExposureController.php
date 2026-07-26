@@ -257,40 +257,14 @@ class ShopKeywordExposureController extends Controller
             'group_count' => 'required|integer|min:1|max:100',
         ]);
 
-        $keywords = $this->exposedKeywords($analysis);
         $groupCount = (int) $data['group_count'];
-        if ($keywords === []) {
-            return back()->withErrors(['group_count' => '상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.']);
+
+        // 생성 규칙은 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
+        try {
+            app(\App\Domain\Shopping\ShopKeywordShortLinkService::class)->generate($analysis, $groupCount);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['group_count' => $e->getMessage()]);
         }
-        if ($groupCount > count($keywords)) {
-            return back()->withErrors(['group_count' => 'Short URL 개수는 상위 노출 키워드 수보다 많을 수 없습니다.']);
-        }
-        if ($analysis->shortLinks()->where('hit_count', '>', 0)->exists()) {
-            return back()->withErrors(['short_links' => '이미 호출된 Short URL이 있어 다시 생성할 수 없습니다.']);
-        }
-
-        $references = $this->referenceKeywords($analysis);
-        $domains = $this->secondaryDomains();
-        $groups = $this->shortLinkKeywordGroups($keywords, $groupCount);
-
-        DB::transaction(function () use ($analysis, $references, $groupCount, $domains, $groups): void {
-            $analysis->shortLinks()->delete();
-
-            for ($groupNo = 1; $groupNo <= $groupCount; $groupNo++) {
-                ShopKeywordShortLink::create([
-                    'analysis_id' => $analysis->id,
-                    'token' => $this->newShortToken(),
-                    'domain' => $domains !== [] ? $domains[($groupNo - 1) % count($domains)] : null,
-                    'group_no' => $groupNo,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$groupNo - 1],
-                    'reference_keywords' => $references,
-                ]);
-            }
-        });
-
-        // 연결 주문의 Short URL 자동 채움 필드 반영(빈 필드만) — 발주 전달값
-        app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
 
         return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
     }
@@ -299,36 +273,14 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
 
-        $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->get();
-        if ($links->isEmpty()) {
-            return back()->withErrors(['short_links' => '재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.']);
+        // 재배정 규칙도 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
+        try {
+            $links = app(\App\Domain\Shopping\ShopKeywordShortLinkService::class)->reassign($analysis);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['short_links' => $e->getMessage()]);
         }
 
-        $keywords = $this->exposedKeywords($analysis);
-        $groupCount = $links->count();
-        if ($keywords === []) {
-            return back()->withErrors(['short_links' => '상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.']);
-        }
-        if ($groupCount > count($keywords)) {
-            return back()->withErrors(['short_links' => 'Short URL 수가 상위 노출 키워드 수보다 많아 재배정할 수 없습니다.']);
-        }
-
-        $references = $this->referenceKeywords($analysis);
-        $groups = $this->shortLinkKeywordGroups($keywords, $groupCount);
-
-        DB::transaction(function () use ($links, $references, $groupCount, $groups): void {
-            foreach ($links->values() as $idx => $link) {
-                $link->update([
-                    'group_no' => $idx + 1,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$idx],
-                    'reference_keywords' => $references,
-                    'cursor' => 0,
-                ]);
-            }
-        });
-
-        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개에 키워드를 재배정했습니다.");
+        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$links->count()}개에 키워드를 재배정했습니다.");
     }
 
     public function short(string $token): RedirectResponse

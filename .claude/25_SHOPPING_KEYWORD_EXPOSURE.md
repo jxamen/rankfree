@@ -130,6 +130,29 @@
 - 확장: manifest 0.3.6 — host `m.search.naver.com`·`s.search.naver.com` 추가, console-bridge content script 는 `admin/shop-keyword*`(+구 `console/shop-keyword*` prod 호환) 매칭. qra("함께 많이 찾는")는 **모바일+PC 합집합**. **확장 새로고침 + 페이지 새로고침 필요**.
 - 테스트: `tests/Feature/ShopFilterHtmlParserTest.php` + `ShopKeywordExposureTest.php`(조합 생성·배치 노출판정·check-html·me 백필·supplement·product-info payload·어미·핵심포함·소유권).
 
+## 외부 API v1 (scope: shop_keyword) — 2026-07-26
+
+> 분석 생성 → 순위 확인 자동 완주 → Short URL 그룹 생성을 외부에서 자동화. 인증은 기존 API 키 체계(28) 그대로.
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/v1/shop-keywords` | 분석 생성 + 확인 자동 시작 — `core_keyword`·`product`(필수), `threshold`, `check_method`, `product_info` |
+| GET | `/api/v1/shop-keywords` | 내 분석 목록(page/per_page≤100) |
+| GET | `/api/v1/shop-keywords/{id}` | 진행 상태 + `exposed_keywords` + `short_links` |
+| POST | `/api/v1/shop-keywords/{id}/short-links` | Short URL 생성(`group_count` 1~100 — 노출 키워드를 그룹에 라운드로빈 분배) |
+| GET | `/api/v1/shop-keywords/{id}/short-links` | Short URL 목록(group_no·url·keywords·hit_count) |
+| POST | `/api/v1/shop-keywords/{id}/short-links/reassign` | 재배정 — URL(토큰·도메인) 유지, 키워드만 다시 분배 + cursor 0 |
+
+- **확장 의존 처리(사용자 확정)** — 서버엔 확장을 켜 둘 수 없으므로 **브라우저로만 얻는 정보는 요청자 쪽에서 수집해 전달**한다.
+  - `check_method=api`(기본): `checkBatch` 가 shop.json 으로 확인 → **확장 없이 서버 완결**(상위 40위·광고 판별 없음).
+    생성 시 [ShopKeywordCheckJob](../app/Jobs/ShopKeywordCheckJob.php) 이 남은 조합 0 까지 자기 자신을 재큐(default 큐, 배치 15/약 7초 + 2초 간격).
+    ⚠️ sync 커넥션에선 재큐가 곧 재귀라 **한 배치만** 돌고 끝낸다(테스트·로컬 보호).
+  - `check_method=search`: 서버 IP 차단 시 `status=blocked` — 확장 켠 브라우저에서 분석 화면을 열면 이어서 처리.
+  - **조합 재료(제목·브랜드·SEO태그)** 는 서버가 상품페이지를 못 여니 `product_info{title,brand,mall,price,seller_tags}` 로 받는다. 생략하면 조합이 빈약해진다(제목 기반 티어가 안 만들어짐).
+- **Short URL 생성은 [ShopKeywordShortLinkService](../app/Domain/Shopping/ShopKeywordShortLinkService.php) 단일 소스** — 관리자 화면(`storeShortLinks`)과 API 가 공유(규칙 수정은 여기 한 곳).
+- 소유권: API 키 소유 회원 = `analyses.user_id`(남의 분석 403). scope 없으면 403, 키 무효 401.
+- 검증: [ShopKeywordApiTest](../tests/Feature/ShopKeywordApiTest.php) 7건(scope·생성/조합·서버 완결·그룹 분배·노출 0 시 422·소유자 격리·목록) + 로컬 실호출(키 발급 → 생성 217조합 → 워커 자동 재큐 확인 → show/목록/422).
+
 ## 후속 여지
 
 - 순위 범위: m.search 첫 로드는 가격비교 슬롯 ~15개(실측) — 그 밖은 0(미노출). threshold 5 목적엔 충분.

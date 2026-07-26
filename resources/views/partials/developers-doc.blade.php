@@ -41,6 +41,7 @@
     <button type="button" class="doc-tab" data-tab="compete">경쟁분석</button>
     <button type="button" class="doc-tab" data-tab="keyword">키워드분석</button>
     <button type="button" class="doc-tab" data-tab="order">마케팅 상품 주문</button>
+    <button type="button" class="doc-tab" data-tab="shop_keyword">쇼핑 유입키워드</button>
 </div>
 
 {{-- ============ 시작하기: 인증 · 오류 ============ --}}
@@ -242,6 +243,72 @@ HTTP/1.1 201
 
 HTTP/1.1 422
 {"message": "'플레이스 URL' 항목을 입력하세요.", "field": "f_place_url"}</pre>
+</div>
+
+{{-- ============ 쇼핑 유입키워드 ============ --}}
+<div class="doc-panel" data-panel="shop_keyword">
+    <h2 class="font-display text-ink doc-h2">쇼핑 유입키워드 <span class="badge border border-hairline" style="font-size:var(--fs-xs);vertical-align:middle;">scope: shop_keyword</span></h2>
+    <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
+        핵심 키워드와 상품으로 <b class="text-ink">롱테일 조합을 만들어 상위 노출되는 키워드를 찾고</b>, 그 키워드를 그룹으로 나눠
+        <b class="text-ink">Short URL</b>을 생성합니다. 분석을 만들면 순위 확인이 <b class="text-ink">자동으로 진행</b>되며,
+        진행 상태는 조회 API로 확인합니다(규칙은 관리자 화면과 동일).
+    </p>
+    <table class="doc-table mt-4">
+        <thead><tr><th style="width:340px;">엔드포인트</th><th>설명</th></tr></thead>
+        <tbody>
+            <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords</code></td><td>분석 생성 + 순위 확인 자동 시작 — <code class="doc-code">core_keyword</code>(필수), <code class="doc-code">product</code>(필수: 상품 URL 또는 업체명), <code class="doc-code">threshold</code>(1~40, 기본 5), <code class="doc-code">check_method</code>, <code class="doc-code">product_info</code></td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords</code></td><td>내 분석 목록 — <code class="doc-code">page</code>/<code class="doc-code">per_page</code>(≤100)</td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords/{id}</code></td><td>진행 상태 + <code class="doc-code">exposed_keywords</code>(노출 키워드) + <code class="doc-code">short_links</code></td></tr>
+            <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords/{id}/short-links</code></td><td>Short URL 생성 — <code class="doc-code">group_count</code>(1~100). 노출 키워드를 그룹에 고르게 나눠 배정</td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords/{id}/short-links</code></td><td>Short URL 목록 — <code class="doc-code">group_no</code>·<code class="doc-code">url</code>·<code class="doc-code">keywords</code>·<code class="doc-code">hit_count</code></td></tr>
+            <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords/{id}/short-links/reassign</code></td><td>재배정 — <b>URL은 그대로 두고 키워드만 다시 나눔</b>(노출 키워드가 늘었을 때)</td></tr>
+        </tbody>
+    </table>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">Short URL 규칙</b></p>
+    <table class="doc-table mt-2">
+        <thead><tr><th style="width:200px;">항목</th><th>규칙</th></tr></thead>
+        <tbody>
+            <tr><td>그룹 분배</td><td>노출 키워드를 순서대로 그룹에 <b class="text-ink">고르게 나눕니다</b>(1번→2번→…→1번). <code class="doc-code">group_count</code> 는 노출 키워드 수보다 클 수 없습니다.</td></tr>
+            <tr><td>재생성 제한</td><td>이미 <b class="text-ink">호출된 적이 있는 링크</b>(<code class="doc-code">hit_count &gt; 0</code>)가 있으면 생성이 막힙니다(배포한 주소가 죽지 않도록). 이때는 <code class="doc-code">/reassign</code> 으로 키워드만 교체하세요.</td></tr>
+            <tr><td>실패 응답</td><td>노출 키워드 없음·그룹 수 초과·호출된 링크 존재는 <code class="doc-code">422</code> + <code class="doc-code">field</code>(<code class="doc-code">group_count</code> 또는 <code class="doc-code">short_links</code>)</td></tr>
+        </tbody>
+    </table>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">확장(브라우저) 필요 여부</b> — 서버에는 확장을 켜 둘 수 없으므로, 브라우저로만 얻을 수 있는 정보는 <b class="text-ink">요청하는 쪽에서 수집해 전달</b>합니다.</p>
+    <table class="doc-table mt-2">
+        <thead><tr><th style="width:200px;">항목</th><th>설명</th></tr></thead>
+        <tbody>
+            <tr><td><code class="doc-code">check_method</code> <br><code class="doc-code">api</code>(기본)</td><td><b class="text-ink">확장 없이 서버가 끝까지 확인</b>합니다(쇼핑 API 기준, 상위 40위까지·광고 판별 없음). 별도 조작 없이 완료될 때까지 자동 진행됩니다.</td></tr>
+            <tr><td><code class="doc-code">check_method</code> <br><code class="doc-code">search</code></td><td>실제 검색화면 기준(광고 판별 가능)이지만 서버 IP가 막히면 <code class="doc-code">status: "blocked"</code> 로 멈춥니다. 이때는 <b class="text-ink">확장을 설치한 브라우저에서 해당 분석 화면을 열어 두면</b> 이어서 처리됩니다.</td></tr>
+            <tr><td><code class="doc-code">product_info</code></td><td>조합 재료가 되는 <b class="text-ink">상품 제목·브랜드·SEO 태그</b>는 서버가 상품 페이지를 열 수 없어 가져오지 못합니다. 요청 시 <code class="doc-code">{"title": "...", "brand": "...", "seller_tags": ["..."]}</code> 로 함께 보내면 제목 기반 조합이 만들어져 노출 적중률이 크게 올라갑니다. <b>생략하면 조합이 빈약해집니다.</b></td></tr>
+        </tbody>
+    </table>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">진행 상태(<code class="doc-code">status</code>)</b> — <code class="doc-code">checking</code>(확인 중) · <code class="doc-code">done</code>(완료) · <code class="doc-code">blocked</code>(차단·중단) · <code class="doc-code">paused</code>(사용자 중단). <code class="doc-code">progress.remaining</code> 이 0 이면 확인이 끝난 것입니다.</p>
+
+<div class="doc-block mt-4">
+<div class="doc-block-t">분석 생성 → 상태 확인 → Short URL</div>
+<pre class="doc-pre">curl -X POST https://rankfree.kr/api/v1/shop-keywords \
+  -H "Authorization: Bearer rk_..." -H "Content-Type: application/json" \
+  -d '{
+    "core_keyword": "비타민c",
+    "product": "https://smartstore.naver.com/mystore/products/123456",
+    "threshold": 5,
+    "product_info": {"title": "종근당 비타민c 고함량 스틱", "brand": "종근당", "seller_tags": ["고함량비타민"]}
+  }'
+
+# → {"analysis": {"id": 42, "status": "checking", "progress": {"total": 240, "remaining": 240, ...}}}
+
+curl https://rankfree.kr/api/v1/shop-keywords/42 -H "Authorization: Bearer rk_..."
+# → {"analysis": {"status": "done", "progress": {"exposed": 12, "remaining": 0}},
+#     "exposed_keywords": ["비타민c 고함량", …], "short_links": []}
+
+curl -X POST https://rankfree.kr/api/v1/shop-keywords/42/short-links \
+  -H "Authorization: Bearer rk_..." -H "Content-Type: application/json" \
+  -d '{"group_count": 3}'
+# → {"short_links": [{"group_no": 1, "url": "https://.../s/AbC123", "keywords": ["비타민c 고함량", …]}, …]}</pre>
+</div>
 </div>
 
 <div class="card-soft mt-12 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
