@@ -12,9 +12,13 @@ class ApiKeyTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** 키 자체의 scope 동작을 보는 테스트라 회원 권한(2026-07-26)은 전부 열어 둔다. */
     private function makeUser(string $email = 'tester@rankfree.kr'): User
     {
-        return User::create(['name' => '테스터', 'email' => $email, 'password' => 'secret1234']);
+        return User::create([
+            'name' => '테스터', 'email' => $email, 'password' => 'secret1234',
+            'api_scopes' => array_keys(\App\Models\ApiKey::SCOPES),
+        ]);
     }
 
     public function test_console_page_renders(): void

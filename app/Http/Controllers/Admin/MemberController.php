@@ -68,6 +68,9 @@ class MemberController extends Controller
             'grade_id' => ['nullable', 'exists:member_grades,id'],
             'subscription_expires_at' => ['nullable', 'date'],
             'operator_role_id' => ['nullable', 'exists:operator_roles,id'],
+            // 회원별 API 기능 권한(2026-07-26) — 허용한 기능만 키 발급·호출 가능
+            'api_scopes' => ['nullable', 'array'],
+            'api_scopes.*' => ['in:'.implode(',', array_keys(\App\Models\ApiKey::SCOPES))],
         ]);
 
         $actor = $request->user();
@@ -82,6 +85,11 @@ class MemberController extends Controller
                 ? Carbon::parse($data['subscription_expires_at'])->endOfDay()
                 : null,
         ];
+
+        // API 기능 권한 — 운영자(관리자)만 편집. 폼에서 전부 해제하면 빈 배열로 저장(=사용 불가)
+        if ($actor->isOperator()) {
+            $payload['api_scopes'] = array_values(array_unique(array_map('strval', (array) ($data['api_scopes'] ?? []))));
+        }
 
         if ($isSuper) {
             // 자기 자신의 슈퍼 권한을 실수로 회수하지 못하게 방지

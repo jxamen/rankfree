@@ -22,7 +22,9 @@ class OrderApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->user = User::create(['name' => '외부연동', 'email' => 'api@rankfree.kr', 'password' => 'secret1234']);
+        // 회원별 API 권한(2026-07-26) — 주문 기능을 허용한 계정
+        $this->user = User::create(['name' => '외부연동', 'email' => 'api@rankfree.kr', 'password' => 'secret1234',
+            'api_scopes' => ['order', 'rank']]);
         [, $plain] = ApiKey::issue($this->user, '테스트', ['order'], null, null, null);
         $this->key = $plain;
     }
@@ -168,7 +170,7 @@ class OrderApiTest extends TestCase
             ->assertOk()->assertJsonPath('order.order_no', $orderNo);
 
         // 남의 키로는 404
-        $other = User::create(['name' => '남', 'email' => 'other@rankfree.kr', 'password' => 'secret1234']);
+        $other = User::create(['name' => '남', 'email' => 'other@rankfree.kr', 'password' => 'secret1234', 'api_scopes' => ['order']]);
         [, $otherKey] = ApiKey::issue($other, '남의키', ['order'], null, null, null);
         $this->withHeader('Authorization', 'Bearer '.$otherKey)->getJson("/api/v1/orders/{$orderNo}")
             ->assertStatus(404);

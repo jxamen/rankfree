@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'provider', 'provider_id', 'password', 'role', 'grade_id', 'operator_role_id', 'subscription_expires_at'])]
+#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'provider', 'provider_id', 'password', 'role', 'api_scopes', 'grade_id', 'operator_role_id', 'subscription_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -26,7 +26,33 @@ class User extends Authenticatable
             'phone_verified_at' => 'datetime',
             'subscription_expires_at' => 'datetime',
             'password' => 'hashed',
+            'api_scopes' => 'array',   // 회원별 허용 API 기능(scope) — 관리자가 부여
         ];
+    }
+
+    /**
+     * 이 회원이 쓸 수 있는 API 기능(scope) 목록(2026-07-26).
+     * 관리자가 허용한 것만 — 기본은 없음(다 열어주지 않는다). 슈퍼관리자만 예외로 전체.
+     *
+     * @return list<string>
+     */
+    public function allowedApiScopes(): array
+    {
+        if ($this->isSuperAdmin()) {
+            return array_keys(\App\Models\ApiKey::SCOPES);
+        }
+
+        // 정의에서 사라진 scope 는 무시(오래된 데이터 보호)
+        return array_values(array_intersect(
+            array_map('strval', (array) ($this->api_scopes ?? [])),
+            array_keys(\App\Models\ApiKey::SCOPES),
+        ));
+    }
+
+    /** 특정 API 기능 사용 권한 여부 — 키 발급과 실제 호출 양쪽에서 검사한다. */
+    public function canUseApiScope(string $scope): bool
+    {
+        return in_array($scope, $this->allowedApiScopes(), true);
     }
 
     /** 유료 구독 활성 여부 — 유료 등급이며 만료일이 없거나(무기한) 아직 안 지남. */

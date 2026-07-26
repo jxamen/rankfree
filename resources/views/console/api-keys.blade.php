@@ -115,14 +115,23 @@
                 <input name="name" class="input" value="{{ old('name') }}" placeholder="예: 사내 대시보드 연동" required maxlength="80">
             </div>
 
+            {{-- 권한 — 관리자가 이 계정에 허용한 기능만 발급할 수 있다(2026-07-26) --}}
             <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">권한 (scope)</label>
-            <div class="flex gap-4 flex-wrap mb-4">
-                @foreach (\App\Models\ApiKey::SCOPES as $code => $label)
-                    <label class="flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
-                        <input type="checkbox" name="scopes[]" value="{{ $code }}" @checked(in_array($code, (array) old('scopes', ['rank'])))> {{ $label }}
-                    </label>
-                @endforeach
-            </div>
+            @if (($allowedScopes ?? []) === [])
+                <div class="card-soft px-4 py-3 mb-4" style="font-size:var(--fs-xs);">
+                    <b class="text-ink">사용 가능한 API 기능이 없습니다.</b>
+                    <span class="text-muted">필요한 기능을 관리자에게 요청하시면 권한이 부여된 뒤 키를 발급할 수 있습니다.</span>
+                </div>
+            @else
+                <div class="flex gap-4 flex-wrap mb-4">
+                    @foreach ($allowedScopes as $code)
+                        <label class="flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                            <input type="checkbox" name="scopes[]" value="{{ $code }}"
+                                   @checked(in_array($code, (array) old('scopes', [$allowedScopes[0]])))> {{ \App\Models\ApiKey::SCOPES[$code] ?? $code }}
+                        </label>
+                    @endforeach
+                </div>
+            @endif
 
             <div class="flex gap-3 flex-wrap mb-4">
                 <div style="flex:1;min-width:160px;">

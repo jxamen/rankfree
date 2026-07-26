@@ -13,15 +13,23 @@ class ApiKeyController extends Controller
     {
         return view('console.api-keys', [
             'keys' => $request->user()->apiKeys()->latest()->get(),
+            // 관리자가 이 회원에게 허용한 기능만 발급 화면에 노출한다(2026-07-26)
+            'allowedScopes' => $request->user()->allowedApiScopes(),
         ]);
     }
 
     public function store(Request $request)
     {
+        $allowed = $request->user()->allowedApiScopes();
+        if ($allowed === []) {
+            return back()->withErrors(['scopes' => '사용 가능한 API 기능이 없습니다. 관리자에게 권한을 요청하세요.']);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80'],
             'scopes' => ['required', 'array', 'min:1'],
-            'scopes.*' => ['in:'.implode(',', array_keys(ApiKey::SCOPES))],
+            // 회원에게 허용된 기능만 키에 담을 수 있다
+            'scopes.*' => ['in:'.implode(',', $allowed)],
             'expires_at' => ['nullable', 'date', 'after:today'],
             'daily_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'allowed_ips' => ['nullable', 'string', 'max:2000'],

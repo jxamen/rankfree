@@ -11,6 +11,17 @@
   - 입력 오류는 [OrderInputException](../app/Domain/Order/OrderInputException.php)(field, message) — field 규약: 동적 필드 `f_{field_key}` · `quantity` · `days` · `user_coupon_id`. 웹은 폼 에러 키로, API 는 422 응답의 `field` 로 그대로 노출.
 - **파일(FILE/IMAGE) 필드는 웹 전용** — 업로드 저장은 웹 컨트롤러가 하고 경로만 서비스에 전달. 필수 파일 필드가 있는 상품은 API 에서 `orderable: false` + 주문 시 422.
 
+## 회원별 기능 권한 (2026-07-26) — 다 열어주지 않는다
+
+- `users.api_scopes`(JSON) = **관리자가 허용한 기능만** 그 회원이 쓸 수 있다. **기본값은 없음(전부 차단)**, 슈퍼관리자만 예외로 전체.
+  - [User::allowedApiScopes()](../app/Models/User.php) / `canUseApiScope()` — 정의에서 사라진 scope 는 무시.
+- **3중 게이트**: ① 발급 — 허용 밖 scope 는 [ApiKeyController](../app/Http/Controllers/ApiKeyController.php) 검증에서 반려(권한 0 이면 발급 자체 차단),
+  ② 화면 — 콘솔 발급 폼에 허용된 기능만 노출(없으면 안내 문구), ③ **런타임** — [AuthenticateApiKey](../app/Http/Middleware/AuthenticateApiKey.php) 가
+  키 scope 통과 후 회원 권한을 다시 확인해 **권한 회수 시 이미 발급된 키도 즉시 403**(`allowed_scopes` 동봉).
+- 관리자 편집: `/admin/members` 회원 수정 폼의 **API 사용 권한** 체크박스([MemberController::update](../app/Http/Controllers/Admin/MemberController.php), 운영자만). 전부 해제 = 사용 불가.
+- **무중단 이관**: 마이그레이션이 기존 API 키들의 scope 합집합을 각 회원 `api_scopes` 로 옮긴다(배포 순간 기존 연동이 403 되지 않게).
+- 검증 [MemberApiScopeTest](../tests/Feature/MemberApiScopeTest.php) 9건(기본 차단·슈퍼 전체·발급 차단/허용·폼 노출·**권한 회수 시 기존 키 403**·관리자 편집 라운드트립).
+
 ## 인증·엔드포인트
 
 기존 외부 API 키 체계([AuthenticateApiKey](../app/Http/Middleware/AuthenticateApiKey.php) — Bearer `rk_…`, 활성/만료/허용 IP/일일 한도) 그대로, **scope `order`** 추가([ApiKey::SCOPES](../app/Models/ApiKey.php) — 콘솔 API 키 발급 화면에 자동 노출). 라우트는 [routes/api.php](../routes/api.php) v1 그룹.

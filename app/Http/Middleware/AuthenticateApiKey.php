@@ -34,6 +34,14 @@ class AuthenticateApiKey
         if ($scope !== null && ! $key->hasScope($scope)) {
             return response()->json(['message' => "이 키에는 '{$scope}' 권한이 없습니다.", 'scopes' => $key->scopes], 403);
         }
+        // 회원별 기능 권한(2026-07-26) — 키에 scope 가 있어도 관리자가 그 회원에게 허용한 기능이 아니면 막는다.
+        // 발급 뒤 권한을 회수하면 기존 키도 즉시 차단된다.
+        if ($scope !== null && ! $key->user->canUseApiScope($scope)) {
+            return response()->json([
+                'message' => "이 계정은 '{$scope}' 기능을 사용할 수 없습니다. 관리자에게 권한을 요청하세요.",
+                'allowed_scopes' => $key->user->allowedApiScopes(),
+            ], 403);
+        }
 
         // 일일 사용량 — 한도 초과 시 429, 무제한 키도 집계는 남긴다
         $usage = ApiKeyUsage::firstOrCreate(

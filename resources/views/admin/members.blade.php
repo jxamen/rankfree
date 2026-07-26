@@ -130,6 +130,26 @@
                                             <option value="{{ $r->id }}" @selected($m->operator_role_id == $r->id)>{{ $r->name }}</option>
                                         @endforeach
                                     </select></div>
+                                {{-- API 기능 권한(2026-07-26) — 체크한 기능만 이 회원이 키를 발급·호출할 수 있다.
+                                     슈퍼관리자 계정은 항상 전체 사용 가능(체크와 무관). --}}
+                                <div class="w-full" style="border-top:1px solid var(--color-hairline-soft);padding-top:10px;margin-top:2px;">
+                                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">
+                                        API 사용 권한 <span class="text-muted-soft">— 체크한 기능만 키 발급·호출 가능</span>
+                                    </label>
+                                    @php $mScopes = $m->allowedApiScopes(); @endphp
+                                    <div class="flex gap-4 flex-wrap">
+                                        @foreach (\App\Models\ApiKey::SCOPES as $code => $label)
+                                            <label class="flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                                                <input type="checkbox" name="api_scopes[]" value="{{ $code }}"
+                                                       @checked(in_array($code, $mScopes, true))
+                                                       {{ $m->isSuperAdmin() ? 'disabled' : '' }}> {{ $label }}
+                                            </label>
+                                        @endforeach
+                                        @if ($m->isSuperAdmin())
+                                            <span class="text-muted-soft" style="font-size:var(--fs-xs);">슈퍼관리자는 전체 사용 가능</span>
+                                        @endif
+                                    </div>
+                                </div>
                                 <button type="submit" class="btn btn-primary btn-sm">저장</button>
                                 <button type="button" class="btn btn-ghost btn-sm" onclick="rfTgl('edit-{{ $m->id }}')">닫기</button>
                             </form>
