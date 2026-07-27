@@ -111,7 +111,7 @@
         </div>
     </div>
 
-    {{-- 모바일 메뉴 패널 — 햄버거 클릭 시 헤더 아래로 펼침. 대분류는 아코디언(기본 펼침) + 세부 메뉴 --}}
+    {{-- 모바일 메뉴 패널 — 햄버거 클릭 시 헤더 아래로 펼침. 대분류는 아코디언(기본 접힘) + 세부 메뉴 --}}
     <style>
         #rf-mnav summary { list-style: none; cursor: pointer; }
         #rf-mnav summary::-webkit-details-marker { display: none; }
@@ -123,7 +123,7 @@
     <div id="rf-mnav" class="hidden md:hidden border-t border-hairline-soft bg-canvas" style="max-height:calc(100vh - 64px);overflow-y:auto;">
         <nav class="container-page py-3 flex flex-col" style="font-size:var(--fs-sm);font-weight:500;">
             {{-- 분석 도구 — 세부 메뉴 포함 --}}
-            <details open>
+            <details>
                 <summary class="flex items-center justify-between px-2 py-2.5 rounded-md text-body hover:bg-surface-card transition">
                     분석 도구
                     <svg class="chev transition" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -146,7 +146,7 @@
                 </div>
             </details>
             {{-- 마케팅 — 세부 메뉴 포함 --}}
-            <details open>
+            <details>
                 <summary class="flex items-center justify-between px-2 py-2.5 rounded-md text-body hover:bg-surface-card transition">
                     마케팅
                     <svg class="chev transition" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
