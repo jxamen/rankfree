@@ -39,7 +39,8 @@
         // 키워드 검색은 PC 지도(map.naver.com), 플레이스 상세는 모바일(m.place) 로 연다(사용자 요구)
         $searchUrl = 'https://map.naver.com/p/search/'.urlencode((string) $slot->keyword);
         $targetName = ($slot->label ? $slot->label.' · ' : '').($slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : ''));
-        $targetUrl = $slot->place_url ?: ($slot->place_id ? 'https://m.place.naver.com/'.($slot->category ?: 'place').'/'.$slot->place_id : null);
+        // 플레이스 열기 — 모바일 place 상세 홈. category(hairshop 등) 는 잘못 저장될 수 있어 URL 에 쓰지 않고 place 고정 + /home
+        $targetUrl = $slot->place_id ? 'https://m.place.naver.com/place/'.$slot->place_id.'/home' : $slot->place_url;
         $targetTitle = '플레이스 페이지 열기';
         $capBadge = '순위 추적 · 랭크프리';
         $capNoun = '순위 추적';
