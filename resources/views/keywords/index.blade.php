@@ -11,7 +11,7 @@
 
 @push('head')
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'CollectionPage',
     'name' => '키워드 인사이트',
     'description' => $__desc,
@@ -21,7 +21,7 @@
 ], $__f) !!}</script>
 {{-- 사이트링크 검색창 신호 — 검색 진입점임을 검색엔진에 알린다 --}}
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'WebSite',
     'name' => '랭크프리',
     'url' => url('/'),

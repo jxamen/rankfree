@@ -24,15 +24,18 @@
     $__crumbs[] = ['name' => $seoTitle, 'item' => $__url];
 @endphp
 @push('head')
+{{-- ⚠️ JSON-LD 키는 반드시 '@'.'context' 로 쪼개 쓴다(2026-07-27).
+     Blade 에 @context 디렉티브가 실제로 있어서 '@context' 라고 쓰면 컴파일 때 PHP 코드로 치환되고,
+     스키마 전체가 무효가 된다(실측: 운영 리포트의 ld+json 키에 PHP 소스가 박혀 있었다). @type 등은 무해. --}}
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'BreadcrumbList',
     'itemListElement' => collect($__crumbs)->values()->map(fn ($c, $i) => [
         '@type' => 'ListItem', 'position' => $i + 1, 'name' => $c['name'], 'item' => $c['item'],
     ])->all(),
 ], $__f) !!}</script>
 <script type="application/ld+json">{!! json_encode(array_filter([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'Article',
     'headline' => \Illuminate\Support\Str::limit($seoTitle, 110, ''),
     'description' => $seoDesc,
@@ -49,7 +52,7 @@
 ], fn ($v) => $v !== null && $v !== ''), $__f) !!}</script>
 @if ($__faq->isNotEmpty())
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'FAQPage',
     'mainEntity' => $__faq->map(fn ($x) => [
         '@type' => 'Question',

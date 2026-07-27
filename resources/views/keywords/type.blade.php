@@ -18,7 +18,7 @@
 
 @push('head')
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'BreadcrumbList',
     'itemListElement' => [
         ['@type' => 'ListItem', 'position' => 1, 'name' => '홈', 'item' => url('/')],
@@ -27,7 +27,7 @@
     ],
 ], $__f) !!}</script>
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'CollectionPage',
     'name' => $typeLabel.' 키워드 인사이트',
     'description' => $__desc,

@@ -33,7 +33,7 @@
     @push('head')
 {{-- BreadcrumbList — 홈 > 커뮤니티 > 카테고리 > 글 --}}
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'BreadcrumbList',
     'itemListElement' => array_values(array_filter([
         ['@type' => 'ListItem', 'position' => 1, 'name' => '홈', 'item' => url('/')],
@@ -45,7 +45,7 @@
 {{-- DiscussionForumPosting — 실사용자 작성 글에만 출력(구글 포럼 마크업은 실제 사람의 UGC 전용. 페르소나 글은 미출력). --}}
 @if ($post->author_type === 'user' && $post->user)
 <script type="application/ld+json">{!! json_encode(array_filter([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'DiscussionForumPosting',
     'headline' => $post->title,
     'text' => $__bodyText,

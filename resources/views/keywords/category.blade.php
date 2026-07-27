@@ -25,12 +25,12 @@
 
 @push('head')
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'BreadcrumbList',
     'itemListElement' => $__crumbs,
 ], $__f) !!}</script>
 <script type="application/ld+json">{!! json_encode([
-    '@context' => 'https://schema.org',
+    '@'.'context' => 'https://schema.org',
     '@type' => 'CollectionPage',
     'name' => $cat->name.' 키워드 인사이트',
     'description' => $__desc,
