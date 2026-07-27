@@ -33,6 +33,9 @@
             @endif
         </div>
         @include('auth._phone-verify')
+
+        @include('auth._signup-terms')
+
         <button type="submit" class="btn btn-primary btn-lg mt-1">가입 완료</button>
     </form>
 @endsection

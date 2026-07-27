@@ -41,11 +41,22 @@ class SocialAuthTest extends TestCase
             ->assertSee('인증번호 받기')->assertSee('Google로 계속하기');
     }
 
+    /** 약관 3종은 defaults(service·marketing·third_party) — 필수라 가입 시 함께 동의해야 한다. */
+    private const TERMS = ['terms' => ['service' => '1', 'marketing' => '1', 'third_party' => '1']];
+
     public function test_register_requires_phone_verification(): void
     {
-        $this->post('/register', [
+        $this->from('/register')->post('/register', [
             'name' => '홍길동', 'email' => 'a@rf.kr', 'phone' => '010-1234-5678', 'password' => 'password123',
-        ])->assertSessionHasErrors('phone');
+        ] + self::TERMS)->assertSessionHasErrors('phone');
+        $this->assertDatabaseMissing('users', ['email' => 'a@rf.kr']);
+    }
+
+    public function test_register_requires_terms_agreement(): void
+    {
+        $this->from('/register')->withSession(['phone_verified' => '01012345678'])->post('/register', [
+            'name' => '홍길동', 'email' => 'a@rf.kr', 'phone' => '010-1234-5678', 'password' => 'password123',
+        ])->assertSessionHasErrors('terms.service');   // 약관 미동의 → 가입 불가
         $this->assertDatabaseMissing('users', ['email' => 'a@rf.kr']);
     }
 
@@ -53,7 +64,7 @@ class SocialAuthTest extends TestCase
     {
         $this->withSession(['phone_verified' => '01012345678'])->post('/register', [
             'name' => '홍길동', 'email' => 'a@rf.kr', 'phone' => '010-1234-5678', 'password' => 'password123',
-        ])->assertRedirect(route('console.dashboard'));
+        ] + self::TERMS)->assertRedirect(route('console.dashboard'));
 
         $this->assertDatabaseHas('users', ['email' => 'a@rf.kr', 'phone' => '01012345678']);
         $this->assertNotNull(User::where('email', 'a@rf.kr')->first()->phone_verified_at);
@@ -100,9 +111,23 @@ class SocialAuthTest extends TestCase
             'phone_verified' => '01055556666',
         ])->post('/auth/complete', [
             'name' => '구글회원', 'email' => 'g@rf.kr', 'phone' => '010-5555-6666',
-        ])->assertRedirect(route('console.dashboard'));
+        ] + self::TERMS)->assertRedirect(route('console.dashboard'));
 
         $this->assertDatabaseHas('users', ['email' => 'g@rf.kr', 'phone' => '01055556666', 'provider' => 'google']);
+        // 소셜 가입도 약관 동의 이력이 저장된다
+        $this->assertNotNull(User::where('email', 'g@rf.kr')->first()->term_agreements);
+    }
+
+    public function test_social_complete_requires_terms_agreement(): void
+    {
+        $this->withSession([
+            'social_signup' => ['provider' => 'google', 'provider_id' => 'g-2', 'email' => 'g2@rf.kr', 'name' => '구글회원'],
+            'phone_verified' => '01055557777',
+        ])->from('/auth/complete')->post('/auth/complete', [
+            'name' => '구글회원', 'email' => 'g2@rf.kr', 'phone' => '010-5555-7777',
+            // 약관 미동의 → 가입 불가
+        ])->assertSessionHasErrors('terms.service');
+        $this->assertDatabaseMissing('users', ['email' => 'g2@rf.kr']);
     }
 
     public function test_removed_and_unknown_providers_are_404(): void

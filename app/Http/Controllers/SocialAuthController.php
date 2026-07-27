@@ -94,6 +94,17 @@ class SocialAuthController extends Controller
             return redirect()->route('register');
         }
 
+        // 약관 동의(2026-07-27) — 소셜 가입도 일반 가입과 동일하게 필수 약관에 동의해야 한다.
+        $terms = \App\Domain\Member\SignupTerms::active();
+        $termRules = [];
+        $termMessages = [];
+        foreach ($terms as $t) {
+            if (! empty($t['required'])) {
+                $termRules['terms.'.$t['key']] = ['accepted'];
+                $termMessages['terms.'.$t['key'].'.accepted'] = "'{$t['title']}'에 동의해 주세요.";
+            }
+        }
+
         // 소셜이 이메일을 제공했으면 그 이메일을 고정(변조 방지). 없을 때만 직접 입력받는다.
         $socialEmail = $social['email'] ?? null;
         $rules = [
@@ -103,7 +114,7 @@ class SocialAuthController extends Controller
         if (! $socialEmail) {
             $rules['email'] = ['required', 'email', 'max:150', 'unique:users,email'];
         }
-        $data = $request->validate($rules);
+        $data = $request->validate($rules + $termRules, $termMessages);
         $email = $socialEmail ?: $data['email'];
 
         if ($socialEmail && User::where('email', $email)->exists()) {
@@ -121,6 +132,19 @@ class SocialAuthController extends Controller
         $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
         $role = in_array(strtolower($email), $superAdmins, true) ? 'super' : 'user';
 
+        // 동의 이력 — 언제 무엇에 동의했는지 근거 스냅샷(제목·시각·IP)
+        $agreed = [];
+        foreach ($terms as $t) {
+            if ($request->boolean('terms.'.$t['key'])) {
+                $agreed[$t['key']] = [
+                    'title' => $t['title'],
+                    'required' => (bool) $t['required'],
+                    'agreed_at' => now()->toIso8601String(),
+                    'ip' => $request->ip(),
+                ];
+            }
+        }
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $email,
@@ -131,6 +155,7 @@ class SocialAuthController extends Controller
             'password' => Str::password(24), // 소셜 전용 — 임의 비밀번호(로그인은 소셜로만)
             'role' => $role,
             'grade_id' => MemberGrade::where('slug', 'free')->value('id'),
+            'term_agreements' => $agreed ?: null,
         ]);
 
         session()->forget('social_signup');

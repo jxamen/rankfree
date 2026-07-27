@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'provider', 'provider_id', 'password', 'role', 'api_scopes', 'grade_id', 'operator_role_id', 'subscription_expires_at'])]
+#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'provider', 'provider_id', 'password', 'role', 'api_scopes', 'term_agreements', 'grade_id', 'operator_role_id', 'subscription_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -26,7 +26,8 @@ class User extends Authenticatable
             'phone_verified_at' => 'datetime',
             'subscription_expires_at' => 'datetime',
             'password' => 'hashed',
-            'api_scopes' => 'array',   // 회원별 허용 API 기능(scope) — 관리자가 부여
+            'api_scopes' => 'array',        // 회원별 허용 API 기능(scope) — 관리자가 부여
+            'term_agreements' => 'array',   // 가입 시 약관 동의 이력 {키: {title, required, agreed_at, ip}}
         ];
     }
 

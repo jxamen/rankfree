@@ -37,6 +37,9 @@
         </div>
         @include('auth._phone-verify')
         {{-- 추천인: 입력칸 없음 — 추천 링크(/register?ref=CODE)로 진입하면 백엔드에서 자동 처리 --}}
+
+        @include('auth._signup-terms')
+
         <button type="submit" class="btn btn-primary btn-lg mt-1">무료로 시작</button>
     </form>
 @endsection

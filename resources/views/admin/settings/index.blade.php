@@ -566,6 +566,91 @@
     </div>
 </form>
 
+{{-- 회원가입 약관(2026-07-27) — 메인 저장 폼과 중첩되면 안 되므로 폼 밖 독립 폼.
+     여기서 만든 항목이 회원가입 화면에 그대로 나오고, '필수'로 표시한 항목은 동의해야 가입된다. --}}
+<div class="card p-5 mb-4" id="rf-terms">
+    <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">회원가입 약관 <span class="text-muted-soft" style="font-weight:400;">가입 화면 동의 항목</span></div>
+    <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
+        항목을 추가하면 회원가입 화면에 <b class="text-muted">체크박스 + [보기]</b>로 노출됩니다. <b class="text-muted">필수</b>로 두면 동의해야 가입이 완료되고,
+        동의 시각은 회원 정보에 기록됩니다. <b class="text-muted">키</b>는 영문 소문자·숫자·밑줄(예: <code>marketing</code>)이며 저장 후 바꾸지 않는 것이 좋습니다.
+    </p>
+
+    <form method="POST" action="{{ route('admin.settings.terms') }}" id="rf-terms-form">
+        @csrf
+        <div id="rf-terms-rows" class="flex flex-col gap-3">
+            @foreach ($terms as $i => $t)
+                <div class="rf-term-row card-soft p-4" data-idx="{{ $i }}">
+                    <div class="flex items-center gap-2 flex-wrap mb-2">
+                        <input name="terms[{{ $i }}][key]" class="input" style="width:150px;font-size:var(--fs-xs);"
+                               value="{{ $t['key'] }}" placeholder="키 (예: marketing)" maxlength="40">
+                        <input name="terms[{{ $i }}][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);"
+                               value="{{ $t['title'] }}" placeholder="가입 화면에 보일 제목" maxlength="120">
+                        <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                            <input type="hidden" name="terms[{{ $i }}][required]" value="0">
+                            <input type="checkbox" name="terms[{{ $i }}][required]" value="1" @checked($t['required'])> 필수
+                        </label>
+                        <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                            <input type="hidden" name="terms[{{ $i }}][is_active]" value="0">
+                            <input type="checkbox" name="terms[{{ $i }}][is_active]" value="1" @checked($t['is_active'])> 사용
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>
+                    </div>
+                    <textarea name="terms[{{ $i }}][body]" class="input" rows="6" maxlength="20000"
+                              style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문">{{ $t['body'] }}</textarea>
+                </div>
+            @endforeach
+        </div>
+        <div class="flex items-center gap-2 mt-3">
+            <button type="button" id="rf-term-add" class="btn btn-secondary btn-sm">＋ 약관 추가</button>
+            <button type="submit" class="btn btn-primary btn-sm" style="margin-left:auto;">약관 저장</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    // 약관 행 추가/삭제 — name 인덱스는 제출 직전에 다시 매긴다(중간 삭제해도 배열이 끊기지 않게)
+    var wrap = document.getElementById('rf-terms-rows');
+    var form = document.getElementById('rf-terms-form');
+    if (!wrap || !form) return;
+
+    function bindDel(row) {
+        var b = row.querySelector('.rf-term-del');
+        if (b) b.addEventListener('click', function () { row.remove(); });
+    }
+    wrap.querySelectorAll('.rf-term-row').forEach(bindDel);
+
+    document.getElementById('rf-term-add').addEventListener('click', function () {
+        var i = Date.now();   // 임시 인덱스 — 제출 시 재정렬
+        var row = document.createElement('div');
+        row.className = 'rf-term-row card-soft p-4';
+        row.innerHTML =
+            '<div class="flex items-center gap-2 flex-wrap mb-2">'
+            + '<input name="terms[' + i + '][key]" class="input" style="width:150px;font-size:var(--fs-xs);" placeholder="키 (예: marketing)" maxlength="40">'
+            + '<input name="terms[' + i + '][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);" placeholder="가입 화면에 보일 제목" maxlength="120">'
+            + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
+            + '<input type="hidden" name="terms[' + i + '][required]" value="0">'
+            + '<input type="checkbox" name="terms[' + i + '][required]" value="1" checked> 필수</label>'
+            + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
+            + '<input type="hidden" name="terms[' + i + '][is_active]" value="0">'
+            + '<input type="checkbox" name="terms[' + i + '][is_active]" value="1" checked> 사용</label>'
+            + '<button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>'
+            + '</div>'
+            + '<textarea name="terms[' + i + '][body]" class="input" rows="6" maxlength="20000" style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문"></textarea>';
+        wrap.appendChild(row);
+        bindDel(row);
+    });
+
+    form.addEventListener('submit', function () {
+        wrap.querySelectorAll('.rf-term-row').forEach(function (row, idx) {
+            row.querySelectorAll('[name^="terms["]').forEach(function (el) {
+                el.name = el.name.replace(/^terms\[[^\]]+\]/, 'terms[' + idx + ']');
+            });
+        });
+    });
+})();
+</script>
+
 {{-- 구글 연동 해제 — 메인 설정 폼과 중첩되면 안 되므로 폼 밖에 둔다(위 '연동 해제' 버튼이 form 속성으로 참조). --}}
 @if ($googleConnected)
 <form id="rf-gdisconnect" method="POST" action="{{ route('admin.google-connect.disconnect') }}" hidden

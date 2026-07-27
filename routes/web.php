@@ -550,6 +550,8 @@ $__admin->group(function () {
     // 환경 설정 — 네이버 API 자격증명 관리
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+    // 회원가입 약관 관리(2026-07-27) — 항목·본문·필수여부. 가입 폼이 이 설정을 그대로 렌더한다
+    Route::post('/settings/terms', [SettingsController::class, 'saveTerms'])->name('settings.terms');
     Route::post('/settings/secondary-domain', [SettingsController::class, 'createSecondaryDomain'])->name('settings.secondary-domain.create');
 
     // 커뮤니티 카테고리 관리 (추가·이름/아이콘/정렬·사용 여부)

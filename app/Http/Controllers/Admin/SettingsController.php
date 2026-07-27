@@ -54,6 +54,8 @@ class SettingsController extends Controller
             'cloudflareApiToken' => AppSetting::read(self::CLOUDFLARE_API_TOKEN_KEY),
             'cloudflareDnsTarget' => AppSetting::read(self::CLOUDFLARE_DNS_TARGET_KEY) ?: self::defaultDnsTarget(request()),
             'cloudflareZones' => self::normalizeCloudflareZones(AppSetting::readJson(self::CLOUDFLARE_ZONES_KEY)),
+            // 회원가입 약관(2026-07-27) — 항목·본문·필수여부를 여기서 관리하고 가입 폼이 그대로 렌더한다
+            'terms' => \App\Domain\Member\SignupTerms::all(),
             'searchadRows' => AppSetting::readJson('searchad.accounts'),
             'adsRows' => AppSetting::readJson('ads.logins'),
             'openapiRows' => AppSetting::readJson('openapi.keys'),
@@ -188,6 +190,37 @@ class SettingsController extends Controller
         $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'payment', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
 
         return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
+    }
+
+    /**
+     * 회원가입 약관 저장(2026-07-27) — 항목 배열을 순서대로 보관.
+     * 필수(required)로 표시한 항목은 가입 시 반드시 동의해야 계정이 만들어진다.
+     */
+    public function saveTerms(Request $request)
+    {
+        $request->validate([
+            'terms' => ['nullable', 'array', 'max:20'],
+            'terms.*.key' => ['nullable', 'string', 'max:40', 'regex:/^[a-z0-9_]*$/'],
+            'terms.*.title' => ['nullable', 'string', 'max:120'],
+            'terms.*.body' => ['nullable', 'string', 'max:20000'],
+        ], [
+            'terms.*.key.regex' => '약관 키는 영문 소문자·숫자·밑줄만 사용할 수 있습니다.',
+        ]);
+
+        $rows = [];
+        foreach ((array) $request->input('terms', []) as $i => $row) {
+            $rows[] = [
+                'key' => $row['key'] ?? '',
+                'title' => $row['title'] ?? '',
+                'body' => $row['body'] ?? '',
+                // 체크박스는 hidden 0 + checkbox 1 조합이라 문자열로 들어온다
+                'required' => (string) ($row['required'] ?? '0') === '1',
+                'is_active' => (string) ($row['is_active'] ?? '0') === '1',
+            ];
+        }
+        \App\Domain\Member\SignupTerms::save($rows);
+
+        return back()->with('status', '회원가입 약관을 저장했습니다.');
     }
 
     public function createSecondaryDomain(Request $request)

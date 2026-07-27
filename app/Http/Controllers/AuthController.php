@@ -52,12 +52,23 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
+        // 약관 동의(2026-07-27) — 필수 항목은 반드시 체크해야 가입된다(항목은 환경설정에서 관리)
+        $terms = \App\Domain\Member\SignupTerms::active();
+        $termRules = [];
+        $termMessages = [];
+        foreach ($terms as $t) {
+            if (! empty($t['required'])) {
+                $termRules['terms.'.$t['key']] = ['accepted'];
+                $termMessages['terms.'.$t['key'].'.accepted'] = "'{$t['title']}'에 동의해 주세요.";
+            }
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:50'],
             'email' => ['required', 'email', 'max:150', 'unique:users,email'],
             'phone' => ['required', 'string', 'max:20'],
             'password' => ['required', Password::min(8)],
-        ]);
+        ] + $termRules, $termMessages);
 
         // 전화번호 SMS 인증 필수 — 세션의 인증완료 번호와 대조
         $phone = PhoneVerification::normalize($data['phone']);
@@ -73,6 +84,19 @@ class AuthController extends Controller
         $superAdmins = array_map('strtolower', (array) config('rankfree.super_admins', []));
         $role = in_array(strtolower($data['email']), $superAdmins, true) ? 'super' : 'user';
 
+        // 동의 이력 — 마케팅·제3자 제공은 "언제 무엇에 동의했는지" 근거가 필요해 제목까지 스냅샷으로 남긴다
+        $agreed = [];
+        foreach ($terms as $t) {
+            if ($request->boolean('terms.'.$t['key'])) {
+                $agreed[$t['key']] = [
+                    'title' => $t['title'],
+                    'required' => (bool) $t['required'],
+                    'agreed_at' => now()->toIso8601String(),
+                    'ip' => $request->ip(),
+                ];
+            }
+        }
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
@@ -81,6 +105,7 @@ class AuthController extends Controller
             'password' => $data['password'],
             'role' => $role,
             'grade_id' => MemberGrade::where('slug', 'free')->value('id'),
+            'term_agreements' => $agreed ?: null,
         ]);
 
         PhoneVerification::clear();
