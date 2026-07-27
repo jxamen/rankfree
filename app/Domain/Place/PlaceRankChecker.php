@@ -429,12 +429,24 @@ class PlaceRankChecker
         return null;
     }
 
-    /** id·업종 → 깔끔한 m.place URL. */
+    /** id·업종 → 깔끔한 m.place URL(내부/수집용 — 업종 경로 포함). */
     public static function buildMPlaceUrl(string $id, string $category = 'place'): string
     {
         $category = in_array($category, self::PLACE_CATEGORIES, true) ? $category : 'place';
 
         return 'https://m.place.naver.com/' . $category . '/' . preg_replace('/\D/', '', $id);
+    }
+
+    /**
+     * 사용자 대면 플레이스 열기 링크의 **단일 소스** — 항상 place/{id}/home.
+     * 업종(category)은 잘못 저장될 수 있어(hairshop 오저장 등) URL 경로에 쓰지 않는다.
+     * 순위추적 카드·등록/수정 저장 URL·자동입력 등 모든 열기 링크가 이 메서드로 수렴한다.
+     */
+    public static function mobilePlaceUrl(?string $id, ?string $fallback = null): ?string
+    {
+        $id = preg_replace('/\D/', '', (string) $id);
+
+        return $id !== '' ? 'https://m.place.naver.com/place/' . $id . '/home' : $fallback;
     }
 
     /**

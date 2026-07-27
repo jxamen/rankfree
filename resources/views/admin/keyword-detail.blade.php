@@ -236,7 +236,7 @@
                         <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                             <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted">{{ $i->rnk }}</td>
                             <td style="padding:7px 6px;">
-                                <a href="https://m.place.naver.com/place/{{ $i->place_id }}" target="_blank" rel="noopener"
+                                <a href="{{ \App\Domain\Place\PlaceRankChecker::mobilePlaceUrl($i->place_id) }}" target="_blank" rel="noopener"
                                    class="text-ink font-semibold" style="text-decoration:none;">{{ $i->name }}</a>
                             </td>
                             <td style="padding:7px 6px;">

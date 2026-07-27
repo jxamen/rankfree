@@ -36,8 +36,8 @@ class RankSlotService
             $cat = $meta['category'] !== '' ? $meta['category'] : 'place';
             $out['category'] = $cat;
             $out['place_name'] = $meta['name'] !== '' ? $meta['name'] : null;
-            // crm sp_place_url_convert 와 동일하게 m.place 정규 URL 로 저장
-            $out['place_url'] = 'https://m.place.naver.com/' . $cat . '/' . $placeId;
+            // 저장 URL 은 표준(place/{id}/home) 단일 소스 — 업종(category)은 URL 에 쓰지 않는다(hairshop 등 오저장 방지)
+            $out['place_url'] = PlaceRankChecker::mobilePlaceUrl($placeId);
         } elseif (! $isUrl) {
             // URL 이 아니면 업체명 직접 입력으로 간주
             $out['place_name'] = $input;
