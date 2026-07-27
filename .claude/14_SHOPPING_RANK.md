@@ -8,6 +8,7 @@
 - **슬롯 = (키워드 × 대상)**. 대상 = **상품 URL(productId)** 또는 **업체명(mallName)**.
 - 키워드로 `shop.json` 검색(sort=sim) → 상위 `display×max_pages`(=1000)위까지 순회하며 대상 매칭 → 순위 기록.
 - 하루 1회 기록(당일 재확인 시 갱신, `updateOrCreate(slot,date)`).
+- **3일 연속 미노출 자동 중단**(2026-07-24): 최근 순위 기록 3건이 모두 rank 0(=1000위 밖 미노출)이면 슬롯을 `is_active=false`로 일시정지(삭제 아님 · 목록 [재개]로 복구). 차단(-1) 기록은 판정 제외([ShopRankSlotService](../app/Domain/Shopping/ShopRankSlotService.php)). 플레이스([RankSlotService](../app/Domain/Place/RankSlotService.php), 300위 기준)와 **동일 정책**. 콘솔 안내 문구는 `console/rank`·`console/shop-rank` 뷰 하단 설명 문단.
 
 ## 데이터 소스
 
