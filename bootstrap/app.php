@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // 가장 앞에서 처리해 세션·라우팅 비용을 아낀다. 서브도메인(어드민·단축URL)은 정확일치가 아니라 통과.
         $middleware->prepend(\App\Http\Middleware\RedirectCanonicalHost::class);
 
+        // AI 크롤러 유입 기록(2026-07-27) — GPTBot·ChatGPT-User 등은 JS 미실행이라 GA4 에 안 잡힌다.
+        // 리다이렉트 이후에 두어 대표 도메인으로 정리된 요청만 집계한다.
+        $middleware->append(\App\Http\Middleware\LogAiCrawler::class);
+
         $middleware->alias([
             'operator' => \App\Http\Middleware\EnsureOperator::class,
             'menu.gate' => \App\Http\Middleware\MenuGate::class,

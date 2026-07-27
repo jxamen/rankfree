@@ -72,6 +72,9 @@
 .ga4-tbl a:hover{text-decoration:underline}
 .ga4-scroll{overflow:auto;max-height:500px;border-radius:10px}
 .ga4-empty{color:var(--ga4-soft);font-size:var(--ga4-fs-xs);text-align:center;padding:28px}
+/* 표 묶음 소제목(AI 유입 등 한 섹션에 표가 여러 개일 때) */
+.ga4-subt{font-size:var(--ga4-fs-xs);font-weight:600;color:var(--ga4-fg);margin:0 0 6px}
+.ga4-muted{color:var(--ga4-soft);font-weight:400}
 
 .ga4-chart{display:flex;align-items:flex-end;gap:3px;height:190px}
 .ga4-chart .c{flex:1;min-width:3px;height:100%;display:flex;flex-direction:column;justify-content:flex-end}

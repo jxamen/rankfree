@@ -110,6 +110,82 @@
     </div>
 </div>
 
+{{-- ③-2 AI 유입(AI Discovery) — AI Referral + Generative Organic.
+     provider 미등록이거나 데이터가 없으면 섹션 자체를 만들지 않는다. --}}
+@if (! empty($ga['aiDiscovery']))
+@php $__ai = $ga['aiDiscovery']; $__aiT = $__ai['totals'] ?? []; @endphp
+<div class="ga4-section" data-sec="aiDiscovery">
+    @include('ga4-insights::partials.sec-head', [
+        't' => '③-2 AI 유입 (AI Discovery)',
+        'd' => 'AI가 데려온 트래픽 — <b>AI Referral</b>(챗봇 답변의 링크를 눌러 들어온 방문) + <b>Generative Organic</b>(AI가 답을 만들려고 문서를 직접 읽어간 요청). 뒤쪽은 자바스크립트를 실행하지 않아 일반 방문 통계에는 잡히지 않습니다.',
+    ])
+    <div class="ga4-card">
+        <div class="ga4-grid ga4-kpis" style="margin-bottom:12px;">
+            <div class="ga4-card ga4-kpi">
+                <div class="lab">AI Referral <i class="ga4-help" title="ChatGPT·Perplexity 등 AI 답변에 실린 링크를 눌러 실제로 사이트에 들어온 방문(세션)입니다.">?</i></div>
+                <div class="val">{{ F::int($__aiT['referral_sessions'] ?? 0) }}</div>
+                <div class="dlt ga4-flat">방문 세션</div>
+            </div>
+            <div class="ga4-card ga4-kpi">
+                <div class="lab">Generative Organic <i class="ga4-help" title="AI가 답변을 만들려고 문서를 직접 읽어간 요청 수입니다. 자바스크립트를 실행하지 않아 일반 방문 통계(GA4)에는 잡히지 않습니다.">?</i></div>
+                <div class="val">{{ F::int($__aiT['generative_hits'] ?? 0) }}</div>
+                <div class="dlt ga4-flat">AI 조회</div>
+            </div>
+            <div class="ga4-card ga4-kpi">
+                <div class="lab">그중 사용자 요청 <i class="ga4-help" title="ChatGPT-User 등 — 사용자가 그 순간 질문해서 AI가 이 문서를 열어본 요청. 사실상 사람이 본 것에 가깝습니다.">?</i></div>
+                <div class="val">{{ F::int($__aiT['user_agent_hits'] ?? 0) }}</div>
+                <div class="dlt ga4-flat">질문 응답 중 열람</div>
+            </div>
+        </div>
+
+        <div class="ga4-cols2">
+            <div>
+                <div class="ga4-subt">AI Referral — 어떤 AI에서 왔나</div>
+                <div class="ga4-scroll"><table class="ga4-tbl">
+                    <thead><tr><th>AI 서비스</th><th class="num">세션</th><th class="num">사용자</th></tr></thead>
+                    <tbody>
+                        @forelse ($__ai['referral'] ?? [] as $x)
+                            <tr><td>{{ $x['name'] }}</td><td class="num">{{ F::int($x['sessions']) }}</td><td class="num">{{ F::int($x['users']) }}</td></tr>
+                        @empty
+                            <tr><td colspan="3" class="ga4-empty">아직 AI 답변을 통한 방문이 없습니다</td></tr>
+                        @endforelse
+                    </tbody>
+                </table></div>
+            </div>
+            <div>
+                <div class="ga4-subt">Generative Organic — 어떤 AI가 읽어갔나</div>
+                <div class="ga4-scroll"><table class="ga4-tbl">
+                    <thead><tr><th>AI 크롤러</th><th>유형</th><th class="num">조회</th></tr></thead>
+                    <tbody>
+                        @forelse ($__ai['generative'] ?? [] as $x)
+                            <tr>
+                                <td>{{ $x['name'] }}</td>
+                                <td>{{ ($x['kind'] ?? '') === 'user' ? '사용자 요청' : '수집·인덱싱' }}</td>
+                                <td class="num">{{ F::int($x['hits']) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="3" class="ga4-empty">기록된 AI 조회가 없습니다</td></tr>
+                        @endforelse
+                    </tbody>
+                </table></div>
+            </div>
+        </div>
+
+        @if (! empty($__ai['pages']))
+            <div class="ga4-subt" style="margin-top:12px;">AI가 많이 읽어간 문서</div>
+            <div class="ga4-scroll"><table class="ga4-tbl">
+                <thead><tr><th>경로</th><th class="num">조회</th></tr></thead>
+                <tbody>
+                    @foreach ($__ai['pages'] as $x)
+                        <tr><td>{{ $x['name'] }}</td><td class="num">{{ F::int($x['hits']) }}</td></tr>
+                    @endforeach
+                </tbody>
+            </table></div>
+        @endif
+    </div>
+</div>
+@endif
+
 {{-- ④ 소스/매체 --}}
 <div class="ga4-section" data-sec="sourceMedium">
     @include('ga4-insights::partials.sec-head', ['t' => '④ 소스 / 매체', 'd' => '정확히 어떤 사이트·어떤 방식으로 왔는지(google/organic, naver/referral 등)'])

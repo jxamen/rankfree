@@ -35,6 +35,15 @@ return [
         'landing_resolver' => \App\Support\Ga4LandingKeywordResolver::class, // 키워드 슬러그 랜딩 → 키워드(네이버 등 추정)
     ],
 
+    // AI 유입(2026-07-27) — AI Referral(GA4 방문) + Generative Organic(AI 크롤러 직접 조회, GA4 미집계)
+    'ai_discovery' => [
+        'provider' => \App\Support\Ga4AiDiscoveryProvider::class,
+    ],
+
+    // 드래그 배치·숨김을 서버 저장(운영자 공용 — 캐시 삭제·다른 기기서도 유지).
+    // route('admin.traffic-stats.layout') GET/POST → App\Http\Controllers\Admin\Ga4LayoutController(AppSetting 'ga4.layout')
+    'layout' => ['persist' => true],
+
     // 미연동 안내(앱 전용) — 환경설정으로 유도
     'setup_help' => '<b>환경설정 › 외부 연동</b>에서 <b>[구글 계정으로 연동]</b> 후 <b>GA4 속성 ID(숫자)</b>를 등록하세요. '
         .'(대안: 서비스 계정 키를 설정하고 그 계정을 GA4 속성에 뷰어로 추가) '

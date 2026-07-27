@@ -127,6 +127,11 @@ class Ga4Reporter
             'newReturning' => $this->named($r(12), 'newVsReturning', ['activeUsers', 'sessions', 'engagementRate']),
             'hours' => $this->hours($r(13)),
             'searchKeywords' => $this->searchKeywords($r(14), $start, $end),
+            // AI Discovery(2026-07-27) — AI Referral(GA4 방문) + Generative Organic(AI 크롤러 직접 조회).
+            // 이미 조회한 리포트를 넘겨 재활용하므로 GA4 쿼터를 더 쓰지 않는다.
+            'aiDiscovery' => $this->aiDiscovery($start, $end, [
+                'sourceMedium' => $this->named($r(3), 'sessionSourceMedium', ['sessions', 'totalUsers', 'engagementRate']),
+            ]),
             'realtime' => $this->realtime(),
             'error' => null,
         ];
@@ -260,6 +265,23 @@ class Ga4Reporter
      *  landing: 소스 × 랜딩에서 키워드 슬러그 페이지를 키워드로 환원(네이버 등 추정치)
      * 둘 다 옵션 — config('ga4-insights.keywords.*') 에 클래스명 등록 시에만 동작(미등록 앱은 빈 값).
      */
+    /**
+     * AI 유입 요약 — 호스트 앱이 주입한 AiDiscoveryProvider 가 계산한다.
+     * 미등록이면 빈 배열(섹션 자체를 렌더하지 않는다).
+     */
+    private function aiDiscovery(string $start, string $end, array $ga): array
+    {
+        $cls = (string) config('ga4-insights.ai_discovery.provider', '');
+        if ($cls === '' || ! class_exists($cls)) {
+            return [];
+        }
+        try {
+            return app($cls)->summary($start, $end, $ga);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     private function searchKeywords(array $rows, string $start, string $end): array
     {
         $landing = [];
