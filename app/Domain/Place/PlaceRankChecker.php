@@ -148,6 +148,17 @@ class PlaceRankChecker
         $result['rank'] = $found ? $rank : 300;
         $result['list_total'] = $listTotal;
 
+        // 업종 전용 리스트에서 미노출이면 통합 place 리스트로 1회 폴백 재조회.
+        // 속눈썹·미용실 등은 뷰티 전용 페이로드(getBeautyList)가 소수만 반환해 순위 밖으로 잡히지만,
+        // 사용자가 보는 통합 플레이스 순위엔 정상 노출된다(실측 '일산속눈썹': 뷰티 7개 미노출 vs place 805개 14위).
+        // 미노출 슬롯에서만 발생하므로 정상 슬롯에는 추가 조회 부담이 없다.
+        if (! $found && ! $result['blocked'] && $type !== 'place' && $placeId) {
+            $fb = $this->check($keyword, $placeId, $targetName, 'place', $cookie);
+            if ($fb['found']) {
+                return $fb;
+            }
+        }
+
         // 비-restaurant 카테고리는 리스트 item에 평점/저장수/태그가 없음 → 상세 보강
         if ($found && ! $isRest && $result['review_score'] === null) {
             $detail = $this->placeDetailInfo($result['place_id'], $type, $cookie);
