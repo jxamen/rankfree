@@ -460,6 +460,9 @@ $__admin->group(function () {
 
     // 방문 분석 (GA4) — ga4-insights 패키지가 /admin/traffic-stats(route명 admin.traffic-stats)에 마운트.
     //   패키지: packages/ga4-insights · 설정: config/ga4-insights.php · 자격증명: App\Support\AppGa4Credentials
+    //   드래그 배치 서버 저장(운영자 공용 — 캐시/기기 무관). 패키지 blade 가 route('admin.traffic-stats.layout') 사용.
+    Route::get('/traffic-stats/layout', [\App\Http\Controllers\Admin\Ga4LayoutController::class, 'show'])->name('traffic-stats.layout.show');
+    Route::post('/traffic-stats/layout', [\App\Http\Controllers\Admin\Ga4LayoutController::class, 'store'])->name('traffic-stats.layout');
 
     // 외부 발주 업체 관리 (API/구글시트)
     Route::get('/vendors', [\App\Http\Controllers\Admin\VendorController::class, 'index'])->name('vendors');

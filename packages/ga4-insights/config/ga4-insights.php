@@ -46,4 +46,10 @@ return [
         'gsc_provider' => null,     // Jcurve\Ga4Insights\Contracts\KeywordsProvider 구현 — 실제 검색어(예: 서치 콘솔)
         'landing_resolver' => null, // Jcurve\Ga4Insights\Contracts\LandingKeywordResolver 구현 — 랜딩 경로 → 키워드 환원
     ],
+
+    // 드래그 배치·숨김 서버 영속(선택) — true 면 대시보드가 route('{route.name}.layout') 로 GET(조회)/POST(저장).
+    // 호스트 앱이 그 라우트를 제공해야 한다. 기본 off = localStorage(브라우저별, 캐시 삭제 시 초기화).
+    'layout' => [
+        'persist' => (bool) env('GA4_INSIGHTS_LAYOUT_PERSIST', false),
+    ],
 ];

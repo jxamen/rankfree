@@ -390,6 +390,7 @@
 
 </div>{{-- /#ga4-layout --}}
 
+@php $__layoutUrl = config('ga4-insights.layout.persist') ? route(config('ga4-insights.route.name').'.layout') : null; @endphp
 <script>
 // 섹션 드래그앤드롭 12그리드 + 지표 표시/숨김.
 //  - 섹션 가운데에 놓으면 같은 줄에 나란히(균등 분할, 최대 4)
@@ -414,27 +415,51 @@
 
     function defaults() { return order.map(function (k) { return [k]; }); }
 
-    function load() {
-        try {
-            var raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-            if (!raw) return false;
-            var rows = Array.isArray(raw) ? raw : (Array.isArray(raw.rows) ? raw.rows : []);
-            var hid = Array.isArray(raw.hidden) ? raw.hidden : [];
-            hidden = hid.filter(function (k) { return sections[k]; });
-            var seen = {};
-            hidden.forEach(function (k) { seen[k] = 1; });
-            layout = [];
-            rows.forEach(function (row) {
-                var r = (Array.isArray(row) ? row : []).filter(function (k) {
-                    return sections[k] && !seen[k] && (seen[k] = 1);
-                });
-                if (r.length) layout.push(r);
+    // 서버 영속(호스트가 route('{name}.layout') 제공 시) — localStorage 대신 서버에 둬 캐시·기기 무관 유지.
+    var LAYOUT_URL = @json($__layoutUrl ?? null);
+    var CSRF = @json(csrf_token());
+
+    // {rows, hidden}(또는 rows 배열)을 파싱해 layout/hidden 에 반영. localStorage·서버 응답 공용.
+    function applyRaw(raw) {
+        if (!raw) return false;
+        var rows = Array.isArray(raw) ? raw : (Array.isArray(raw.rows) ? raw.rows : []);
+        var hid = Array.isArray(raw.hidden) ? raw.hidden : [];
+        hidden = hid.filter(function (k) { return sections[k]; });
+        var seen = {};
+        hidden.forEach(function (k) { seen[k] = 1; });
+        layout = [];
+        rows.forEach(function (row) {
+            var r = (Array.isArray(row) ? row : []).filter(function (k) {
+                return sections[k] && !seen[k] && (seen[k] = 1);
             });
-            order.forEach(function (k) { if (!seen[k]) layout.push([k]); });   // 새 섹션은 맨 아래
-            return layout.length > 0 || hidden.length > 0;
-        } catch (e) { return false; }
+            if (r.length) layout.push(r);
+        });
+        order.forEach(function (k) { if (!seen[k]) layout.push([k]); });   // 새 섹션은 맨 아래
+        return layout.length > 0 || hidden.length > 0;
     }
-    function save() { try { localStorage.setItem(KEY, JSON.stringify({ rows: layout, hidden: hidden })); } catch (e) {} }
+    function load() {
+        try { return applyRaw(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { return false; }
+    }
+    function postLayout(body) {
+        if (!LAYOUT_URL) return;
+        fetch(LAYOUT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' }, body: JSON.stringify(body) }).catch(function () {});
+    }
+    var _saveT;
+    function save() {
+        try { localStorage.setItem(KEY, JSON.stringify({ rows: layout, hidden: hidden })); } catch (e) {}
+        if (LAYOUT_URL) { clearTimeout(_saveT); _saveT = setTimeout(function () { postLayout({ rows: layout, hidden: hidden }); }, 400); }   // 디바운스 서버 저장
+    }
+    // 초기 렌더 후 서버 저장분으로 복원(캐시 지워도·다른 기기서도 배치 유지). 저장된 게 없으면 그대로.
+    function serverHydrate() {
+        if (!LAYOUT_URL) return;
+        fetch(LAYOUT_URL, { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (d && ((Array.isArray(d.rows) && d.rows.length) || (Array.isArray(d.hidden) && d.hidden.length))) {
+                    if (applyRaw(d)) { render(); try { localStorage.setItem(KEY, JSON.stringify({ rows: layout, hidden: hidden })); } catch (e) {} }
+                }
+            }).catch(function () {});
+    }
 
     if (!load()) { layout = defaults(); hidden = []; }
 
@@ -633,9 +658,11 @@
         layout = defaults();
         hidden = [];
         render();
+        postLayout({ rows: [], hidden: [] });   // 서버 저장분도 비움(다음 로드에 기본 배치)
     });
 
     render();
+    serverHydrate();
 })();
 </script>
 
