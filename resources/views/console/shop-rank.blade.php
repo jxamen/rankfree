@@ -10,6 +10,7 @@
 <x-console.page-head title="쇼핑 순위추적">
     <x-slot:desc>네이버 쇼핑 <b>상품/업체 × 키워드</b> 순위를 매일 자동 기록합니다 · 추적 중 <b>{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }} (플레이스+쇼핑 합산)</x-slot:desc>
 </x-console.page-head>
+<p class="text-muted mb-4" style="font-size:var(--fs-xs);">3일 연속 <b>{{ number_format((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) }}위 밖(미노출)</b>이면 순위체크가 자동 중단됩니다 · 목록 [재개]로 복구</p>
 {{-- 액션(좌) + 기간·키워드 검색(우) — 카드 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
@@ -55,7 +56,6 @@
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     스마트스토어·가격비교 상품 URL 또는 업체명 1개에 키워드를 여러 개 등록하면 키워드별로 쇼핑 검색 순위를 추적합니다.
     순위는 하루 1회 기록(당일 재확인 시 갱신)되며 최대 {{ number_format((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) }}위까지 조회합니다.
-    <br>3일 연속 {{ number_format((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) }}위 밖(미노출)이면 트래픽 절약을 위해 순위체크가 자동으로 중단됩니다. 기록은 그대로 유지되며, 목록의 [재개]로 다시 켤 수 있습니다.
 </p>
 
 {{-- 추적 추가 모달 --}}

@@ -12,6 +12,7 @@
 <x-console.page-head title="순위 추적">
     <x-slot:desc>플레이스 <b>키워드별 순위</b>를 매일 자동 갱신합니다 · 추적 중 <b>{{ $usedSlots }}</b> / {{ $maxSlots < 0 ? '무제한' : $maxSlots.'개' }} (플레이스+쇼핑 합산)</x-slot:desc>
 </x-console.page-head>
+<p class="text-muted mb-4" style="font-size:var(--fs-xs);">3일 연속 <b>300위 밖(미노출)</b>이면 순위체크가 자동 중단됩니다 · 목록 [재개]로 복구</p>
 {{-- 기간 필터(좌) + 키워드 검색(우) — 카드. 기간 지정 시 해당 기간의 순위만 표시 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
@@ -55,7 +56,6 @@
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     플레이스 1개에 키워드를 여러 개 등록하면 키워드별로 순위를 추적합니다. 순위는 하루 1회 기록(당일 재확인 시 갱신)되며,
     영=영수증(방문자) 리뷰 · 블=블로그 리뷰 · 저장=저장수(음식점만 제공)입니다.
-    <br>3일 연속 300위 밖(미노출)이면 트래픽 절약을 위해 순위체크가 자동으로 중단됩니다. 기록은 그대로 유지되며, 목록의 [재개]로 다시 켤 수 있습니다.
 </p>
 
 {{-- 추적 추가 모달 --}}
