@@ -55,6 +55,7 @@
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
     스마트스토어·가격비교 상품 URL 또는 업체명 1개에 키워드를 여러 개 등록하면 키워드별로 쇼핑 검색 순위를 추적합니다.
     순위는 하루 1회 기록(당일 재확인 시 갱신)되며 최대 {{ number_format((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) }}위까지 조회합니다.
+    <br>3일 연속 {{ number_format((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) }}위 밖(미노출)이면 트래픽 절약을 위해 순위체크가 자동으로 중단됩니다. 기록은 그대로 유지되며, 목록의 [재개]로 다시 켤 수 있습니다.
 </p>
 
 {{-- 추적 추가 모달 --}}
