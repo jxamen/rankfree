@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // 대표 도메인 통합(2026-07-27) — rankfree.co.kr(+www) → rankfree.kr 301.
+        // 가장 앞에서 처리해 세션·라우팅 비용을 아낀다. 서브도메인(어드민·단축URL)은 정확일치가 아니라 통과.
+        $middleware->prepend(\App\Http\Middleware\RedirectCanonicalHost::class);
+
         $middleware->alias([
             'operator' => \App\Http\Middleware\EnsureOperator::class,
             'menu.gate' => \App\Http\Middleware\MenuGate::class,
