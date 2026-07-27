@@ -25,6 +25,7 @@
         $runRoute = "admin.{$seg}-tracking.run";
         $listRoute = "admin.{$seg}-tracking";
         $updateRoute = "admin.{$seg}-tracking.update";   // 운영자 수정(2026-07-27)
+        $destroyRoute = "admin.{$seg}-tracking.destroy"; // 운영자 삭제(2026-07-27) — 전권
     } else {
         $seg = $isPlace ? 'rank' : 'shop-rank';
         $toggleRoute = "console.{$seg}.toggle";
@@ -124,10 +125,11 @@
                         data-keyword="{{ $slot->keyword }}"
                         data-{{ $editTargetKey }}="{{ $editTargetVal }}"
                         data-label="{{ $slot->label }}">수정</button>
-                @unless ($isAdmin)
-                    {{-- 삭제는 회원 콘솔만(운영자 열람 화면엔 삭제 없음) --}}
-                    <form method="POST" action="{{ route($destroyRoute, $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
-                @endunless
+                {{-- 삭제 — console·admin 공통(admin=운영자 전권). 확인은 SweetAlert2(data-confirm) --}}
+                <form method="POST" action="{{ route($destroyRoute, $slot) }}"
+                      data-confirm="'{{ $slot->keyword }}' 추적을 삭제할까요?"
+                      data-confirm-text="순위 기록도 함께 삭제되며 되돌릴 수 없습니다."
+                      data-confirm-ok="삭제">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
             </div>
         </div>
 

@@ -363,6 +363,8 @@ $__admin->group(function () {
     Route::get('/shop-tracking/resolve', [\App\Http\Controllers\Admin\RankTrackingController::class, 'resolveShop'])->name('shop-tracking.resolve');
     Route::post('/shop-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'storeShop'])->name('shop-tracking.store');
     Route::put('/shop-tracking/{slot}', [\App\Http\Controllers\Admin\RankTrackingController::class, 'updateShop'])->name('shop-tracking.update');
+    Route::delete('/place-tracking/{slot}', [\App\Http\Controllers\Admin\RankTrackingController::class, 'destroyPlace'])->name('place-tracking.destroy');
+    Route::delete('/shop-tracking/{slot}', [\App\Http\Controllers\Admin\RankTrackingController::class, 'destroyShop'])->name('shop-tracking.destroy');
 
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');

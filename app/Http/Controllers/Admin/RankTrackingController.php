@@ -356,6 +356,22 @@ class RankTrackingController extends Controller
         return response()->json(['ok' => $t['product_id'] !== '' || $t['mall_name'] !== ''] + $t + ['label' => $label]);
     }
 
+    /** 운영자 플레이스 슬롯 삭제 — 소유권 체크 없이 전권(어드민 열람 화면). */
+    public function destroyPlace(PlaceRankSlot $slot)
+    {
+        $slot->delete();
+
+        return back()->with('status', '추적 슬롯을 삭제했습니다.');
+    }
+
+    /** 운영자 쇼핑 슬롯 삭제 — 소유권 체크 없이 전권. */
+    public function destroyShop(ShopRankSlot $slot)
+    {
+        $slot->delete();
+
+        return back()->with('status', '추적 슬롯을 삭제했습니다.');
+    }
+
     /** 목록 상단 통계 — 전체·활성·등록 회원 수·최근 7일 확인. */
     private function stats($query): array
     {
