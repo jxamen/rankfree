@@ -35,7 +35,8 @@
 
     // 키워드 검색 링크 · 대상(플레이스/상품) 이름·URL · 캡처 문구
     if ($isPlace) {
-        $searchUrl = 'https://m.place.naver.com/place/list?query='.urlencode((string) $slot->keyword);
+        // 키워드 검색은 PC 지도(map.naver.com), 플레이스 상세는 모바일(m.place) 로 연다(사용자 요구)
+        $searchUrl = 'https://map.naver.com/p/search/'.urlencode((string) $slot->keyword);
         $targetName = ($slot->label ? $slot->label.' · ' : '').($slot->place_name ?: ($slot->place_id ? 'ID '.$slot->place_id : ''));
         $targetUrl = $slot->place_url ?: ($slot->place_id ? 'https://m.place.naver.com/'.($slot->category ?: 'place').'/'.$slot->place_id : null);
         $targetTitle = '플레이스 페이지 열기';
