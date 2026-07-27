@@ -55,7 +55,7 @@ class RankSlotService
      *
      * @throws DomainException
      */
-    public function addMany(User $user, string $placeInput, array $keywords, ?string $label = null): array
+    public function addMany(User $user, string $placeInput, array $keywords, ?string $label = null, bool $ignoreLimit = false): array
     {
         $keywords = array_values(array_unique(array_filter(
             array_map('trim', $keywords),
@@ -67,7 +67,7 @@ class RankSlotService
 
         $lim = $user->rankSlotLimit();
         $used = $user->rankSlotsUsedTotal(); // 플레이스+쇼핑 합산(공유 풀)
-        if ($lim >= 0 && $used + count($keywords) > $lim) {
+        if (! $ignoreLimit && $lim >= 0 && $used + count($keywords) > $lim) {
             $room = max(0, $lim - $used);
             throw new DomainException("추적 한도({$lim}개, 플레이스+쇼핑 합산)를 초과합니다. 현재 {$used}개 사용 중 · 추가 가능 {$room}개(요청 ".count($keywords).'개).');
         }

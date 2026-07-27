@@ -30,7 +30,7 @@ class ShopRankSlotService
      *
      * @return array{target:array, created:list<ShopRankSlot>, skipped:list<string>}
      */
-    public function addMany(User $user, string $targetInput, array $keywords, ?string $label = null): array
+    public function addMany(User $user, string $targetInput, array $keywords, ?string $label = null, bool $ignoreLimit = false): array
     {
         $keywords = collect($keywords)->map(fn ($k) => trim((string) $k))->filter()->unique()->values();
         if ($keywords->isEmpty()) {
@@ -39,7 +39,7 @@ class ShopRankSlotService
 
         $limit = $user->rankSlotLimit();
         $used = $user->rankSlotsUsedTotal(); // 플레이스+쇼핑 합산(공유 풀)
-        if ($limit >= 0 && $used + $keywords->count() > $limit) {
+        if (! $ignoreLimit && $limit >= 0 && $used + $keywords->count() > $limit) {
             throw new DomainException("슬롯 한도를 초과합니다 (사용 {$used} / 한도 {$limit}, 플레이스+쇼핑 합산).");
         }
 

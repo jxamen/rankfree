@@ -355,6 +355,15 @@ $__admin->group(function () {
     // 긁어온 제목·가격·이미지를 저장한다(스마트스토어/브랜드). shop-keyword '상품정보 다시 수집' 미러.
     Route::post('/shop-tracking/{slot}/product-info', [\App\Http\Controllers\Admin\RankTrackingController::class, 'productInfoShop'])->middleware('throttle:60,1')->name('shop-tracking.product-info');
 
+    // 운영자 등록/수정(2026-07-27) — 회원 대신 슬롯 등록·수정(한도 무시). resolve=업체명/대상 조회 AJAX.
+    //   고정 경로(/resolve)를 {slot} 앞에 둔다.
+    Route::get('/place-tracking/resolve', [\App\Http\Controllers\Admin\RankTrackingController::class, 'resolvePlace'])->name('place-tracking.resolve');
+    Route::post('/place-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'storePlace'])->name('place-tracking.store');
+    Route::put('/place-tracking/{slot}', [\App\Http\Controllers\Admin\RankTrackingController::class, 'updatePlace'])->name('place-tracking.update');
+    Route::get('/shop-tracking/resolve', [\App\Http\Controllers\Admin\RankTrackingController::class, 'resolveShop'])->name('shop-tracking.resolve');
+    Route::post('/shop-tracking', [\App\Http\Controllers\Admin\RankTrackingController::class, 'storeShop'])->name('shop-tracking.store');
+    Route::put('/shop-tracking/{slot}', [\App\Http\Controllers\Admin\RankTrackingController::class, 'updateShop'])->name('shop-tracking.update');
+
     // 쇼핑 노출 키워드 분석 (핵심 키워드+상품 → 조합 → 쇼핑 상위 N위 노출 판정) (25) — 2026-07-21 콘솔→관리자 이동
     Route::get('/shop-keyword', [ShopKeywordExposureController::class, 'index'])->name('shop-keyword');
     Route::post('/shop-keyword', [ShopKeywordExposureController::class, 'store'])->middleware('throttle:30,1')->name('shop-keyword.store');

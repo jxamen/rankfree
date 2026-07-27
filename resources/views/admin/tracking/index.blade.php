@@ -27,6 +27,10 @@
     <button type="button" id="rf-run-all" class="btn btn-secondary btn-sm" @disabled($slots->isEmpty())>전체 순위체크</button>
     {{-- 전환 시 회원 필터 유지 — 같은 회원의 플레이스·쇼핑 추적을 오가며 볼 수 있게 --}}
     <a href="{{ route('admin.'.($isPlace ? 'shop-tracking' : 'place-tracking'), array_filter(['user' => $userId ?: null])) }}" class="btn btn-secondary btn-sm">{{ $isPlace ? '쇼핑 추적 보기' : '플레이스 추적 보기' }}</a>
+    {{-- 운영자 등록 — 회원 필터 상태에서만(대상 회원 = 그 회원). 필터 없으면 회원 뱃지로 진입 후 등록 --}}
+    @if ($filterUser ?? null)
+        <button type="button" id="rf-open-modal" class="btn btn-primary btn-sm">＋ 추적 추가</button>
+    @endif
 </x-console.page-head>
 
 {{-- 회원 필터 배너 — 아이디 클릭으로 진입한 업체별 추적 리스트 --}}
@@ -91,6 +95,245 @@
 
 @include('console.partials._image-save')
 @include('rank.partials._card-scripts')
+
+{{-- 순위추적 등록·수정(2026-07-27, 운영자) — 회원 필터 상태에서 그 회원에게 등록. 수정은 전 회원 슬롯(소유권 무시). --}}
+@php
+    $trkStore = $isPlace ? 'admin.place-tracking.store' : 'admin.shop-tracking.store';
+    $trkUpdateTpl = route($isPlace ? 'admin.place-tracking.update' : 'admin.shop-tracking.update', ['slot' => '__ID__']);
+    $trkResolve = route($isPlace ? 'admin.place-tracking.resolve' : 'admin.shop-tracking.resolve');
+@endphp
+
+@if ($filterUser ?? null)
+{{-- 추적 추가 모달(대상 회원 = 필터 회원) --}}
+<div id="rf-modal" class="hidden" style="position:fixed;inset:0;z-index:50;">
+    <div id="rf-modal-bg" style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-ink) 40%, transparent);"></div>
+    <div class="card" style="position:relative;max-width:640px;margin:7vh auto 0;max-height:84vh;overflow-y:auto;box-shadow:var(--shadow-card);">
+        <div class="flex items-center justify-between px-5 border-b border-hairline-soft" style="height:52px;">
+            <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $isPlace ? '플레이스' : '쇼핑' }} 순위추적 추가 · {{ $filterUser->name }}</span>
+            <button type="button" id="rf-modal-close" class="btn btn-ghost btn-sm" title="닫기">✕</button>
+        </div>
+        <form method="POST" action="{{ route($trkStore) }}" class="p-5" id="rf-rank-form">
+            @csrf
+            <input type="hidden" name="user_id" value="{{ $filterUser->id }}">
+            <div class="flex gap-3 flex-wrap items-start mb-4">
+                <div style="flex:2;min-width:280px;">
+                    @if ($isPlace)
+                        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">플레이스 URL 또는 ID</label>
+                        <input name="place" id="rf-place" class="input" value="{{ old('place') }}" placeholder="https://map.naver.com/... · m.place URL · 플레이스 ID" required maxlength="1000" autocomplete="off">
+                        <div id="rf-place-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
+                    @else
+                        <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">상품 URL(스마트스토어/가격비교) 또는 업체명</label>
+                        <input name="target" id="rf-target" class="input" value="{{ old('target') }}" placeholder="https://smartstore.naver.com/.../products/123... · 또는 업체명" required maxlength="500" autocomplete="off">
+                        <div id="rf-target-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
+                    @endif
+                </div>
+                <div style="width:150px;">
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라벨 <span class="text-muted-soft">(선택)</span></label>
+                    <input name="label" class="input" value="{{ old('label') }}" placeholder="{{ $isPlace ? '예: 본점' : '예: 신상' }}">
+                </div>
+            </div>
+
+            <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">추적 키워드 <span class="text-muted-soft">(여러 개 추가 가능)</span></label>
+            <div id="rf-keywords">
+                @php $olds = array_values(array_filter((array) old('keywords', ['']), fn ($v) => $v !== null)); @endphp
+                @forelse ($olds as $kw)
+                    <div class="rf-kw-row flex gap-2 mb-2">
+                        <input name="keywords[]" class="input" style="flex:1;" value="{{ $kw }}" placeholder="{{ $isPlace ? '강남 미용실' : '예: 강아지 사료' }}" @if($loop->first) required @endif>
+                        <button type="button" class="btn btn-ghost btn-sm rf-kw-del" title="삭제" style="width:40px;">✕</button>
+                    </div>
+                @empty
+                    <div class="rf-kw-row flex gap-2 mb-2">
+                        <input name="keywords[]" class="input" style="flex:1;" placeholder="{{ $isPlace ? '강남 미용실' : '예: 강아지 사료' }}" required>
+                        <button type="button" class="btn btn-ghost btn-sm rf-kw-del" title="삭제" style="width:40px;">✕</button>
+                    </div>
+                @endforelse
+            </div>
+
+            <div class="flex items-center justify-between mt-3 flex-wrap gap-2">
+                <button type="button" id="rf-kw-add" class="btn btn-secondary btn-sm">＋ 키워드 추가</button>
+                <button type="submit" class="btn btn-primary">추적 추가 (한도 무시)</button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+
+{{-- 수정 모달(전 회원 슬롯 · 운영자) — slot-card 의 rf-edit-btn 이 열어준다 --}}
+<div id="rf-edit-modal" class="hidden" style="position:fixed;inset:0;z-index:50;">
+    <div class="rf-edit-close" style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-ink) 40%, transparent);"></div>
+    <div class="card" style="position:relative;max-width:480px;margin:14vh auto 0;box-shadow:var(--shadow-card);">
+        <div class="flex items-center justify-between px-5 border-b border-hairline-soft" style="height:52px;">
+            <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">추적 수정</span>
+            <button type="button" class="btn btn-ghost btn-sm rf-edit-close" title="닫기">✕</button>
+        </div>
+        <form method="POST" id="rf-edit-form" action="" class="p-5">
+            @csrf @method('PUT')
+            <input type="hidden" name="edit_slot_id" id="rf-edit-slot-id" value="">
+            <div class="mb-3">
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">키워드</label>
+                <input name="keyword" id="rf-edit-keyword" class="input" value="" required maxlength="{{ $isPlace ? 100 : 120 }}">
+            </div>
+            <div class="mb-3">
+                @if ($isPlace)
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">플레이스 URL 또는 ID</label>
+                    <input name="place" id="rf-edit-place" class="input" value="" required maxlength="1000" autocomplete="off" placeholder="https://m.place.naver.com/... · 플레이스 ID">
+                    <div id="rf-edit-place-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
+                @else
+                    <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">상품 URL 또는 업체명</label>
+                    <input name="target" id="rf-edit-target" class="input" value="" required maxlength="500" autocomplete="off" placeholder="상품 URL · 또는 업체명">
+                    <div id="rf-edit-target-info" class="mt-1" style="font-size:var(--fs-xs);min-height:16px;"></div>
+                @endif
+            </div>
+            <div class="mb-4">
+                <label class="block text-muted mb-1" style="font-size:var(--fs-xs);">라벨 <span class="text-muted-soft">(선택)</span></label>
+                <input name="label" id="rf-edit-label" class="input" value="" maxlength="100" placeholder="{{ $isPlace ? '예: 본점' : '예: 신상' }}">
+            </div>
+            <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">키워드·대상을 바꾸면 다음 확인부터 변경 기준으로 기록됩니다. 기존 기록은 유지됩니다.</p>
+            <div class="flex justify-end gap-2">
+                <button type="button" class="btn btn-secondary btn-sm rf-edit-close">취소</button>
+                <button type="submit" class="btn btn-primary btn-sm">저장</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    const isPlace = @json($isPlace);
+    const resolveUrl = @json($trkResolve);
+    const resolveParam = isPlace ? 'place' : 'target';
+    const editUrlTpl = @json($trkUpdateTpl);
+
+    // ── 추가 모달(회원 필터 시에만 DOM 존재) ──
+    const modal = document.getElementById('rf-modal');
+    if (modal) {
+        const openBtn = document.getElementById('rf-open-modal');
+        const closeBtn = document.getElementById('rf-modal-close');
+        const bg = document.getElementById('rf-modal-bg');
+        const openModal = function () {
+            modal.classList.remove('hidden');
+            const first = modal.querySelector('input[name="' + resolveParam + '"]');
+            if (first) setTimeout(() => first.focus(), 50);
+        };
+        const closeModal = function () { modal.classList.add('hidden'); };
+        openBtn && openBtn.addEventListener('click', openModal);
+        closeBtn && closeBtn.addEventListener('click', closeModal);
+        bg && bg.addEventListener('click', closeModal);
+        window.__rfOpenAdd = openModal;
+        window.__rfCloseAdd = closeModal;
+
+        // 키워드 행 추가/삭제
+        const kwWrap = document.getElementById('rf-keywords');
+        const addBtn = document.getElementById('rf-kw-add');
+        function rowTemplate() {
+            const row = document.createElement('div');
+            row.className = 'rf-kw-row flex gap-2 mb-2';
+            row.innerHTML = '<input name="keywords[]" class="input" style="flex:1;" placeholder="키워드 입력">'
+                + '<button type="button" class="btn btn-ghost btn-sm rf-kw-del" title="삭제" style="width:40px;">✕</button>';
+            return row;
+        }
+        addBtn && addBtn.addEventListener('click', function () {
+            const row = rowTemplate();
+            kwWrap.appendChild(row);
+            row.querySelector('input').focus();
+        });
+        kwWrap && kwWrap.addEventListener('click', function (e) {
+            const del = e.target.closest('.rf-kw-del');
+            if (!del) return;
+            const rows = kwWrap.querySelectorAll('.rf-kw-row');
+            if (rows.length <= 1) { del.closest('.rf-kw-row').querySelector('input').value = ''; return; }
+            del.closest('.rf-kw-row').remove();
+            const first = kwWrap.querySelector('.rf-kw-row input');
+            if (first) first.setAttribute('required', 'required');
+        });
+    }
+
+    // ── 수정 모달(항상 존재) ──
+    const editModal = document.getElementById('rf-edit-modal');
+    const editForm = document.getElementById('rf-edit-form');
+    function editTargetEl() { return document.getElementById(isPlace ? 'rf-edit-place' : 'rf-edit-target'); }
+    function editInfoEl() { return document.getElementById(isPlace ? 'rf-edit-place-info' : 'rf-edit-target-info'); }
+    function openEdit(action, slotId, keyword, target, label) {
+        editForm.action = action;
+        document.getElementById('rf-edit-slot-id').value = slotId || '';
+        document.getElementById('rf-edit-keyword').value = keyword || '';
+        editTargetEl().value = target || '';
+        editInfoEl().textContent = '';
+        document.getElementById('rf-edit-label').value = label || '';
+        editModal.classList.remove('hidden');
+        setTimeout(() => document.getElementById('rf-edit-keyword').focus(), 50);
+    }
+    function closeEdit() { editModal.classList.add('hidden'); }
+    document.querySelectorAll('.rf-edit-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const tgt = isPlace ? btn.dataset.place : btn.dataset.target;
+            openEdit(btn.dataset.action, btn.dataset.slotId, btn.dataset.keyword, tgt, btn.dataset.label);
+        });
+    });
+    editModal.querySelectorAll('.rf-edit-close').forEach(function (el) { el.addEventListener('click', closeEdit); });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (!editModal.classList.contains('hidden')) closeEdit();
+        else if (modal && !modal.classList.contains('hidden') && window.__rfCloseAdd) window.__rfCloseAdd();
+    });
+
+    // 검증 실패 시 해당 모달 재오픈
+    @if (old('edit_slot_id'))
+        openEdit(editUrlTpl.replace('__ID__', @json(old('edit_slot_id'))), @json(old('edit_slot_id')), @json(old('keyword')), @json(old($isPlace ? 'place' : 'target')), @json(old('label')));
+    @elseif (($filterUser ?? null) && ($errors->any() || old($isPlace ? 'place' : 'target')))
+        window.__rfOpenAdd && window.__rfOpenAdd();
+    @endif
+
+    // ── 대상 자동조회(디바운스) — 등록·수정 공용 ──
+    function attachResolver(el, info) {
+        if (!el || !info) return;
+        let t = null, last = '';
+        function doResolve() {
+            const v = (el.value || '').trim();
+            if (v === '' || v === last) return;
+            last = v;
+            info.textContent = isPlace ? '업체명 조회 중…' : '대상 확인 중…';
+            info.style.color = 'var(--color-muted)';
+            fetch(resolveUrl + '?' + resolveParam + '=' + encodeURIComponent(v), { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json())
+                .then(d => {
+                    if (isPlace) {
+                        if (d && d.ok && d.place_name) {
+                            info.innerHTML = '✓ <b style="color:var(--color-ink)">' + d.place_name + '</b>'
+                                + (d.category && d.category !== 'place' ? ' <span style="color:var(--color-muted-soft)">· ' + d.category + '</span>' : '')
+                                + (d.place_id ? ' <span style="color:var(--color-muted-soft)">· ID ' + d.place_id + '</span>' : '');
+                            info.style.color = 'var(--color-primary)';
+                        } else if (d && d.place_id) {
+                            info.textContent = 'ID ' + d.place_id + ' · 업체명은 등록 후 자동 확인됩니다.';
+                            info.style.color = 'var(--color-muted)';
+                        } else {
+                            info.textContent = '플레이스를 찾지 못했습니다. URL/ID를 확인하세요(업체명 직접 입력도 가능).';
+                            info.style.color = 'var(--color-muted-soft)';
+                        }
+                    } else {
+                        if (d && d.ok && d.product_id) {
+                            info.innerHTML = '✓ <b style="color:var(--color-ink)">상품 ID ' + d.product_id + '</b> <span style="color:var(--color-muted-soft)">· 상품명은 순위체크 후 표시</span>';
+                            info.style.color = 'var(--color-primary)';
+                        } else if (d && d.ok && d.mall_name) {
+                            info.innerHTML = '✓ <b style="color:var(--color-ink)">업체명 ' + d.mall_name + '</b> <span style="color:var(--color-muted-soft)">· mallName 일치로 순위 탐색</span>';
+                            info.style.color = 'var(--color-primary)';
+                        } else {
+                            info.textContent = 'URL에서 상품 ID를 찾지 못했습니다. 업체명으로 검색하려면 그대로 두세요.';
+                            info.style.color = 'var(--color-muted-soft)';
+                        }
+                    }
+                })
+                .catch(() => { info.textContent = ''; });
+        }
+        el.addEventListener('input', function () { clearTimeout(t); t = setTimeout(doResolve, 600); });
+        el.addEventListener('blur', doResolve);
+        if (el.value.trim() !== '') doResolve();
+    }
+    attachResolver(document.getElementById(isPlace ? 'rf-place' : 'rf-target'), document.getElementById(isPlace ? 'rf-place-info' : 'rf-target-info'));
+    attachResolver(editTargetEl(), editInfoEl());
+})();
+</script>
 
 @unless ($isPlace)
 {{-- 제목 수집(쇼핑) — 미노출 상품은 순위체크로 제목이 안 붙으므로, 확장(admin-bridge)이 상품페이지에서 긁어와 저장.

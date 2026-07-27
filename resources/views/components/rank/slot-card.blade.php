@@ -24,6 +24,7 @@
         $toggleRoute = "admin.{$seg}-tracking.toggle";
         $runRoute = "admin.{$seg}-tracking.run";
         $listRoute = "admin.{$seg}-tracking";
+        $updateRoute = "admin.{$seg}-tracking.update";   // 운영자 수정(2026-07-27)
     } else {
         $seg = $isPlace ? 'rank' : 'shop-rank';
         $toggleRoute = "console.{$seg}.toggle";
@@ -115,13 +116,15 @@
                 @endif
                 <button type="button" class="btn btn-ghost btn-sm"
                         onclick="rfSaveReportImage('rf-slot-report-{{ $slot->id }}', @js($imgName), this)" title="이 키워드 순위를 PNG 이미지로 저장">🖼 이미지</button>
+                {{-- 수정 — console·admin 공통(admin=운영자 수정) --}}
+                <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"
+                        data-action="{{ route($updateRoute, $slot) }}"
+                        data-slot-id="{{ $slot->id }}"
+                        data-keyword="{{ $slot->keyword }}"
+                        data-{{ $editTargetKey }}="{{ $editTargetVal }}"
+                        data-label="{{ $slot->label }}">수정</button>
                 @unless ($isAdmin)
-                    <button type="button" class="btn btn-ghost btn-sm rf-edit-btn"
-                            data-action="{{ route($updateRoute, $slot) }}"
-                            data-slot-id="{{ $slot->id }}"
-                            data-keyword="{{ $slot->keyword }}"
-                            data-{{ $editTargetKey }}="{{ $editTargetVal }}"
-                            data-label="{{ $slot->label }}">수정</button>
+                    {{-- 삭제는 회원 콘솔만(운영자 열람 화면엔 삭제 없음) --}}
                     <form method="POST" action="{{ route($destroyRoute, $slot) }}" onsubmit="return confirm('삭제하시겠습니까?')">@csrf @method('DELETE')<button type="submit" class="btn btn-ghost btn-sm" style="color:var(--color-error);">삭제</button></form>
                 @endunless
             </div>

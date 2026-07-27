@@ -199,6 +199,163 @@ class RankTrackingController extends Controller
         ]);
     }
 
+    // ── 운영자 등록/수정(2026-07-27) — 회원 대신 슬롯을 등록·수정한다. 소유권 검사 없음, 한도 무시. ──
+
+    /** [운영자 등록] 플레이스 — 대상 회원(user_id)에게 등록. 한도 무시(운영자 권한). */
+    public function storePlace(Request $request, RankSlotService $service)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'place' => ['required', 'string', 'max:1000'],
+            'keywords' => ['required', 'array', 'min:1'],
+            'keywords.*' => ['nullable', 'string', 'max:100'],
+            'label' => ['nullable', 'string', 'max:100'],
+        ]);
+        $target = \App\Models\User::findOrFail($data['user_id']);
+        try {
+            $res = $service->addMany($target, $data['place'], $data['keywords'], $data['label'] ?? null, true);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['place' => $e->getMessage()])->withInput();
+        }
+        $t0 = microtime(true);
+        foreach ($res['created'] as $slot) {   // 등록 즉시 첫 순위 수집(20초 예산)
+            if (microtime(true) - $t0 > 20) {
+                break;
+            }
+            try {
+                $service->run($slot);
+            } catch (\Throwable) {
+            }
+        }
+        $n = count($res['created']);
+        $msg = $n > 0 ? "{$target->name} · 키워드 {$n}개 추적 추가됨." : '추가된 키워드가 없습니다.';
+        if (count($res['skipped'])) {
+            $msg .= ' (중복 제외: '.implode(', ', $res['skipped']).')';
+        }
+
+        return back()->with('status', $msg);
+    }
+
+    /** [운영자 수정] 플레이스 슬롯 — 소유권 검사 없이, 중복은 슬롯 소유 회원 기준. */
+    public function updatePlace(Request $request, PlaceRankSlot $slot, RankSlotService $service)
+    {
+        $data = $request->validate([
+            'keyword' => ['required', 'string', 'max:100'],
+            'place' => ['required', 'string', 'max:1000'],
+            'label' => ['nullable', 'string', 'max:100'],
+        ]);
+        $kw = trim($data['keyword']);
+        $placeInput = trim($data['place']);
+        $placeChanged = $placeInput !== (string) $slot->place_url && $placeInput !== (string) $slot->place_id;
+        $place = $placeChanged ? $service->resolvePlace($placeInput) : null;
+        $newPlaceId = $placeChanged ? $place['place_id'] : $slot->place_id;
+        $newPlaceName = $placeChanged ? $place['place_name'] : $slot->place_name;
+
+        $dupe = PlaceRankSlot::where('user_id', $slot->user_id)->where('id', '!=', $slot->id)->where('keyword', $kw)
+            ->when($newPlaceId, fn ($q) => $q->where('place_id', $newPlaceId), fn ($q) => $q->where('place_name', $newPlaceName))
+            ->exists();
+        if ($dupe) {
+            return back()->withErrors(['keyword' => "'{$kw}' 는 이미 같은 플레이스에서 추적 중입니다."])->withInput();
+        }
+
+        $slot->update(array_merge(
+            ['keyword' => $kw, 'label' => $data['label'] !== null && trim($data['label']) !== '' ? trim($data['label']) : null],
+            $placeChanged ? ['place_id' => $place['place_id'], 'place_name' => $place['place_name'], 'place_url' => $place['place_url'], 'category' => $place['category'] ?: 'place'] : [],
+        ));
+
+        return back()->with('status', '수정했습니다. 다음 확인부터 변경된 기준으로 기록됩니다.');
+    }
+
+    /** [운영자] 플레이스 업체명 미리보기(AJAX). */
+    public function resolvePlace(Request $request, RankSlotService $service)
+    {
+        $input = trim((string) $request->query('place', ''));
+        if ($input === '') {
+            return response()->json(['ok' => false, 'message' => '플레이스 URL 또는 ID 를 입력하세요.'], 422);
+        }
+        $p = $service->resolvePlace($input);
+
+        return response()->json(['ok' => (bool) ($p['place_id'] || $p['place_name']), 'place_id' => $p['place_id'], 'place_name' => $p['place_name'], 'category' => $p['category'], 'place_url' => $p['place_url']]);
+    }
+
+    /** [운영자 등록] 쇼핑 — 대상 회원에게 등록. 한도 무시. */
+    public function storeShop(Request $request, ShopRankSlotService $service)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'target' => ['required', 'string', 'max:500'],
+            'keywords' => ['required', 'array', 'min:1'],
+            'keywords.*' => ['nullable', 'string', 'max:120'],
+            'label' => ['nullable', 'string', 'max:100'],
+        ]);
+        $target = \App\Models\User::findOrFail($data['user_id']);
+        try {
+            $res = $service->addMany($target, $data['target'], $data['keywords'], $data['label'] ?? null, true);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['target' => $e->getMessage()])->withInput();
+        }
+        $t0 = microtime(true);
+        foreach ($res['created'] as $slot) {
+            if (microtime(true) - $t0 > 20) {
+                break;
+            }
+            try {
+                $service->run($slot);
+            } catch (\Throwable) {
+            }
+        }
+        $n = count($res['created']);
+        $msg = $n > 0 ? "{$target->name} · 키워드 {$n}개 추적 추가됨." : '추가된 키워드가 없습니다.';
+        if (count($res['skipped'])) {
+            $msg .= ' (중복 제외: '.implode(', ', $res['skipped']).')';
+        }
+
+        return back()->with('status', $msg);
+    }
+
+    /** [운영자 수정] 쇼핑 슬롯 — 소유권 없이, 중복은 슬롯 소유 회원 기준. */
+    public function updateShop(Request $request, ShopRankSlot $slot, ShopRankSlotService $service)
+    {
+        $data = $request->validate([
+            'keyword' => ['required', 'string', 'max:120'],
+            'target' => ['required', 'string', 'max:500'],
+            'label' => ['nullable', 'string', 'max:100'],
+        ]);
+        $t = $service->resolve($data['target']);
+        if ($t['product_id'] === '' && $t['mall_name'] === '') {
+            return back()->withErrors(['target' => '상품 URL 또는 업체명을 확인하세요.'])->withInput();
+        }
+        $dup = ShopRankSlot::where('user_id', $slot->user_id)->where('keyword', $data['keyword'])->where('id', '!=', $slot->id)
+            ->where(fn ($q) => $t['product_id'] !== '' ? $q->where('product_id', $t['product_id']) : $q->where('mall_name', $t['mall_name']))
+            ->exists();
+        if ($dup) {
+            return back()->withErrors(['keyword' => '이미 추적 중인 키워드입니다.'])->withInput();
+        }
+        $slot->update([
+            'keyword' => $data['keyword'],
+            'label' => $data['label'] ?: null,
+            'target_type' => $t['type'],
+            'product_id' => $t['product_id'] ?: null,
+            'mall_name' => $t['mall_name'] ?: null,
+            'product_url' => $t['url'] ?: null,
+        ]);
+
+        return back()->with('status', '수정했습니다.');
+    }
+
+    /** [운영자] 쇼핑 대상 미리보기(AJAX). */
+    public function resolveShop(Request $request, ShopRankSlotService $service)
+    {
+        $input = trim((string) $request->query('target', ''));
+        if ($input === '') {
+            return response()->json(['ok' => false, 'message' => 'target 이 비었습니다.'], 422);
+        }
+        $t = $service->resolve($input);
+        $label = $t['product_id'] !== '' ? '상품 ID '.$t['product_id'] : '업체명 '.$t['mall_name'];
+
+        return response()->json(['ok' => $t['product_id'] !== '' || $t['mall_name'] !== ''] + $t + ['label' => $label]);
+    }
+
     /** 목록 상단 통계 — 전체·활성·등록 회원 수·최근 7일 확인. */
     private function stats($query): array
     {
