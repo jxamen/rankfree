@@ -75,6 +75,18 @@
        - 검증: 실확장 SW 직접호출 결정적 4/4(지연주입 성공·캡차 즉시·미로딩 차단·429에러페이지 15초 차단) + 적응형 스태거 실측(첫 5개 11초 분산·700ms 미만 간격 0).
 3. **hub:refresh** ([HubRefresh](../app/Console/Commands/HubRefresh.php)) — `refresh_after_days`(기본 30일) 지난 문서를 오래된 순 상한(기본 20)만큼 재수집 → 사이트맵 lastmod 갱신 효과. 볼륨이 안 나오면 기존 스냅샷 유지·커서만 전진
 
+#### 관리자 일괄 수집(collect-batch) — 플레이스는 카테고리 순서대로 하나씩 (2026-07-27)
+
+- 대상 선정이 **카테고리 순서(`sort` → `id`)** 다 — 쇼핑(`shoppingRootCategories`)과 같은 기준.
+  예전엔 `collected_at is null desc → collected_at` 이라 실행할 때마다 순서가 뒤바뀌어 어디까지 돌았는지 알 수 없었다.
+- 실행도 **순차**다: 컨트롤러는 [KeywordHubCollectCategoryJob](../app/Jobs/KeywordHubCollectCategoryJob.php) 을 **첫 카테고리만** 큐에 넣고,
+  잡이 끝날 때 같은 run 의 다음 `queued` 플레이스 항목을 스스로 이어서 dispatch 한다(`dispatchNextPlaceItem`).
+  워커가 4개라 전부 dispatch 하면 카테고리가 동시에 섞여 진행됐다.
+  - 건너뜀(카테고리 없음·대상 아님·락 충돌)·**최종 실패(`failed()`)** 에서도 다음으로 넘어간다 — 한 카테고리가 막아서 전체가 멈추지 않게.
+  - 관리자 OFF(`KeywordHubCollectionControl`) 로 `release()` 재시도하는 경우엔 이어달리지 않는다(같은 항목이 다시 실행된다).
+  - run 이 `cancelled` 면 체인을 멈춘다. **쇼핑 루트는 종전대로 병렬**(서로 독립).
+- 검증: [KeywordHubPlaceSequentialTest](../tests/Feature/KeywordHubPlaceSequentialTest.php) 5건(첫 항목만 큐·sort 순서·다음 이어달리기·마지막 종료·취소 중단)
+
 - **스케줄**: [routes/console.php](../routes/console.php) — **발행과 발굴을 분리**한다.
   - **발행(hub:publish)**: 관리자 승인분만 처리(도어웨이·쿼터 리스크 없음) → **기본 on**(`hub.publish_enabled`, `.env HUB_PUBLISH_ENABLED=false` 로 끔). `hub.publish_interval`(분, 기본 10)마다 실행해 승인 후보 ≤`publish_per_run`(10) 발행. **승인 큐가 빌 때까지 자동으로 계속 드레인**하고, 없으면 idle. `withoutOverlapping`.
   - **발굴(hub:collect 06:10 · hub:discover 06:20 · hub:refresh 06:40 · hub:shopping-collect 월 06:50)**: 후보 대량 생성이라 쿼터 보호로 **기본 off** — `.env HUB_SCHEDULE_ENABLED=true` 로 활성.

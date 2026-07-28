@@ -54,35 +54,69 @@ class KeywordHubCollectCategoryJob implements ShouldQueue
         $categoryId = (int) $item->target_id;
         $lock = Cache::lock("hub:collect:category:{$categoryId}", 600);
 
-        if (! $lock->get()) {
-            $this->completeHubItem($item, [], '같은 카테고리 수집이 이미 실행 중이라 건너뜀');
-
-            return;
-        }
-
+        // 이 카테고리가 끝나면(성공·건너뜀 무관) 같은 실행의 다음 카테고리를 이어서 돌린다.
+        // 관리자 OFF 로 재시도(release) 하는 경우는 위에서 이미 return 했으므로 여기 오지 않는다.
         try {
-            $category = KeywordCategory::find($categoryId);
-            if (! $category) {
-                $this->completeHubItem($item, [], '카테고리를 찾을 수 없어 건너뜀');
+            if (! $lock->get()) {
+                $this->completeHubItem($item, [], '같은 카테고리 수집이 이미 실행 중이라 건너뜀');
 
                 return;
             }
 
-            if (! $category->is_active || $category->naver_cid !== null || ! $category->seedList()) {
-                $this->completeHubItem($item, [], '수집 대상이 아니어서 건너뜀');
+            try {
+                $category = KeywordCategory::find($categoryId);
+                if (! $category) {
+                    $this->completeHubItem($item, [], '카테고리를 찾을 수 없어 건너뜀');
 
-                return;
+                    return;
+                }
+
+                if (! $category->is_active || $category->naver_cid !== null || ! $category->seedList()) {
+                    $this->completeHubItem($item, [], '수집 대상이 아니어서 건너뜀');
+
+                    return;
+                }
+
+                $stats = $collector->collect($category);
+                $this->completeHubItem($item, $stats);
+            } finally {
+                $lock->release();
             }
-
-            $stats = $collector->collect($category);
-            $this->completeHubItem($item, $stats);
         } finally {
-            $lock->release();
+            $this->dispatchNextPlaceItem($item);
         }
     }
 
     public function failed(?Throwable $exception): void
     {
         $this->failHubItem($this->itemId, $exception);
+
+        // 한 카테고리가 끝내 실패해도 나머지가 멈추면 안 된다 — 다음 카테고리로 넘어간다.
+        $item = KeywordHubRunItem::find($this->itemId);
+        if ($item) {
+            $this->dispatchNextPlaceItem($item);
+        }
+    }
+
+    /**
+     * 같은 실행(run)에서 아직 시작하지 않은 다음 플레이스 카테고리를 큐에 넣는다(2026-07-27).
+     * 카테고리 순서대로 하나씩 진행하기 위한 이어달리기 — 컨트롤러는 첫 카테고리만 넣는다.
+     */
+    private function dispatchNextPlaceItem(KeywordHubRunItem $item): void
+    {
+        if ($item->run?->status === 'cancelled') {
+            return;
+        }
+
+        $next = KeywordHubRunItem::where('run_id', $item->run_id)
+            ->where('type', 'place')
+            ->where('id', '>', $item->id)
+            ->where('status', 'queued')
+            ->orderBy('id')
+            ->first();
+
+        if ($next) {
+            self::dispatch($next->id);
+        }
     }
 }

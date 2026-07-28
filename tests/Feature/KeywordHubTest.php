@@ -718,7 +718,9 @@ class KeywordHubTest extends TestCase
         $this->assertDatabaseHas('keyword_hub_run_items', ['run_id' => $run->id, 'type' => 'place', 'target_id' => (string) $placeB->id]);
         $this->assertDatabaseHas('keyword_hub_run_items', ['run_id' => $run->id, 'type' => 'shopping', 'target_id' => '50000000']);
 
-        Queue::assertPushed(KeywordHubCollectCategoryJob::class, 2);
+        // 플레이스는 카테고리 순서대로 하나씩 진행한다(2026-07-27) — 항목은 2개지만 큐에는 첫 카테고리만.
+        // 나머지는 잡이 끝날 때 이어서 들어간다([KeywordHubPlaceSequentialTest]).
+        Queue::assertPushed(KeywordHubCollectCategoryJob::class, 1);
         Queue::assertPushed(KeywordHubCollectShoppingRootJob::class, 1);
     }
 

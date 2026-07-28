@@ -171,11 +171,19 @@ class KeywordHubController extends Controller
             'note' => count($items) ? '큐에 등록됨' : '수집 대상 없음',
         ])->save();
 
+        // 쇼핑은 종전대로 한꺼번에 큐에 넣고(루트별 독립), 플레이스는 **카테고리 순서대로 하나씩** 돈다(2026-07-27).
+        // 워커가 여러 개라 전부 dispatch 하면 카테고리가 동시에 섞여 진행돼 "어디까지 됐는지"를 알 수 없었다.
+        // 첫 카테고리만 넣고, 잡이 끝날 때 스스로 다음 카테고리를 이어서 실행한다(KeywordHubCollectCategoryJob).
+        $firstPlaceQueued = false;
         foreach ($items as $item) {
             if ($item->type === 'shopping') {
                 KeywordHubCollectShoppingRootJob::dispatch($item->id);
-            } else {
+
+                continue;
+            }
+            if (! $firstPlaceQueued) {
                 KeywordHubCollectCategoryJob::dispatch($item->id);
+                $firstPlaceQueued = true;
             }
         }
 
@@ -741,12 +749,13 @@ class KeywordHubController extends Controller
 
     private function placeCollectCategories(int $limit)
     {
+        // 카테고리 순서(sort → id)대로 수집한다(2026-07-27) — 쇼핑(shoppingRootCategories)과 같은 기준.
+        // 예전엔 '미수집 우선 → 오래된 순' 이라 실행할 때마다 순서가 뒤바뀌어 어디까지 돌았는지 알기 어려웠다.
         return KeywordCategory::with('parent')
             ->where('type', 'place')
             ->where('is_active', true)
             ->whereNull('naver_cid')
-            ->orderByRaw('collected_at is null desc')
-            ->orderBy('collected_at')
+            ->orderBy('sort')
             ->orderBy('id')
             ->get()
             ->filter(fn (KeywordCategory $category) => (bool) $category->seedList())
