@@ -19,6 +19,7 @@
     @stack('head')
 </head>
 <body class="bg-surface-page min-h-screen flex items-center justify-center font-sans antialiased text-body" style="padding:24px;">
+@include('partials.custom-body')
     <div class="w-full" style="max-width:400px;">
         <a href="/" class="flex items-center justify-center gap-2 mb-8">
             <span class="inline-flex items-center justify-center w-8 h-8 rounded-md bg-primary text-on-primary font-display" style="font-size:var(--fs-md);">R</span>

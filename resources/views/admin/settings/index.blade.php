@@ -558,6 +558,16 @@
             <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);"><b>원문 그대로</b> 삽입됩니다. <code>&lt;script&gt;</code>·<code>&lt;meta&gt;</code>·<code>&lt;link&gt;</code> 태그를 직접 포함하세요.</div>
             <textarea name="custom_head_html" spellcheck="false" placeholder="&lt;meta name=&quot;...&quot; content=&quot;...&quot;&gt;&#10;&lt;script async src=&quot;https://www.googletagmanager.com/gtag/js?id=G-XXXX&quot;&gt;&lt;/script&gt;" class="input" style="width:100%;height:300px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_head_html', $customHtml) }}</textarea>
         </div>
+
+        {{-- body 시작 코드(2026-07-27) — GTM noscript 처럼 head 에 넣으면 동작하지 않는 것들 --}}
+        <div class="mb-2">
+            <label class="text-ink font-semibold" style="font-size:var(--fs-sm);display:block;margin-bottom:6px;">커스텀 스크립트 · body 시작 HTML</label>
+            <div class="text-muted-soft mb-2" style="font-size:var(--fs-xs);">
+                모든 페이지의 <code>&lt;body&gt;</code> <b>바로 뒤</b>에 원문 그대로 삽입됩니다.
+                <b>GTM noscript</b>처럼 head 에 두면 동작하지 않는 코드를 넣으세요.
+            </div>
+            <textarea name="custom_body_html" spellcheck="false" placeholder="&lt;noscript&gt;&lt;iframe src=&quot;https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX&quot; height=&quot;0&quot; width=&quot;0&quot; style=&quot;display:none;visibility:hidden&quot;&gt;&lt;/iframe&gt;&lt;/noscript&gt;" class="input" style="width:100%;height:180px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.6;resize:vertical;white-space:pre;">{{ old('custom_body_html', $customBodyHtml) }}</textarea>
+        </div>
     </div>
 
     <div class="flex items-center gap-2">

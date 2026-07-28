@@ -22,6 +22,7 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
+@include('partials.custom-body')
 @php
     $fmt = fn ($v) => $v === null ? '—' : round($v);
     $bar = function ($v, $color = 'var(--color-primary)') {

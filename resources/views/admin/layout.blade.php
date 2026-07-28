@@ -61,6 +61,7 @@
     @stack('head')
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
+@include('partials.custom-body')
 <div class="flex min-h-screen console-shell">
     {{-- 모바일 드로어 백드롭 --}}
     <div id="rf-sb-bg" class="hidden lg:hidden" style="position:fixed;inset:0;z-index:49;background:color-mix(in srgb, var(--color-ink) 40%, transparent);"></div>

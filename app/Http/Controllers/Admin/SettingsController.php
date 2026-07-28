@@ -70,6 +70,8 @@ class SettingsController extends Controller
             // 커스텀 head 코드(모든 페이지 <head> 주입)
             'customCss' => AppSetting::read('custom.head_css'),
             'customHtml' => AppSetting::read('custom.head_html'),
+            // <body> 바로 뒤 코드(2026-07-27) — GTM noscript 처럼 head 에 두면 동작하지 않는 것들
+            'customBodyHtml' => AppSetting::read('custom.body_html'),
             // 외부 연동 키 — Cloudflare Turnstile · Google/Kakao 소셜 · 알리고 SMS
             'turnstileSiteKey' => AppSetting::read('turnstile.site_key'),
             'turnstileSecret' => AppSetting::read('turnstile.secret'),
@@ -166,6 +168,10 @@ class SettingsController extends Controller
         AppSetting::write('custom.head_css', (string) $request->input('custom_head_css', ''));
         AppSetting::write('custom.head_html', (string) $request->input('custom_head_html', ''));
         Cache::forget(AppSetting::CUSTOM_HEAD_CACHE);
+
+        // <body> 바로 뒤 코드(2026-07-27) — GTM noscript 등
+        AppSetting::write('custom.body_html', (string) $request->input('custom_body_html', ''));
+        Cache::forget(AppSetting::CUSTOM_BODY_CACHE);
 
         // 외부 연동 단일 값 키 저장(Turnstile·소셜·알리고)
         foreach (self::SIMPLE as $key => $field) {

@@ -11,6 +11,9 @@ class AppSetting extends Model
     /** 커스텀 head 코드 캐시 키(설정 저장 시 무효화). */
     public const CUSTOM_HEAD_CACHE = 'app:custom_head';
 
+    /** 커스텀 body 시작 코드 캐시 키 — GTM noscript 처럼 <body> 바로 뒤에 와야 하는 코드(2026-07-27). */
+    public const CUSTOM_BODY_CACHE = 'app:custom_body';
+
     protected $fillable = ['key', 'value'];
 
     // 값 암호화(저장 시 암호화, 조회 시 복호화). 네이버 자격증명 등 시크릿 보호.
@@ -67,6 +70,24 @@ class AppSetting extends Model
             });
         } catch (\Throwable $e) {
             return '';   // DB/테이블 미준비 등 — head 주입 생략(페이지는 정상 렌더)
+        }
+    }
+
+    /**
+     * 어드민 환경설정의 커스텀 body 시작 코드 — <body> 바로 뒤 주입용(2026-07-27).
+     * GTM noscript(iframe) 처럼 head 가 아니라 body 첫머리에 있어야 동작하는 코드를 넣는다.
+     * head 와 같은 이유로 캐시하고, 설정 저장 시 무효화한다.
+     */
+    public static function customBody(): string
+    {
+        try {
+            return Cache::rememberForever(self::CUSTOM_BODY_CACHE, function () {
+                $html = trim((string) static::read('custom.body_html'));
+
+                return $html !== '' ? $html."\n" : '';
+            });
+        } catch (\Throwable $e) {
+            return '';   // DB 미준비 등 — 주입 생략(페이지는 정상 렌더)
         }
     }
 }
