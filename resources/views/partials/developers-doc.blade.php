@@ -102,6 +102,34 @@ HTTP/1.1 201
   "created": [{"id": 12, "keyword": "강남 미용실", "last_rank": null, "history": []}],
   "skipped": []
 }</pre>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">순위 확인 결과(<code class="doc-code">result</code>)</b> — <code class="doc-code">run</code>·<code class="doc-code">check</code> 응답에 공통으로 실립니다.</p>
+    <table class="doc-table mt-2">
+        <thead><tr><th style="width:220px;">필드</th><th>설명</th></tr></thead>
+        <tbody>
+            <tr><td><code class="doc-code">rank</code></td><td>순위(1~). <code class="doc-code">0</code>/<code class="doc-code">300</code>=순위밖, <code class="doc-code">blocked:true</code>=차단</td></tr>
+            <tr><td><code class="doc-code">found</code> · <code class="doc-code">blocked</code></td><td>노출 여부 · IP/토큰 차단 여부(bool)</td></tr>
+            <tr><td><code class="doc-code">list_total</code></td><td>해당 키워드 검색 결과의 총 업체 수</td></tr>
+            <tr><td><code class="doc-code">review_count</code> · <code class="doc-code">blog_review_count</code> · <code class="doc-code">save_count</code></td><td>방문자 리뷰 · 블로그 리뷰 · 저장 수</td></tr>
+            <tr><td><code class="doc-code">review_score</code> · <code class="doc-code">category</code> · <code class="doc-code">tags</code></td><td>평점 · 업종 · 대표 키워드(배열)</td></tr>
+        </tbody>
+    </table>
+    <div class="doc-block mt-4">
+    <div class="doc-block-t">1회성 순위 조회 · 슬롯 목록</div>
+    <pre class="doc-pre">curl -X POST {{ url('/api/v1') }}/rank/check \
+  -H "Authorization: Bearer rk_..." -H "Content-Type: application/json" \
+  -d '{"keyword": "강남 미용실", "place": "https://m.place.naver.com/hairshop/1145161001"}'
+# → {"result": {"blocked": false, "found": true, "rank": 3, "list_total": 280,
+#               "category": "미용실", "place_id": "1145161001", "place_name": "라온헤어 강남점",
+#               "review_count": 1240, "blog_review_count": 320, "save_count": 890,
+#               "review_score": 4.9, "tags": ["염색", "펌"]}}
+
+curl {{ url('/api/v1') }}/rank/slots -H "Authorization: Bearer rk_..."
+# → {"used": 12, "limit": 100, "slots": [
+#     {"id": 12, "keyword": "강남 미용실", "place_id": "1145161001", "place_name": "라온헤어 강남점",
+#      "last_rank": 3, "last_review_count": 1240, "last_checked_at": "2026-07-29T11:30:00+09:00",
+#      "history": [{"date": "2026-07-28", "rank": 4}, {"date": "2026-07-29", "rank": 3}]}]}</pre>
+    </div>
 </div>
 
 {{-- ============ 경쟁분석 ============ --}}
@@ -119,6 +147,32 @@ HTTP/1.1 201
             <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/compete/{slotId}/analyze</code></td><td>분석 실행 — <code class="doc-code">detail_top</code>(기본 10). 동기 처리로 수십 초 소요, 차단 시 <code class="doc-code">429 blocked</code></td></tr>
         </tbody>
     </table>
+
+    <p class="mt-4 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">응답 구조</b> — <code class="doc-code">rows</code>(경쟁셋, <code class="doc-code">is_mine</code> 로 내 플레이스 구분) · <code class="doc-code">explain</code>(내 점수 해설: <code class="doc-code">components</code>·<code class="doc-code">seo</code>·<code class="doc-code">dims</code>) · <code class="doc-code">series</code>(일자별 N1/N2/N3·순위 추이). 분석 이력이 없으면 <code class="doc-code">{"analyzed": false, "rows": [], "mine": null, "explain": null}</code>.</p>
+    <div class="doc-block mt-4">
+    <div class="doc-block-t">분석 실행 → 상세 조회 → 요약</div>
+    <pre class="doc-pre">curl -X POST {{ url('/api/v1') }}/compete/12/analyze \
+  -H "Authorization: Bearer rk_..." -H "Content-Type: application/json" -d '{"detail_top": 10}'
+# → {"blocked": false, "my_rank": 3, "total": 280, "competitors": 10,
+#    "my_score": {"n1": 82.5, "n2": 74.1, "n3": 68.0, "tier": 2, "rnk": 3,
+#                 "d1": 90, "d2": 75, "…": "…", "d10": 60}}
+# 차단 시 → HTTP 429 {"message": "조회 제한(nCaptcha 토큰 재발급 필요)", "blocked": true}
+
+curl {{ url('/api/v1') }}/compete/12 -H "Authorization: Bearer rk_..."
+# → {"analyzed": true, "ymd": "2026-07-29", "keyword": "강남 미용실", "place_name": "라온헤어 강남점",
+#    "rows": [{"rnk": 1, "name": "A헤어", "place_id": "123", "is_mine": false,
+#              "visitor_cnt": 2100, "blog_cnt": 540, "review_score": 4.8,
+#              "n1": 88.0, "n2": 80.1, "n3": 72.5, "tier": 1},
+#             {"rnk": 3, "name": "라온헤어 강남점", "place_id": "1145161001", "is_mine": true, "…": "…"}],
+#    "explain": {"components": {"L": 12.0, "B": 8.5, "region": "강남", "core": "미용실"},
+#                "seo": [{"label": "업체명 키워드", "grade": 1.0, "w": 0.15, "avail": 1}],
+#                "dims": {"d1": 90, "n1": 82.5, "…": "…"}},
+#    "series": [{"ymd": "2026-07-28", "n1": 81.0, "rnk": 4}, {"ymd": "2026-07-29", "n1": 82.5, "rnk": 3}]}
+
+curl {{ url('/api/v1') }}/compete/tracks -H "Authorization: Bearer rk_..."
+# → {"tracks": [{"slot_id": 12, "keyword": "강남 미용실", "place_name": "라온헤어 강남점",
+#               "analyzed_ymd": "2026-07-29", "n1": 82.5, "n2": 74.1, "n3": 68.0, "rnk": 3}]}</pre>
+    </div>
 </div>
 
 {{-- ============ 키워드분석 ============ --}}
@@ -143,7 +197,7 @@ HTTP/1.1 200
     "keyword": "강남미용실",
     "monthly_pc": 1200, "monthly_mobile": 8800, "monthly_total": 10000,
     "comp_idx": "높음",
-    "related": [{"keyword": "강남역미용실", "monthly_total": 4300}]
+    "related": [{"keyword": "강남역미용실", "monthly_pc": 500, "monthly_mobile": 3800, "comp_idx": "중간", "monthly_total": 4300}]
   }
 }</pre>
     <pre class="doc-pre mt-3">GET {{ url('/api/v1') }}/keyword/detail?keyword=강남+미용실
@@ -160,9 +214,12 @@ HTTP/1.1 200
       "age": [{"age": "20", "total": 3100, "pct": 31.0}, {"age": "30", "total": 4200, "pct": 42.0}],
       "monthly": [{"label": "2025-08", "pc": 1100, "mobile": 8300, "total": 9400}, … ],
       "buckets": [{"gender": "f", "age": "20", "pc": 300, "mobile": 2500, "total": 2800}, … ]
-    }
-  }
+    },
+    "grade": "A", "weekday": {"mon": 14.2, "sun": 12.1, "…": "…"}
+  },
+  "share_token": "abc123def…"
 }</pre>
+    <p class="mt-2 text-muted-soft" style="font-size:var(--fs-xs);">* <code class="doc-code">grade</code>(S~F 추정 등급)·<code class="doc-code">weekday</code>(요일별 검색 비율)·<code class="doc-code">share_token</code>(공개 공유 토큰)은 상세 응답에만 포함. 소스 일시 장애 시 <code class="doc-code">503</code> <code class="doc-code">{"data": null, "message": …}</code>. 월 한도 초과 시 <code class="doc-code">429</code> <code class="doc-code">{"limit_exceeded": true}</code>.</p>
 </div>
 
 {{-- ============ 마케팅 상품 주문 ============ --}}
