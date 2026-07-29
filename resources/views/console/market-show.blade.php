@@ -12,5 +12,6 @@
         'weekday' => $weekday ?? null,
         'shareUrl' => $a->shareUrl(),
         'public' => false,
+        'kdPending' => $kdPending ?? false,
     ])
 @endsection

@@ -339,6 +339,26 @@
             <div class="font-display mt-1" style="font-size:var(--fs-xl);color:var(--color-badge-violet);">{{ $kdRatio }}</div>
         </div>
     </div>
+@elseif (! empty($kdPending))
+    {{-- keyword_data 미완비 — 백그라운드 보강 중. 완료되면 프론트가 자동 갱신(수동 새로고침 불필요, 2026-07-29). --}}
+    <div id="rf-kd-pending" data-status-url="{{ route('market.kd-status', ['keyword' => $a->keyword]) }}">
+        <div class="text-ink font-semibold mb-3" style="font-size:var(--fs-xs);">키워드 분석 <span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">수집 중…</span></div>
+        <div class="card-soft mb-6 px-4 py-3 text-muted rf-kd-note" style="font-size:var(--fs-xs);">검색광고 기준 검색량·성별·연령 데이터를 수집하고 있습니다. 완료되면 자동으로 표시됩니다.</div>
+    </div>
+    <script>
+    (function () {
+        var el = document.getElementById('rf-kd-pending');
+        if (! el) return;
+        var url = el.dataset.statusUrl, note = el.querySelector('.rf-kd-note'), tries = 0, max = 20;
+        var t = setInterval(function () {
+            if (++tries > max) { clearInterval(t); if (note) note.textContent = '아직 수집 중입니다. 잠시 후 새로고침하면 표시됩니다.'; return; }
+            fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) {
+                if (j.ready) { clearInterval(t); location.reload(); }
+                else if (j.failed) { clearInterval(t); if (note) note.textContent = '지금은 데이터를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.'; }
+            }).catch(function () {});
+        }, 3000);
+    })();
+    </script>
 @endif
 
 {{-- 키워드 상세 분석 — 성별·연령·트렌드·성별×연령·월별 (인사이트는 맨 위로 이동) --}}

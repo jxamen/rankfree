@@ -71,6 +71,8 @@ Route::get('/keywords/{slug}', [KeywordInsightController::class, 'category'])->n
 //    구 /k /m /p /sp /ps /r /rc /sr 토큰 URL 은 아래 루프에서 301 로 이 URL 로 이동(기존 링크 유지).
 Route::get('/keyword/{slug}', [KeywordAnalysisController::class, 'shared'])->name('keyword.shared');
 Route::get('/market/{slug}', [MarketAnalysisController::class, 'shared'])->name('market.shared');
+// keyword_data 보강 완료 폴링 — 시장분석 첫 열람(미완비)에서 프론트가 자동 갱신
+Route::get('/market-kd-status', [MarketAnalysisController::class, 'kdStatus'])->middleware('throttle:60,1')->name('market.kd-status');
 Route::get('/product/{slug}', [ProductAnalysisController::class, 'shared'])->name('product.shared');
 Route::get('/seller/{slug}', [SellerPowerController::class, 'shared'])->name('seller-power.shared');
 Route::get('/store/{slug}', function (string $slug) {

@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Domain\Keyword\NaverDataLabService;
 use App\Domain\Seo\RelatedDocsService;
+use App\Domain\Shopping\MarketKeywordDataEnricher;
 use App\Models\MarketAnalysis;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /** 쇼핑 시장 분석 내역 — 콘솔 (확장 프로그램 수집분 열람). */
 class MarketAnalysisController extends Controller
@@ -22,14 +24,17 @@ class MarketAnalysisController extends Controller
         ]);
     }
 
-    public function show(Request $request, MarketAnalysis $analysis, NaverDataLabService $datalab)
+    public function show(Request $request, MarketAnalysis $analysis, NaverDataLabService $datalab, MarketKeywordDataEnricher $enricher)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+
+        // keyword_data 미완비면 백그라운드 보강 예약(공개 공유와 동일) — 콘솔 상세도 첫 열람에 '키워드 분석'이 채워지게
+        $enricher->ensureAsync($analysis);
 
         // 요일별 검색 비율(데이터랩) — 키워드 분석과 동일 지표(공유 모듈에서 렌더)
         $weekday = $analysis->keyword ? $datalab->weekdayRatio($analysis->keyword) : null;
 
-        return view('console.market-show', ['a' => $analysis, 'weekday' => $weekday]);
+        return view('console.market-show', ['a' => $analysis, 'weekday' => $weekday, 'kdPending' => $enricher->needs($analysis)]);
     }
 
     /** 공개 공유 리포트 — 공유 토큰으로 비로그인 열람. */
@@ -66,7 +71,28 @@ class MarketAnalysisController extends Controller
         // 콘솔 상세와 동일하게 요일별 검색 비율(데이터랩 24h 캐시)도 함께 렌더
         $weekday = $display->keyword ? $datalab->weekdayRatio($display->keyword) : null;
 
-        return view('market.share', ['a' => $display, 'weekday' => $weekday, 'related' => $related->sectionsFor($display)]);
+        return view('market.share', ['a' => $display, 'weekday' => $weekday, 'related' => $related->sectionsFor($display), 'kdPending' => $enricher->needs($display)]);
+    }
+
+    /**
+     * keyword_data 보강 상태 폴링(공개) — 미완비 문서 첫 열람 시 프론트가 완료를 감지해 자동 갱신한다.
+     * 완료 여부만 반환(민감정보 없음). ready=true 면 프론트가 페이지를 1회 새로고침한다.
+     */
+    public function kdStatus(Request $request, MarketKeywordDataEnricher $enricher)
+    {
+        $kw = trim((string) $request->query('keyword', ''));
+        if ($kw === '') {
+            return response()->json(['ready' => true]);
+        }
+        $a = MarketAnalysis::where('keyword', $kw)->orderByDesc('updated_at')->orderByDesc('id')->first();
+        if (! $a) {
+            return response()->json(['ready' => true]);
+        }
+
+        return response()->json([
+            'ready' => ! $enricher->needs($a),
+            'failed' => (bool) Cache::get('market:kd-enrich-fail:'.md5(mb_strtoupper($kw))),
+        ]);
     }
 
     /** 검색엔진·AI 크롤러 User-Agent 감지 — 이들에겐 keyword_data 를 동기로 완비해 빈 색인을 막는다. */

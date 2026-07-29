@@ -30,7 +30,7 @@
     <div class="badge mb-4 border border-hairline">쇼핑 시장 분석 리포트 · 랭크프리</div>
     <h1 class="font-display text-ink" style="font-size:clamp(24px,4vw,34px);line-height:1.2;">{{ $__kw }} 쇼핑 시장 분석</h1>
     <p class="text-muted" style="margin-top:8px;font-size:var(--fs-sm);line-height:1.6;">{{ $__summary }}</p>
-    @include('console._market_body', ['a' => $a, 'weekday' => $weekday ?? null, 'shareUrl' => null, 'public' => true])
+    @include('console._market_body', ['a' => $a, 'weekday' => $weekday ?? null, 'shareUrl' => null, 'public' => true, 'kdPending' => $kdPending ?? false])
     @include('partials.related-docs', ['related' => $related ?? []])
 </section>
 @endsection
