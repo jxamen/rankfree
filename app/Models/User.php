@@ -28,7 +28,14 @@ class User extends Authenticatable
             'password' => 'hashed',
             'api_scopes' => 'array',        // 회원별 허용 API 기능(scope) — 관리자가 부여
             'term_agreements' => 'array',   // 가입 시 약관 동의 이력 {키: {title, required, agreed_at, ip}}
+            'signup_utm' => 'array',        // 가입 유입 utm {source, medium, campaign, term, content}
         ];
+    }
+
+    /** 추천인(이 회원을 추천한 회원) — /register?ref=CODE 가입 시 연결(ReferralService). */
+    public function referredBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'referred_by');
     }
 
     /**

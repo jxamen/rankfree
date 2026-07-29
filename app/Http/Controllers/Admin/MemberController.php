@@ -18,7 +18,7 @@ class MemberController extends Controller
         $gradeId = $request->query('grade');
         $role = $request->query('role');
 
-        $query = User::with(['grade', 'operatorRole'])->latest();
+        $query = User::with(['grade', 'operatorRole', 'referredBy'])->latest();
 
         if ($q !== '') {
             $digits = preg_replace('/[^0-9]/', '', $q);

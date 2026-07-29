@@ -24,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // 리다이렉트 이후에 두어 대표 도메인으로 정리된 요청만 집계한다.
         $middleware->append(\App\Http\Middleware\LogAiCrawler::class);
 
+        // 가입 유입경로(first-touch) 캡처 — 게스트 첫 방문의 외부 referrer·utm 을 쿠키에 담아 가입 시 저장한다.
+        $middleware->append(\App\Http\Middleware\CaptureAttribution::class);
+
         $middleware->alias([
             'operator' => \App\Http\Middleware\EnsureOperator::class,
             'menu.gate' => \App\Http\Middleware\MenuGate::class,

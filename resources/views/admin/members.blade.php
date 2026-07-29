@@ -75,6 +75,18 @@
                             </div>
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $m->email }}</div>
                             <div class="text-muted-soft" style="font-size:var(--fs-xs);">📞 {{ $phoneFmt ?: '—' }}</div>
+                            {{-- 유입경로(가입 시 first-touch) + 추천인 --}}
+                            @php
+                                $utm = (array) ($m->signup_utm ?? []);
+                                if (! empty($utm['source'])) {
+                                    $inflow = $utm['source'].(! empty($utm['medium']) ? ' / '.$utm['medium'] : '').(! empty($utm['campaign']) ? ' ('.$utm['campaign'].')' : '');
+                                } elseif ($m->signup_referrer) {
+                                    $inflow = parse_url($m->signup_referrer, PHP_URL_HOST) ?: $m->signup_referrer;
+                                } else {
+                                    $inflow = '직접';
+                                }
+                            @endphp
+                            <div class="text-muted-soft" style="font-size:var(--fs-xs);" title="{{ $m->signup_referrer ?: '' }}">↗ 유입: <span class="text-muted">{{ $inflow }}</span>@if ($m->referredBy) · 추천 <span class="text-muted">{{ $m->referredBy->name }}</span>@endif</div>
                         </td>
                         <td class="px-3 py-3">
                             @if ($m->grade)
