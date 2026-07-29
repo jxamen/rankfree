@@ -75,7 +75,9 @@ class ShopKeywordApiController extends Controller
             $analysis->update(['status' => 'pending']);
         }
 
-        return response()->json(['analysis' => $this->payload($analysis)], 201);
+        return response()->json([
+            'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis, $this->oneProductInfo($analysis))],
+        ], 201);
     }
 
     /** 내 분석 목록. */
@@ -86,8 +88,12 @@ class ShopKeywordApiController extends Controller
         $rows = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->latest('id')->paginate($perPage);
 
+        $infos = $this->productInfoMap($request->user()->id, collect($rows->items())->pluck('product_id')->all());
+
         return response()->json([
-            'analyses' => collect($rows->items())->map(fn ($a) => $this->payload($a))->all(),
+            'analyses' => collect($rows->items())
+                ->map(fn ($a) => $this->payload($a) + ['product' => $this->productPayload($a, $infos[(string) $a->product_id] ?? null)])
+                ->all(),
             'page' => $rows->currentPage(),
             'per_page' => $rows->perPage(),
             'total' => $rows->total(),
@@ -100,21 +106,37 @@ class ShopKeywordApiController extends Controller
         abort_unless($analysis->user_id === $request->user()->id, 403);
 
         return response()->json([
-            'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis)],
+            'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis, $this->oneProductInfo($analysis))],
             'exposed_keywords' => $this->shortLinks->exposedKeywords($analysis),
             'short_links' => $this->linkPayload($analysis),
         ]);
     }
 
-    /**
-     * 수집·저장된 상품 정보 전체(상세 조회 전용) — SEO 태그·카테고리·대표이미지는 분석 행이 아니라
-     * 상품정보 저장소(ShopProductInfo)에 있으므로 여기서 합쳐 돌려준다.
-     */
-    private function productPayload(ShopKeywordAnalysis $analysis): array
+    /** 분석 1건의 상품정보 조회(생성·상세용). 목록은 productInfoMap 으로 일괄 조회한다. */
+    private function oneProductInfo(ShopKeywordAnalysis $analysis): ?\App\Models\ShopProductInfo
     {
-        $pi = \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+        return \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
             ->where('channel_product_id', (string) $analysis->product_id)->first();
+    }
 
+    /** 목록용 일괄 조회 — 페이지의 상품정보를 한 번에 읽어 N+1 을 막는다. 키 = channel_product_id */
+    private function productInfoMap(int $userId, array $productIds)
+    {
+        $ids = array_values(array_filter(array_unique(array_map('strval', $productIds))));
+        if ($ids === []) {
+            return collect();
+        }
+
+        return \App\Models\ShopProductInfo::where('user_id', $userId)
+            ->whereIn('channel_product_id', $ids)->get()->keyBy('channel_product_id');
+    }
+
+    /**
+     * 수집·저장된 상품 정보 전체 — SEO 태그(해시태그)·카테고리·대표이미지는 분석 행이 아니라
+     * 상품정보 저장소(ShopProductInfo)에 있으므로 여기서 합쳐 돌려준다. 수집 전에는 빈 값.
+     */
+    private function productPayload(ShopKeywordAnalysis $analysis, ?\App\Models\ShopProductInfo $pi = null): array
+    {
         return [
             'title' => (string) ($pi->title ?? $analysis->product_title),
             'brand' => (string) ($pi->brand ?? $analysis->brand),

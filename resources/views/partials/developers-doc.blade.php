@@ -1673,19 +1673,33 @@
     "core_keyword": "비타민c",
     "product_url": "https://smartstore.naver.com/healthyday/products/6412870193",
     "product_id": "6412870193",
-    "mall_name": "헬씨데이",
+    "mall_name": "",
+    "product_title": "",
+    "brand": "",
+    "product_price": 0,
     "threshold": 5,
-    "status": "checking",
+    "status": "pending",
     "progress": {
-      "total": 240,
+      "total": 0,
       "checked": 0,
-      "remaining": 240,
+      "remaining": 0,
       "exposed": 0,
       "blocked": false
     },
-    "created_at": "2026-07-29T14:20:11+09:00"
+    "created_at": "2026-07-29T14:20:11+09:00",
+    "product": {
+      "title": "",
+      "brand": "",
+      "mall_name": "",
+      "price": 0,
+      "category": "",
+      "thumbnail_url": "",
+      "seller_tags": [],
+      "collected_at": null
+    }
   }
 }</pre></div>
+            <p class="ep-t mt-2 text-muted-soft">※ 생성 직후에는 아직 상품 정보를 수집하기 전이라 <code class="doc-code">product</code> 가 비어 있고 <code class="doc-code">status</code> 는 <code class="doc-code">pending</code> 입니다. 확장이 수집하면 값이 채워지고 <code class="doc-code">checking</code> 으로 넘어갑니다 — 진행은 상세 조회로 폴링하세요.</p>
             <div class="ep-l">응답 필드</div>
             <table class="doc-table">
                 <thead><tr><th style="width:210px;">필드</th><th style="width:80px;">타입</th><th>설명</th></tr></thead>
@@ -1706,6 +1720,11 @@
                     <tr><td><code class="doc-code">analysis.progress.exposed</code></td><td>int</td><td>1~<code class="doc-code">threshold</code> 위로 확인된 조합 수</td></tr>
                     <tr><td><code class="doc-code">analysis.progress.blocked</code></td><td>bool</td><td>차단으로 확인이 멈췄는지 여부</td></tr>
                     <tr><td><code class="doc-code">analysis.created_at</code></td><td>string</td><td>생성 시각(ISO 8601, KST)</td></tr>
+                    <tr><td><code class="doc-code">analysis.product</code></td><td>object</td><td><b class="text-ink">수집된 상품 정보</b> — 모든 응답(생성 · 목록 · 상세)에 같은 모양으로 들어갑니다. 생성 직후에는 아직 수집 전이라 빈 값이고, 확장이 채우면 값이 들어옵니다</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.seller_tags</code></td><td>array</td><td><b class="text-ink">해시태그(관련 태그)</b> — 상품 상세페이지 하단 태그. <code class="doc-code">#</code> 없이 문자열 배열</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.thumbnail_url</code></td><td>string</td><td>대표이미지 URL</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.title</code> · <code class="doc-code">brand</code> · <code class="doc-code">mall_name</code> · <code class="doc-code">price</code> · <code class="doc-code">category</code></td><td>—</td><td>상품 제목 · 브랜드 · 상점명 · 판매가(원) · 카테고리</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.collected_at</code></td><td>string</td><td>상품 정보 수집 시각(ISO 8601). 수집 전이면 <code class="doc-code">null</code></td></tr>
                 </tbody>
             </table>
         </div>
