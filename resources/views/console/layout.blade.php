@@ -69,6 +69,10 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     @include('partials.custom-head')
+    {{-- GTM 회원가입 전환 — 가입 직후 1회(?signup=1). 표시 후 URL에서 파라미터 제거해 새로고침 중복 방지. GTM: 맞춤이벤트 트리거 event=sign_up → GA4 이벤트 sign_up --}}
+    @if (request()->boolean('signup'))
+    <script>window.dataLayer=window.dataLayer||[];dataLayer.push({event:'sign_up',method:'email'});history.replaceState&&history.replaceState(null,'',location.pathname);</script>
+    @endif
     @stack('head')
 </head>
 <body class="bg-surface-page font-sans antialiased text-body">
