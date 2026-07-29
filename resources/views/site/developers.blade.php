@@ -1,4 +1,4 @@
-{{-- 공개 API 문서 — 외부 파트너 공유용(비로그인 열람). 본문은 콘솔 문서(console.developers)와 공용 partial --}}
+{{-- 공개 API 문서 — 외부 파트너 공유용(비로그인 열람). 본문은 partials/developers-doc --}}
 @extends('layouts.site')
 @section('title', 'API 문서 — 랭크프리')
 @section('description', '랭크프리 오픈 API — 인증 · 순위추적 · 경쟁분석 · 키워드분석 · 마케팅 상품 주문 연동 문서')

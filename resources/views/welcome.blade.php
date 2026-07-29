@@ -525,7 +525,7 @@
                     <p class="mt-3 text-body" style="font-size:var(--fs-base);line-height:1.7;max-width:460px;">
                         키 발급 한 번으로 플레이스·쇼핑 순위를 API로 받아보세요. 허용 IP·일일 한도·기간을 직접 관리할 수 있습니다.
                     </p>
-                    <a href="/console/developers" class="btn btn-secondary btn-sm mt-5">API 문서 보기 →</a>
+                    <a href="/developers" class="btn btn-secondary btn-sm mt-5">API 문서 보기 →</a>
                 </div>
                 <div class="rounded-lg border border-hairline bg-surface-soft overflow-hidden" style="font-family:var(--font-mono);font-size:var(--fs-xs);">
                     <div class="flex items-center gap-1.5 px-4 border-b border-hairline-soft" style="height:32px;">

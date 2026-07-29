@@ -1,5 +1,5 @@
-{{-- 개발자 문서 본문(공용) — 공개 /developers 와 콘솔 /console/developers 가 함께 사용. 내용 수정은 이 파일에서.
-     주제별 탭(시작하기·순위추적·경쟁분석·키워드분석·상품 주문) — URL 해시(#order 등)로 특정 탭 딥링크 가능. --}}
+{{-- 개발자 문서 본문 — 공개 /developers 전용. 내용 수정은 이 파일에서(콘솔 문서는 2026-07-29 제거).
+     주제별 탭(시작하기·순위추적·경쟁분석·키워드분석·상품 주문·쇼핑 유입키워드) — URL 해시(#order 등)로 특정 탭 딥링크 가능. --}}
 <style>
     .doc-h2 { font-size:var(--fs-xl); line-height: 1.3; margin-top: 34px; }
     .doc-code { font-family: var(--font-mono); font-size:var(--fs-xs); }
