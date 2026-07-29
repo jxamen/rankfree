@@ -155,6 +155,11 @@ class SettingsController extends Controller
         }
         $this->saveAiKeys($request);
 
+        // 회원가입 약관 — 하단 저장 버튼 하나로 함께 저장(2026-07-29, 별도 저장 버튼 제거)
+        if ($request->has('terms_submitted')) {
+            $this->persistTerms($request);
+        }
+
         // 플레이스 업종별 패턴 — 콤마/줄바꿈 구분 입력을 배열로. 탭을 열어 제출했을 때만 저장한다.
         if ($request->has('place_patterns')) {
             $patterns->save(collect((array) $request->input('place_patterns', []))
@@ -204,6 +209,17 @@ class SettingsController extends Controller
      */
     public function saveTerms(Request $request)
     {
+        $this->persistTerms($request);
+
+        return back()->with('status', '회원가입 약관을 저장했습니다.');
+    }
+
+    /**
+     * 회원가입 약관 저장 — 환경설정 메인 저장(update)과 구 전용 라우트(saveTerms)가 공유한다.
+     * 회원 탭이 함께 제출됐을 때만(terms_submitted) 반영해, 다른 화면의 저장이 약관을 지우지 않게 한다.
+     */
+    private function persistTerms(Request $request): void
+    {
         $request->validate([
             'terms' => ['nullable', 'array', 'max:20'],
             'terms.*.key' => ['nullable', 'string', 'max:40', 'regex:/^[a-z0-9_]*$/'],
@@ -225,8 +241,6 @@ class SettingsController extends Controller
             ];
         }
         \App\Domain\Member\SignupTerms::save($rows);
-
-        return back()->with('status', '회원가입 약관을 저장했습니다.');
     }
 
     public function createSecondaryDomain(Request $request)

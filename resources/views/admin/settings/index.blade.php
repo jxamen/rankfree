@@ -384,8 +384,8 @@
             예) 1회당 20 · 최대 200 → 추천 가입 10명까지 슬롯 +200개. 이미 최대치에 도달한 추천인은 추천 관계만 기록되고 더 늘지 않습니다.
         </p>
 
-        {{-- 회원가입 약관(2026-07-27, 2026-07-29 회원 탭으로 이동) — 입력은 form 속성으로 폼 밖의
-             #rf-terms-form 에 연결한다(메인 저장 폼 안이라 form 태그를 여기 둘 수 없음). --}}
+        {{-- 회원가입 약관(2026-07-27, 2026-07-29 회원 탭으로 이동) — 메인 저장 폼 소속이라
+             하단 [저장] 버튼 하나로 다른 설정과 함께 저장된다(별도 저장 버튼 없음). --}}
         <div id="rf-terms" class="mt-8 pt-6" style="border-top:1px solid var(--color-hairline);">
             <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">회원가입 약관 <span class="text-muted-soft" style="font-weight:400;">가입 화면 동의 항목</span></div>
             <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
@@ -396,29 +396,30 @@
                 @foreach ($terms as $i => $t)
                     <div class="rf-term-row card-soft p-4" data-idx="{{ $i }}">
                         <div class="flex items-center gap-2 flex-wrap mb-2">
-                            <input form="rf-terms-form" name="terms[{{ $i }}][key]" class="input" style="width:150px;font-size:var(--fs-xs);"
+                            <input name="terms[{{ $i }}][key]" class="input" style="width:150px;font-size:var(--fs-xs);"
                                    value="{{ $t['key'] }}" placeholder="키 (예: marketing)" maxlength="40">
-                            <input form="rf-terms-form" name="terms[{{ $i }}][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);"
+                            <input name="terms[{{ $i }}][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);"
                                    value="{{ $t['title'] }}" placeholder="가입 화면에 보일 제목" maxlength="120">
                             <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
-                                <input form="rf-terms-form" type="hidden" name="terms[{{ $i }}][required]" value="0">
-                                <input form="rf-terms-form" type="checkbox" name="terms[{{ $i }}][required]" value="1" @checked($t['required'])> 필수
+                                <input type="hidden" name="terms[{{ $i }}][required]" value="0">
+                                <input type="checkbox" name="terms[{{ $i }}][required]" value="1" @checked($t['required'])> 필수
                             </label>
                             <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
-                                <input form="rf-terms-form" type="hidden" name="terms[{{ $i }}][is_active]" value="0">
-                                <input form="rf-terms-form" type="checkbox" name="terms[{{ $i }}][is_active]" value="1" @checked($t['is_active'])> 사용
+                                <input type="hidden" name="terms[{{ $i }}][is_active]" value="0">
+                                <input type="checkbox" name="terms[{{ $i }}][is_active]" value="1" @checked($t['is_active'])> 사용
                             </label>
                             <button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>
                         </div>
-                        <textarea form="rf-terms-form" name="terms[{{ $i }}][body]" class="input" rows="6" maxlength="20000"
+                        <textarea name="terms[{{ $i }}][body]" class="input" rows="6" maxlength="20000"
                                   style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문">{{ $t['body'] }}</textarea>
                     </div>
                 @endforeach
             </div>
             <div class="flex items-center gap-2 mt-3">
                 <button type="button" id="rf-term-add" class="btn btn-secondary btn-sm">＋ 약관 추가</button>
-                <button type="submit" form="rf-terms-form" class="btn btn-primary btn-sm" style="margin-left:auto;">약관 저장</button>
             </div>
+            {{-- 회원 탭이 제출됐음을 알리는 표식 — 이 값이 있을 때만 약관을 저장한다(행을 모두 지운 경우도 반영) --}}
+            <input type="hidden" name="terms_submitted" value="1">
         </div>
     </div>
 
@@ -613,21 +614,19 @@
         </div>
     </div>
 
-    <div class="flex items-center gap-2">
+    {{-- 저장·취소 — 위 내용(약관 추가 버튼 등)과 붙지 않도록 여백을 둔다(2026-07-29) --}}
+    <div class="flex items-center gap-2 mt-6">
         <button type="submit" class="btn btn-primary">저장</button>
         <a href="{{ route('admin.home') }}" class="btn btn-secondary">취소</a>
     </div>
 </form>
 
-{{-- 회원가입 약관 저장 폼(2026-07-29) — UI 는 회원 탭 안에 있고 입력이 form 속성으로 여기에 붙는다.
-     폼 태그 자체는 메인 저장 폼과 중첩되면 안 되므로 폼 밖에 둔다. --}}
-<form method="POST" action="{{ route('admin.settings.terms') }}" id="rf-terms-form" hidden>@csrf</form>
-
 <script>
 (function () {
-    // 약관 행 추가/삭제 — name 인덱스는 제출 직전에 다시 매긴다(중간 삭제해도 배열이 끊기지 않게)
+    // 약관 행 추가/삭제 — name 인덱스는 제출 직전에 다시 매긴다(중간 삭제해도 배열이 끊기지 않게).
+    // 약관은 메인 저장 폼 소속이라 하단 [저장] 버튼 하나로 함께 저장된다(2026-07-29).
     var wrap = document.getElementById('rf-terms-rows');
-    var form = document.getElementById('rf-terms-form');
+    var form = document.getElementById('rf-settings-form');
     if (!wrap || !form) return;
 
     function bindDel(row) {
@@ -642,17 +641,17 @@
         row.className = 'rf-term-row card-soft p-4';
         row.innerHTML =
             '<div class="flex items-center gap-2 flex-wrap mb-2">'
-            + '<input form="rf-terms-form" name="terms[' + i + '][key]" class="input" style="width:150px;font-size:var(--fs-xs);" placeholder="키 (예: marketing)" maxlength="40">'
-            + '<input form="rf-terms-form" name="terms[' + i + '][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);" placeholder="가입 화면에 보일 제목" maxlength="120">'
+            + '<input name="terms[' + i + '][key]" class="input" style="width:150px;font-size:var(--fs-xs);" placeholder="키 (예: marketing)" maxlength="40">'
+            + '<input name="terms[' + i + '][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);" placeholder="가입 화면에 보일 제목" maxlength="120">'
             + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
-            + '<input form="rf-terms-form" type="hidden" name="terms[' + i + '][required]" value="0">'
-            + '<input form="rf-terms-form" type="checkbox" name="terms[' + i + '][required]" value="1" checked> 필수</label>'
+            + '<input type="hidden" name="terms[' + i + '][required]" value="0">'
+            + '<input type="checkbox" name="terms[' + i + '][required]" value="1" checked> 필수</label>'
             + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
-            + '<input form="rf-terms-form" type="hidden" name="terms[' + i + '][is_active]" value="0">'
-            + '<input form="rf-terms-form" type="checkbox" name="terms[' + i + '][is_active]" value="1" checked> 사용</label>'
+            + '<input type="hidden" name="terms[' + i + '][is_active]" value="0">'
+            + '<input type="checkbox" name="terms[' + i + '][is_active]" value="1" checked> 사용</label>'
             + '<button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>'
             + '</div>'
-            + '<textarea form="rf-terms-form" name="terms[' + i + '][body]" class="input" rows="6" maxlength="20000" style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문"></textarea>';
+            + '<textarea name="terms[' + i + '][body]" class="input" rows="6" maxlength="20000" style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문"></textarea>';
         wrap.appendChild(row);
         bindDel(row);
     });
