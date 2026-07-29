@@ -14,7 +14,7 @@
 @section('admin-content')
 @php
     // 저장/리디렉션 후에도 보던 탭 유지 — ?tab= 파라미터로 초기 활성 탭 결정
-    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'member' => '회원', 'payment' => '결제', 'place' => '플레이스 패턴', 'domains' => '2차 도메인', 'custom' => '커스텀 코드'];
+    $__tabs = ['basic' => '광고·데이터 API', 'api' => 'AI API', 'integ' => '외부 연동', 'extension' => '확장 프로그램', 'member' => '회원', 'payment' => '결제', 'place' => '플레이스 패턴', 'domains' => '2차 도메인', 'custom' => '커스텀 코드'];
     $__active = array_key_exists(request('tab'), $__tabs) ? request('tab') : 'basic';
 @endphp
 <x-console.page-head title="환경 설정" desc="API 자격증명·수집·AI 등 서비스 운영 설정 · 탭별로 저장됩니다" />
@@ -327,12 +327,15 @@
             @include('admin.settings._simplefield', ['name' => 'seoul_openapi_key', 'label' => '일반 인증키', 'value' => $seoulOpenapiKey, 'secret' => true, 'placeholder' => '발급받은 32자 인증키'])
         </div>
 
-        {{-- 크롬 확장 웹스토어 게시 --}}
+    </div>
+
+    {{-- ── 확장 프로그램: 웹스토어 게시(2026-07-29 외부 연동에서 분리) ──── --}}
+    <div class="rf-tabpane" data-tab="extension" @if ($__active !== 'extension') hidden @endif>
         <div class="card p-5 mb-4">
             <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">크롬 확장 웹스토어 게시 <span class="text-muted-soft" style="font-weight:400;">항목 ID · 원클릭 게시</span></div>
             <p class="text-muted-soft mb-3" style="font-size:var(--fs-xs);line-height:1.7;">
                 <a href="https://chrome.google.com/webstore/devconsole" target="_blank" rel="noopener" class="text-ink">웹스토어 대시보드</a>에서 최초 등록 후 <b>항목 ID</b>(32자)를 넣고 저장하세요.
-                게시는 위 <b>구글 데이터 연동</b> 계정(웹스토어 게시 권한 포함)으로 서버가 <code>extension/</code>을 묶어 업로드·심사제출합니다.
+                게시는 <b>외부 연동</b> 탭의 <b>구글 데이터 연동</b> 계정(웹스토어 게시 권한 포함)으로 서버가 <code>extension/</code>을 묶어 업로드·심사제출합니다.
                 항목의 <b>게시(publisher) 권한을 가진 구글 계정</b>으로 연동돼 있어야 합니다.
             </p>
             @include('admin.settings._simplefield', ['name' => 'extension_chrome_id', 'label' => '항목 ID (32자, a–p)', 'value' => $extensionChromeId, 'secret' => false, 'placeholder' => 'ghlnhbdcbnaennjgghnifboeoghnmfdm'])
@@ -347,13 +350,16 @@
 
             @if (! $cwsStatus['scoped'])
                 <p class="mb-3" style="font-size:var(--fs-xs);color:var(--color-warning);line-height:1.7;">
-                    게시하려면 위 <b>구글 데이터 연동</b>을 <b>다시</b> 눌러 “Chrome 웹스토어” 권한까지 동의하세요(게시 계정 = 연동 계정이어야 합니다).
+                    게시하려면 <b>외부 연동</b> 탭의 <b>구글 데이터 연동</b>을 <b>다시</b> 눌러 “Chrome 웹스토어” 권한까지 동의하세요(게시 계정 = 연동 계정이어야 합니다).
                 </p>
             @endif
 
             <button type="submit" form="rf-ext-publish" class="btn btn-primary btn-sm" @unless ($cwsStatus['ready']) disabled @endunless>
                 웹스토어에 게시 (v{{ $cwsStatus['version'] }} 심사 제출)
             </button>
+            <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);line-height:1.7;">
+                ※ 심사 제출은 웹스토어 대시보드의 <b>개인정보 처리(Privacy practices)</b> 항목이 채워져 있어야 통과합니다 — 비어 있으면 업로드는 되고 제출만 거부됩니다.
+            </p>
         </div>
     </div>
 
@@ -377,6 +383,43 @@
         <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
             예) 1회당 20 · 최대 200 → 추천 가입 10명까지 슬롯 +200개. 이미 최대치에 도달한 추천인은 추천 관계만 기록되고 더 늘지 않습니다.
         </p>
+
+        {{-- 회원가입 약관(2026-07-27, 2026-07-29 회원 탭으로 이동) — 입력은 form 속성으로 폼 밖의
+             #rf-terms-form 에 연결한다(메인 저장 폼 안이라 form 태그를 여기 둘 수 없음). --}}
+        <div id="rf-terms" class="mt-8 pt-6" style="border-top:1px solid var(--color-hairline);">
+            <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">회원가입 약관 <span class="text-muted-soft" style="font-weight:400;">가입 화면 동의 항목</span></div>
+            <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
+                항목을 추가하면 회원가입 화면에 <b class="text-muted">체크박스 + [보기]</b>로 노출됩니다. <b class="text-muted">필수</b>로 두면 동의해야 가입이 완료되고,
+                동의 시각은 회원 정보에 기록됩니다. <b class="text-muted">키</b>는 영문 소문자·숫자·밑줄(예: <code>marketing</code>)이며 저장 후 바꾸지 않는 것이 좋습니다.
+            </p>
+            <div id="rf-terms-rows" class="flex flex-col gap-3">
+                @foreach ($terms as $i => $t)
+                    <div class="rf-term-row card-soft p-4" data-idx="{{ $i }}">
+                        <div class="flex items-center gap-2 flex-wrap mb-2">
+                            <input form="rf-terms-form" name="terms[{{ $i }}][key]" class="input" style="width:150px;font-size:var(--fs-xs);"
+                                   value="{{ $t['key'] }}" placeholder="키 (예: marketing)" maxlength="40">
+                            <input form="rf-terms-form" name="terms[{{ $i }}][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);"
+                                   value="{{ $t['title'] }}" placeholder="가입 화면에 보일 제목" maxlength="120">
+                            <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                                <input form="rf-terms-form" type="hidden" name="terms[{{ $i }}][required]" value="0">
+                                <input form="rf-terms-form" type="checkbox" name="terms[{{ $i }}][required]" value="1" @checked($t['required'])> 필수
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
+                                <input form="rf-terms-form" type="hidden" name="terms[{{ $i }}][is_active]" value="0">
+                                <input form="rf-terms-form" type="checkbox" name="terms[{{ $i }}][is_active]" value="1" @checked($t['is_active'])> 사용
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>
+                        </div>
+                        <textarea form="rf-terms-form" name="terms[{{ $i }}][body]" class="input" rows="6" maxlength="20000"
+                                  style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문">{{ $t['body'] }}</textarea>
+                    </div>
+                @endforeach
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+                <button type="button" id="rf-term-add" class="btn btn-secondary btn-sm">＋ 약관 추가</button>
+                <button type="submit" form="rf-terms-form" class="btn btn-primary btn-sm" style="margin-left:auto;">약관 저장</button>
+            </div>
+        </div>
     </div>
 
     {{-- ── 결제: 무통장 입금 계좌 ──────────────────────────────────────── --}}
@@ -576,46 +619,9 @@
     </div>
 </form>
 
-{{-- 회원가입 약관(2026-07-27) — 메인 저장 폼과 중첩되면 안 되므로 폼 밖 독립 폼.
-     여기서 만든 항목이 회원가입 화면에 그대로 나오고, '필수'로 표시한 항목은 동의해야 가입된다. --}}
-<div class="card p-5 mb-4" id="rf-terms">
-    <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">회원가입 약관 <span class="text-muted-soft" style="font-weight:400;">가입 화면 동의 항목</span></div>
-    <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">
-        항목을 추가하면 회원가입 화면에 <b class="text-muted">체크박스 + [보기]</b>로 노출됩니다. <b class="text-muted">필수</b>로 두면 동의해야 가입이 완료되고,
-        동의 시각은 회원 정보에 기록됩니다. <b class="text-muted">키</b>는 영문 소문자·숫자·밑줄(예: <code>marketing</code>)이며 저장 후 바꾸지 않는 것이 좋습니다.
-    </p>
-
-    <form method="POST" action="{{ route('admin.settings.terms') }}" id="rf-terms-form">
-        @csrf
-        <div id="rf-terms-rows" class="flex flex-col gap-3">
-            @foreach ($terms as $i => $t)
-                <div class="rf-term-row card-soft p-4" data-idx="{{ $i }}">
-                    <div class="flex items-center gap-2 flex-wrap mb-2">
-                        <input name="terms[{{ $i }}][key]" class="input" style="width:150px;font-size:var(--fs-xs);"
-                               value="{{ $t['key'] }}" placeholder="키 (예: marketing)" maxlength="40">
-                        <input name="terms[{{ $i }}][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);"
-                               value="{{ $t['title'] }}" placeholder="가입 화면에 보일 제목" maxlength="120">
-                        <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
-                            <input type="hidden" name="terms[{{ $i }}][required]" value="0">
-                            <input type="checkbox" name="terms[{{ $i }}][required]" value="1" @checked($t['required'])> 필수
-                        </label>
-                        <label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">
-                            <input type="hidden" name="terms[{{ $i }}][is_active]" value="0">
-                            <input type="checkbox" name="terms[{{ $i }}][is_active]" value="1" @checked($t['is_active'])> 사용
-                        </label>
-                        <button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>
-                    </div>
-                    <textarea name="terms[{{ $i }}][body]" class="input" rows="6" maxlength="20000"
-                              style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문">{{ $t['body'] }}</textarea>
-                </div>
-            @endforeach
-        </div>
-        <div class="flex items-center gap-2 mt-3">
-            <button type="button" id="rf-term-add" class="btn btn-secondary btn-sm">＋ 약관 추가</button>
-            <button type="submit" class="btn btn-primary btn-sm" style="margin-left:auto;">약관 저장</button>
-        </div>
-    </form>
-</div>
+{{-- 회원가입 약관 저장 폼(2026-07-29) — UI 는 회원 탭 안에 있고 입력이 form 속성으로 여기에 붙는다.
+     폼 태그 자체는 메인 저장 폼과 중첩되면 안 되므로 폼 밖에 둔다. --}}
+<form method="POST" action="{{ route('admin.settings.terms') }}" id="rf-terms-form" hidden>@csrf</form>
 
 <script>
 (function () {
@@ -636,17 +642,17 @@
         row.className = 'rf-term-row card-soft p-4';
         row.innerHTML =
             '<div class="flex items-center gap-2 flex-wrap mb-2">'
-            + '<input name="terms[' + i + '][key]" class="input" style="width:150px;font-size:var(--fs-xs);" placeholder="키 (예: marketing)" maxlength="40">'
-            + '<input name="terms[' + i + '][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);" placeholder="가입 화면에 보일 제목" maxlength="120">'
+            + '<input form="rf-terms-form" name="terms[' + i + '][key]" class="input" style="width:150px;font-size:var(--fs-xs);" placeholder="키 (예: marketing)" maxlength="40">'
+            + '<input form="rf-terms-form" name="terms[' + i + '][title]" class="input" style="flex:1;min-width:220px;font-size:var(--fs-xs);" placeholder="가입 화면에 보일 제목" maxlength="120">'
             + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
-            + '<input type="hidden" name="terms[' + i + '][required]" value="0">'
-            + '<input type="checkbox" name="terms[' + i + '][required]" value="1" checked> 필수</label>'
+            + '<input form="rf-terms-form" type="hidden" name="terms[' + i + '][required]" value="0">'
+            + '<input form="rf-terms-form" type="checkbox" name="terms[' + i + '][required]" value="1" checked> 필수</label>'
             + '<label class="inline-flex items-center gap-1.5 text-ink" style="font-size:var(--fs-xs);">'
-            + '<input type="hidden" name="terms[' + i + '][is_active]" value="0">'
-            + '<input type="checkbox" name="terms[' + i + '][is_active]" value="1" checked> 사용</label>'
+            + '<input form="rf-terms-form" type="hidden" name="terms[' + i + '][is_active]" value="0">'
+            + '<input form="rf-terms-form" type="checkbox" name="terms[' + i + '][is_active]" value="1" checked> 사용</label>'
             + '<button type="button" class="btn btn-ghost btn-sm rf-term-del" title="삭제" style="color:var(--color-error);margin-left:auto;">✕</button>'
             + '</div>'
-            + '<textarea name="terms[' + i + '][body]" class="input" rows="6" maxlength="20000" style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문"></textarea>';
+            + '<textarea form="rf-terms-form" name="terms[' + i + '][body]" class="input" rows="6" maxlength="20000" style="font-size:var(--fs-xs);line-height:1.6;" placeholder="약관 본문"></textarea>';
         wrap.appendChild(row);
         bindDel(row);
     });
