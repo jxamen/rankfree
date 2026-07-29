@@ -258,7 +258,7 @@ HTTP/1.1 422
         <tbody>
             <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords</code></td><td>분석 생성 + 순위 확인 자동 시작 — <code class="doc-code">core_keyword</code>(필수), <code class="doc-code">product</code>(필수: 상품 URL 또는 업체명), <code class="doc-code">threshold</code>(1~40, 기본 5), <code class="doc-code">check_method</code>, <code class="doc-code">product_info</code></td></tr>
             <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords</code></td><td>내 분석 목록 — <code class="doc-code">page</code>/<code class="doc-code">per_page</code>(≤100)</td></tr>
-            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords/{id}</code></td><td>진행 상태 + <code class="doc-code">exposed_keywords</code>(노출 키워드) + <code class="doc-code">short_links</code></td></tr>
+            <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords/{id}</code></td><td>진행 상태 + <b class="text-ink">상품 정보</b>(<code class="doc-code">product_url</code>·<code class="doc-code">product_id</code>·<code class="doc-code">mall_name</code>) + <code class="doc-code">exposed_keywords</code>(노출 키워드) + <code class="doc-code">short_links</code></td></tr>
             <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords/{id}/short-links</code></td><td>Short URL 생성 — <code class="doc-code">group_count</code>(1~100). 노출 키워드를 그룹에 고르게 나눠 배정</td></tr>
             <tr><td><span class="doc-method m-get">GET</span> <code class="doc-code">/shop-keywords/{id}/short-links</code></td><td>Short URL 목록 — <code class="doc-code">group_no</code>·<code class="doc-code">url</code>·<code class="doc-code">keywords</code>·<code class="doc-code">hit_count</code></td></tr>
             <tr><td><span class="doc-method m-post">POST</span> <code class="doc-code">/shop-keywords/{id}/short-links/reassign</code></td><td>재배정 — <b>URL은 그대로 두고 키워드만 다시 나눔</b>(노출 키워드가 늘었을 때)</td></tr>
@@ -281,7 +281,7 @@ HTTP/1.1 422
         <tbody>
             <tr><td><code class="doc-code">check_method</code> <br><code class="doc-code">api</code>(기본)</td><td><b class="text-ink">확장 없이 서버가 끝까지 확인</b>합니다(쇼핑 API 기준, 상위 40위까지·광고 판별 없음). 별도 조작 없이 완료될 때까지 자동 진행됩니다.</td></tr>
             <tr><td><code class="doc-code">check_method</code> <br><code class="doc-code">search</code></td><td>실제 검색화면 기준(광고 판별 가능)이지만 서버 IP가 막히면 <code class="doc-code">status: "blocked"</code> 로 멈춥니다. 이때는 <b class="text-ink">확장을 설치한 브라우저에서 해당 분석 화면을 열어 두면</b> 이어서 처리됩니다.</td></tr>
-            <tr><td><code class="doc-code">product_info</code></td><td>조합 재료가 되는 <b class="text-ink">상품 제목·브랜드·SEO 태그</b>는 서버가 상품 페이지를 열 수 없어 가져오지 못합니다. 요청 시 <code class="doc-code">{"title": "...", "brand": "...", "seller_tags": ["..."]}</code> 로 함께 보내면 제목 기반 조합이 만들어져 노출 적중률이 크게 올라갑니다. <b>생략하면 조합이 빈약해집니다.</b></td></tr>
+            <tr><td><code class="doc-code">product_info</code></td><td>조합 재료가 되는 <b class="text-ink">상품 제목·브랜드·상점명·가격·SEO 태그</b>는 서버가 상품 페이지를 열 수 없어 가져오지 못합니다. 요청 시 <code class="doc-code">{"title": "...", "brand": "...", "mall": "상점명", "price": 19900, "seller_tags": ["..."]}</code> 로 함께 보내면 제목 기반 조합이 만들어져 노출 적중률이 크게 올라갑니다. <code class="doc-code">mall</code>(상점명)·<code class="doc-code">price</code>(가격)는 그대로 저장돼 조회 응답의 상품 정보로 되돌려받습니다. <b>생략하면 조합이 빈약해집니다.</b></td></tr>
         </tbody>
     </table>
 
@@ -298,10 +298,13 @@ HTTP/1.1 422
     "product_info": {"title": "종근당 비타민c 고함량 스틱", "brand": "종근당", "seller_tags": ["고함량비타민"]}
   }'
 
-# → {"analysis": {"id": 42, "status": "checking", "progress": {"total": 240, "remaining": 240, ...}}}
+# → {"analysis": {"id": 42, "product_url": "https://smartstore.naver.com/mystore/products/123456",
+#                 "product_id": "123456", "mall_name": "종근당건강몰",
+#                 "status": "checking", "progress": {"total": 240, "remaining": 240, ...}}}
 
 curl https://rankfree.kr/api/v1/shop-keywords/42 -H "Authorization: Bearer rk_..."
-# → {"analysis": {"status": "done", "progress": {"exposed": 12, "remaining": 0}},
+# → {"analysis": {"status": "done", "product_id": "123456", "mall_name": "종근당건강몰",
+#                 "progress": {"exposed": 12, "remaining": 0}},
 #     "exposed_keywords": ["비타민c 고함량", …], "short_links": []}
 
 curl -X POST https://rankfree.kr/api/v1/shop-keywords/42/short-links \
