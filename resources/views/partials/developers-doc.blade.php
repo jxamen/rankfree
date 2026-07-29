@@ -1859,7 +1859,15 @@
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 서버가 URL 에서 자동 추출한 상품 ID</td></tr>
                     <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명. 수집 전에는 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.product_title</code> · <code class="doc-code">analysis.brand</code> · <code class="doc-code">analysis.product_price</code></td><td>string · string · int</td><td>자동 수집된 상품 제목 · 브랜드 · 판매가</td></tr>
-                    <tr><td><code class="doc-code">analysis.product</code></td><td>object</td><td><b class="text-ink">수집된 상품 정보 전체</b>(상세 조회에만 포함) — <code class="doc-code">title</code> · <code class="doc-code">brand</code> · <code class="doc-code">mall_name</code> · <code class="doc-code">price</code> · <code class="doc-code">category</code> · <code class="doc-code">thumbnail_url</code> · <code class="doc-code">seller_tags</code>(배열) · <code class="doc-code">collected_at</code>(수집 시각)</td></tr>
+                    <tr><td><code class="doc-code">analysis.product</code></td><td>object</td><td><b class="text-ink">수집된 상품 정보 전체</b> — 아래 항목을 담습니다(상세 조회에만 포함)</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.seller_tags</code></td><td>array</td><td><b class="text-ink">해시태그(관련 태그)</b> — 상품 상세페이지 하단의 태그 목록. <code class="doc-code">#</code> 없이 문자열 배열로 반환합니다</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.title</code></td><td>string</td><td>상품 제목</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.brand</code></td><td>string</td><td>브랜드 · 제조사</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.mall_name</code></td><td>string</td><td>상점명</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.price</code></td><td>int</td><td>판매가(원)</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.category</code></td><td>string</td><td>카테고리</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.thumbnail_url</code></td><td>string</td><td>대표이미지 URL</td></tr>
+                    <tr><td><code class="doc-code">analysis.product.collected_at</code></td><td>string</td><td>상품 정보를 수집한 시각(ISO8601). 아직 수집 전이면 <code class="doc-code">null</code></td></tr>
                     <tr><td><code class="doc-code">analysis.core_keyword</code></td><td>string</td><td>핵심 키워드</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td><code class="doc-code">checking</code>/<code class="doc-code">done</code>/<code class="doc-code">blocked</code>/<code class="doc-code">paused</code></td></tr>
