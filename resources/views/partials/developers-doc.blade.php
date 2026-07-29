@@ -1654,17 +1654,7 @@
                 <tbody>
                     <tr><td><code class="doc-code">core_keyword</code></td><td><span class="req-y">필수</span></td><td>string</td><td>핵심 키워드(최대 120자). 모든 조합에 이 키워드가 포함됩니다.</td></tr>
                     <tr><td><code class="doc-code">product</code></td><td><span class="req-y">필수</span></td><td>string</td><td>내 상품 URL(최대 500자). 스마트스토어 · 브랜드스토어 · 가격비교 catalog URL 을 인식해 <code class="doc-code">product_id</code> 를 자동 추출합니다. URL 이 아니면 업체명으로 취급해 상품이 아닌 <b class="text-ink">업체 단위</b>로 매칭합니다.</td></tr>
-                    <tr><td><code class="doc-code">threshold</code></td><td><span class="req-n">선택</span></td><td>int</td><td>노출로 볼 순위 기준(1~40, 기본 <code class="doc-code">5</code>). 이 순위 이내면 노출로 판정합니다.</td></tr>
-                    <tr><td><code class="doc-code">check_method</code></td><td><span class="req-n">선택</span></td><td>string</td><td><code class="doc-code">api</code>(기본) 또는 <code class="doc-code">search</code>. 아래 표 참고.</td></tr>
-                </tbody>
-            </table>
-            <p class="ep-t mt-2 text-muted-soft">※ 상품 제목 · 상점명 · 가격 등 상품 정보는 <b class="text-ink">보내지 않습니다</b> — 랭크프리가 자동으로 수집합니다.</p>
-            <div class="ep-l">check_method 선택</div>
-            <table class="doc-table">
-                <thead><tr><th style="width:150px;">값</th><th>순위 확인 방식</th></tr></thead>
-                <tbody>
-                    <tr><td><code class="doc-code">api</code> (기본)</td><td>쇼핑 API 기준으로 확인합니다. <b class="text-ink">빠르고 차단이 없으며</b> 상위 40위까지 판정합니다. 광고 노출 여부는 판별하지 않습니다.</td></tr>
-                    <tr><td><code class="doc-code">search</code></td><td>모바일 통합검색 실화면 기준 — <b class="text-ink">광고 노출까지 판별</b>해 더 정확하지만 느리고, 차단되면 <code class="doc-code">status: "blocked"</code> 로 멈출 수 있습니다.</td></tr>
+                    <tr><td><code class="doc-code">threshold</code></td><td><span class="req-n">선택</span></td><td>int</td><td>노출로 볼 순위 기준 — <b class="text-ink"><code class="doc-code">4</code> 또는 <code class="doc-code">5</code></b>만 쓸 수 있습니다(기본 <code class="doc-code">5</code>). 이 순위 이내면 노출로 판정합니다.</td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
@@ -1685,7 +1675,6 @@
     "product_id": "6412870193",
     "mall_name": "헬씨데이",
     "threshold": 5,
-    "check_method": "api",
     "status": "checking",
     "progress": {
       "total": 240,
@@ -1707,7 +1696,6 @@
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — URL 에서 자동 추출한 상품 ID(스마트스토어 channelProductId 또는 가격비교 nvMid). 업체 매칭이면 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명(입력이 URL 이 아니면 입력한 업체명). 수집 전에는 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
-                    <tr><td><code class="doc-code">analysis.check_method</code></td><td>string</td><td>확정된 확인 방식(<code class="doc-code">api</code>/<code class="doc-code">search</code>)</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td>진행 상태. 조합이 0개면 즉시 <code class="doc-code">done</code></td></tr>
                     <tr><td><code class="doc-code">analysis.progress.total</code></td><td>int</td><td>생성된 조합 수</td></tr>
                     <tr><td><code class="doc-code">analysis.progress.checked</code></td><td>int</td><td>순위 확인이 끝난 조합 수</td></tr>
@@ -1749,7 +1737,6 @@
       "product_id": "6412870193",
       "mall_name": "헬씨데이",
       "threshold": 5,
-      "check_method": "api",
       "status": "done",
       "progress": {
         "total": 240,
@@ -1767,7 +1754,6 @@
       "product_id": "6390112044",
       "mall_name": "헬씨데이",
       "threshold": 5,
-      "check_method": "api",
       "status": "checking",
       "progress": {
         "total": 180,
@@ -1823,7 +1809,6 @@
     "product_id": "6412870193",
     "mall_name": "헬씨데이",
     "threshold": 5,
-    "check_method": "api",
     "status": "done",
     "progress": {
       "total": 240,
@@ -1859,7 +1844,6 @@
                     <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명. 수집 전에는 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.core_keyword</code></td><td>string</td><td>핵심 키워드</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
-                    <tr><td><code class="doc-code">analysis.check_method</code></td><td>string</td><td>확인 방식(<code class="doc-code">api</code>/<code class="doc-code">search</code>)</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td><code class="doc-code">checking</code>/<code class="doc-code">done</code>/<code class="doc-code">blocked</code>/<code class="doc-code">paused</code></td></tr>
                     <tr><td><code class="doc-code">analysis.progress.*</code></td><td>object</td><td><code class="doc-code">total</code> · <code class="doc-code">checked</code> · <code class="doc-code">remaining</code> · <code class="doc-code">exposed</code> · <code class="doc-code">blocked</code></td></tr>
                     <tr><td><code class="doc-code">analysis.created_at</code></td><td>string</td><td>생성 시각(ISO 8601)</td></tr>

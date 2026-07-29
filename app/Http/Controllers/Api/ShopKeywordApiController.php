@@ -36,7 +36,7 @@ class ShopKeywordApiController extends Controller
         $data = $request->validate([
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
-            'threshold' => 'nullable|integer|min:1|max:40',
+            'threshold' => 'nullable|integer|in:4,5',   // 외부 API 는 상위 4·5위 판정만(2026-07-29)
             'check_method' => 'nullable|in:api,search',
             // 조합 재료 — 확장 수집분이 없을 때 외부에서 상품정보를 직접 전달(제목이 없으면 조합 품질이 떨어진다)
             'product_info' => 'nullable|array',
