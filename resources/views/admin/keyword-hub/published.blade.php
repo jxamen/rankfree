@@ -61,7 +61,7 @@
                     @endphp
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                         <td style="padding:7px 6px;">
-                            <a href="{{ $doc->shareUrl() }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $doc->keyword }}</a>
+                            <a href="{{ $doc->shareUrlCanonical() }}" target="_blank" rel="noopener" class="text-ink font-semibold" style="text-decoration:none;">{{ $doc->keyword }}</a>
                         </td>
                         <td style="padding:7px 6px;" class="text-muted">{{ $catName }}</td>
                         @if (! $isShopping)

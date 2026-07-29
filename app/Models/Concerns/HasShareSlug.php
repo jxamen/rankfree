@@ -52,6 +52,19 @@ trait HasShareSlug
         return url('/'.$this->shareSlugPrefix().'/'.$this->shareSlug());
     }
 
+    /**
+     * 공개 서비스(canonical) 호스트 기준 절대 공유 URL.
+     * shareUrl() 의 url() 은 '현재 요청 호스트'를 붙여, 관리자 비밀 호스트(ADMIN_HOST)에서
+     * 목록을 열면 링크에 admin 호스트가 새어 나온다. 발행 문서 목록처럼 공개 도메인으로
+     * 열려야 하는 링크는 이 접근자를 쓴다.
+     */
+    public function shareUrlCanonical(): string
+    {
+        $host = config('rankfree.canonical.host') ?: parse_url((string) config('app.url'), PHP_URL_HOST);
+
+        return 'https://'.$host.'/'.$this->shareSlugPrefix().'/'.$this->shareSlug();
+    }
+
     /** 중복을 피한 유일 슬러그 생성(저장은 호출측). 인수형 모델은 기본 슬러그를 빼앗아 온다(부수효과: 이전 보유자 슬러그 반납). */
     public function buildUniqueShareSlug(): string
     {

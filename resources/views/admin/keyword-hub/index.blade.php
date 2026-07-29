@@ -279,7 +279,7 @@
             @forelse (($hubDocsByType[$type] ?? collect()) as $d)
                 <div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid var(--color-hairline-soft);font-size:var(--fs-xs);">
                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ $label }}</span>
-                    <a href="{{ $d->shareUrl() }}" target="_blank" class="text-ink font-semibold" style="text-decoration:none;">{{ $d->keyword }}</a>
+                    <a href="{{ $d->shareUrlCanonical() }}" target="_blank" class="text-ink font-semibold" style="text-decoration:none;">{{ $d->keyword }}</a>
                     @if ($type === 'shopping')
                         <span class="font-mono text-muted">시장 {{ number_format((int) $d->revenue_6m) }}원</span>
                     @else
