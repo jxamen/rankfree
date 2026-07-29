@@ -62,6 +62,9 @@ Route::prefix('ext')->group(function (): void {
         // 확장이 큐를 폴링 → 상품페이지 수집 → 반영(조합 재생성·순위확인 자동 시작). shop_keyword 권한자 전용.
         Route::get('/shop-keyword/product-queue', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1');
         Route::post('/shop-keyword/{analysis}/product-info', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
+        // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버 자동 체크 없음. 조합 1건당 1회 제출이라 한도를 넉넉히.
+        Route::get('/shop-keyword/check-queue', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1');
+        Route::post('/shop-keyword/{analysis}/check-html', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1');
 
         // 상품 분석(리뷰 분석) 저장/내역
         Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');

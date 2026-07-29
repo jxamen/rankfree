@@ -86,8 +86,10 @@ class ShopKeywordExposureAnalyzer
         $combos = $this->buildCombos($core, $tokens, $me, $maxCombos, $maxTokens);
         // 순위 확인 방식(2026-07-22) — 기본 api(shop.json). ⚠️ 클로저 밖에서 확정(use 누락 시 조용히 기본값이 된다)
         $checkMethod = in_array($opts['check_method'] ?? '', ['api', 'search'], true) ? $opts['check_method'] : 'api';
+        // 출처(2026-07-29) — 'api' 는 서버가 자동 확인하지 않고 요청자 확장이 이어받는다. 위와 같은 이유로 클로저 밖에서 확정.
+        $createdVia = ($opts['created_via'] ?? '') === 'api' ? 'api' : 'admin';
 
-        return DB::transaction(function () use ($user, $core, $target, $productInput, $threshold, $tokens, $me, $combos, $checkMethod) {
+        return DB::transaction(function () use ($user, $core, $target, $productInput, $threshold, $tokens, $me, $combos, $checkMethod, $createdVia) {
             $tokenRows = $this->tokenRows($tokens);
 
             $analysis = ShopKeywordAnalysis::create([
@@ -106,6 +108,7 @@ class ShopKeywordExposureAnalyzer
                 'exposed_count' => 0,
                 'status' => count($combos) ? 'checking' : 'done',
                 'check_method' => $checkMethod,
+                'created_via' => $createdVia,
             ]);
 
             $now = now();

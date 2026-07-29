@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Http\Controllers\Controller;
-use App\Jobs\ShopKeywordCheckJob;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopProductInfo;
 use Illuminate\Http\JsonResponse;
@@ -111,18 +110,16 @@ class ExtShopKeywordController extends Controller
             $this->analyzer->regenerate($analysis);
         }
 
-        // 조합이 생겼으면 순위 확인을 자동으로 시작한다. status 는 regenerate 가 이미 checking 으로
-        // 바꿔 두므로 status 로 판단하면 안 되고, **미확인 조합이 남았는지**로 판단해 잡을 띄운다
-        // (관리자 화면은 화면 JS 가 확인을 몰지만, API 경로는 이 잡이 유일한 구동원이다).
+        // 조합이 생겼으면 확인 대기 상태로만 바꾼다 — 서버는 순위를 자동으로 돌리지 않고(2026-07-29),
+        // 확장이 check-queue 를 폴링해 이어서 확인한다. status 는 큐 선별 조건이라 반드시 갱신한다.
         $fresh = $analysis->fresh();
-        $started = false;
+        $pending = false;
         if ($fresh->combos()->whereNull('rank')->exists()) {
             if ($fresh->status !== 'checking') {
                 $fresh->update(['status' => 'checking']);
                 $fresh = $fresh->fresh();
             }
-            ShopKeywordCheckJob::dispatch($fresh->id);
-            $started = true;
+            $pending = true;
         }
 
         return response()->json(['ok' => true, 'data' => [
@@ -130,7 +127,58 @@ class ExtShopKeywordController extends Controller
             'title' => (string) $fresh->product_title,
             'combo_count' => (int) $fresh->combo_count,
             'status' => (string) $fresh->status,
-            'check_started' => $started,
+            'check_pending' => $pending,   // 확인할 조합이 생겼다 — 확장이 check-queue 로 이어받는다
         ]]);
+    }
+
+    /**
+     * 순위 확인 대기열 — 확인이 남은 **내 API 분석** 하나와 그 미확인 조합을 준다.
+     * 관리자·주문으로 만든 분석(created_via=admin)은 화면이 직접 몰기 때문에 여기서 제외한다.
+     */
+    public function checkQueue(Request $request): JsonResponse
+    {
+        $this->authorizeScope($request);
+
+        $limit = min(40, max(1, (int) $request->query('limit', 40)));
+
+        $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+            ->where('created_via', 'api')
+            ->where('status', '!=', 'paused')       // 사용자가 중단한 분석은 건드리지 않는다
+            ->whereHas('combos', fn ($q) => $q->whereNull('rank'))
+            ->orderBy('id')->first();
+
+        if (! $analysis) {
+            return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
+        }
+
+        $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get(['id', 'keyword']);
+
+        return response()->json(['data' => [
+            'analysis_id' => (int) $analysis->id,
+            'items' => $items->map(fn ($i) => ['item_id' => (int) $i->id, 'keyword' => (string) $i->keyword])->all(),
+        ] + $this->analyzer->progress($analysis)]);
+    }
+
+    /**
+     * 확장이 가져온 통합검색 HTML 로 조합 1건의 순위를 판정·저장한다.
+     * 관리자 화면의 checkHtml 과 같은 규칙(소유자 확인 · 이 분석의 조합만).
+     */
+    public function checkHtml(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        $this->authorizeScope($request);
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+
+        $data = $request->validate([
+            'item_id' => ['required', 'integer'],
+            'html' => ['nullable', 'string', 'max:4000000'],
+        ]);
+
+        $item = $analysis->combos()->whereKey((int) $data['item_id'])->first();
+        if (! $item) {
+            return response()->json($this->analyzer->progress($analysis) + ['skipped' => true]);
+        }
+
+        // html 이 비어 있어도 정상 입력 — 가격비교 슬롯을 못 찾은 것으로 보고 순위 없음으로 기록한다.
+        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? '')));
     }
 }

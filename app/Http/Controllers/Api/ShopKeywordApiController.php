@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Domain\Shopping\ShopKeywordShortLinkService;
 use App\Http\Controllers\Controller;
-use App\Jobs\ShopKeywordCheckJob;
 use App\Models\ShopKeywordAnalysis;
 use DomainException;
 use Illuminate\Http\Request;
@@ -16,12 +15,11 @@ use Illuminate\Http\Request;
  * 분석 생성(키워드 추출·조합) → 순위 확인 → 노출 키워드로 Short URL 그룹 생성까지 외부에서 자동화한다.
  * 규칙은 화면과 동일한 곳을 쓴다: 추출·조합·확인 [ShopKeywordExposureAnalyzer], Short URL [ShopKeywordShortLinkService].
  *
- * 확장(브라우저) 의존:
- *  - check_method='api'(기본) 는 openapi shop.json 을 서버가 직접 호출 → **확장 없이 완결**된다(상위 40위·광고 판별 없음).
- *    생성 즉시 ShopKeywordCheckJob 이 남은 조합이 0 이 될 때까지 자동으로 확인한다.
- *  - check_method='search' 는 실화면(m.search) 기준이라 서버 IP 가 막히면 status=blocked 로 멈춘다.
- *    이때는 확장을 켠 브라우저로 관리자 분석 화면을 열어 두면 이어서 처리된다.
- *  - 조합 재료(제목·SEO태그)는 원래 확장 수집분을 쓰므로, 외부에서는 `product_info` 로 직접 넘길 수 있다.
+ * 확장(브라우저) 의존(2026-07-29 개편):
+ *  - 서버는 **순위를 자동으로 돌리지 않는다.** 요청자 계정의 확장이 /api/ext/shop-keyword/* 큐를 폴링해
+ *    ① 상품정보 수집(product-queue) ② 순위 확인(check-queue → check-html) 까지 화면 없이 이어서 처리한다.
+ *  - 그래서 API 생성분은 created_via='api' · check_method='search'(확장이 읽는 통합검색 기준)로 고정된다.
+ *  - 확장이 꺼져 있으면 progress.remaining 이 줄지 않는다(분석은 유지되며 확장이 켜지면 이어서 진행).
  */
 class ShopKeywordApiController extends Controller
 {
@@ -48,9 +46,21 @@ class ShopKeywordApiController extends Controller
             'product_info.seller_tags.*' => 'nullable|string|max:80',
         ]);
 
+        // 같은 회원이 같은 키워드 + 같은 상품을 다시 요청하면 새로 만들지 않고 기존 분석을 돌려준다(2026-07-29).
+        // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
+        if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
+            return response()->json([
+                'analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
+                'reused' => true,   // 새로 만들지 않고 기존 분석을 돌려줬다
+            ]);
+        }
+
         $opts = [
             'threshold' => $data['threshold'] ?? null,
-            'check_method' => $data['check_method'] ?? 'api',
+            // 외부 API 분석은 요청자의 확장이 순위를 확인한다(2026-07-29). 확장은 통합검색 HTML 만 읽을 수 있으므로
+            // 확인 방식을 search 로 고정한다 — 기록된 순위 근거와 실제 확인 경로를 일치시킨다.
+            'check_method' => 'search',
+            'created_via' => 'api',
         ];
         if (! empty($data['product_info']['title'])) {
             $opts['product_info'] = [
@@ -66,10 +76,9 @@ class ShopKeywordApiController extends Controller
 
         $analysis = $this->analyzer->prepare($request->user(), trim($data['core_keyword']), trim($data['product']), null, $opts);
 
-        // 확인 자동 완주 — 조합이 있으면 큐가 남은 조합 0 까지 배치를 이어서 돌린다.
-        if ($analysis->status === 'checking') {
-            ShopKeywordCheckJob::dispatch($analysis->id);
-        } elseif ((int) $analysis->combo_count === 0 && trim((string) $analysis->product_title) === '') {
+        // 서버는 순위를 자동으로 돌리지 않는다(2026-07-29) — 조합이 생기면 status=checking 으로 두고,
+        // 요청자 계정의 확장이 /api/ext/shop-keyword/check-queue 를 폴링해 확인을 이어받는다.
+        if ((int) $analysis->combo_count === 0 && trim((string) $analysis->product_title) === '') {
             // 상품 제목을 아직 못 구해 조합이 0개 — '완료'가 아니라 **상품정보 수집 대기**다(2026-07-29).
             // 요청자의 확장이 /api/ext/shop-keyword/product-queue 를 폴링해 채우면 조합·순위확인이 이어진다.
             $analysis->update(['status' => 'pending']);
@@ -110,6 +119,25 @@ class ShopKeywordApiController extends Controller
             'exposed_keywords' => $this->shortLinks->exposedKeywords($analysis),
             'short_links' => $this->linkPayload($analysis),
         ]);
+    }
+
+    /**
+     * 같은 회원 · 같은 키워드 · 같은 상품의 기존 분석(가장 최근). 없으면 null.
+     * 상품 식별은 URL 에서 뽑은 product_id 우선, 업체명 입력처럼 ID 가 없으면 입력값 그대로 비교한다.
+     */
+    private function findExisting(int $userId, string $coreKeyword, string $productInput): ?ShopKeywordAnalysis
+    {
+        $target = app(\App\Domain\Shopping\NaverShoppingRankService::class)->resolveTarget($productInput);
+        $pid = (string) ($target['product_id'] ?? '');
+
+        return ShopKeywordAnalysis::where('user_id', $userId)
+            ->where('core_keyword', $coreKeyword)
+            ->when($pid !== '',
+                fn ($q) => $q->where('product_id', $pid),
+                // ⚠️ orWhere 는 반드시 그룹으로 — 안 묶으면 user_id·core_keyword 조건을 빠져나간다
+                fn ($q) => $q->where(fn ($w) => $w->where('product_url', $productInput)->orWhere('mall_name', $productInput)),
+            )
+            ->latest('id')->first();
     }
 
     /** 분석 1건의 상품정보 조회(생성·상세용). 목록은 productInfoMap 으로 일괄 조회한다. */

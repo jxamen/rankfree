@@ -90,13 +90,31 @@ class ShopKeywordApiTest extends TestCase
         $this->api('POST', '/api/v1/shop-keywords', $this->createPayload(), $other)->assertStatus(403);
     }
 
+    /**
+     * 확장이 순위 확인을 끝낸 상태를 만든다 — 서버는 API 분석을 자동 확인하지 않으므로(2026-07-29)
+     * 테스트가 확장 역할을 대신한다. 앞 3개는 노출(1~3위), 나머지는 순위 밖(0).
+     */
+    private function completeCheckLikeExtension(ShopKeywordAnalysis $analysis): void
+    {
+        $combos = $analysis->combos()->orderBy('id')->get();
+        foreach ($combos as $i => $c) {
+            $c->forceFill(['rank' => $i < 3 ? $i + 1 : 0, 'checked_at' => now()])->save();
+        }
+        $analysis->forceFill([
+            'checked_count' => $combos->count(),
+            'exposed_count' => min(3, $combos->count()),
+            'status' => 'done',
+        ])->save();
+    }
+
     /** 생성 — 조합이 만들어지고 진행 상태를 함께 준다. 소유자는 API 키 회원. */
     public function test_creates_analysis_with_progress(): void
     {
         $res = $this->api('POST', '/api/v1/shop-keywords', $this->createPayload())->assertStatus(201);
 
         $res->assertJsonPath('analysis.core_keyword', '비타민c')
-            ->assertJsonPath('analysis.check_method', 'api')      // 기본값 — 확장 없이 서버가 확인
+            // API 분석은 확장이 통합검색 기준으로 확인한다 — check_method 는 search 로 고정
+            ->assertJsonPath('analysis.check_method', 'search')
             ->assertJsonPath('analysis.threshold', 5);
 
         $id = $res->json('analysis.id');
@@ -108,20 +126,24 @@ class ShopKeywordApiTest extends TestCase
         $this->assertTrue($analysis->combos()->where('keyword', 'like', '%고함량%')->exists());
     }
 
-    /** 순위 확인은 서버(shop.json)만으로 끝난다 — 확장 호출 없음. 이후 노출 키워드가 조회된다. */
-    public function test_check_completes_on_server_and_exposes_keywords(): void
+    /**
+     * 서버는 순위를 자동으로 돌리지 않는다(2026-07-29) — 생성만으로는 확인이 진행되지 않고,
+     * 요청자 계정의 확장이 확인을 마치면 노출 키워드가 조회된다.
+     */
+    public function test_server_does_not_auto_check_and_extension_completes(): void
     {
+        \Illuminate\Support\Facades\Queue::fake();
+
         $id = $this->api('POST', '/api/v1/shop-keywords', $this->createPayload())->json('analysis.id');
         $analysis = ShopKeywordAnalysis::find($id);
 
-        // sync 큐에선 잡이 한 배치만 돌므로 남은 조합이 없어질 때까지 이어서 실행(운영은 큐가 자동 반복)
-        for ($i = 0; $i < 10 && $analysis->combos()->whereNull('rank')->exists(); $i++) {
-            app(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::class)->checkBatch($analysis->fresh());
-        }
-        $analysis->refresh();
+        // 서버 자동 확인 잡이 뜨지 않는다
+        \Illuminate\Support\Facades\Queue::assertNothingPushed();
+        $this->assertGreaterThan(0, $analysis->combos()->whereNull('rank')->count(), '확인 전이라 미확인 조합이 남아 있어야 한다');
+        $this->assertSame('api', $analysis->created_via);
 
-        $this->assertSame('done', $analysis->status);
-        $this->assertSame(0, (int) $analysis->combos()->whereNull('rank')->count());
+        // 확장이 확인을 끝내면 노출 키워드가 나온다
+        $this->completeCheckLikeExtension($analysis);
 
         $show = $this->api('GET', "/api/v1/shop-keywords/{$id}")->assertOk();
         $this->assertNotEmpty($show->json('exposed_keywords'));
@@ -132,10 +154,7 @@ class ShopKeywordApiTest extends TestCase
     public function test_creates_short_link_groups(): void
     {
         $id = $this->api('POST', '/api/v1/shop-keywords', $this->createPayload())->json('analysis.id');
-        $analysis = ShopKeywordAnalysis::find($id);
-        for ($i = 0; $i < 10 && $analysis->combos()->whereNull('rank')->exists(); $i++) {
-            app(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::class)->checkBatch($analysis->fresh());
-        }
+        $this->completeCheckLikeExtension(ShopKeywordAnalysis::find($id));   // 확장이 확인을 끝낸 상태
 
         $exposed = $this->api('GET', "/api/v1/shop-keywords/{$id}")->json('exposed_keywords');
         $this->assertGreaterThanOrEqual(2, count($exposed), '노출 키워드가 2개 이상이어야 그룹 분배를 검증할 수 있다');
@@ -157,10 +176,7 @@ class ShopKeywordApiTest extends TestCase
     public function test_lists_and_reassigns_short_links(): void
     {
         $id = $this->api('POST', '/api/v1/shop-keywords', $this->createPayload())->json('analysis.id');
-        $analysis = ShopKeywordAnalysis::find($id);
-        for ($i = 0; $i < 10 && $analysis->combos()->whereNull('rank')->exists(); $i++) {
-            app(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::class)->checkBatch($analysis->fresh());
-        }
+        $this->completeCheckLikeExtension(ShopKeywordAnalysis::find($id));   // 확장이 확인을 끝낸 상태
 
         $created = $this->api('POST', "/api/v1/shop-keywords/{$id}/short-links", ['group_count' => 2])->json('short_links');
         $urls = array_column($created, 'url');

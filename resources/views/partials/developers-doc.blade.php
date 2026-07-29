@@ -1613,8 +1613,8 @@
             <div class="text-ink mt-2" style="font-size:var(--fs-sm);font-weight:600;">조합 + 순위체크</div>
             <p class="text-muted mt-1" style="font-size:var(--fs-xs);line-height:1.7;">
                 수집된 상품 정보로 <b class="text-ink">롱테일 키워드를 자동으로 만들어</b>, 키워드마다 쇼핑을 검색해
-                <b class="text-ink">내 상품이 상위 N위 안에 노출되는지 확인</b>합니다. 생성 응답은 확인을 기다리지 않고 바로 돌아오므로,
-                진행률은 <code class="doc-code">GET /shop-keywords/{id}</code> 의 <code class="doc-code">progress</code> 로 폴링합니다.
+                <b class="text-ink">내 상품이 상위 N위 안에 노출되는지 확인</b>합니다. 이 확인도 <b class="text-ink">확장 프로그램이 이어서 처리</b>합니다.
+                생성 응답은 확인을 기다리지 않고 바로 돌아오므로, 진행률은 <code class="doc-code">GET /shop-keywords/{id}</code> 의 <code class="doc-code">progress</code> 로 폴링합니다.
             </p>
         </div>
         <div class="flow-i">
@@ -1635,7 +1635,8 @@
             <tr><td>소유권</td><td>키 소유자가 만든 분석만 접근할 수 있습니다. 남의 <code class="doc-code">id</code> 를 조회하면 <code class="doc-code">403</code>.</td></tr>
             <tr><td>호출 한도</td><td>생성 · 변경 계열(<span class="doc-method m-post">POST</span>)은 분당 30회.</td></tr>
             <tr><td><code class="doc-code">status</code></td><td><code class="doc-code">pending</code>(상품 정보 수집 대기 — 확장이 채우면 자동으로 <code class="doc-code">checking</code> 으로 넘어갑니다) · <code class="doc-code">checking</code>(확인 중) · <code class="doc-code">done</code>(완료) · <code class="doc-code">blocked</code>(차단으로 중단) · <code class="doc-code">paused</code>(사용자 중단)</td></tr>
-            <tr><td>확장 프로그램</td><td>상품 정보 수집은 <b class="text-ink">요청자 계정으로 로그인된 랭크프리 확장</b>이 담당합니다. 확장이 켜져 있지 않으면 <code class="doc-code">pending</code> 에서 더 진행되지 않습니다(화면을 열어 둘 필요는 없습니다).</td></tr>
+            <tr><td>확장 프로그램</td><td><b class="text-ink">상품 정보 수집과 순위 확인</b>은 <b class="text-ink">요청자 계정으로 로그인된 랭크프리 확장</b>이 담당합니다. 확장이 켜져 있지 않으면 진행되지 않습니다(화면을 열어 둘 필요는 없습니다).</td></tr>
+            <tr><td>중복 요청</td><td>같은 키워드 + 같은 상품으로 다시 요청하면 <b class="text-ink">새로 만들지 않고 기존 분석을 그대로 돌려줍니다</b>(응답에 <code class="doc-code">reused: true</code>, 상태코드 <code class="doc-code">200</code>). 새로 생성될 때만 <code class="doc-code">201</code> 입니다.</td></tr>
             <tr><td><code class="doc-code">progress</code></td><td><code class="doc-code">total</code>(전체 조합) · <code class="doc-code">checked</code>(확인 완료) · <code class="doc-code">remaining</code>(남은 조합) · <code class="doc-code">exposed</code>(노출 판정 수). <b class="text-ink">remaining 이 0 이면 확인 종료</b>입니다.</td></tr>
         </tbody>
     </table>

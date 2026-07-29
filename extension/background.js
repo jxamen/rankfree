@@ -77,10 +77,61 @@ async function drainShopKeywordProductQueue() {
   }
 }
 
+// 순위 확인도 확장이 이어받는다(2026-07-29) — 서버는 API 분석의 순위를 자동으로 돌리지 않는다.
+// 상품정보가 채워져야 조합이 생기므로 상품정보 큐 다음에 실행한다.
+let skwCheckActive = false;
+let lastScreenSerpAt = 0;   // 관리자 화면 루프가 m.search 를 쓴 시각 — 같은 IP 이중 크롤 방지용
+
+async function drainShopKeywordCheckQueue() {
+  if (skwCheckActive) return;
+  if (Date.now() - lastScreenSerpAt < 60000) return;      // 화면이 돌고 있으면 양보
+  const { token, apiBase } = await getStore();
+  if (!token) return;
+  const s = await chrome.storage.local.get(['rfSkwCheckSkipUntil']);
+  if (Date.now() < (s.rfSkwCheckSkipUntil || 0)) return;  // 권한 없음·차단 백오프 중
+
+  skwCheckActive = true;
+  const startedAt = Date.now();
+  try {
+    while (Date.now() - startedAt < 150000) {              // 알람 주기(3분) 안에서만 — 다음 알람이 이어받는다
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=40', { token, apiBase });
+      if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
+        await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000 });
+        return;
+      }
+      if (!q.ok || !q.json || !q.json.data) return;        // 네트워크·일시 오류 — 다음 알람에 재시도
+      const d = q.json.data;
+      const items = d.items || [];
+      if (!items.length) return;                           // 확인할 조합 없음
+      for (const it of items) {
+        if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
+        const res = await handlers.fetchShopSerp({ keyword: it.keyword });
+        if (!res || res.ok === false) {
+          // 보안문자·차단이면 30분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
+          if (res && (res.captcha || res.status === 403 || res.status === 429)) {
+            await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 30 * 60 * 1000 });
+            try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
+            return;
+          }
+          continue;
+        }
+        const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
+          method: 'POST', body: { item_id: it.item_id, html: res.html || '' }, token, apiBase,
+        });
+        if (r.status === 401 || r.status === 403) return;
+        await new Promise((x) => setTimeout(x, 900 + Math.random() * 700));   // 화면 루프와 같은 페이싱
+      }
+    }
+  } catch (e) { /* noop */ } finally {
+    skwCheckActive = false;
+  }
+}
+
 try {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
-    if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue();
+    // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
+    if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue().then(drainShopKeywordCheckQueue);
   });
   chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
 } catch (e) { /* noop */ }
@@ -463,7 +514,9 @@ const handlers = {
    * 서버 fetch 는 IP rate-limit(429)로 수십 건에서 멈추지만 브라우저는 한도가 없다.
    * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
    */
-  async fetchShopSerp({ keyword }) {
+  async fetchShopSerp({ keyword }, sender) {
+    // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
+    if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     let res;
