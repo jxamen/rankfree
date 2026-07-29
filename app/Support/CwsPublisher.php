@@ -98,9 +98,13 @@ class CwsPublisher
                 return ['ok' => true, 'version' => $version, 'message' => 'v'.$version.' 업로드 완료(심사 미제출) — 웹스토어 대시보드에서 검토 후 제출하세요.'];
             }
 
-            // 2) 게시(심사 제출) — POST publish
+            // 2) 게시(심사 제출) — POST publish.
+            // 본문은 반드시 빈 JSON 객체 '{}' 로 보낸다. Content-Length:0 만 주면 구글이 빈 문자열을
+            // JSON 으로 파싱하려다 400 "Root element must be a message" 를 돌려주고, 그 응답엔 status /
+            // statusDetail 이 없어 아래 실패 메시지가 통째로 비어 나온다(진짜 원인이 가려짐 — 2026-07-29).
             $pub = Http::withToken($token)
-                ->withHeaders(['x-goog-api-version' => '2', 'Content-Length' => '0'])
+                ->withHeaders(['x-goog-api-version' => '2'])
+                ->withBody('{}', 'application/json')
                 ->timeout(60)
                 ->post(self::API.'/chromewebstore/v1.1/items/'.$extId.'/publish?publishTarget='.$target);
             $pj = is_array($pub->json()) ? $pub->json() : [];
@@ -111,8 +115,14 @@ class CwsPublisher
                     .($target === 'trustedTesters' ? ' (테스터 대상)' : '').' — 심사 대기(보통 수 시간~며칠) 후 반영됩니다.'];
             }
 
-            return ['ok' => false, 'version' => $version, 'message' => '게시 실패('.$pub->status().'): '
-                .implode(', ', $st).' '.implode('; ', (array) ($pj['statusDetail'] ?? []))];
+            // 오류 응답에는 status/statusDetail 이 없고 error.message 에 사유가 온다
+            // (예: "Publish condition not met: … Privacy practices tab") — 그대로 노출해야 조치할 수 있다.
+            $detail = trim(implode(', ', $st).' '.implode('; ', (array) ($pj['statusDetail'] ?? [])));
+            if ($detail === '') {
+                $detail = (string) ($pj['error']['message'] ?? mb_substr((string) $pub->body(), 0, 300));
+            }
+
+            return ['ok' => false, 'version' => $version, 'message' => '게시 실패('.$pub->status().'): '.$detail];
         } catch (\Throwable $e) {
             return ['ok' => false, 'version' => $version, 'message' => '게시 중 오류: '.$e->getMessage()];
         } finally {
