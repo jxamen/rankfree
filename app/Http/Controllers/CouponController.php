@@ -42,6 +42,7 @@ class CouponController extends Controller
             return back()->withErrors(['coupon' => '쿠폰이 모두 소진되었습니다.']);
         }
 
-        return back()->with('status', "'{$coupon->name}' 쿠폰을 받았습니다. 셀프마케팅 주문 시 사용할 수 있습니다.");
+        // GTM 전환 — 쿠폰 다운로드(?conv=download_coupon). back() 대신 마이페이지로 명시 이동
+        return redirect()->route('console.me', ['conv' => 'download_coupon'])->with('status', "'{$coupon->name}' 쿠폰을 받았습니다. 셀프마케팅 주문 시 사용할 수 있습니다.");
     }
 }

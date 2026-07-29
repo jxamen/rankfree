@@ -139,7 +139,8 @@ class ShopRankTrackController extends Controller
             $msg .= " (중복 {$skipped}개 제외: ".implode(', ', $res['skipped']).')';
         }
 
-        return redirect()->route('console.shop-rank')->with('status', $msg);
+        // GTM 전환 — 쇼핑 추적 등록(?conv=add_shop_tracking)
+        return redirect()->route('console.shop-rank', ['conv' => 'add_shop_tracking'])->with('status', $msg);
     }
 
     public function update(Request $request, ShopRankSlot $slot)

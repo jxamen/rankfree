@@ -69,9 +69,24 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     @include('partials.custom-head')
-    {{-- GTM 회원가입 전환 — 가입 직후 1회(?signup=1). 표시 후 URL에서 파라미터 제거해 새로고침 중복 방지. GTM: 맞춤이벤트 트리거 event=sign_up → GA4 이벤트 sign_up --}}
-    @if (request()->boolean('signup'))
-    <script>window.dataLayer=window.dataLayer||[];dataLayer.push({event:'sign_up',method:'email'});history.replaceState&&history.replaceState(null,'',location.pathname);</script>
+    {{-- GTM 전환 이벤트 — 성공 직후 도착 페이지에 ?conv=<key>(주문은 &value=&oid=). 화이트리스트에 있는 이벤트만 dataLayer.push 후 replaceState로 URL 정리(새로고침·재로그인 중복 방지). GTM: 맞춤이벤트 트리거로 각 event 를 GA4 전환에 연결 --}}
+    @php
+        $__convMap = [
+            'sign_up' => ['event' => 'sign_up', 'method' => 'email'],
+            'purchase' => ['event' => 'purchase', 'currency' => 'KRW'],
+            'add_place_tracking' => ['event' => 'add_place_tracking'],
+            'add_shop_tracking' => ['event' => 'add_shop_tracking'],
+            'download_coupon' => ['event' => 'download_coupon'],
+        ];
+        $__conv = request()->query('conv');
+        $__convData = ($__conv && isset($__convMap[$__conv])) ? $__convMap[$__conv] : null;
+        if ($__convData && $__conv === 'purchase') {                       // 구매만 금액·주문번호 부가
+            if (is_numeric(request()->query('value'))) $__convData['value'] = (float) request()->query('value');
+            if ($__oid = request()->query('oid')) $__convData['transaction_id'] = (string) $__oid;
+        }
+    @endphp
+    @if ($__convData)
+    <script>window.dataLayer=window.dataLayer||[];dataLayer.push(@json($__convData, JSON_UNESCAPED_UNICODE));history.replaceState&&history.replaceState(null,'',location.pathname);</script>
     @endif
     @stack('head')
 </head>

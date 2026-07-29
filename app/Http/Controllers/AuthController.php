@@ -112,8 +112,8 @@ class AuthController extends Controller
         app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리
         Auth::login($user);
 
-        // GTM 회원가입 전환 신호 — 도착 페이지에 ?signup=1 표식, dataLayer.push({event:'sign_up'}) 1회 후 URL 정리(새로고침·재로그인 중복 없음)
-        return redirect()->route('console.dashboard', ['signup' => 1]);
+        // GTM 회원가입 전환 신호 — 도착 페이지에 ?conv=sign_up 표식, dataLayer.push 1회 후 URL 정리(새로고침·재로그인 중복 없음)
+        return redirect()->route('console.dashboard', ['conv' => 'sign_up']);
     }
 
     public function logout(Request $request)

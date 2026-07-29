@@ -88,7 +88,8 @@ class OrderController extends Controller
             return back()->withInput()->withErrors([$e->field => $e->getMessage()]);
         }
 
-        return redirect()->route('order.show', $token)
+        // GTM 구매 전환 — ?conv=purchase + 금액(value)·주문번호(oid=transaction_id)
+        return redirect()->route('order.show', ['token' => $token, 'conv' => 'purchase', 'value' => (int) $order->total_price, 'oid' => $order->order_no])
             ->with('order_done', $order->order_no)
             ->with('order_amount', $order->total_price);
     }

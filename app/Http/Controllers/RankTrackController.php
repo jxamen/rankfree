@@ -79,7 +79,8 @@ class RankTrackController extends Controller
             $msg .= ' (중복 제외: '.implode(', ', $res['skipped']).')';
         }
 
-        return back()->with('status', $msg);
+        // GTM 전환 — 플레이스 추적 등록(?conv=add_place_tracking). back() 대신 같은 페이지로 명시 이동
+        return redirect()->route('console.rank', ['conv' => 'add_place_tracking'])->with('status', $msg);
     }
 
     /** 슬롯 수정 — 키워드·플레이스(URL/ID)·라벨. 같은 플레이스 내 중복 키워드는 거부. */
