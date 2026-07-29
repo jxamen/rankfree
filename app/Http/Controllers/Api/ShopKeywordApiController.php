@@ -100,10 +100,31 @@ class ShopKeywordApiController extends Controller
         abort_unless($analysis->user_id === $request->user()->id, 403);
 
         return response()->json([
-            'analysis' => $this->payload($analysis),
+            'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis)],
             'exposed_keywords' => $this->shortLinks->exposedKeywords($analysis),
             'short_links' => $this->linkPayload($analysis),
         ]);
+    }
+
+    /**
+     * 수집·저장된 상품 정보 전체(상세 조회 전용) — SEO 태그·카테고리·대표이미지는 분석 행이 아니라
+     * 상품정보 저장소(ShopProductInfo)에 있으므로 여기서 합쳐 돌려준다.
+     */
+    private function productPayload(ShopKeywordAnalysis $analysis): array
+    {
+        $pi = \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+            ->where('channel_product_id', (string) $analysis->product_id)->first();
+
+        return [
+            'title' => (string) ($pi->title ?? $analysis->product_title),
+            'brand' => (string) ($pi->brand ?? $analysis->brand),
+            'mall_name' => (string) ($pi->mall_name ?? $analysis->mall_name),
+            'price' => (int) ($pi->price ?? $analysis->product_price),
+            'category' => (string) ($pi->category ?? ''),
+            'thumbnail_url' => (string) ($pi->thumbnail_url ?? ''),
+            'seller_tags' => array_values((array) ($pi->seller_tags ?? [])),
+            'collected_at' => optional($pi?->collected_at)->toIso8601String(),
+        ];
     }
 
     /** Short URL 생성 — 노출 키워드를 group_count 개 그룹으로 나눈다(화면과 동일 규칙). */
@@ -167,9 +188,13 @@ class ShopKeywordApiController extends Controller
         return [
             'id' => (int) $analysis->id,
             'core_keyword' => (string) $analysis->core_keyword,
+            // 수집·저장된 상품 정보 — 확장이 채운 값이 그대로 나간다(2026-07-29)
             'product_url' => (string) $analysis->product_url,
             'product_id' => (string) $analysis->product_id,
             'mall_name' => (string) $analysis->mall_name,
+            'product_title' => (string) $analysis->product_title,
+            'brand' => (string) $analysis->brand,
+            'product_price' => (int) $analysis->product_price,
             'threshold' => (int) $analysis->threshold,
             'check_method' => (string) $analysis->check_method,
             'status' => (string) $analysis->status,

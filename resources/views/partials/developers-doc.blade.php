@@ -1695,6 +1695,9 @@
                     <tr><td><code class="doc-code">analysis.product_url</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 정리된 상품 URL(추적 파라미터 제거). URL 이 아니면 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — URL 에서 자동 추출한 상품 ID(스마트스토어 channelProductId 또는 가격비교 nvMid). 업체 매칭이면 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명(입력이 URL 이 아니면 입력한 업체명). 수집 전에는 빈 문자열</td></tr>
+                    <tr><td><code class="doc-code">analysis.product_title</code></td><td>string</td><td>자동 수집된 상품 제목. 수집 전에는 빈 문자열</td></tr>
+                    <tr><td><code class="doc-code">analysis.brand</code></td><td>string</td><td>자동 수집된 브랜드 · 제조사</td></tr>
+                    <tr><td><code class="doc-code">analysis.product_price</code></td><td>int</td><td>자동 수집된 판매가(원). 수집 전에는 <code class="doc-code">0</code></td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td>진행 상태. 조합이 0개면 즉시 <code class="doc-code">done</code></td></tr>
                     <tr><td><code class="doc-code">analysis.progress.total</code></td><td>int</td><td>생성된 조합 수</td></tr>
@@ -1808,6 +1811,9 @@
     "product_url": "https://smartstore.naver.com/healthyday/products/6412870193",
     "product_id": "6412870193",
     "mall_name": "헬씨데이",
+    "product_title": "헬씨데이 비타민C 1000mg 고함량 스틱 30포",
+    "brand": "헬씨데이",
+    "product_price": 19900,
     "threshold": 5,
     "status": "done",
     "progress": {
@@ -1817,7 +1823,17 @@
       "exposed": 12,
       "blocked": false
     },
-    "created_at": "2026-07-29T14:20:11+09:00"
+    "created_at": "2026-07-29T14:20:11+09:00",
+    "product": {
+      "title": "헬씨데이 비타민C 1000mg 고함량 스틱 30포",
+      "brand": "헬씨데이",
+      "mall_name": "헬씨데이",
+      "price": 19900,
+      "category": "건강기능식품",
+      "thumbnail_url": "https://shop-phinf.pstatic.net/.../6412870193.jpg",
+      "seller_tags": ["고함량비타민", "비타민스틱", "휴대용비타민"],
+      "collected_at": "2026-07-29T14:20:40+09:00"
+    }
   },
   "exposed_keywords": [
     "비타민c 고함량 스틱",
@@ -1842,6 +1858,8 @@
                     <tr><td><code class="doc-code">analysis.product_url</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 정리된 상품 URL(쿼리스트링 제거)</td></tr>
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 서버가 URL 에서 자동 추출한 상품 ID</td></tr>
                     <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명. 수집 전에는 빈 문자열</td></tr>
+                    <tr><td><code class="doc-code">analysis.product_title</code> · <code class="doc-code">analysis.brand</code> · <code class="doc-code">analysis.product_price</code></td><td>string · string · int</td><td>자동 수집된 상품 제목 · 브랜드 · 판매가</td></tr>
+                    <tr><td><code class="doc-code">analysis.product</code></td><td>object</td><td><b class="text-ink">수집된 상품 정보 전체</b>(상세 조회에만 포함) — <code class="doc-code">title</code> · <code class="doc-code">brand</code> · <code class="doc-code">mall_name</code> · <code class="doc-code">price</code> · <code class="doc-code">category</code> · <code class="doc-code">thumbnail_url</code> · <code class="doc-code">seller_tags</code>(배열) · <code class="doc-code">collected_at</code>(수집 시각)</td></tr>
                     <tr><td><code class="doc-code">analysis.core_keyword</code></td><td>string</td><td>핵심 키워드</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td><code class="doc-code">checking</code>/<code class="doc-code">done</code>/<code class="doc-code">blocked</code>/<code class="doc-code">paused</code></td></tr>
