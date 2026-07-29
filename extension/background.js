@@ -39,10 +39,50 @@ async function resumeBulkIfNeeded(reason, ignoreHeartbeat) {
   } catch (e) { /* noop */ }
 }
 
+// ── 쇼핑 유입키워드 상품정보 자동 수집(2026-07-29) ────────────────────────────────
+// 서버는 상품페이지를 직접 못 읽는다(429 + 스토어 SPA). 관리자 화면에서는 사람이 분석 화면을 열면
+// 확장이 채워주지만, 외부 API 로 만든 분석은 그 화면을 여는 사람이 없다.
+// → 요청자가 확장만 켜 두면 이 폴러가 자기 분석의 상품정보를 화면 없이 채우고, 서버가 조합 재생성 ·
+//   순위확인까지 이어서 돌린다. shop_keyword 권한이 없는 계정은 서버가 403 → 오래 쉰다(부담 0).
+const SKW_QUEUE_ALARM = 'rfShopKwProductQueue';
+let skwQueueActive = false;
+
+async function drainShopKeywordProductQueue() {
+  if (skwQueueActive) return;                       // 이 SW 에서 이미 수집 중
+  const { token, apiBase } = await getStore();
+  if (!token) return;                               // 미로그인
+  const skipUntil = (await chrome.storage.local.get(['rfSkwSkipUntil'])).rfSkwSkipUntil || 0;
+  if (Date.now() < skipUntil) return;               // 권한 없음 등으로 백오프 중
+
+  skwQueueActive = true;
+  try {
+    const q = await apiFetch('/api/ext/shop-keyword/product-queue?limit=3', { token, apiBase });
+    if (q.status === 403) {                         // 권한 없는 계정 — 6시간 쉰다
+      await chrome.storage.local.set({ rfSkwSkipUntil: Date.now() + 6 * 3600 * 1000 });
+      return;
+    }
+    if (!q.ok || !q.json || !q.json.data) return;   // 네트워크·일시 오류 — 다음 알람에 재시도
+    for (const it of (q.json.data.items || [])) {
+      if (!it || !it.product_url) continue;
+      const pi = await handlers.collectProductPage({ url: it.product_url });
+      // 실패(로그인 게이트·타임아웃)는 남겨 두면 다음 주기에 다시 시도된다
+      if (!pi || !pi.ok || !pi.info) continue;
+      await apiFetch('/api/ext/shop-keyword/' + it.analysis_id + '/product-info', {
+        method: 'POST', body: { info: pi.info }, token, apiBase,
+      });
+      await new Promise((r) => setTimeout(r, 1500));   // 연속 탭 열기 간격
+    }
+  } catch (e) { /* noop */ } finally {
+    skwQueueActive = false;
+  }
+}
+
 try {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
+    if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue();
   });
+  chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
 } catch (e) { /* noop */ }
 
 async function getStore() {

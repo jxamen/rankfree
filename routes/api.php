@@ -58,6 +58,11 @@ Route::prefix('ext')->group(function (): void {
         // 상품정보(제목·업체명·가격·SEO태그) — 노출 키워드 분석 조합 재료(서버는 상품페이지 429라 확장 수집)
         Route::post('/product-infos', [ExtProductInfoController::class, 'store'])->middleware('throttle:60,1');
 
+        // 쇼핑 유입키워드 상품정보 자동 수집(2026-07-29) — 외부 API 로 만든 분석도 화면 없이 채워진다.
+        // 확장이 큐를 폴링 → 상품페이지 수집 → 반영(조합 재생성·순위확인 자동 시작). shop_keyword 권한자 전용.
+        Route::get('/shop-keyword/product-queue', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1');
+        Route::post('/shop-keyword/{analysis}/product-info', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
+
         // 상품 분석(리뷰 분석) 저장/내역
         Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');
         Route::get('/product-analyses', [ExtProductController::class, 'index']);

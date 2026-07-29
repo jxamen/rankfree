@@ -1600,23 +1600,20 @@
     <div class="flow">
         <div class="flow-i">
             <div class="flow-n">1단계</div>
-            <div class="text-ink mt-2" style="font-size:var(--fs-sm);font-weight:600;">상품 정보</div>
+            <div class="text-ink mt-2" style="font-size:var(--fs-sm);font-weight:600;">상품 정보 — 자동 수집</div>
             <p class="text-muted mt-1" style="font-size:var(--fs-xs);line-height:1.7;">
-                <code class="doc-code">POST /shop-keywords</code> 에 <code class="doc-code">product</code>(상품 URL)만 넣으면 서버가 URL 에서
-                <b class="text-ink">product_id 를 자동으로 추출합니다.</b> 상품을 미리 등록하는 별도 API 를 호출할 필요가 없습니다.
-                <code class="doc-code">product_info</code> 를 생략하면 서버가 핵심 키워드로 쇼핑 검색을 한 번 돌려 내 상품 슬롯의
-                <b class="text-ink">제목 · 상점명 · 가격</b>을 가져와 조합 재료로 씁니다(슬롯을 못 찾으면 빈 값으로 남습니다).
-                반대로 <code class="doc-code">product_info.title</code> 을 보내면 그 값이 우선이라 검색 폴백을 쓰지 않으므로,
-                <code class="doc-code">brand</code> · <code class="doc-code">mall</code> · <code class="doc-code">price</code> 도 <b class="text-ink">함께 보내야 채워집니다.</b>
-                서버가 어떤 경우에도 가져올 수 없는 값은 <b class="text-ink">SEO 태그(seller_tags)</b> 뿐이며, 이것까지 넣으면 <b class="text-ink">조합 품질이 크게 올라갑니다.</b>
+                보내는 값은 <b class="text-ink">핵심 키워드와 상품 URL 두 개뿐</b>입니다. 상품 제목 · 상점명 · 가격 같은 상품 정보는
+                <b class="text-ink">랭크프리가 알아서 수집합니다</b> — 따로 넣을 값이 없습니다.
+                수집에는 <b class="text-ink">요청자 계정으로 로그인된 랭크프리 확장 프로그램</b>이 필요하며,
+                확장이 켜져 있으면 화면을 열어 둘 필요 없이 자동으로 처리됩니다.
             </p>
         </div>
         <div class="flow-i">
             <div class="flow-n">2단계</div>
             <div class="text-ink mt-2" style="font-size:var(--fs-sm);font-weight:600;">조합 + 순위체크</div>
             <p class="text-muted mt-1" style="font-size:var(--fs-xs);line-height:1.7;">
-                핵심 키워드 x 상품 정보(제목 단어 · 브랜드 · SEO 태그 · 가격)를 곱해 2~5단어 롱테일 조합을 만들고,
-                조합마다 쇼핑 검색을 돌려 <b class="text-ink">상위 노출 여부를 자동으로 확인</b>합니다. 생성 응답은 확인을 기다리지 않고 바로 돌아오므로,
+                수집된 상품 정보로 <b class="text-ink">롱테일 키워드를 자동으로 만들어</b>, 키워드마다 쇼핑을 검색해
+                <b class="text-ink">내 상품이 상위 N위 안에 노출되는지 확인</b>합니다. 생성 응답은 확인을 기다리지 않고 바로 돌아오므로,
                 진행률은 <code class="doc-code">GET /shop-keywords/{id}</code> 의 <code class="doc-code">progress</code> 로 폴링합니다.
             </p>
         </div>
@@ -1637,7 +1634,8 @@
             <tr><td>인증</td><td><code class="doc-code">Authorization: Bearer rk_...</code> 헤더. API 키에 <code class="doc-code">shop_keyword</code> 스코프가 있어야 합니다.</td></tr>
             <tr><td>소유권</td><td>키 소유자가 만든 분석만 접근할 수 있습니다. 남의 <code class="doc-code">id</code> 를 조회하면 <code class="doc-code">403</code>.</td></tr>
             <tr><td>호출 한도</td><td>생성 · 변경 계열(<span class="doc-method m-post">POST</span>)은 분당 30회.</td></tr>
-            <tr><td><code class="doc-code">status</code></td><td><code class="doc-code">checking</code>(확인 중) · <code class="doc-code">done</code>(완료) · <code class="doc-code">blocked</code>(차단으로 중단) · <code class="doc-code">paused</code>(사용자 중단)</td></tr>
+            <tr><td><code class="doc-code">status</code></td><td><code class="doc-code">pending</code>(상품 정보 수집 대기 — 확장이 채우면 자동으로 <code class="doc-code">checking</code> 으로 넘어갑니다) · <code class="doc-code">checking</code>(확인 중) · <code class="doc-code">done</code>(완료) · <code class="doc-code">blocked</code>(차단으로 중단) · <code class="doc-code">paused</code>(사용자 중단)</td></tr>
+            <tr><td>확장 프로그램</td><td>상품 정보 수집은 <b class="text-ink">요청자 계정으로 로그인된 랭크프리 확장</b>이 담당합니다. 확장이 켜져 있지 않으면 <code class="doc-code">pending</code> 에서 더 진행되지 않습니다(화면을 열어 둘 필요는 없습니다).</td></tr>
             <tr><td><code class="doc-code">progress</code></td><td><code class="doc-code">total</code>(전체 조합) · <code class="doc-code">checked</code>(확인 완료) · <code class="doc-code">remaining</code>(남은 조합) · <code class="doc-code">exposed</code>(노출 판정 수). <b class="text-ink">remaining 이 0 이면 확인 종료</b>입니다.</td></tr>
         </tbody>
     </table>
@@ -1649,7 +1647,7 @@
             <span class="ep-s">분석 생성 + 순위확인 자동 시작</span>
         </div>
         <div class="ep-b">
-            <p class="ep-t">핵심 키워드와 상품으로 분석을 만듭니다. 상품 URL 에서 <code class="doc-code">product_id</code> 를 추출하고, <code class="doc-code">product_info.title</code> 을 보내지 않았다면 검색 결과에서 내 상품 슬롯을 찾아 <b class="text-ink">제목 · 상점명(<code class="doc-code">mall_name</code>) · 가격</b>을 채운 뒤, 조합을 생성하고 <b class="text-ink">순위 확인을 즉시 시작</b>합니다. 응답은 확인을 기다리지 않고 바로 돌아옵니다(<code class="doc-code">status: "checking"</code>).</p>
+            <p class="ep-t"><b class="text-ink">핵심 키워드와 상품 URL 두 개</b>로 분석을 만듭니다. 상품 정보 수집 · 키워드 생성 · 순위 확인이 이어서 <b class="text-ink">자동으로 진행</b>되며, 응답은 이를 기다리지 않고 바로 돌아옵니다. 진행 상태는 <code class="doc-code">GET /shop-keywords/{id}</code> 로 폴링하세요.</p>
             <div class="ep-l first">요청 파라미터</div>
             <table class="doc-table">
                 <thead><tr><th style="width:210px;">파라미터</th><th style="width:64px;">필수</th><th style="width:80px;">타입</th><th>설명</th></tr></thead>
@@ -1658,20 +1656,15 @@
                     <tr><td><code class="doc-code">product</code></td><td><span class="req-y">필수</span></td><td>string</td><td>내 상품 URL(최대 500자). 스마트스토어 · 브랜드스토어 · 가격비교 catalog URL 을 인식해 <code class="doc-code">product_id</code> 를 자동 추출합니다. URL 이 아니면 업체명으로 취급해 상품이 아닌 <b class="text-ink">업체 단위</b>로 매칭합니다.</td></tr>
                     <tr><td><code class="doc-code">threshold</code></td><td><span class="req-n">선택</span></td><td>int</td><td>노출로 볼 순위 기준(1~40, 기본 <code class="doc-code">5</code>). 이 순위 이내면 노출로 판정합니다.</td></tr>
                     <tr><td><code class="doc-code">check_method</code></td><td><span class="req-n">선택</span></td><td>string</td><td><code class="doc-code">api</code>(기본) 또는 <code class="doc-code">search</code>. 아래 표 참고.</td></tr>
-                    <tr><td><code class="doc-code">product_info</code></td><td><span class="req-n">선택</span></td><td>object</td><td>조합 재료가 되는 상품 정보. <b class="text-ink"><code class="doc-code">title</code> 을 보내면 검색 폴백 대신 이 객체의 값이 그대로 쓰입니다</b> — 부분만 보내면 나머지는 빈 값으로 남습니다.</td></tr>
-                    <tr><td><code class="doc-code">product_info.title</code></td><td><span class="req-n">선택</span></td><td>string</td><td>상품 제목(최대 300자) — 조합의 핵심 재료(제목 단어 · 제목 구절). <b class="text-ink">title 이 비어 있으면 product_info 전체가 무시됩니다.</b></td></tr>
-                    <tr><td><code class="doc-code">product_info.brand</code></td><td><span class="req-n">선택</span></td><td>string</td><td>브랜드 · 제조사(최대 120자). 브랜드 결합 조합에 사용합니다. 비어 있으면 제목 첫 단어를 브랜드로 봅니다.</td></tr>
-                    <tr><td><code class="doc-code">product_info.mall</code></td><td><span class="req-n">선택</span></td><td>string</td><td>상점명(최대 150자). 저장되어 조회 응답의 <code class="doc-code">mall_name</code> 으로 돌아옵니다. <b class="text-ink"><code class="doc-code">title</code> 을 보내면서 이 값을 비우면 <code class="doc-code">mall_name</code> 은 빈 문자열로 남습니다</b>(검색 폴백을 쓰지 않기 때문).</td></tr>
-                    <tr><td><code class="doc-code">product_info.price</code></td><td><span class="req-n">선택</span></td><td>int</td><td>판매가(0 ~ 2,000,000,000). 가격 결합 조합에 사용합니다.</td></tr>
-                    <tr><td><code class="doc-code">product_info.seller_tags</code></td><td><span class="req-n">선택</span></td><td>array</td><td>상품 상세의 SEO 태그 문자열 배열(최대 60개, 각 80자). <b class="text-ink">서버가 스스로 가져올 수 없는 유일한 값</b>이며, 태그 자체도 조합 후보가 됩니다.</td></tr>
                 </tbody>
             </table>
+            <p class="ep-t mt-2 text-muted-soft">※ 상품 제목 · 상점명 · 가격 등 상품 정보는 <b class="text-ink">보내지 않습니다</b> — 랭크프리가 자동으로 수집합니다.</p>
             <div class="ep-l">check_method 선택</div>
             <table class="doc-table">
                 <thead><tr><th style="width:150px;">값</th><th>순위 확인 방식</th></tr></thead>
                 <tbody>
-                    <tr><td><code class="doc-code">api</code> (기본)</td><td>서버가 쇼핑 API 로 직접 확인합니다. <b class="text-ink">브라우저 확장 없이 끝까지 자동 완주</b>하며 상위 40위까지 판정합니다. 광고 노출 여부는 판별하지 않으며, 확인 과정에서 <code class="doc-code">mall_name</code> 등 상품 정보를 추가로 채우지도 않습니다(생성 시점 값이 그대로 유지).</td></tr>
-                    <tr><td><code class="doc-code">search</code></td><td>모바일 통합검색 실화면 기준(가격비교 오가닉 순위 + 광고 노출 판별). 서버 IP 가 막히면 <code class="doc-code">status: "blocked"</code> 로 멈추며, 이때는 <b class="text-ink">확장을 설치한 브라우저에서 해당 분석 화면을 열어 두면</b> 이어서 처리됩니다. 이 확장 경로에서는 매칭 슬롯을 만날 때 비어 있던 제목 · 상점명 · 가격이 뒤늦게 채워집니다.</td></tr>
+                    <tr><td><code class="doc-code">api</code> (기본)</td><td>쇼핑 API 기준으로 확인합니다. <b class="text-ink">빠르고 차단이 없으며</b> 상위 40위까지 판정합니다. 광고 노출 여부는 판별하지 않습니다.</td></tr>
+                    <tr><td><code class="doc-code">search</code></td><td>모바일 통합검색 실화면 기준 — <b class="text-ink">광고 노출까지 판별</b>해 더 정확하지만 느리고, 차단되면 <code class="doc-code">status: "blocked"</code> 로 멈출 수 있습니다.</td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
@@ -1680,16 +1673,7 @@
   -H "Content-Type: application/json" \
   -d '{
     "core_keyword": "비타민c",
-    "product": "https://smartstore.naver.com/healthyday/products/6412870193",
-    "threshold": 5,
-    "check_method": "api",
-    "product_info": {
-      "title": "헬씨데이 비타민C 1000mg 고함량 스틱 30포",
-      "brand": "헬씨데이",
-      "mall": "헬씨데이",
-      "price": 19900,
-      "seller_tags": ["고함량비타민", "비타민스틱", "휴대용비타민"]
-    }
+    "product": "https://smartstore.naver.com/healthyday/products/6412870193"
   }'</pre></div>
             <div class="ep-l">응답 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">HTTP/1.1 201 Created
@@ -1721,7 +1705,7 @@
                     <tr><td><code class="doc-code">analysis.core_keyword</code></td><td>string</td><td>입력한 핵심 키워드</td></tr>
                     <tr><td><code class="doc-code">analysis.product_url</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 정리된 상품 URL(추적 파라미터 제거). URL 이 아니면 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — URL 에서 자동 추출한 상품 ID(스마트스토어 channelProductId 또는 가격비교 nvMid). 업체 매칭이면 빈 문자열</td></tr>
-                    <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — <code class="doc-code">product_info.mall</code> 을 보냈으면 그 값. <code class="doc-code">product_info</code> 를 생략했으면 검색 매칭 슬롯의 상점명, 입력이 URL 이 아니면 입력한 업체명. <b class="text-ink"><code class="doc-code">title</code> 만 보냈거나 슬롯을 못 찾으면 빈 문자열</b></td></tr>
+                    <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명(입력이 URL 이 아니면 입력한 업체명). 수집 전에는 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
                     <tr><td><code class="doc-code">analysis.check_method</code></td><td>string</td><td>확정된 확인 방식(<code class="doc-code">api</code>/<code class="doc-code">search</code>)</td></tr>
                     <tr><td><code class="doc-code">analysis.status</code></td><td>string</td><td>진행 상태. 조합이 0개면 즉시 <code class="doc-code">done</code></td></tr>
@@ -1872,7 +1856,7 @@
                     <tr><td><code class="doc-code">analysis.id</code></td><td>int</td><td>분석 ID(요청한 <code class="doc-code">{id}</code> 와 동일)</td></tr>
                     <tr><td><code class="doc-code">analysis.product_url</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 정리된 상품 URL(쿼리스트링 제거)</td></tr>
                     <tr><td><code class="doc-code">analysis.product_id</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 서버가 URL 에서 자동 추출한 상품 ID</td></tr>
-                    <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — <code class="doc-code">product_info.mall</code> 을 보냈으면 그 값, 생략했으면 검색 매칭 슬롯의 상점명. <b class="text-ink"><code class="doc-code">title</code> 만 보냈거나 슬롯을 못 찾으면 빈 문자열</b>이며, <code class="doc-code">check_method=api</code> 로 확인이 진행돼도 채워지지 않습니다</td></tr>
+                    <tr><td><code class="doc-code">analysis.mall_name</code></td><td>string</td><td><b class="text-ink">상품 정보</b> — 자동 수집된 상점명. 수집 전에는 빈 문자열</td></tr>
                     <tr><td><code class="doc-code">analysis.core_keyword</code></td><td>string</td><td>핵심 키워드</td></tr>
                     <tr><td><code class="doc-code">analysis.threshold</code></td><td>int</td><td>노출 판정 기준 순위</td></tr>
                     <tr><td><code class="doc-code">analysis.check_method</code></td><td>string</td><td>확인 방식(<code class="doc-code">api</code>/<code class="doc-code">search</code>)</td></tr>

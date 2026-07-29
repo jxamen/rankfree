@@ -69,6 +69,10 @@ class ShopKeywordApiController extends Controller
         // 확인 자동 완주 — 조합이 있으면 큐가 남은 조합 0 까지 배치를 이어서 돌린다.
         if ($analysis->status === 'checking') {
             ShopKeywordCheckJob::dispatch($analysis->id);
+        } elseif ((int) $analysis->combo_count === 0 && trim((string) $analysis->product_title) === '') {
+            // 상품 제목을 아직 못 구해 조합이 0개 — '완료'가 아니라 **상품정보 수집 대기**다(2026-07-29).
+            // 요청자의 확장이 /api/ext/shop-keyword/product-queue 를 폴링해 채우면 조합·순위확인이 이어진다.
+            $analysis->update(['status' => 'pending']);
         }
 
         return response()->json(['analysis' => $this->payload($analysis)], 201);
