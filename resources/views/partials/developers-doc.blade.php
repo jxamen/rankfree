@@ -50,8 +50,9 @@
     .doc-copy:hover { color: var(--color-primary); border-color: var(--color-primary); }
     @media (hover: none) { .doc-copy { opacity: 1; } }
     /* 단계 흐름(쇼핑 유입키워드) */
-    .flow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-    .flow-i { flex: 1 1 210px; border: 1px solid var(--color-hairline); border-radius: 12px; padding: 12px 14px; }
+    /* 단계는 한 줄에 하나씩(세로 스택) — 설명이 길어 가로 3열은 읽기 어렵다 */
+    .flow { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    .flow-i { border: 1px solid var(--color-hairline); border-radius: 12px; padding: 12px 14px; }
     .flow-n { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--color-muted-soft); margin-bottom: 3px; }
 </style>
 
