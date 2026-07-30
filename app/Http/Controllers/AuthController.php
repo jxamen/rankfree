@@ -111,7 +111,7 @@ class AuthController extends Controller
         PhoneVerification::clear();
         app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리
         $this->saveSignupAttribution($request, $user);                  // 유입경로(first-touch 쿠키) 기록
-        Auth::login($user);
+        Auth::login($user, true);   // 가입 직후에도 로그인 유지(소셜 로그인과 동일하게 remember)
 
         // GTM 회원가입 전환 신호 — 도착 페이지에 ?conv=sign_up 표식, dataLayer.push 1회 후 URL 정리(새로고침·재로그인 중복 없음)
         return redirect()->route('console.dashboard', ['conv' => 'sign_up'])

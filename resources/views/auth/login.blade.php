@@ -38,7 +38,7 @@
         </div>
         <div class="flex items-center justify-between">
             <label class="flex items-center gap-2 text-muted" style="font-size:var(--fs-xs);">
-                <input type="checkbox" name="remember"> 로그인 상태 유지
+                <input type="checkbox" name="remember" checked> 로그인 상태 유지
             </label>
             <a href="{{ route('password.request') }}" class="text-muted hover:text-ink transition" style="font-size:var(--fs-xs);">비밀번호 찾기</a>
         </div>
