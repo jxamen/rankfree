@@ -71,13 +71,8 @@
 </table>
 
 <h2 class="font-display text-ink doc-h2">연동 방식과 규칙</h2>
-    <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
-        광고주가 발주한 <b class="text-ink">참여형 미션</b>을 받아, 여러분의 사용자에게 노출하고 참여 결과를 제출하는 API입니다.
-        오퍼월·미니앱·포인트 앱 등 <b class="text-ink">사용자를 보유한 매체</b>가 연동 대상이며, 수락된 참여 건수로 정산합니다.
-        연동에 앞서 운영자에게 <b class="text-ink">매체 등록</b>을 요청하세요 — 매체가 연결되지 않은 키는 <code class="doc-code">403</code>을 받습니다.
-    </p>
 
-    <p class="mt-5 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">미션을 받는 두 가지 방식</b> — 화면 구성에 맞는 쪽을 고르면 됩니다. 제출 이후는 완전히 동일합니다.</p>
+    <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;"><b class="text-ink">미션을 받는 두 가지 방식</b> — 화면 구성에 맞는 쪽을 고르면 됩니다. 제출 이후는 완전히 동일합니다.</p>
     <table class="doc-table mt-2">
         <thead><tr><th style="width:150px;">방식</th><th>흐름</th></tr></thead>
         <tbody>
@@ -102,15 +97,15 @@
             </tr>
             <tr>
                 <td><code class="doc-code">remaining</code></td>
-                <td>남은 참여 가능 수량이지만 <b class="text-ink">하루 전체가 아니라 현재 시간대(구간)의 잔여</b>입니다. 미션 수량은 하루에 걸쳐 시간대별로 나뉘어 열리므로, 0이어도 다음 구간에 다시 열립니다</td>
+                <td><b class="text-ink">지금 받을 수 있는 남은 수량</b>입니다. 수시로 변하므로 캐시하지 마세요. 0이 되어 목록에서 사라진 미션도 <b class="text-ink">나중에 다시 나올 수 있으니</b> “종료”로 처리하지 마세요</td>
             </tr>
             <tr>
                 <td>정답</td>
                 <td>정답과 해시태그 목록은 <b class="text-ink">어떤 응답에도 포함되지 않습니다</b>. 퀴즈형 미션은 <code class="doc-code">quiz.tagIndex</code>(몇 번째 태그를 묻는지)만 내려가며 <b class="text-ink">참여자마다 번호가 다릅니다</b>. 채점은 서버가 합니다</td>
             </tr>
             <tr>
-                <td>상세 조회는 예약이 아님</td>
-                <td>목록·상세·할당으로 받은 미션이 <b class="text-ink">제출 시점엔 소진됐을 수 있습니다</b>. 확정은 언제나 제출 시점에 이뤄지며, 그때 <code class="doc-code">quota_full</code> 또는 <code class="doc-code">slot_exhausted</code> 로 거절될 수 있습니다</td>
+                <td>미션 수령은 예약이 아님</td>
+                <td>목록·상세·할당으로 받은 미션이 <b class="text-ink">제출 시점엔 소진됐을 수 있습니다</b>. 참여 확정은 제출 시점에 이뤄지므로, 수량 소진으로 거절될 수 있다는 전제로 구현하세요</td>
             </tr>
             <tr>
                 <td><code class="doc-code">Idempotency-Key</code></td>
@@ -118,11 +113,11 @@
             </tr>
             <tr>
                 <td>호출 한도</td>
-                <td>매체별 <b class="text-ink">초당 요청 수</b>가 설정되어 있습니다(기본 100/초). 초과 시 <code class="doc-code">429</code> — 백오프 후 <b class="text-ink">같은 Idempotency-Key</b> 로 재시도하세요. 목록은 <code class="doc-code">ETag</code> 를 지원하므로 <code class="doc-code">If-None-Match</code> 로 폴링 부하를 줄일 수 있습니다</td>
+                <td>매체별로 <b class="text-ink">초당 호출 한도</b>가 설정됩니다(연동 시 안내). 초과 시 <code class="doc-code">429</code> — 백오프 후 <b class="text-ink">같은 Idempotency-Key</b> 로 재시도하세요. 목록은 <code class="doc-code">ETag</code> 를 지원하므로 <code class="doc-code">If-None-Match</code> 로 폴링 부하를 줄일 수 있습니다</td>
             </tr>
             <tr>
                 <td>운영 시간</td>
-                <td>새벽 <b class="text-ink">02:00~06:00</b> 은 참여가 중단됩니다(<code class="doc-code">closed: true</code>). 하루 경계는 자정이 아니라 <b class="text-ink">오전 6시</b>이며, 참여 한도와 수량이 이때 초기화됩니다</td>
+                <td>새벽 <b class="text-ink">02:00~06:00</b> 에는 참여가 중단됩니다(<code class="doc-code">closed: true</code>). 이 시간에는 미션이 내려가지 않습니다</td>
             </tr>
         </tbody>
     </table>
@@ -178,7 +173,7 @@
                 <tbody>
                     <tr><td><code class="doc-code">mission.id</code></td><td>string</td><td>미션 ID. 제출 시 경로에 그대로 사용</td></tr>
                     <tr><td><code class="doc-code">mission.landingUrl</code></td><td>string</td><td>참여자가 방문할 상품 페이지 주소</td></tr>
-                    <tr><td><code class="doc-code">mission.remaining</code></td><td>int</td><td><b class="text-ink">현재 구간</b>의 잔여 수량</td></tr>
+                    <tr><td><code class="doc-code">mission.remaining</code></td><td>int</td><td>지금 받을 수 있는 남은 수량</td></tr>
                     <tr><td><code class="doc-code">mission.quiz.tagIndex</code></td><td>int</td><td>몇 번째 해시태그를 묻는지(1부터). <b class="text-ink">참여자마다 다른 값</b>이며, 그대로 화면에 안내하면 됩니다</td></tr>
                     <tr><td><code class="doc-code">mission.quiz.tagCount</code></td><td>int</td><td>상품에 달린 해시태그 개수</td></tr>
                     <tr><td><code class="doc-code">mission.quiz</code></td><td>object</td><td>퀴즈형 미션에만 포함됩니다(태그가 없는 미션이면 키 자체가 없음)</td></tr>
@@ -187,7 +182,7 @@
             <div class="ep-l">줄 미션이 없을 때</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">HTTP/1.1 204 No Content
 Retry-After: 5931</pre></div>
-            <p class="ep-t mt-2">재고 소진·참여 한도·이용 제한을 <b class="text-ink">구분하지 않고</b> 모두 <code class="doc-code">204</code> 로 응답합니다. 참여자에게는 “지금은 참여할 미션이 없습니다”로 안내하세요.</p>
+            <p class="ep-t mt-2">참여자에게는 “지금은 참여할 미션이 없습니다”로 안내하고, <code class="doc-code">Retry-After</code> 이후에 다시 호출하세요.</p>
         </div>
     </div>
 
@@ -198,7 +193,7 @@ Retry-After: 5931</pre></div>
             <span class="ep-s">미션 목록</span>
         </div>
         <div class="ep-b">
-            <p class="ep-t">현재 구간에 참여 가능한 미션을 모두 반환합니다. <code class="doc-code">participant_hash</code> 를 함께 보내면 <b class="text-ink">그 참여자가 이미 참여한 미션은 제외</b>된 목록이 옵니다(권장). <code class="doc-code">ETag</code> 헤더가 함께 오므로, 다음 폴링에 <code class="doc-code">If-None-Match</code> 로 보내면 변경이 없을 때 <code class="doc-code">304</code> 로 응답해 트래픽을 줄일 수 있습니다.</p>
+            <p class="ep-t">지금 참여 가능한 미션을 반환합니다. <code class="doc-code">participant_hash</code> 를 함께 보내면 <b class="text-ink">그 참여자가 이미 참여한 미션은 제외</b>된 목록이 옵니다(권장). <code class="doc-code">ETag</code> 헤더가 함께 오므로, 다음 폴링에 <code class="doc-code">If-None-Match</code> 로 보내면 변경이 없을 때 <code class="doc-code">304</code> 로 응답해 트래픽을 줄일 수 있습니다.</p>
             <div class="ep-l first">요청 파라미터</div>
             <table class="doc-table">
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
@@ -236,10 +231,10 @@ Retry-After: 5931</pre></div>
             <table class="doc-table">
                 <thead><tr><th style="width:210px;">필드</th><th style="width:80px;">타입</th><th>설명</th></tr></thead>
                 <tbody>
-                    <tr><td><code class="doc-code">missions[].remaining</code></td><td>int</td><td>현재 구간 잔여 수량. <b class="text-ink">0인 미션은 목록에 나오지 않습니다</b></td></tr>
-                    <tr><td><code class="doc-code">meta.slot</code></td><td>int</td><td>현재 시간 구간 번호(0부터)</td></tr>
+                    <tr><td><code class="doc-code">missions[].remaining</code></td><td>int</td><td>지금 받을 수 있는 남은 수량. <b class="text-ink">0인 미션은 목록에 나오지 않습니다</b></td></tr>
+                    <tr><td><code class="doc-code">meta.slot</code></td><td>int</td><td>내부 참조용 값 — 연동에서 사용하지 않습니다</td></tr>
                     <tr><td><code class="doc-code">meta.closed</code></td><td>bool</td><td><code class="doc-code">true</code> 면 운영 시간이 아님(02~06시). <code class="doc-code">opensAt</code> 에 다음 오픈 시각</td></tr>
-                    <tr><td><code class="doc-code">meta.verifyMode</code></td><td>string</td><td><code class="doc-code">server</code> = 정답 검증을 rankfree가 수행 / <code class="doc-code">vendor</code> = 매체가 자체 검증(사후 감사 대상)</td></tr>
+                    <tr><td><code class="doc-code">meta.verifyMode</code></td><td>string</td><td><code class="doc-code">server</code> = 정답 검증을 랭크프리가 수행 / <code class="doc-code">vendor</code> = 매체가 자체 검증</td></tr>
                 </tbody>
             </table>
         </div>
@@ -280,9 +275,9 @@ Retry-After: 5931</pre></div>
                 <tbody>
                     <tr><td><code class="doc-code">410</code></td><td><code class="doc-code">not_found</code></td><td>존재하지 않는 미션</td></tr>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">closed</code></td><td>종료·비활성 미션이거나 운영 시간이 아님</td></tr>
-                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">slot_exhausted</code></td><td>현재 구간 수량 소진 — 다음 구간에 다시 열림</td></tr>
+                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">slot_exhausted</code></td><td>지금은 받을 수 있는 수량이 없습니다 — 잠시 후 다시 시도</td></tr>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">participant_duplicate</code></td><td>그 참여자가 이미 참여한 미션</td></tr>
-                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">not_eligible</code></td><td>참여할 수 없는 사용자 (사유 비공개)</td></tr>
+                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">not_eligible</code></td><td>지금 이 참여자는 참여할 수 없습니다</td></tr>
                 </tbody>
             </table>
         </div>
@@ -335,9 +330,9 @@ Retry-After: 5931</pre></div>
                 <tbody>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">verify_failed</code></td><td>정답 불일치 — 참여자에게 다시 확인하도록 안내</td></tr>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">quota_full</code></td><td>미션 하루 수량 소진 — 다른 미션으로 안내</td></tr>
-                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">slot_exhausted</code></td><td>현재 구간 수량 소진. <code class="doc-code">retry_after_seconds</code> 가 함께 오며, 그 시간 뒤 다시 열립니다</td></tr>
+                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">slot_exhausted</code></td><td>지금은 받을 수 있는 수량이 없습니다. <code class="doc-code">retry_after_seconds</code> 가 함께 오니 그만큼 기다렸다 재시도하세요</td></tr>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">participant_duplicate</code></td><td>그 참여자가 이미 참여한 미션</td></tr>
-                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">not_eligible</code></td><td>참여할 수 없는 사용자 (사유 비공개)</td></tr>
+                    <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">not_eligible</code></td><td>지금 이 참여자는 참여할 수 없습니다</td></tr>
                     <tr><td><code class="doc-code">422</code></td><td><code class="doc-code">closed</code></td><td>미션 종료·비활성이거나 운영 시간이 아님</td></tr>
                     <tr><td><code class="doc-code">410</code></td><td><code class="doc-code">not_found</code></td><td>존재하지 않는 미션</td></tr>
                     <tr><td><code class="doc-code">400</code></td><td>—</td><td><code class="doc-code">Idempotency-Key</code> 헤더 누락</td></tr>
@@ -349,8 +344,8 @@ Retry-After: 5931</pre></div>
                 <tbody>
                     <tr><td><code class="doc-code">status</code></td><td>string</td><td><code class="doc-code">accepted</code> · <code class="doc-code">duplicate</code> · <code class="doc-code">rejected</code></td></tr>
                     <tr><td><code class="doc-code">participation_id</code></td><td>int</td><td>참여 원장 ID. 정산 대조에 사용하므로 여러분 쪽에도 저장하세요</td></tr>
-                    <tr><td><code class="doc-code">remaining</code></td><td>int</td><td>제출 후 남은 현재 구간 수량</td></tr>
-                    <tr><td><code class="doc-code">retry_after_seconds</code></td><td>int</td><td><code class="doc-code">slot_exhausted</code> 일 때만. 다음 구간까지 남은 초</td></tr>
+                    <tr><td><code class="doc-code">remaining</code></td><td>int</td><td>제출 후 남은 수량</td></tr>
+                    <tr><td><code class="doc-code">retry_after_seconds</code></td><td>int</td><td><code class="doc-code">slot_exhausted</code> 일 때만. 이 초만큼 기다렸다 다시 시도하면 됩니다</td></tr>
                 </tbody>
             </table>
         </div>
