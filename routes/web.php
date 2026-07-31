@@ -124,6 +124,10 @@ Route::middleware('auth')->group(function () {
 // API 문서 — 공개 페이지(외부 파트너 공유용, 비로그인 열람 · 2026-07-23 콘솔 301 → 공개 복원). 본문은 콘솔 문서와 공용 partial.
 Route::view('/developers', 'site.developers')->name('developers');
 
+// 리워드 미션 API 문서 — 광고주용(/developers)과 분리한다. 대상 독자가 다르다:
+// 저쪽은 데이터·주문을 쓰는 광고주, 이쪽은 참여를 공급하는 매체(오퍼월·미니앱).
+Route::view('/developers/reward', 'site.developers-reward')->name('developers.reward');
+
 // 개인정보처리방침 (공개 — 크롬 웹스토어 심사 필수)
 Route::view('/privacy', 'site.privacy')->name('privacy');
 

@@ -103,3 +103,16 @@ if (config('rankfree.hub.schedule_enabled', false)) {
     // 데이터랩 쇼핑인사이트 인기검색어 — 순위 변동이 느려 주 1회면 충분(월요일 새벽)
     Schedule::command('hub:shopping-collect')->timezone('Asia/Seoul')->weeklyOn(1, '06:50')->withoutOverlapping()->runInBackground();
 }
+
+// 리워드 참여시스템(.claude/reward) — 세부주문서 → 미션 동기화(C12 역할 분담).
+// 풀 벤더 미지정이면 커맨드가 스스로 중단 + 경고 로그만 남긴다(안전).
+Schedule::command('reward:sync-missions --incremental')->cron('*/5 * * * *')->withoutOverlapping()->runInBackground();      // 한도 변경 반영(5분 창)
+// 전량 대조는 5분 격자(*/5)를 피해 08:02 에 — 뮤텍스 이름이 커맨드+옵션이라 증분과 서로를 막지 못한다(같은 미션 upsert 경합)
+Schedule::command('reward:sync-missions')->timezone('Asia/Seoul')->dailyAt('08:02')->withoutOverlapping()->runInBackground(); // 전량 대조 + 신규 draft + 종료/취소 정리
+Schedule::command('reward:sync-missions --counters-only')->timezone('Asia/Seoul')->dailyAt('00:07')->withoutOverlapping()->runInBackground(); // 당일+익일 카운터 선생성(격자 회피)
+
+// 리워드 노출 캐시(Phase 4 — design-02 §7·§8-1)
+Schedule::command('reward:build-snapshot')->everyMinute()->withoutOverlapping()->runInBackground();   // 스냅샷 원장(전 서버 공유 — 1대만)
+// 🔴 warm-cache 는 withoutOverlapping() 금지(§7-6) — 공유 cache_locks 라 다중 서버에서 1대만 돌게 된다.
+//    커맨드 내부의 flock(로컬 파일 락)이 서버별 중복 실행만 막는다. 서버가 늘면 전 서버에 이 크론이 있어야 한다.
+Schedule::command('reward:warm-cache')->everyMinute()->runInBackground();

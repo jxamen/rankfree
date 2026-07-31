@@ -39,6 +39,13 @@ return [
             'serialize' => false,
         ],
 
+        // 리워드 L2(design-02 §7) — REWARD_L2_STORE=reward_l2 로 켠다. 기본 스토어는 건드리지 않는다.
+        'reward_l2' => [
+            'driver' => 'redis',
+            'connection' => env('REWARD_REDIS_CONNECTION', 'default'),
+            'lock_connection' => env('REWARD_REDIS_CONNECTION', 'default'),
+        ],
+
         'database' => [
             'driver' => 'database',
             'connection' => env('DB_CACHE_CONNECTION'),

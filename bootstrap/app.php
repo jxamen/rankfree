@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             require __DIR__.'/../routes/coupon.php';   // 쿠폰(26) — 별도 파일
+            require __DIR__.'/../routes/farm.php';     // 리워드 참여시스템 — 퀴즈농장 미니앱 API (.claude/reward)
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'usage.gate' => \App\Http\Middleware\MenuUsageGate::class,
             'auth.ext' => \App\Http\Middleware\AuthenticateExtToken::class,
             'auth.apikey' => \App\Http\Middleware\AuthenticateApiKey::class,
+            'auth.reward' => \App\Http\Middleware\AuthenticateRewardUser::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

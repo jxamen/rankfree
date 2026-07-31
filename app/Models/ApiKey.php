@@ -18,6 +18,7 @@ class ApiKey extends Model
         'keyword_detail' => '키워드 상세분석',
         'order' => '마케팅 상품 주문',
         'shop_keyword' => '쇼핑 유입키워드',
+        'mission' => '리워드 미션 연동',
     ];
 
     protected $fillable = [

@@ -33,6 +33,26 @@ class AppServiceProvider extends ServiceProvider
         // 상대 시간(diffForHumans) 한글 표기 — "2 days ago" → "2일 전"
         Carbon::setLocale('ko');
 
+        // 리워드 벤더 토큰버킷(design-04 §4-2 ①) — 매체별 초당 상한(reward_media.rate_limit_rps, 어드민 조정)
+        // throttle 이 인증 미들웨어보다 먼저 돌 수 있으므로 user() 에 기대지 않고 토큰에서 직접 해석한다(L1 캐시)
+        \Illuminate\Support\Facades\RateLimiter::for('reward-vendor', function (\Illuminate\Http\Request $request) {
+            $userId = $request->user()?->id;
+            if (! $userId && ($token = $request->bearerToken() ?: $request->header('X-API-KEY'))) {
+                $userId = \App\Domain\Reward\RewardCache::remember(
+                    'reward:keyuser:'.hash('sha256', (string) $token), 30, 60,
+                    fn () => ['id' => \App\Models\ApiKey::findByPlain((string) $token)?->user_id],
+                )['id'] ?? null;
+            }
+            $media = $userId ? \App\Models\RewardMedia::forApiUser((int) $userId) : ['id' => null];
+            if (! $media['id']) {
+                // 매체 미연결 키 — 컨트롤러가 403 을 주기 전까지 보수적으로 제한
+                return \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by('rw-nomedia:'.($userId ?: $request->ip()));
+            }
+
+            return \Illuminate\Cache\RateLimiting\Limit::perSecond(max(1, (int) ($media['rate_limit_rps'] ?? 100)))
+                ->by('rw-media:'.$media['id']);
+        });
+
         // 키워드 마스터(목록 전용 파생 테이블)를 후보 변경에 맞춰 유지
         \App\Models\KeywordCandidate::observe(\App\Observers\KeywordCandidateObserver::class);
 

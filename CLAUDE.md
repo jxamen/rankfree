@@ -44,6 +44,7 @@ php artisan test # 테스트
 |------|------|
 | `C:\Users\jxame\Documents\project\crm\ads\smartplace` | 이식 원본 (플레이스 순위·경쟁분석·블로그분석·순위 API) |
 | `C:\Users\jxame\Documents\project\sign` | 하네스(.claude 체계)·Laravel+Tailwind 스택 참고 (스타일은 참고 안 함) |
+| `C:\Users\jxame\Documents\project\toss_inapp_farmer` | 토스 미니앱 "퀴즈농장" 클라이언트(farm-quiz) — 리워드 참여시스템([.claude/reward/](.claude/reward/))의 첫 매체 |
 
 ## 현재 상태
 

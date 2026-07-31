@@ -128,6 +128,7 @@ class SettingsServiceProvider extends ServiceProvider
             'quiz.model' => 'rankfree.quiz.model',                // 캡차(퀴즈) 분석 모델(멀티 공급자)
             'quiz.solve_timeout' => 'services.gemini.quiz_timeout', // 확장 정답 대기 시간(초)
             'quiz.thinking' => 'services.gemini.quiz_thinking',    // 캡차 풀이 추론(thinking) on/off
+            'reward.pool_vendor_id' => 'reward.pool_vendor_id',    // 리워드 풀 벤더 id — 미션 동기화 필터(.claude/reward)
         ] as $mk => $cfg) {
             $v = trim((string) ($m[$mk] ?? ''));
             if ($v !== '') {

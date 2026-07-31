@@ -90,5 +90,7 @@
 | [26_COUPON.md](./26_COUPON.md) | 쿠폰 — 정액/정률 할인, 관리자 발행·전체 발급·마이페이지 다운로드(콘솔 메뉴 없음), 셀프마케팅 주문 적용·취소 복원. **라우트는 routes/coupon.php 별도 파일** |
 | [27_PRODUCT_PACKAGE.md](./27_PRODUCT_PACKAGE.md) | 마케팅 상품 — 고정 수량·기간 패키지(고객은 그대로 주문, 서버 강제) + 상품 복제(필드·배분 포함, 비활성 시작) |
 | [28_ORDER_API.md](./28_ORDER_API.md) | 외부 주문 API v1(scope: order) — 상품 조회·주문 생성·조회. **주문 규칙은 OrderPlacer 단일 소스**(웹·API 공유), 공개 문서 /developers |
+| [reward/API-miniapp-integration.md](./reward/API-miniapp-integration.md) | **리워드 미니앱 연동 가이드(퀴즈농장)** — `/api/farm/*` 인증(x-user-key)·단건 할당·제출·상태 API 계약. 예제는 실서버 응답 캡처본 |
+| [reward/HANDOFF-rankfree.md](./reward/HANDOFF-rankfree.md) | **대규모 리워드 참여시스템** 백엔드(**퀴즈농장 전용 아님** — 퀴즈농장은 첫 매체, 다양한 매체에 제공) — 진입점. 상세는 [reward/](./reward/): 스키마·런타임(한도/쿨다운)·정산·어드민 설정·미니앱 API·인프라 제약. 일 100만 참여는 산정 기준선(상한 아님) |
 | [research/research-crm-smartplace-inventory.md](./research/research-crm-smartplace-inventory.md) | crm ads/smartplace 이식 자산 인벤토리 |
 | [tasks/](./tasks/) | 작업 태스크 |

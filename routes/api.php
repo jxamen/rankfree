@@ -125,6 +125,16 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/orders/{orderNo}', [\App\Http\Controllers\Api\OrderApiController::class, 'show']);
     });
 
+    // 리워드 미션 연동 (scope: mission) — 벤더 S2S(design-04 §3). 목록·클릭검증+상세·참여 제출(멱등)·정산 대사.
+    // 벤더별 토큰버킷(throttle:reward-vendor — rate_limit_rps, AppServiceProvider) + 키 일일 한도가 보호한다.
+    Route::middleware(['auth.apikey:mission', 'throttle:reward-vendor'])->group(function (): void {
+        Route::get('/missions', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'index']);
+        Route::post('/missions/assign', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'assign']);
+        Route::get('/missions/{mission}', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'show'])->whereNumber('mission');
+        Route::post('/missions/{mission}/participations', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'store'])->whereNumber('mission');
+        Route::get('/participations', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'participations']);
+    });
+
     // 쇼핑 유입키워드 (scope: shop_keyword) — 분석 생성(추출·조합) → 순위 확인 자동 완주 → Short URL 그룹 생성.
     // check_method=api(기본)는 서버가 shop.json 으로 확인해 확장 없이 완결된다(25·28 참조).
     Route::middleware('auth.apikey:shop_keyword')->group(function (): void {

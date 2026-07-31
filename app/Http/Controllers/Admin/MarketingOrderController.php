@@ -199,6 +199,15 @@ class MarketingOrderController extends Controller
             }
         }
 
+        // 리워드 미션 즉시 재동기화(C12) — 한도 하향의 5분 지연 창이 초과(순손실)의 유일한 경로라 훅으로 없앤다
+        if ($n > 0) {
+            try {
+                app(\App\Domain\Reward\MissionSync::class)->sync(orderId: $order->id);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('reward.sync 어드민 훅 실패: '.$e->getMessage());
+            }
+        }
+
         return back()->with('status', "세부주문 {$n}건을 저장했습니다.");
     }
 
