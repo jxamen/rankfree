@@ -26,7 +26,8 @@ class RankTrackingController extends Controller
         $slots = $userId > 0
             ? PlaceRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
             : PlaceRankSlot::with('user:id,name,email')
-                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
+                // 카드 날짜별 셀 표시 상한(60일)에 맞춰 로드 — limit(2)면 2일치만 보임
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)])
                 ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                     ->where('keyword', 'like', $this->like($q))
                     ->orWhere('place_name', 'like', $this->like($q))
@@ -60,7 +61,8 @@ class RankTrackingController extends Controller
         $slots = $userId > 0
             ? ShopRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
             : ShopRankSlot::with('user:id,name,email')
-                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(2)])
+                // 카드 날짜별 셀 표시 상한(60일)에 맞춰 로드
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)])
                 ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
                     ->where('keyword', 'like', $this->like($q))
                     ->orWhere('product_title', 'like', $this->like($q))
