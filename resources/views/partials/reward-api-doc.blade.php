@@ -134,7 +134,7 @@
             <span class="ep-s">미션 단건 할당</span>
         </div>
         <div class="ep-b">
-            <p class="ep-t">참여 가능한 미션 하나를 골라 상세까지 한 번에 돌려줍니다. 현재 구간에 잔여가 있고 그 참여자가 아직 참여하지 않은 미션 중에서, <b class="text-ink">소진율이 낮은 미션을 우선</b>해 배정합니다. 줄 미션이 없으면 본문 없이 <code class="doc-code">204</code> 이며, 다시 시도할 시점을 <code class="doc-code">Retry-After</code>(초) 헤더로 알려줍니다.</p>
+            <p class="ep-t">참여 가능한 미션 하나를 골라 상세까지 한 번에 돌려줍니다. 줄 미션이 없으면 본문 없이 <code class="doc-code">204</code> 이며, 다시 시도할 시점을 <code class="doc-code">Retry-After</code>(초) 헤더로 알려줍니다.</p>
             <div class="ep-l first">요청 파라미터</div>
             <table class="doc-table">
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
