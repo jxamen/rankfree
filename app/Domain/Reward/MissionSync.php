@@ -119,6 +119,14 @@ class MissionSync
                 }
                 Log::warning("reward.sync: unit_revenue=0 — 미션 #{$row->order_item_id} draft 유지(주문 {$row->order_id})");
                 $stats['drafted']++;
+            } elseif (blank($mission->landing_url)) {
+                // 단축 URL(moi.short_url)이 유입 집계의 기준이다. 없으면 참여가 광고주 실적으로 잡히지 않으므로
+                // 노출 자체를 막는다 — 상품 원본 URL 로 조용히 대체하면 추적이 깨진 걸 아무도 모른다.
+                if ($mission->status === 'active') {
+                    $mission->status = 'draft';
+                }
+                Log::warning("reward.sync: 단축 URL 없음 — 미션 #{$row->order_item_id} draft 유지(주문 {$row->order_id})");
+                $stats['drafted']++;
             } elseif ($mission->status === 'draft' && $this->isGradable($mission)) {
                 $mission->status = 'active';   // 채점 가능한 draft 는 노출 가능
             } elseif ($mission->status === 'draft' && $isNew) {

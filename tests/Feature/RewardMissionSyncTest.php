@@ -126,6 +126,32 @@ class RewardMissionSyncTest extends TestCase
         $this->assertSame(['여름원피스', '린넨', '데일리룩'], $m->tags);
     }
 
+    /**
+     * 단축 URL(short_url)이 유입 집계의 기준이다 — 없으면 참여해도 광고주 실적으로 잡히지 않으므로
+     * 노출 자체를 막아야 한다(상품 원본 URL 로 대체하면 추적이 깨진 걸 알 수 없다).
+     */
+    public function test_단축_URL이_없으면_채점_가능해도_draft_로_막는다(): void
+    {
+        DB::table('marketing_order_items')->where('id', $this->poolItemId)->update(['short_url' => null]);
+        RewardMission::query()->delete();
+
+        app(MissionSync::class)->sync();
+        $m = RewardMission::query()->first();
+        $m->update(['answer' => '12500']);          // 채점은 가능한 상태로 만들어도
+        app(MissionSync::class)->sync();
+
+        $this->assertSame('draft', RewardMission::query()->first()->status);
+
+        // 단축 URL 이 채워지면 그때 노출된다
+        DB::table('marketing_order_items')->where('id', $this->poolItemId)
+            ->update(['short_url' => 'https://link.example.com/x1']);
+        app(MissionSync::class)->sync();
+
+        $fresh = RewardMission::query()->first();
+        $this->assertSame('active', $fresh->status);
+        $this->assertSame('https://link.example.com/x1', $fresh->landing_url);
+    }
+
     public function test_한도_하향은_오늘_카운터에_overflow_로_기록된다(): void
     {
         app(MissionSync::class)->sync();

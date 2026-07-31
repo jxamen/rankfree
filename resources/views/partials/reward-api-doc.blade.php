@@ -100,6 +100,10 @@
                 <td><b class="text-ink">지금 받을 수 있는 남은 수량</b>입니다. 수시로 변하므로 캐시하지 마세요. 0이 되어 목록에서 사라진 미션도 <b class="text-ink">나중에 다시 나올 수 있으니</b> “종료”로 처리하지 마세요</td>
             </tr>
             <tr>
+                <td><code class="doc-code">landingUrl</code></td>
+                <td>참여자를 보낼 <b class="text-ink">단축 URL</b>입니다. 미션마다 다르며, <b class="text-ink">이 주소로 이동시켜야 참여가 집계</b>됩니다. 주소를 가공하거나 상품 원본 주소로 바꾸지 마세요</td>
+            </tr>
+            <tr>
                 <td>정답</td>
                 <td>정답과 해시태그 목록은 <b class="text-ink">어떤 응답에도 포함되지 않습니다</b>. 퀴즈형 미션은 <code class="doc-code">quiz.tagIndex</code>(몇 번째 태그를 묻는지)만 내려가며 <b class="text-ink">참여자마다 번호가 다릅니다</b>. 채점은 서버가 합니다</td>
             </tr>
@@ -172,7 +176,7 @@
                 <thead><tr><th style="width:210px;">필드</th><th style="width:80px;">타입</th><th>설명</th></tr></thead>
                 <tbody>
                     <tr><td><code class="doc-code">mission.id</code></td><td>string</td><td>미션 ID. 제출 시 경로에 그대로 사용</td></tr>
-                    <tr><td><code class="doc-code">mission.landingUrl</code></td><td>string</td><td>참여자가 방문할 상품 페이지 주소</td></tr>
+                    <tr><td><code class="doc-code">mission.landingUrl</code></td><td>string</td><td>참여자를 보낼 <b class="text-ink">단축 URL</b>. <b class="text-ink">반드시 이 주소로 이동</b>시켜야 참여가 집계됩니다 — 상품 원본 주소로 바꿔 열면 유입이 잡히지 않습니다</td></tr>
                     <tr><td><code class="doc-code">mission.remaining</code></td><td>int</td><td>지금 받을 수 있는 남은 수량</td></tr>
                     <tr><td><code class="doc-code">mission.quiz.tagIndex</code></td><td>int</td><td>몇 번째 해시태그를 묻는지(1부터). <b class="text-ink">참여자마다 다른 값</b>이며, 그대로 화면에 안내하면 됩니다</td></tr>
                     <tr><td><code class="doc-code">mission.quiz.tagCount</code></td><td>int</td><td>상품에 달린 해시태그 개수</td></tr>
