@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Reward\MissionAssigner;
+use App\Domain\Reward\MissionCopy;
 use App\Domain\Reward\MissionSnapshot;
 use App\Domain\Reward\SlotCap;
 use App\Domain\Reward\TagIndex;
@@ -132,11 +133,8 @@ class VendorMissionApiController extends Controller
 
         $tagCount = (int) $picked['tag_count'];
         if ($tagCount > 0) {
-            $payload['quiz'] = [
-                'question' => $mission->question ?: '지정된 순서의 해시태그를 입력해 주세요',
-                'tagIndex' => TagIndex::for($user->user_key_hash, $mission->id, $day, $tagCount),
-                'tagCount' => $tagCount,
-            ];
+            $payload['quiz'] = $this->quizPayload($mission, $picked,
+                TagIndex::for($user->user_key_hash, $mission->id, $day, $tagCount), $tagCount);
         }
 
         return response()->json(['status' => 'ok', 'mission' => $payload]);
@@ -193,11 +191,8 @@ class VendorMissionApiController extends Controller
         $payload = $this->missionPayload($m) + ['remaining' => $slotRemaining];
         $tags = array_values(array_filter((array) $m->tags, fn ($t) => is_string($t) && trim($t) !== ''));
         if ($tags !== []) {
-            $payload['quiz'] = [
-                'question' => $m->question ?: '지정된 순서의 해시태그를 입력해 주세요',
-                'tagIndex' => TagIndex::for($user->user_key_hash, $m->id, $day, count($tags)),   // 참여자별 결정적
-                'tagCount' => count($tags),
-            ];
+            $payload['quiz'] = $this->quizPayload($m, [], // 참여자별 결정적 번호
+                TagIndex::for($user->user_key_hash, $m->id, $day, count($tags)), count($tags));
         }
 
         return response()->json(['status' => 'ok', 'mission' => $payload]);
@@ -262,13 +257,41 @@ class VendorMissionApiController extends Controller
             'landingUrl' => $m['landing_url'],
             'product' => [
                 'name' => (string) ($m['product_title'] ?? ''),
-                'imageUrl' => $m['product_image_url'],
+                'imageUrl' => MissionCopy::productImage($m['product_image_url']),
                 'price' => $m['product_price'],
                 'shopName' => $m['shop_name'],
             ],
             'startsOn' => $m['starts_on'],
             'endsOn' => $m['ends_on'],
         ];
+    }
+
+    /**
+     * 퀴즈 안내 — 매체가 문구를 하드코딩하지 않도록 guide·notice 까지 내려준다.
+     * 문구는 미션별 값 → 어드민 설정 → 기본값 순(MissionCopy). 정답·태그 목록은 절대 싣지 않는다.
+     *
+     * @param  array<string, mixed>  $row  스냅샷 행(있으면 keyword·shop_name 등을 여기서 가져온다)
+     */
+    private function quizPayload(RewardMission $m, array $row, int $tagIndex, int $tagCount): array
+    {
+        $kind = MissionCopy::kindFor($tagCount);
+        $vars = MissionCopy::vars($row + [
+            'shop_name' => $m->shop_name,
+            'product_title' => $m->product_title,
+            'keyword' => $m->keyword,
+            'product_price' => $m->product_price,
+            'reward_item' => $m->reward_item,
+            'reward_count' => $m->reward_count,
+        ], $tagIndex, $tagCount);
+
+        return array_filter([
+            'question' => $m->question ?: MissionCopy::line($kind, 'question', $vars),
+            'placeholder' => $m->placeholder ?: (MissionCopy::line($kind, 'placeholder', $vars) ?: null),
+            'guide' => $m->guide ?: MissionCopy::guide($kind, $vars),
+            'notice' => MissionCopy::line($kind, 'notice', $vars) ?: null,
+            'tagIndex' => $tagIndex,
+            'tagCount' => $tagCount,
+        ], fn ($v) => $v !== null && $v !== [] && $v !== '');
     }
 
     /** 벤더에 내리는 미션 필드 — 정답 계열(answer·tags)은 hidden 이라 직렬화되지 않는다 */
@@ -282,7 +305,7 @@ class VendorMissionApiController extends Controller
             'landingUrl' => $m->landing_url ?: $m->product_url,
             'product' => [
                 'name' => (string) ($m->product_title ?? ''),
-                'imageUrl' => $m->product_image_url,
+                'imageUrl' => MissionCopy::productImage($m->product_image_url),
                 'price' => $m->product_price,
                 'shopName' => $m->shop_name,
             ],

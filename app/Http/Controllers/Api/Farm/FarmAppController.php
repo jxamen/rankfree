@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Farm;
 
 use App\Domain\Reward\MissionAssigner;
+use App\Domain\Reward\MissionCopy;
 use App\Domain\Reward\MissionSnapshot;
 use App\Domain\Reward\MissionSubmitService;
 use App\Domain\Reward\SlotCap;
@@ -159,21 +160,24 @@ class FarmAppController extends Controller
         $tagCount = (int) $m['tag_count'];
         $tagIndex = $tagCount > 0 ? TagIndex::for($userKeyHash, (int) $m['id'], $day, $tagCount) : null;
 
+        // 안내 문구는 미션별 값 → 어드민 설정 → 기본값 순. 클라이언트가 하드코딩하지 않도록 전부 응답에 싣는다
+        $kind = MissionCopy::kindFor($tagCount);
+        $vars = MissionCopy::vars($m, $tagIndex, $tagCount);
+
         $quiz = [
             'product' => [
                 'name' => (string) ($m['product_title'] ?? ''),
                 'imageEmoji' => $m['product_emoji'],
-                'imageUrl' => $m['product_image_url'],
+                'imageUrl' => MissionCopy::productImage($m['product_image_url']),
                 'price' => $m['product_price'],
+                'shopName' => $m['shop_name'],
+                'keyword' => $m['keyword'],
             ],
-            'guide' => $m['guide'] ?: [
-                "아래 '참여하기'를 누르면 상품 페이지가 열려요.",
-                $tagIndex ? "상품 정보에 있는 해시태그 중 {$tagIndex}번째 태그를 확인해 주세요." : '상품 정보를 확인해 주세요.',
-                '다시 돌아와서 입력하면 돼요. #은 빼고 적어도 괜찮아요.',
-            ],
+            'guide' => $m['guide'] ?: MissionCopy::guide($kind, $vars),
+            'notice' => MissionCopy::line($kind, 'notice', $vars) ?: null,
             'hintUrl' => $m['landing_url'],
-            'question' => $m['question'] ?: ($tagIndex ? "{$tagIndex}번째 해시태그를 입력해 주세요" : '정답을 입력해 주세요'),
-            'placeholder' => $m['placeholder'],
+            'question' => $m['question'] ?: MissionCopy::line($kind, 'question', $vars),
+            'placeholder' => $m['placeholder'] ?: (MissionCopy::line($kind, 'placeholder', $vars) ?: null),
         ];
         if ($tagIndex !== null) {
             $quiz['tagIndex'] = $tagIndex;      // 사용자마다 다른 결정적 번호 — 태그 목록은 절대 미노출

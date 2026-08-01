@@ -22,12 +22,19 @@ final class MissionGrader
         return mb_strtolower($s);
     }
 
-    /** @return array{correct: bool, norm: string} norm 은 로그 저장용(64자 절단) */
+    /**
+     * 정답을 무엇으로 낼지는 설정이다(어드민 '정답 소스'). 미션별 answer_type 이 최우선이고,
+     * 비어 있으면 config('reward.answer_source') 를 따른다.
+     *
+     * @return array{correct: bool, norm: string} norm 은 로그 저장용(64자 절단)
+     */
     public static function grade(RewardMission $mission, RewardUser $user, string $day, string $answer): array
     {
         $tags = array_values(array_filter((array) $mission->tags, fn ($t) => is_string($t) && trim($t) !== ''));
+        $source = $mission->answer_type ?: (string) config('reward.answer_source', 'tag');
 
-        if ($tags !== []) {
+        // 해시태그형 — 참여자마다 다른 N번째 태그. 태그가 없으면 고정 정답으로 폴백한다
+        if (($source === 'tag' || $source === '') && $tags !== []) {
             $idx = TagIndex::for($user->user_key_hash, $mission->id, $day, count($tags));
             $norm = self::normalize($answer);
 
@@ -37,25 +44,46 @@ final class MissionGrader
             ];
         }
 
+        // 판매가형 — 상품 가격을 맞춘다(오차 허용은 tolerance_percent)
+        if ($source === 'price') {
+            return self::gradeNumber($answer, (string) ($mission->product_price ?? ''), $mission->tolerance_percent);
+        }
+
         if ($mission->answer === null || $mission->answer === '') {
+            // 설정이 고정 정답인데 값이 없다 — 태그가 있으면 그걸로라도 채점한다(미션이 죽지 않게)
+            if ($tags !== []) {
+                $idx = TagIndex::for($user->user_key_hash, $mission->id, $day, count($tags));
+                $norm = self::normalize($answer);
+
+                return ['correct' => $norm !== '' && $norm === self::normalize($tags[$idx - 1]),
+                    'norm' => mb_substr($norm, 0, 64)];
+            }
+
             return ['correct' => false, 'norm' => mb_substr(self::normalize($answer), 0, 64)];
         }
 
-        if ($mission->answer_type === 'number') {
-            $given = (string) preg_replace('/\D+/', '', $answer);
-            $expect = (string) preg_replace('/\D+/', '', (string) $mission->answer);
-            if ($given === '' || $expect === '') {
-                return ['correct' => false, 'norm' => mb_substr($given, 0, 64)];
-            }
-            $correct = $mission->tolerance_percent
-                ? abs((float) $given - (float) $expect) <= (float) $expect * $mission->tolerance_percent / 100
-                : $given === $expect;
-
-            return ['correct' => $correct, 'norm' => mb_substr($given, 0, 64)];
+        if ($source === 'number') {
+            return self::gradeNumber($answer, (string) $mission->answer, $mission->tolerance_percent);
         }
 
         $norm = self::normalize($answer);
 
         return ['correct' => $norm !== '' && $norm === self::normalize((string) $mission->answer), 'norm' => mb_substr($norm, 0, 64)];
+    }
+
+    /** 숫자 비교 — 숫자만 남겨 비교하고, tolerance_percent 가 있으면 그만큼 오차를 허용한다 */
+    private static function gradeNumber(string $answer, string $expected, ?int $tolerancePercent): array
+    {
+        $given = (string) preg_replace('/\D+/', '', $answer);
+        $expect = (string) preg_replace('/\D+/', '', $expected);
+        if ($given === '' || $expect === '') {
+            return ['correct' => false, 'norm' => mb_substr($given, 0, 64)];
+        }
+
+        $correct = $tolerancePercent
+            ? abs((float) $given - (float) $expect) <= (float) $expect * $tolerancePercent / 100
+            : $given === $expect;
+
+        return ['correct' => $correct, 'norm' => mb_substr($given, 0, 64)];
     }
 }

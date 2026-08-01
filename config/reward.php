@@ -30,6 +30,60 @@ return [
     'exposure_limit' => 8,
 
     /*
+     * 상품 사진이 없을 때 대신 내려줄 이미지(어드민 설정 'reward.default_product_image').
+     * 쇼핑 미션 안내는 사진·상품명·가격을 함께 보여주는데, 사진 자리가 비면 화면이 깨져 보인다.
+     */
+    'default_product_image' => 'https://shop-phinf.pstatic.net/20260508_43/1778232942496MPY10_PNG/112365762552778230_452519374.png?type=o1000',
+
+    /*
+     * 정답을 무엇으로 낼지 — 신규 미션의 기본값(어드민 설정 'reward.answer_source' 로 변경).
+     * 미션별로 다르게 하려면 reward_missions.answer_type 을 바꾼다(그 값이 최우선).
+     *   tag   = 상품 해시태그 중 참여자별 N번째 (기본)
+     *   price = 상품 판매가 (tolerance_percent 만큼 오차 허용)
+     *   text  = 운영자가 입력한 고정 정답(문자)
+     *   number= 운영자가 입력한 고정 정답(숫자, tolerance_percent 적용)
+     */
+    'answer_source' => 'tag',
+    'answer_sources' => [
+        'tag' => '상품 해시태그 (N번째)',
+        'price' => '상품 판매가',
+        'text' => '고정 정답 (문자)',
+        'number' => '고정 정답 (숫자)',
+    ],
+
+    /*
+     * 미션 안내 문구 템플릿 — 클라이언트가 하드코딩하지 않도록 API 응답에 실어 보낸다.
+     * 어드민 환경설정('reward.copy.*')이 이 기본값을 덮어쓰므로 문구 변경에 배포가 필요 없다.
+     * 치환 변수: {tagIndex} {tagCount} {shop_name} {product_title} {keyword} {price} {reward_item} {reward_count}
+     * 미션별로 다른 문구를 쓰려면 reward_missions 의 guide/question/placeholder 를 채운다(그 값이 최우선).
+     */
+    'copy' => [
+        'shopping_tag' => [
+            'guide' => [
+                "'참여하기'를 누르면 네이버에서 「{keyword}」 검색 결과가 열려요.",
+                '[광고] 표시가 없는 {shop_name}의 「{product_title}」 상품을 찾아 눌러 주세요.',
+                '상품 페이지에서 [상세정보 펼쳐보기]를 누르고 맨 아래까지 내리면 태그가 있어요.',
+                '앞에서부터 세어 {tagIndex}번째 태그를 입력해 주세요. # 기호는 빼고 글자만 적으면 돼요.',
+            ],
+            'question' => '{tagIndex}번째 태그를 입력해 주세요',
+            'placeholder' => '{tagIndex}번째 태그 입력',
+            'notice' => '[광고] 가 붙은 상품은 참여할 수 없어요. 아래 정보와 같은 상품을 찾아 주세요.',
+            'description' => '{keyword} 검색에서 {shop_name} 상품을 찾아 태그를 확인하면 {reward_item} {reward_count}개를 받아요.',
+        ],
+        // 태그가 없는 미션(고정 정답형) 폴백
+        'fallback' => [
+            'guide' => [
+                "'참여하기'를 누르면 상품 페이지가 열려요.",
+                '상품 정보를 확인하고 돌아와 정답을 입력해 주세요.',
+            ],
+            'question' => '정답을 입력해 주세요',
+            'placeholder' => '',
+            'notice' => '',
+            'description' => '{keyword} 검색 결과에서 {shop_name} 상품을 확인하면 {reward_item} {reward_count}개를 받아요.',
+        ],
+    ],
+
+    /*
      * 신규 참여자 행 생성 예산(IP·시간당) — x-user-key 는 클라이언트가 자유 발급하므로
      * 인증 없는 읽기 엔드포인트만으로 reward_users 를 무제한 만들 수 있다. 0 = 끔.
      */

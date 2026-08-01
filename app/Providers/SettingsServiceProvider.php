@@ -111,6 +111,31 @@ class SettingsServiceProvider extends ServiceProvider
             config(['rankfree.community.rewrite.thinking' => $v]);   // 재작성 추론(thinking) on/off
         }
 
+        // 5-1) 리워드 미션 문구·정답 소스 — 어드민 환경 설정 > 리워드 미션 탭.
+        //      문구를 바꾸는 데 배포가 필요 없어야 하므로 config 기본값을 여기서 덮는다(값이 있을 때만).
+        foreach (['shopping_tag', 'fallback'] as $kind) {
+            $guide = array_values(array_filter(array_map(
+                fn ($l) => is_string($l) ? trim($l) : null, $rows("reward.copy.{$kind}.guide"),
+            )));
+            if ($guide) {
+                config(["reward.copy.{$kind}.guide" => $guide]);
+            }
+            foreach (['question', 'placeholder', 'notice', 'description'] as $key) {
+                $v = trim((string) ($m["reward.copy.{$kind}.{$key}"] ?? ''));
+                if ($v !== '') {
+                    config(["reward.copy.{$kind}.{$key}" => $v]);
+                }
+            }
+        }
+        $v = trim((string) ($m['reward.answer_source'] ?? ''));
+        if ($v !== '' && array_key_exists($v, (array) config('reward.answer_sources', []))) {
+            config(['reward.answer_source' => $v]);
+        }
+        $v = trim((string) ($m['reward.default_product_image'] ?? ''));
+        if ($v !== '') {
+            config(['reward.default_product_image' => $v]);
+        }
+
         // 6) 단일 값 연동 키 (setting key → config 경로). 값이 있을 때만 .env 오버라이드.
         //    Cloudflare Turnstile · Google/Kakao 소셜 로그인 · 알리고 SMS · 서울 열린데이터광장(신규 개업 수집)
         foreach ([

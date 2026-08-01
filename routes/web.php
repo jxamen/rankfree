@@ -573,6 +573,16 @@ $__admin->group(function () {
     Route::post('/settings/terms', [SettingsController::class, 'saveTerms'])->name('settings.terms');
     Route::post('/settings/secondary-domain', [SettingsController::class, 'createSecondaryDomain'])->name('settings.secondary-domain.create');
 
+    // 리워드 설정 — 미션 안내 문구·정답 기준. 환경 설정과 분리한다(미션 타입이 늘어나는 축)
+    Route::get('/reward/settings', [\App\Http\Controllers\Admin\RewardSettingsController::class, 'index'])->name('reward.settings');
+    Route::put('/reward/settings', [\App\Http\Controllers\Admin\RewardSettingsController::class, 'update'])->name('reward.settings.update');
+
+    // 리워드 미션 API 테스트 — 매체가 받는 응답을 실제 엔드포인트로 호출해 확인(.claude/reward)
+    Route::get('/reward/api-test', [\App\Http\Controllers\Admin\RewardApiTestController::class, 'index'])->name('reward.api-test');
+    Route::post('/reward/api-test/call', [\App\Http\Controllers\Admin\RewardApiTestController::class, 'call'])->name('reward.api-test.call');
+    Route::post('/reward/api-test/answer', [\App\Http\Controllers\Admin\RewardApiTestController::class, 'answer'])->name('reward.api-test.answer');
+    Route::get('/reward/api-test/status', [\App\Http\Controllers\Admin\RewardApiTestController::class, 'status'])->name('reward.api-test.status');
+
     // 커뮤니티 카테고리 관리 (추가·이름/아이콘/정렬·사용 여부)
     Route::get('/community-categories', [CommunityCategoryController::class, 'index'])->name('community-categories');
     Route::post('/community-categories', [CommunityCategoryController::class, 'store'])->name('community-categories.store');

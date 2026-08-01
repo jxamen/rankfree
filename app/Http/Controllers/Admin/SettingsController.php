@@ -198,7 +198,7 @@ class SettingsController extends Controller
         AppSetting::write('referral.bonus_max', (string) max(0, (int) $request->input('referral_bonus_max', 200)));
 
         // 저장 후에도 보던 탭 유지
-        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'member', 'payment', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
+        $tab = in_array($request->input('tab'), ['basic', 'api', 'integ', 'extension', 'member', 'payment', 'place', 'domains', 'custom'], true) ? $request->input('tab') : null;
 
         return redirect()->route('admin.settings', array_filter(['tab' => $tab]))->with('status', '환경 설정을 저장했습니다.');
     }

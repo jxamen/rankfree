@@ -100,9 +100,19 @@ class MissionSync
                 $mission->title = Str::limit(trim(($row->mall_name ? $row->mall_name.' ' : '').($row->product_title ?? '').' 최저가 찾기'), 77);
             }
             if ($mission->description === '' || $mission->description === null) {
-                $mission->description = Str::limit(sprintf(
-                    '%s 검색 결과에서 %s 상품 가격을 확인하고 오면 %s %d개를 받아요.',
-                    $row->core_keyword ?? '쇼핑', $row->mall_name ?? '해당', $mission->reward_item ?? 'water', $mission->reward_count ?? 1,
+                // 문구 템플릿은 어드민 설정에서 바꾼다(MissionCopy) — 여기에 문장을 하드코딩하지 않는다
+                $tagCount = count(array_filter((array) $mission->tags, fn ($t) => is_string($t) && trim($t) !== ''));
+                $mission->description = Str::limit(MissionCopy::line(
+                    MissionCopy::kindFor($tagCount),
+                    'description',
+                    MissionCopy::vars([
+                        'shop_name' => $row->mall_name ?? '해당 상점',
+                        'product_title' => $row->product_title ?? '',
+                        'keyword' => $row->core_keyword ?? '쇼핑',
+                        'product_price' => $row->product_price ?? null,
+                        'reward_item' => $mission->reward_item ?? 'water',
+                        'reward_count' => $mission->reward_count ?? 1,
+                    ], null, $tagCount),
                 ), 197);
             }
 
