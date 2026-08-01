@@ -174,6 +174,8 @@ class FarmAppController extends Controller
                 'keyword' => $m['keyword'],
             ],
             'guide' => $m['guide'] ?: MissionCopy::guide($kind, $vars),
+            // 글만으로는 어디를 눌러야 하는지 전달되지 않는다 — 단계마다 예시 이미지를 함께 준다
+            'guideSteps' => $m['guide'] ? null : MissionCopy::steps($kind, $vars),
             'notice' => MissionCopy::line($kind, 'notice', $vars) ?: null,
             'hintUrl' => $m['landing_url'],
             'question' => $m['question'] ?: MissionCopy::line($kind, 'question', $vars),
@@ -183,6 +185,7 @@ class FarmAppController extends Controller
             $quiz['tagIndex'] = $tagIndex;      // 사용자마다 다른 결정적 번호 — 태그 목록은 절대 미노출
             $quiz['tagCount'] = $tagCount;
         }
+        $quiz = array_filter($quiz, fn ($v) => $v !== null && $v !== []);
 
         return [
             'id' => (string) $m['id'],

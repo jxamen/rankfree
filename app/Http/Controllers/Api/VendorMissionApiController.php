@@ -288,6 +288,7 @@ class VendorMissionApiController extends Controller
             'question' => $m->question ?: MissionCopy::line($kind, 'question', $vars),
             'placeholder' => $m->placeholder ?: (MissionCopy::line($kind, 'placeholder', $vars) ?: null),
             'guide' => $m->guide ?: MissionCopy::guide($kind, $vars),
+            'guideSteps' => $m->guide ? null : MissionCopy::steps($kind, $vars),
             'notice' => MissionCopy::line($kind, 'notice', $vars) ?: null,
             'tagIndex' => $tagIndex,
             'tagCount' => $tagCount,

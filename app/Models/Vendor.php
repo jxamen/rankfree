@@ -11,6 +11,9 @@ class Vendor extends Model
     public const CHANNELS = [
         'api' => 'API 호출',
         'gsheet' => '구글시트',
+        // 리워드 풀(.claude/reward design-04 §2-1) — 외부로 전송하지 않는다.
+        // 이 채널로 배분된 회차는 미션 풀에 편입되는 것이 곧 발주다(참여자가 우리 API 로 가져간다).
+        'reward' => '리워드 풀(미션)',
     ];
 
     /**

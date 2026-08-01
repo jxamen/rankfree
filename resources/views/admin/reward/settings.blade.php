@@ -59,7 +59,9 @@
             <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $__meta['label'] }}</div>
             <p class="text-muted mb-3" style="font-size:var(--fs-xs);">{{ $__meta['desc'] }} · 비워두면 기본 문구를 씁니다</p>
 
-            <label class="form-label" style="font-size:var(--fs-xs);">참여 방법 <span class="text-muted">(한 줄에 한 단계, 순서대로 노출)</span></label>
+            <label class="form-label" style="font-size:var(--fs-xs);">참여 방법
+                <span class="text-muted">(한 줄에 한 단계 · 단계 끝에 <code>| 이미지주소</code> 를 붙이면 예시 사진이 함께 나갑니다)</span>
+            </label>
             <textarea name="copy[{{ $__kind }}][guide]" class="input" spellcheck="false"
                 style="width:100%;height:120px;font-size:var(--fs-xs);line-height:1.7;resize:vertical;"
                 placeholder="{{ implode("\n", (array) config('reward.copy.'.$__kind.'.guide', [])) }}">{{ old('copy.'.$__kind.'.guide', is_array($__c['guide'] ?? null) ? implode("\n", $__c['guide']) : '') }}</textarea>

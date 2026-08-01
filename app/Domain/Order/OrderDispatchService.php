@@ -204,9 +204,13 @@ class OrderDispatchService
     private function send(OrderDispatch $d): void
     {
         try {
-            $ok = $d->channel === 'gsheet'
-                ? $this->sendGsheet($d)
-                : $this->sendApi($d);
+            $ok = match ($d->channel) {
+                // 리워드 풀은 외부로 보내지 않는다 — 미션 풀 편입이 곧 발주다(.claude/reward design-04 §2-1).
+                // 전송을 시도하면 API URL 이 없어 실패로 남고, 그러면 미션 동기화 대상(sent)에서 빠진다.
+                'reward' => tap(true, fn () => $d->response = '리워드 풀 — 미션으로 편입(외부 전송 없음)'),
+                'gsheet' => $this->sendGsheet($d),
+                default => $this->sendApi($d),
+            };
         } catch (\Throwable $e) {
             $ok = false;
             $d->response = mb_substr('오류: '.$e->getMessage(), 0, 1900);

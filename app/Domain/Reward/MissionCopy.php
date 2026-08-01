@@ -31,17 +31,51 @@ final class MissionCopy
     }
 
     /**
+     * 참여 방법(텍스트만) — 구버전 클라이언트 호환.
+     *
      * @param  array<string, mixed>  $vars  치환 변수 (tagIndex·shop_name 등)
      * @return array<int, string>
      */
     public static function guide(string $kind, array $vars): array
     {
-        $lines = (array) self::setting($kind, 'guide', []);
+        return array_column(self::steps($kind, $vars), 'text');
+    }
 
-        return array_values(array_filter(
-            array_map(fn ($l) => self::render((string) $l, $vars), $lines),
-            fn ($l) => $l !== '',
-        ));
+    /**
+     * 참여 방법(단계별) — 글만으로는 "어디를 눌러야 하는지"가 전달되지 않아 단계마다 예시 이미지를 붙인다.
+     * 설정에서는 한 줄을 `설명 | 이미지URL` 로 적는다(이미지는 선택).
+     *
+     * @return array<int, array{step:int, text:string, image:?string}>
+     */
+    public static function steps(string $kind, array $vars): array
+    {
+        $out = [];
+        foreach ((array) self::setting($kind, 'guide', []) as $line) {
+            [$text, $image] = self::splitLine((string) $line);
+            $text = self::render($text, $vars);
+            if ($text === '') {
+                continue;
+            }
+            $out[] = ['step' => count($out) + 1, 'text' => $text, 'image' => $image ?: null];
+        }
+
+        return $out;
+    }
+
+    /** `설명 | https://…` → [설명, 이미지]. 파이프가 없으면 이미지 없음 */
+    private static function splitLine(string $line): array
+    {
+        $pos = mb_strrpos($line, '|');
+        if ($pos === false) {
+            return [trim($line), null];
+        }
+
+        $tail = trim(mb_substr($line, $pos + 1));
+
+        // 파이프 뒤가 URL 일 때만 이미지로 본다 — 본문에 쓰인 파이프를 잘라먹지 않게
+        return str_starts_with($tail, 'http')
+            ? [trim(mb_substr($line, 0, $pos)), $tail]
+            : [trim($line), null];
     }
 
     public static function line(string $kind, string $key, array $vars): string
@@ -49,15 +83,35 @@ final class MissionCopy
         return self::render((string) self::setting($kind, $key, ''), $vars);
     }
 
-    /** {변수} 치환 — 값이 없는 변수는 빈 문자열로 지워 어색한 자리를 남기지 않는다 */
+    /**
+     * {변수} 치환. 값이 없으면 그 자리를 지우는데, 「」·[]·() 같은 감싸는 기호와 조사가 남으면
+     * "「」 상품을 찾아" 처럼 깨진 문장이 된다 — 빈 껍데기까지 함께 정리한다.
+     */
     public static function render(string $template, array $vars): string
     {
+        $s = $template;
         $replace = [];
+
         foreach ($vars as $k => $v) {
-            $replace['{'.$k.'}'] = (string) ($v ?? '');
+            $value = (string) ($v ?? '');
+            if ($value === '') {
+                // 빈 변수는 감싸는 기호(「」·[]·())와 뒤따르는 조사까지 통째로 지운다.
+                // 그러지 않으면 "{shop_name}의 「{product_title}」 상품" → "의 「」 상품" 처럼 깨진다
+                $s = preg_replace(
+                    '/[「\[(【]?\s*\{'.preg_quote($k, '/').'\}\s*[」\])】]?\s*(?:의|은|는|이|가|을|를|와|과|에서|에)?/u',
+                    '', $s,
+                ) ?? $s;
+
+                continue;
+            }
+            $replace['{'.$k.'}'] = $value;
         }
 
-        return trim(preg_replace('/\s{2,}/u', ' ', strtr($template, $replace)) ?? '');
+        $s = strtr($s, $replace);
+        $s = preg_replace('/\s{2,}/u', ' ', $s) ?? $s;
+        $s = preg_replace('/\s+([,.])/u', '$1', $s) ?? $s;
+
+        return trim($s);
     }
 
     /**
