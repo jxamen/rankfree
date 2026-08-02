@@ -25,16 +25,14 @@ return [
          * 사람이 브라우저로는 절대 요청하지 않는 경로만 넣는다 — 한 번만 걸려도 차단하기 때문이다.
          */
         'patterns' => [
-            // 🔴 하위 경로까지 잡아야 한다 — 실측에서 /api/.env·/admin/.env·/config/.env·/backend/.env 가
-            //    루트 /.env 만큼 두들겨 맞았다. 앵커를 ^ 로만 두면 전부 놓친다.
-            '#(^|/)\.env#i',                                // .env .env.bak .env.production api/.env
-            '#(^|/)\.git(/|-credentials|config|ignore)#i',  // .git/HEAD .git-credentials .gitconfig
-            '#(^|/)\.(aws|ssh|svn|hg|docker|hermes|vscode|idea|github)/#i',
-
-            // 셸·도구 설정 파일(토큰이 들어 있는 것들)
-            '#(^|/)\.(bashrc|zshrc|bash_profile|bash_history|profile|npmrc|s3cfg|netrc|htpasswd|DS_Store)$#i',
-            '#(^|/)\.(mcp|claude)\.json$#i',
-            '#(^|/)\.(gitlab-ci|travis)\.ya?ml$#i',
+            /*
+             * 점으로 시작하는 경로 조각 전부. 웹에서 정당한 dotfile 은 .well-known 하나뿐이고
+             * 그건 safe_paths 가 먼저 걸러낸다. 개별 나열은 끝없는 두더지잡기였다 —
+             * 실측에서 .env·.git·.aws 를 막자 .boto·.aider.conf.yml·.codex/config.toml·
+             * .cursor/mcp.json·.config/anthropic/credentials/*(AI 도구 자격증명!)이 뒤이어 나왔다.
+             * 🔴 하위 경로까지 잡아야 한다: /api/.env·/admin/.env 가 루트 /.env 만큼 두들겨 맞는다.
+             */
+            '#(^|/)\.[^/]#',
 
             // 개인키 — SSH·TLS
             '#(^|/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$#i',
@@ -42,10 +40,14 @@ return [
             '#(^|/)(private-?key|server\.key)$#i',
 
             // 자격증명 번들
-            '#(^|/)(secrets?|credentials?|service-?account|serviceAccountKey|firebase-adminsdk|key)\.(json|ya?ml)$#i',
+            '#(^|/)(secrets?|credentials?|service-?account|serviceAccountKey|firebase-adminsdk|key|auth|config)\.(json|ya?ml)$#i',
             '#(^|/)rclone\.conf$#i',
+            '#(^|/)terraform\.tfstate#i',
+            '#(^|/)docker-compose\.ya?ml$#i',
+            '#(^|/)storage/logs/#i',                        // 로그 노출 탐침
 
             '#(^|/)wp-(admin|login\.php|includes/|content/)#i',   // 워드프레스가 아니다
+            '#(^|/)wp-config\.php[.~]#i',                   // wp-config.php.bak/.old
             '#(^|/)xmlrpc\.php$#i',
             '#(^|/)(phpmyadmin|phpMyAdmin|pma|myadmin|adminer\.php)#i',
             '#(^|/)vendor/phpunit/#i',                      // CVE-2017-9841 RCE 탐침

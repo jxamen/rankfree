@@ -60,6 +60,11 @@ class ProbeIpBlockTest extends TestCase
             '/serviceAccountKey.json', '/service-account.json', '/credentials.json', '/secrets.yml',
             '/firebase-adminsdk.json', '/rclone.conf', '/.s3cfg', '/.npmrc', '/.bashrc', '/.zshrc',
             '/.mcp.json', '/.claude.json', '/.docker/config.json', '/.hermes/auth.json', '/.svn/entries',
+            // AI 코딩 도구 자격증명을 노린 2차 물결
+            '/.claude/settings.json', '/.cursor/mcp.json', '/.codex/config.toml', '/.aider.conf.yml',
+            '/.config/anthropic/credentials/default.json', '/.continue/config.json', '/.openclaw/openclaw.json',
+            '/.boto', '/terraform.tfstate', '/docker-compose.yaml', '/wp-config.php.bak',
+            '/auth.json', '/config.json', '/storage/logs/laravel.log',
         ]);
     }
 
