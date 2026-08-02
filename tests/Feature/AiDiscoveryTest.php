@@ -44,6 +44,29 @@ class AiDiscoveryTest extends TestCase
         $this->assertSame('/', $row->path);
     }
 
+    /**
+     * UA 를 위조한 자격증명 스캐너(/.env·/.aws/credentials)는 GPTBot 을 자처한다.
+     * 404 로 끝난 요청은 문서가 읽힌 게 아니므로 기록은 하되 'AI 가 읽어간 문서'에서는 뺀다.
+     */
+    public function test_forged_bot_scan_is_recorded_but_not_counted_as_read(): void
+    {
+        $ua = 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)';
+
+        $this->withHeaders(['User-Agent' => $ua])->get('/')->assertOk();
+        $this->withHeaders(['User-Agent' => $ua])->get('/.aws/credentials')->assertNotFound();
+
+        $scan = AiCrawlerHit::where('path', '/.aws/credentials')->first();
+        $this->assertNotNull($scan, '스캔 시도 자체는 남아야 한다');
+        $this->assertSame(404, $scan->status);
+
+        $today = now()->toDateString();
+        $out = (new Ga4AiDiscoveryProvider)->summary($today, $today, []);
+
+        $this->assertSame(1, $out['totals']['generative_hits'], '404 는 AI 조회로 세지 않는다');
+        $this->assertSame(1, $out['totals']['blocked_hits']);
+        $this->assertSame(['/'], array_column($out['pages'], 'name'), '스캔 경로는 상위 문서에 오르면 안 된다');
+    }
+
     /** 사람 방문은 기록하지 않는다. */
     public function test_human_visit_not_recorded(): void
     {

@@ -127,7 +127,7 @@
                 <div class="dlt ga4-flat">방문 세션</div>
             </div>
             <div class="ga4-card ga4-kpi">
-                <div class="lab">Generative Organic <i class="ga4-help" title="AI가 답변을 만들려고 문서를 직접 읽어간 요청 수입니다. 자바스크립트를 실행하지 않아 일반 방문 통계(GA4)에는 잡히지 않습니다.">?</i></div>
+                <div class="lab">Generative Organic <i class="ga4-help" title="AI가 답변을 만들려고 문서를 직접 읽어간 요청 수입니다. 자바스크립트를 실행하지 않아 일반 방문 통계(GA4)에는 잡히지 않습니다. 실제로 문서를 내려준 요청만 세며, 없는 주소를 찾다 404로 끝난 요청은 제외합니다.">?</i></div>
                 <div class="val">{{ F::int($__aiT['generative_hits'] ?? 0) }}</div>
                 <div class="dlt ga4-flat">AI 조회</div>
             </div>
@@ -181,6 +181,15 @@
                     @endforeach
                 </tbody>
             </table></div>
+        @endif
+
+        @if (($__aiT['blocked_hits'] ?? 0) > 0)
+            {{-- UA 는 위조가 자유롭다 — 스캐너가 GPTBot 을 자처해도 404 로 끝난 요청은 위 집계에서 뺀다 --}}
+            <div class="ga4-note" style="margin-top:10px;">
+                같은 기간, AI 크롤러를 사칭해 없는 파일(<code>/.env</code> 등)을 찾은 요청이
+                <strong>{{ F::int($__aiT['blocked_hits']) }}</strong>건 있었습니다.
+                모두 404 로 막혔고 위 집계에는 포함하지 않았습니다.
+            </div>
         @endif
     </div>
 </div>

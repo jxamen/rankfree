@@ -18,15 +18,18 @@ class LogAiCrawler
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // 상태코드를 함께 남기려면 응답이 나온 뒤에 기록해야 한다(위조 UA 스캔과 실제 열람 구분).
+        $response = $next($request);
+
         // GET 문서 요청만 — 정적 자원·프리플라이트는 의미 없다
         if ($request->isMethod('GET')) {
             $bot = AiCrawlerHit::detect($request->userAgent());
             if ($bot !== null && ! $this->isAsset($request->path())) {
-                AiCrawlerHit::record($bot, '/'.ltrim($request->path(), '/'));
+                AiCrawlerHit::record($bot, '/'.ltrim($request->path(), '/'), $response->getStatusCode());
             }
         }
 
-        return $next($request);
+        return $response;
     }
 
     /** 이미지·스크립트 등은 문서 소비가 아니라 제외. */

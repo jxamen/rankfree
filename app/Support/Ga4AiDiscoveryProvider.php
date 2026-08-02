@@ -40,7 +40,7 @@ class Ga4AiDiscoveryProvider implements AiDiscoveryProvider
     public function summary(string $startDate, string $endDate, array $ga): array
     {
         $referral = $this->referralRows((array) ($ga['sourceMedium'] ?? []));
-        [$generative, $pages, $userHits] = $this->generativeRows($startDate, $endDate);
+        [$generative, $pages, $userHits, $blockedHits] = $this->generativeRows($startDate, $endDate);
 
         return [
             'referral' => $referral,
@@ -50,6 +50,7 @@ class Ga4AiDiscoveryProvider implements AiDiscoveryProvider
                 'referral_sessions' => array_sum(array_column($referral, 'sessions')),
                 'generative_hits' => array_sum(array_column($generative, 'hits')),
                 'user_agent_hits' => $userHits,
+                'blocked_hits' => $blockedHits,
             ],
         ];
     }
@@ -89,13 +90,17 @@ class Ga4AiDiscoveryProvider implements AiDiscoveryProvider
     }
 
     /**
-     * AI 크롤러 집계 — 봇별 히트, 많이 읽힌 문서, 사용자 요청형(ChatGPT-User 등) 합계.
+     * AI 크롤러 집계 — 봇별 히트, 많이 읽힌 문서, 사용자 요청형(ChatGPT-User 등) 합계, 실패한 요청 수.
      *
-     * @return array{0: list<array<string,mixed>>, 1: list<array<string,mixed>>, 2: int}
+     * 본문을 내려준 요청(2xx)만 '읽어간 것'으로 센다. UA 는 위조가 자유로워
+     * 자격증명 스캐너가 GPTBot 을 자처하는데, 404 로 끝난 시도까지 세면 AI 유입이 부풀려진다.
+     *
+     * @return array{0: list<array<string,mixed>>, 1: list<array<string,mixed>>, 2: int, 3: int}
      */
     private function generativeRows(string $startDate, string $endDate): array
     {
-        $base = AiCrawlerHit::query()->whereBetween('hit_date', [$startDate, $endDate]);
+        $window = fn () => AiCrawlerHit::query()->whereBetween('hit_date', [$startDate, $endDate]);
+        $base = $window()->succeeded();
 
         $byBot = (clone $base)
             ->selectRaw('bot, SUM(hits) as hits')
@@ -116,6 +121,9 @@ class Ga4AiDiscoveryProvider implements AiDiscoveryProvider
 
         $userHits = (int) (clone $base)->whereIn('bot', AiCrawlerHit::USER_AGENTS)->sum('hits');
 
-        return [$generative, $pages, $userHits];
+        // 위조 UA 스캔 규모 — 집계에서는 빼되, 얼마나 두드려 맞는지는 보여준다
+        $blockedHits = (int) $window()->failed()->sum('hits');
+
+        return [$generative, $pages, $userHits, $blockedHits];
     }
 }
