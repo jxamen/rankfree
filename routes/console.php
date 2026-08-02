@@ -116,3 +116,6 @@ Schedule::command('reward:build-snapshot')->everyMinute()->withoutOverlapping()-
 // 🔴 warm-cache 는 withoutOverlapping() 금지(§7-6) — 공유 cache_locks 라 다중 서버에서 1대만 돌게 된다.
 //    커맨드 내부의 flock(로컬 파일 락)이 서버별 중복 실행만 막는다. 서버가 늘면 전 서버에 이 크론이 있어야 한다.
 Schedule::command('reward:warm-cache')->everyMinute()->runInBackground();
+
+// 만료된 탐침 차단 기록 정리 — 차단 자체는 blocked_until 로 이미 풀린다. 목록이 불어나지 않게만 치운다.
+Schedule::command('security:blocked-ips --prune')->timezone('Asia/Seoul')->dailyAt('05:20')->withoutOverlapping()->runInBackground();

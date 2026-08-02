@@ -58,6 +58,38 @@
 - **[public/ai.txt](../public/ai.txt)** — AI 크롤러·생성엔진 정책(robots 유사 문법). 공개 콘텐츠 크롤·인용 허용 + 개인 영역(`/console·/admin·/order` 등) 제외 + 출처 표기 요청.
 - **[public/robots.txt](../public/robots.txt)** — AI 봇 그룹(GPTBot·ClaudeBot·PerplexityBot·Google-Extended 등) 명시 허용 + `/ai.txt`·`/llms.txt` 참조. GEO/AEO 전략상 AI 인용을 **허용**하는 방향.
 
+## AI 크롤러 집계 — UA 는 신뢰하지 않는다 (2026-08-02)
+
+Generative Organic(AI 가 문서를 직접 읽어간 요청)은 [LogAiCrawler](../app/Http/Middleware/LogAiCrawler.php) 가 `ai_crawler_hits` 에 쌓고 [Ga4AiDiscoveryProvider](../app/Support/Ga4AiDiscoveryProvider.php) 가 대시보드로 보낸다.
+
+- **User-Agent 는 위조가 자유롭다.** 자격증명 스캐너(`/.env`·`/.aws/credentials`·`/.git-credentials`)가 GPTBot 을 자처해 들어오며, 실제로 "AI 가 많이 읽어간 문서" 상위를 차지했다. **UA 매칭만으로 AI 유입이라 부르면 안 된다.**
+- **판정 기준은 응답 상태코드다.** 본문을 내려준 **2xx 만 '읽어간 것'으로 센다**(`scopeSucceeded`). 4xx 는 기록은 하되 집계에서 빼고(`scopeFailed`) 규모만 대시보드에 한 줄로 보여준다.
+- 상태코드를 남기려면 응답 생성 **뒤에** 기록해야 하므로 미들웨어는 `$next()` 이후에 쓴다. 유일키는 `(hit_date, bot, path, status)` — 같은 경로라도 200 과 404 는 다른 사건이다.
+- **IP·역DNS 검증은 도입하지 않았다.** 요청마다 확인 비용이 붙고 캐시가 필요한데, 상태코드 필터만으로 지표 오염이 걷힌다. 위조 UA 자체를 차단해야 할 만큼 양이 늘면 그때 올린다.
+- 마이그레이션 이전 행은 상태를 알 수 없어 200 으로 남는다 — **과거 구간 오염은 소급 교정되지 않는다.**
+
+## 취약점 탐침 IP 자동 차단 (2026-08-02)
+
+봇 UA 로 위장해 `/.env`·`/.aws/credentials`·`/.git-credentials` 를 훑는 요청은 자격증명 스캔이다. 해당 IP 를 기록하고 일정 시간 차단한다.
+구현: [BlockProbeIps](../app/Http/Middleware/BlockProbeIps.php) · [BlockedIp](../app/Models/BlockedIp.php) · [config/security.php](../config/security.php) · 운영 명령 `security:blocked-ips`
+
+- **판정은 경로로만 한다(UA 무관).** 스캐너가 늘 봇 UA 를 쓰는 것도 아니고, 사람이 브라우저로 이 경로를 요청할 일은 없다. 한 번만 걸려도 차단한다.
+- **미들웨어 맨 앞**(`prepend`)에 둔다 — 차단된 IP 는 리다이렉트·세션 비용도 쓰지 않는다.
+- **영구 차단하지 않는다.** 기본 24시간(`SECURITY_PROBE_BLOCK_HOURS`). 스캐너는 IP 를 갈아타므로 영구 목록은 커지기만 하고, 통신사 NAT 처럼 공유 IP 를 잘못 잡았을 때 피해도 시간으로 제한된다. 만료분은 매일 05:20 `--prune` 으로 정리.
+- 차단 목록은 캐시에 **문자열 배열로만** 담는다(60초) — 운영 database 캐시에 Eloquent 객체를 넣으면 깨진다.
+
+**오차단이 서비스를 죽이는 두 지점 — 반드시 유지할 것:**
+
+| 위험 | 결과 | 방어 |
+|------|------|------|
+| 🔴 `.well-known/` 을 점(dot) 경로로 뭉뚱그려 차단 | Let's Encrypt ACME 갱신 실패 → **사이트 전체 HTTPS 불통** | `safe_paths` 가 `patterns` 보다 우선. 패턴을 "모든 dotfile" 로 넓히지 말 것 |
+| 🔴 CDN 프록시 뒤에서 엣지 IP 를 차단 | 그 엣지를 지나는 **모든 정상 사용자**가 403 | `trust_proxy_guard` — `CF-Connecting-IP`·`X-Forwarded-For` 가 있는데 `TrustProxies` 미설정이면 차단하지 않는다 |
+
+현재 rankfree 는 `TrustProxies` 미설정 + **Cloudflare DNS-only** 라 `REMOTE_ADDR` 이 실제 클라이언트다(차단 성립). **Cloudflare 프록시(주황 구름)를 켜려면 `TrustProxies` 설정이 선행돼야 한다.**
+
+- 운영자 IP 는 `SECURITY_NEVER_BLOCK_IPS`(쉼표 구분, 기본 `127.0.0.1,::1`) 에 넣는다. 기능 자체는 `SECURITY_PROBE_BLOCK=false` 로 끌 수 있다.
+- 오차단 복구: `php artisan security:blocked-ips`(목록) · `--unblock=IP`(해제)
+
 ## 검색엔진 발행 알림 (2026-07-17)
 
 허브 문서 발행 시 **공식 지원 경로로만** 검색엔진에 알린다. 구현: [SearchEnginePing](../app/Domain/Seo/SearchEnginePing.php) · [config/seo-ping.php](../config/seo-ping.php)

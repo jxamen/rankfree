@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // 가장 앞에서 처리해 세션·라우팅 비용을 아낀다. 서브도메인(어드민·단축URL)은 정확일치가 아니라 통과.
         $middleware->prepend(\App\Http\Middleware\RedirectCanonicalHost::class);
 
+        // 취약점 탐침 IP 차단(2026-08-02) — /.env·/.aws/credentials 를 훑는 IP 를 기록·차단.
+        // 나중에 prepend 한 것이 앞에 온다: 차단된 IP 는 리다이렉트·세션 비용도 쓰지 않는다.
+        $middleware->prepend(\App\Http\Middleware\BlockProbeIps::class);
+
         // AI 크롤러 유입 기록(2026-07-27) — GPTBot·ChatGPT-User 등은 JS 미실행이라 GA4 에 안 잡힌다.
         // 리다이렉트 이후에 두어 대표 도메인으로 정리된 요청만 집계한다.
         $middleware->append(\App\Http\Middleware\LogAiCrawler::class);
