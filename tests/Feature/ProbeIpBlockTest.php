@@ -45,6 +45,44 @@ class ProbeIpBlockTest extends TestCase
         $this->asIp('198.51.100.9')->get('/')->assertOk();
     }
 
+    /**
+     * 운영 로그(2026-08-02)에서 실제로 관측된 탐침 경로들.
+     * 🔴 하위 경로(/api/.env·/admin/.env)가 루트만큼 두들겨 맞는다 — 패턴 앵커를 ^ 로만 두면 전부 놓친다.
+     */
+    public static function 관측된_탐침_경로(): array
+    {
+        return array_map(fn ($p) => [$p], [
+            '/.env', '/api/.env', '/admin/.env', '/config/.env', '/backend/.env', '/.env.production',
+            '/.git/HEAD', '/.git-credentials', '/.gitlab-ci.yml', '/.github/workflows/deploy.yml',
+            '/.aws/credentials', '/.ssh/id_rsa', '/id_rsa', '/id_ed25519', '/.ssh/authorized_keys',
+            '/server.key', '/key.pem', '/privatekey.key', '/ssl/localhost.key', '/private-key',
+            '/serviceAccountKey.json', '/service-account.json', '/credentials.json', '/secrets.yml',
+            '/firebase-adminsdk.json', '/rclone.conf', '/.s3cfg', '/.npmrc', '/.bashrc', '/.zshrc',
+            '/.mcp.json', '/.claude.json', '/.docker/config.json', '/.hermes/auth.json', '/.svn/entries',
+        ]);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('관측된_탐침_경로')]
+    public function test_관측된_탐침_경로는_모두_차단된다(string $path): void
+    {
+        // 경로마다 다른 IP 로 — 각 경로가 독립적으로 차단을 유발하는지 본다
+        $ip = '198.18.'.random_int(0, 255).'.'.random_int(1, 254);
+
+        $this->asIp($ip)->get($path)->assertForbidden();
+        $this->assertDatabaseHas('blocked_ips', ['ip' => $ip, 'hit_path' => $path]);
+    }
+
+    /** 정상 경로는 절대 걸리면 안 된다. */
+    public function test_정상_경로는_차단되지_않는다(): void
+    {
+        foreach (['/', '/login', '/keywords', '/.well-known/acme-challenge/x'] as $path) {
+            $res = $this->asIp('198.51.100.42')->get($path);
+            $this->assertNotSame(403, $res->getStatusCode(), "정상 경로가 차단됨: {$path}");
+        }
+
+        $this->assertDatabaseCount('blocked_ips', 0);
+    }
+
     /** 🔴 .well-known 은 점으로 시작해도 정상 경로다 — 막으면 인증서 갱신(ACME)이 실패한다. */
     public function test_well_known_은_탐침으로_보지_않는다(): void
     {

@@ -25,17 +25,30 @@ return [
          * 사람이 브라우저로는 절대 요청하지 않는 경로만 넣는다 — 한 번만 걸려도 차단하기 때문이다.
          */
         'patterns' => [
-            '#^\.env#i',                                    // .env .env.bak .env.old .env.example
-            '#^\.git(/|-credentials|config|ignore)#i',      // .git/HEAD .git-credentials .gitconfig
-            '#^\.aws/#i',
-            '#^\.ssh/#i',
-            '#^\.(vscode|idea|svn|hg)/#i',
-            '#^\.DS_Store$#i',
+            // 🔴 하위 경로까지 잡아야 한다 — 실측에서 /api/.env·/admin/.env·/config/.env·/backend/.env 가
+            //    루트 /.env 만큼 두들겨 맞았다. 앵커를 ^ 로만 두면 전부 놓친다.
+            '#(^|/)\.env#i',                                // .env .env.bak .env.production api/.env
+            '#(^|/)\.git(/|-credentials|config|ignore)#i',  // .git/HEAD .git-credentials .gitconfig
+            '#(^|/)\.(aws|ssh|svn|hg|docker|hermes|vscode|idea|github)/#i',
+
+            // 셸·도구 설정 파일(토큰이 들어 있는 것들)
+            '#(^|/)\.(bashrc|zshrc|bash_profile|bash_history|profile|npmrc|s3cfg|netrc|htpasswd|DS_Store)$#i',
+            '#(^|/)\.(mcp|claude)\.json$#i',
+            '#(^|/)\.(gitlab-ci|travis)\.ya?ml$#i',
+
+            // 개인키 — SSH·TLS
+            '#(^|/)id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$#i',
+            '#(^|/)[^/]+\.(pem|key|p12|pfx|ppk|jks|keystore)$#i',
+            '#(^|/)(private-?key|server\.key)$#i',
+
+            // 자격증명 번들
+            '#(^|/)(secrets?|credentials?|service-?account|serviceAccountKey|firebase-adminsdk|key)\.(json|ya?ml)$#i',
+            '#(^|/)rclone\.conf$#i',
+
             '#(^|/)wp-(admin|login\.php|includes/|content/)#i',   // 워드프레스가 아니다
             '#(^|/)xmlrpc\.php$#i',
             '#(^|/)(phpmyadmin|phpMyAdmin|pma|myadmin|adminer\.php)#i',
             '#(^|/)vendor/phpunit/#i',                      // CVE-2017-9841 RCE 탐침
-            '#(^|/)(credentials|secrets)\.(json|ya?ml|txt|bak)$#i',
             '#^server-status#i',
         ],
 
@@ -45,7 +58,7 @@ return [
          *    여기로 들어온다. 여기를 막으면 인증서 갱신이 실패해 사이트 전체가 HTTPS 로 안 열린다.
          */
         'safe_paths' => [
-            '#^\.well-known/#i',
+            '#(^|/)\.well-known/#i',
         ],
 
         // 어떤 경우에도 차단하지 않을 IP(운영자 사무실·모니터링·프록시 등).

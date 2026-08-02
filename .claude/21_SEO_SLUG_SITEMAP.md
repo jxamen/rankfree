@@ -74,6 +74,8 @@ Generative Organic(AI 가 문서를 직접 읽어간 요청)은 [LogAiCrawler](.
 구현: [BlockProbeIps](../app/Http/Middleware/BlockProbeIps.php) · [BlockedIp](../app/Models/BlockedIp.php) · [config/security.php](../config/security.php) · 운영 명령 `security:blocked-ips`
 
 - **판정은 경로로만 한다(UA 무관).** 스캐너가 늘 봇 UA 를 쓰는 것도 아니고, 사람이 브라우저로 이 경로를 요청할 일은 없다. 한 번만 걸려도 차단한다.
+- 🔴 **패턴 앵커를 `^` 로만 두지 말 것.** 운영 로그(2026-08-02) 실측에서 `/api/.env`·`/admin/.env`·`/config/.env`·`/backend/.env` 가 루트 `/.env` 와 같은 빈도로 두들겨 맞았다. `(^|/)` 로 하위 경로까지 잡는다. 실제 관측 목록은 [ProbeIpBlockTest](../tests/Feature/ProbeIpBlockTest.php) 의 데이터 프로바이더가 회귀 기준이다.
+- 관측된 탐침 대상: 각 depth 의 `.env`, SSH/TLS 개인키(`id_rsa`·`*.key`·`*.pem`), 서비스계정 JSON(`serviceAccountKey.json`·`firebase-adminsdk.json`), CI 설정(`.github/`·`.gitlab-ci.yml`), 셸·도구 설정(`.bashrc`·`.npmrc`·`.s3cfg`·`.mcp.json`·`.claude.json`), `rclone.conf`
 - **미들웨어 맨 앞**(`prepend`)에 둔다 — 차단된 IP 는 리다이렉트·세션 비용도 쓰지 않는다.
 - **영구 차단하지 않는다.** 기본 24시간(`SECURITY_PROBE_BLOCK_HOURS`). 스캐너는 IP 를 갈아타므로 영구 목록은 커지기만 하고, 통신사 NAT 처럼 공유 IP 를 잘못 잡았을 때 피해도 시간으로 제한된다. 만료분은 매일 05:20 `--prune` 으로 정리.
 - 차단 목록은 캐시에 **문자열 배열로만** 담는다(60초) — 운영 database 캐시에 Eloquent 객체를 넣으면 깨진다.
