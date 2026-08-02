@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\BlockedIp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -62,7 +63,7 @@ class ProbeIpBlockTest extends TestCase
         ]);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('관측된_탐침_경로')]
+    #[DataProvider('관측된_탐침_경로')]
     public function test_관측된_탐침_경로는_모두_차단된다(string $path): void
     {
         // 경로마다 다른 IP 로 — 각 경로가 독립적으로 차단을 유발하는지 본다
