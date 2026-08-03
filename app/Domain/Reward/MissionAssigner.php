@@ -19,12 +19,23 @@ class MissionAssigner
      *
      * @return array<string, mixed>|null 스냅샷 행(MissionSnapshot::liveRows 형태)
      */
-    public function pick(int $rewardUserId, string $userKeyHash, string $day, int $slotNo): ?array
+    public function pick(int $rewardUserId, string $userKeyHash, string $day, int $slotNo, ?int $mediaId = null): ?array
     {
         $rows = collect(app(MissionSnapshot::class)->cachedList($day, $slotNo))
             ->filter(fn (array $m) => (int) $m['used']
                 < min(SlotCap::at((int) $m['daily_quota'], $slotNo), (int) $m['daily_quota']));
 
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        // 매체 배분(§2-1) — 그 매체 몫을 다 쓴 미션은 주지 않는다(규칙이 없으면 제한 없음)
+        if ($mediaId) {
+            $remaining = MediaQuota::remainingFor($mediaId, $rows->values()->all(), $day);
+            if ($remaining !== []) {
+                $rows = $rows->filter(fn (array $m) => ($remaining[(int) $m['id']] ?? null) !== 0);
+            }
+        }
         if ($rows->isEmpty()) {
             return null;
         }

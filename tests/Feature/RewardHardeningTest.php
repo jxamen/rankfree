@@ -51,6 +51,8 @@ class RewardHardeningTest extends TestCase
             'daily_quota' => 50, 'total_quota' => 350, 'unit_revenue' => 375, 'payout_point' => 10,
             'per_user_limit' => 7, 'per_user_daily_limit' => 1,
             'title' => '하드닝 미션', 'description' => '설명', 'tags' => self::TAGS,
+            // 상품을 특정할 수 없는 미션은 노출되지 않는다(MissionSnapshot 노출 게이트)
+            'shop_name' => '하드닝몰', 'product_title' => '하드닝 상품', 'product_price' => 12000, 'keyword' => '하드닝키워드',
             'landing_url' => 'https://s.example/h1',
         ]);
         DB::table('reward_mission_daily_counters')->insert([

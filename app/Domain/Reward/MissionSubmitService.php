@@ -104,12 +104,13 @@ class MissionSubmitService
 
         // ── C. 확정 트랜잭션 (C18 — ③→④ 순서 불변 · 내부에서 외부 호출 금지) ──────────────
         $slotCap = SlotCap::at((int) $mission->daily_quota, $slotNo);
+        $mediaCap = MediaQuota::capFor($mission, MediaQuota::rulesFor($media->id));
         $jitter = (int) $media->setting('cooldown_jitter_minutes');
         $cooldownUntil = $now->copy()->addMinutes((int) $media->setting('cooldown_minutes') + ($jitter > 0 ? random_int(-$jitter, $jitter) : 0));
         $dayNo = (int) $planting->completed_days + 1;
 
         try {
-            $gate = DB::transaction(function () use ($media, $user, $mission, $planting, $day, $now, $slotNo, $slotCap, $dailyLimit, $pointCap, $payout, $cooldownUntil, $dayNo, $ip, $ipHash, $ipLimit) {
+            $gate = DB::transaction(function () use ($media, $user, $mission, $planting, $day, $now, $slotNo, $slotCap, $mediaCap, $dailyLimit, $pointCap, $payout, $cooldownUntil, $dayNo, $ip, $ipHash, $ipLimit) {
                 // ① 사용자 원자 UPDATE — 일 상한·쿨다운·포인트 상한·시도·IP 를 한 문장에 (design-01 §2-1)
                 $affected = DB::update(
                     "UPDATE reward_users SET
@@ -163,6 +164,11 @@ class MissionSubmitService
                 // ③-b 식별자(IP) 한도 원자 소비 — 같은 IP 뒤 여러 사용자가 동시에 통과하는 것을 여기서 막는다
                 if ($ipHash && ! IdentityGate::consume($media->id, IdentityGate::TYPE_IP, $ipHash, $day, $ipLimit)) {
                     throw new GateRejected('ip_limit', '잠시 후 다시 시도해 주세요.');
+                }
+
+                // ③-c 매체 배분 상한(§2-1) — 이 매체가 이 미션을 하루 몇 건까지 가져갈지. 규칙 없으면 무제한
+                if (! MediaQuota::consume($mission->id, $media->id, $day, $mediaCap)) {
+                    throw new GateRejected('media_cap', '방금 마감됐어요. 다른 미션을 해보세요.');
                 }
 
                 // ④ 미션 일 한도 — C8 2단 UPDATE. 구간 상한 초과는 통과(청구 가능), 일 한도 소진만 거절

@@ -61,14 +61,15 @@ return [
         'shopping_tag' => [
             'guide' => [
                 "'참여하기'를 누르면 네이버에서 「{keyword}」 검색 결과가 열려요.",
-                '[광고] 표시가 없는 {shop_name}의 「{product_title}」 상품을 찾아 눌러 주세요.',
+                '[광고] 표시가 없는 {shop_name}의 「{product_title}」({price}원) 상품을 찾아 눌러 주세요.',
                 '상품 페이지에서 [상세정보 펼쳐보기]를 누르고 맨 아래까지 내리면 태그가 있어요.',
                 '앞에서부터 세어 {tagIndex}번째 태그를 입력해 주세요. # 기호는 빼고 글자만 적으면 돼요.',
             ],
             'question' => '{tagIndex}번째 태그를 입력해 주세요',
             'placeholder' => '{tagIndex}번째 태그 입력',
             'notice' => '[광고] 가 붙은 상품은 참여할 수 없어요. 아래 정보와 같은 상품을 찾아 주세요.',
-            'description' => '{keyword} 검색에서 {shop_name} 상품을 찾아 태그를 확인하면 {reward_item} {reward_count}개를 받아요.',
+            // 설명만 봐도 어떤 상품인지 알 수 있어야 한다 — 상점명·상품명·판매가를 함께 적는다
+            'description' => '네이버에서 「{keyword}」 검색 → {shop_name}의 「{product_title}」({price}원)을 찾아 태그를 확인하면 {reward_item} {reward_count}개를 받아요.',
         ],
         // 태그가 없는 미션(고정 정답형) 폴백
         'fallback' => [

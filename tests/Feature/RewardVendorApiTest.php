@@ -52,6 +52,7 @@ class RewardVendorApiTest extends TestCase
             'daily_quota' => 5, 'total_quota' => 35, 'unit_revenue' => 375, 'payout_point' => 10,
             'per_user_limit' => 7, 'per_user_daily_limit' => 1,
             'title' => '벤더 미션', 'description' => '설명', 'tags' => self::TAGS,
+            'shop_name' => '벤더몰', 'product_title' => '벤더 상품', 'product_price' => 22000, 'keyword' => '벤더키워드',
             'landing_url' => 'https://s.example/v1',
         ]);
         DB::table('reward_mission_daily_counters')->insert([

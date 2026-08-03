@@ -96,11 +96,12 @@ class VendorSubmitService
         }
 
         $slotCap = SlotCap::at((int) $mission->daily_quota, $slotNo);
+        $mediaCap = MediaQuota::capFor($mission, MediaQuota::rulesFor($media->id));   // 매체 배분 상한(§2-1)
         $dailyLimit = (int) $media->setting('daily_mission_limit');         // 식별자 일 한도(§8 표 기본 3)
         $cooldownMin = (int) data_get($media->settings, 'cooldown_minutes', 0);   // 벤더는 명시 설정시에만 쿨다운
 
         try {
-            $result = DB::transaction(function () use ($media, $user, $mission, $day, $now, $slotNo, $slotCap, $dailyLimit, $cooldownMin, $idemKey, $ip, $ipHash, $ipLimit) {
+            $result = DB::transaction(function () use ($media, $user, $mission, $day, $now, $slotNo, $slotCap, $mediaCap, $dailyLimit, $cooldownMin, $idemKey, $ip, $ipHash, $ipLimit) {
                 // ① 참여자 원자 UPDATE — 일 한도(+옵션 쿨다운). 포인트 상한·밭은 벤더 경로에 없다
                 $affected = DB::update(
                     "UPDATE reward_users SET
@@ -125,6 +126,11 @@ class VendorSubmitService
                 // ②-b 식별자(IP) 한도 원자 소비 — participant_hash 를 갈아치워도 이 축은 남는다(§8)
                 if ($ipHash && ! IdentityGate::consume($media->id, IdentityGate::TYPE_IP, $ipHash, $day, $ipLimit)) {
                     throw new GateRejected('ip_limit', 'not_eligible');
+                }
+
+                // ②-c 매체 배분 상한(§2-1) — 이 벤더에 배정된 몫을 넘기지 않는다
+                if (! MediaQuota::consume($mission->id, $media->id, $day, $mediaCap)) {
+                    throw new GateRejected('media_cap', 'quota_full');
                 }
 
                 // 벤더는 구간 상한을 넘기지 않는다(§7) — 하루 물량 몰아치기 차단

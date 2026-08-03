@@ -38,6 +38,7 @@ class RewardExposureCacheTest extends TestCase
             'starts_on' => self::DAY, 'ends_on' => Carbon::parse(self::DAY)->addDays(6)->toDateString(),
             'daily_quota' => 50, 'total_quota' => 350, 'unit_revenue' => 375, 'payout_point' => 10,
             'title' => '캐시 미션', 'description' => '설명', 'tags' => ['cachetag-x'],
+            'shop_name' => '캐시몰', 'product_title' => '캐시 상품', 'product_price' => 9900, 'keyword' => '캐시키워드',
             'landing_url' => 'https://s.example/c1',
         ]);
         DB::table('reward_mission_daily_counters')->insert([

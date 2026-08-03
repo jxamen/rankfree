@@ -104,6 +104,9 @@ class MissionSnapshot
             ->leftJoin('reward_mission_daily_counters as c', fn ($j) => $j
                 ->on('c.mission_id', '=', 'reward_missions.id')->where('c.stat_date', $day))
             ->where('reward_missions.status', 'active')
+            // 상품을 특정할 수 없으면 참여가 불가능하다 — 상품명·검색어가 빠진 안내로는 상품을 찾을 수 없다.
+            ->whereNotNull('reward_missions.product_title')->where('reward_missions.product_title', '<>', '')
+            ->whereNotNull('reward_missions.keyword')->where('reward_missions.keyword', '<>', '')
             ->whereDate('starts_on', '<=', $day)->whereDate('ends_on', '>=', $day)
             ->whereRaw('COALESCE(c.used, 0) < COALESCE(c.daily_quota, reward_missions.daily_quota)')
             ->orderBy('sort_order')->orderBy('reward_missions.id')
