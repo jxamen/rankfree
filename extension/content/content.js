@@ -219,7 +219,9 @@
         break; // 더 못 받으면 지금까지로
       }
       if (all.length <= before) break; // 새 상품 없음(중복/끝) → 중단
-      await new Promise((r) => setTimeout(r, 400));
+      // 시장분석(≤5p)은 400ms 로 검증됐지만 순위체크는 13p 까지 간다 —
+      // 깊어질수록 간격을 벌려 연속 호출로 차단당하지 않게 한다(최대 1.2초).
+      await new Promise((r) => setTimeout(r, Math.min(1200, 400 + Math.max(0, i - 5) * 120)));
     }
 
     all.forEach((p, idx) => { p.rank = p.rank || idx + 1; });

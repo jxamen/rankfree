@@ -111,6 +111,22 @@ class ExtShopRankController extends Controller
             (int) ($data['total'] ?? 0),
         );
 
+        /*
+         * 🔴 부분 수집을 '미노출'로 기록하면 안 된다.
+         * 13페이지를 요청했는데 3페이지만 받고 끊긴 경우, 700위에 있는 상품도 못 찾는다.
+         * 그걸 rank=0("1000위 밖")으로 저장하면 순위 그래프가 거짓이 된다.
+         * 못 찾았고 + 요청한 깊이만큼 못 훑었으면 → 확정하지 않고 다시 큐에 둔다.
+         */
+        $wanted = max(80, (int) $job->pages * 80);
+        if (! $res['found'] && $res['scanned'] < $wanted * 0.9) {
+            $job->failAttempt('partial:'.$res['scanned'].'/'.$wanted, 60);
+
+            return response()->json(['ok' => true, 'data' => [
+                'job_id' => (int) $job->id,
+                'partial' => true, 'scanned' => $res['scanned'], 'wanted' => $wanted,
+            ]]);
+        }
+
         $job->complete($res);
         $this->slots->applyJobResult($job);
 

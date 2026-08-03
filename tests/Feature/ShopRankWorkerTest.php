@@ -199,6 +199,60 @@ class ShopRankWorkerTest extends TestCase
         $this->assertDatabaseHas('shop_rank_records', ['slot_id' => $slot->id, 'rank' => 2, 'list_total' => 4321]);
     }
 
+    /**
+     * 🔴 부분 수집을 '미노출'로 확정하면 안 된다.
+     * 13페이지를 요청했는데 3페이지만 받고 끊기면 700위 상품도 못 찾는다 —
+     * 그걸 rank=0 으로 저장하면 순위 그래프가 거짓이 된다.
+     */
+    public function test_부분_수집은_미노출로_확정하지_않는다(): void
+    {
+        $user = User::factory()->create();
+        $slot = ShopRankSlot::create([
+            'user_id' => $user->id, 'keyword' => 'kw', 'target_type' => 'product',
+            'product_id' => '999999', 'is_active' => true,   // 이 목록에 없는 상품
+        ]);
+        $job = app(ShopRankSlotService::class)->enqueue($slot);   // 13페이지(1040개) 요청
+        ShopRankJob::claim('w1', 1);
+
+        // 워커가 3페이지(240개)만 보내고 끊겼다
+        $partial = [];
+        for ($i = 1; $i <= 240; $i++) {
+            $partial[] = ['isAd' => false, 'link' => "https://smartstore.naver.com/s/products/{$i}"];
+        }
+
+        $this->postJson("/api/ext/shop-rank/{$job->id}/result", ['worker_id' => 'w1', 'products' => $partial])
+            ->assertOk()
+            ->assertJsonPath('data.partial', true);
+
+        $this->assertSame('pending', $job->fresh()->status, '부분 수집은 재시도해야 한다');
+        $this->assertDatabaseCount('shop_rank_records', 0);   // 미노출로 기록하면 안 된다
+        $this->assertNull($slot->fresh()->last_rank);
+    }
+
+    /** 요청한 깊이만큼 훑고도 못 찾았으면 그건 진짜 미노출이다 — 정상 확정. */
+    public function test_끝까지_훑고_못_찾으면_미노출로_확정한다(): void
+    {
+        $user = User::factory()->create();
+        $slot = ShopRankSlot::create([
+            'user_id' => $user->id, 'keyword' => 'kw', 'target_type' => 'product',
+            'product_id' => '999999', 'is_active' => true,
+        ]);
+        $job = app(ShopRankSlotService::class)->enqueue($slot);
+        ShopRankJob::claim('w1', 1);
+
+        $full = [];
+        for ($i = 1; $i <= max(80, $job->pages * 80); $i++) {
+            $full[] = ['isAd' => false, 'link' => "https://smartstore.naver.com/s/products/{$i}"];
+        }
+
+        $this->postJson("/api/ext/shop-rank/{$job->id}/result", ['worker_id' => 'w1', 'products' => $full])
+            ->assertOk()
+            ->assertJsonPath('data.found', false);
+
+        $this->assertSame('done', $job->fresh()->status);
+        $this->assertDatabaseHas('shop_rank_records', ['slot_id' => $slot->id, 'rank' => 0]);
+    }
+
     /** 리스가 끊겨 다른 워커가 가져간 뒤 늦게 도착한 결과로 덮어쓰지 않는다. */
     public function test_소유자가_아닌_워커의_제출은_거부한다(): void
     {
