@@ -75,6 +75,40 @@ class ShopRankWorkerTest extends TestCase
         $this->assertSame(2, $res['rank']);
     }
 
+    /**
+     * 🔴 link 만 보고 매칭하면 놓친다 — 확장은 link 를 mallProductId 로 조립하는데
+     * 슬롯에 저장된 건 URL 에서 뽑은 채널상품번호라 값이 다를 수 있다(실측: 1페이지 상품 미매칭).
+     */
+    public function test_링크가_달라도_식별자로_매칭한다(): void
+    {
+        $products = [
+            ['isAd' => false, 'link' => 'https://smartstore.naver.com/a/products/111', 'mallName' => '가몰'],
+            // link 의 번호(999)와 채널상품번호(52204544619)가 다른 실제 상황
+            ['isAd' => false, 'link' => 'https://smartstore.naver.com/b/products/999',
+                'channelProductId' => '52204544619', 'mallName' => '나몰', 'title' => '타깃'],
+        ];
+
+        $res = (new ShopRankFromProducts)->rank($products, [
+            'type' => 'product', 'product_id' => '52204544619', 'id_kind' => 'channel', 'mall_name' => '',
+        ]);
+
+        $this->assertTrue($res['found'], '링크가 달라도 채널상품번호로 찾아야 한다');
+        $this->assertSame(2, $res['rank']);
+        $this->assertSame('타깃', $res['title']);
+    }
+
+    /** 조기 중단 힌트를 함께 내려준다 — 3위 상품 때문에 13페이지를 긁으면 차단당한다. */
+    public function test_할당에_조기중단_힌트를_함께_준다(): void
+    {
+        ShopRankJob::create([
+            'keyword' => 'kw', 'target_type' => 'product', 'product_id' => '52204544619', 'source' => 'guest',
+        ]);
+
+        $this->postJson('/api/ext/shop-rank/claim', ['worker_id' => 'w1', 'limit' => 1])
+            ->assertOk()
+            ->assertJsonPath('data.items.0.match.product_id', '52204544619');
+    }
+
     /** 깊은 순위도 그대로 센다 — 800위대 상품이 '미노출'이 되면 안 된다. */
     public function test_깊은_순위도_정확히_센다(): void
     {
@@ -200,11 +234,10 @@ class ShopRankWorkerTest extends TestCase
     }
 
     /**
-     * 🔴 부분 수집을 '미노출'로 확정하면 안 된다.
-     * 13페이지를 요청했는데 3페이지만 받고 끊기면 700위 상품도 못 찾는다 —
-     * 그걸 rank=0 으로 저장하면 순위 그래프가 거짓이 된다.
+     * 🔴 한 페이지 분량도 못 받았으면 '미노출'로 확정하지 않는다.
+     * 수집이 시작하자마자 막힌 것이라, 그걸 rank=0 으로 저장하면 순위 그래프가 거짓이 된다.
      */
-    public function test_부분_수집은_미노출로_확정하지_않는다(): void
+    public function test_한_페이지도_못_받으면_미노출로_확정하지_않는다(): void
     {
         $user = User::factory()->create();
         $slot = ShopRankSlot::create([
@@ -214,9 +247,9 @@ class ShopRankWorkerTest extends TestCase
         $job = app(ShopRankSlotService::class)->enqueue($slot);   // 13페이지(1040개) 요청
         ShopRankJob::claim('w1', 1);
 
-        // 워커가 3페이지(240개)만 보내고 끊겼다
+        // 수집이 시작하자마자 막혀 12개만 왔다(한 페이지 분량 미만)
         $partial = [];
-        for ($i = 1; $i <= 240; $i++) {
+        for ($i = 1; $i <= 12; $i++) {
             $partial[] = ['isAd' => false, 'link' => "https://smartstore.naver.com/s/products/{$i}"];
         }
 

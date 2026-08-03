@@ -90,14 +90,29 @@ class ShopRankFromProducts
             return false;
         }
 
-        // 스마트스토어/브랜드 — 상품 URL 의 channelProductId
+        if ($pid === '') {
+            return false;
+        }
+
+        // 스마트스토어/브랜드 — 상품 URL 의 상품번호
         $link = $this->str($p['link'] ?? '');
         if ($link !== '' && preg_match('#/products/(\d+)#', $link, $m) && $m[1] === $pid) {
             return true;
         }
 
+        /*
+         * 링크만 믿으면 놓친다 — 확장은 link 를 mallProductId 로 조립하는데
+         * 슬롯에 저장된 건 URL 에서 뽑은 채널상품번호라 값이 다를 수 있다(실측: 1페이지 상품 미매칭).
+         * 수집이 담아 주는 식별자를 모두 본다.
+         */
+        foreach (['channelProductId', 'mallProductId', 'nvMid', 'id'] as $k) {
+            if ((string) ($p[$k] ?? '') === $pid) {
+                return true;
+            }
+        }
+
         // 링크 형태가 바뀌어도 id 가 그대로 박혀 있으면 인정(느슨한 폴백)
-        return $pid !== '' && $link !== '' && str_contains($link, $pid);
+        return $link !== '' && str_contains($link, $pid);
     }
 
     private function str(mixed $v): string

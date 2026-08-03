@@ -82,6 +82,15 @@ class ExtShopRankController extends Controller
                 // count = 몇 위까지 뒤질지. 순위추적은 구 shop.json 과 같은 1000위가 기본이다
                 // (시장분석의 80~400 과 목적이 다르다 — 여기서 얕게 끊으면 순위가 '미노출'로 잘못 나온다).
                 'count' => max(80, (int) $j->pages * 80),
+                /*
+                 * 🔴 조기 중단 힌트 — 대상을 찾으면 그 자리에서 페이지 수집을 멈추라는 뜻이다.
+                 * 없으면 3위에 있는 상품도 13페이지를 다 긁는다(= 네이버 차단을 자초한다).
+                 * 판정(광고 제외 오가닉 순위)은 여전히 서버가 한다 — 이건 "그만 긁어도 된다"는 신호일 뿐.
+                 */
+                'match' => [
+                    'product_id' => (string) $j->product_id,
+                    'mall_name' => (string) $j->mall_name,
+                ],
             ], $jobs),
             'lease_seconds' => ShopRankJob::LEASE_SECONDS,
         ]]);
@@ -112,13 +121,17 @@ class ExtShopRankController extends Controller
         );
 
         /*
-         * 🔴 부분 수집을 '미노출'로 기록하면 안 된다.
-         * 13페이지를 요청했는데 3페이지만 받고 끊긴 경우, 700위에 있는 상품도 못 찾는다.
-         * 그걸 rank=0("1000위 밖")으로 저장하면 순위 그래프가 거짓이 된다.
-         * 못 찾았고 + 요청한 깊이만큼 못 훑었으면 → 확정하지 않고 다시 큐에 둔다.
+         * 🔴 "한 페이지도 제대로 못 받았다" 만 부족으로 본다.
+         *
+         * 부분 수집을 그대로 '미노출'로 기록하면 순위 그래프가 거짓이 된다. 하지만 기준을 높게 잡으면
+         * 반대 사고가 난다 — 실측(2026-08-03)에서 1페이지가 80 이 아니라 **46개**로 왔고,
+         * 목표(1040)의 90%% 를 요구했더니 정상 수집까지 전부 '부족 → 재시도' 가 되어
+         * 큐 전체를 반복해 훑다가 네이버에 IP 가 막혔다.
+         * → 한 페이지 분량은 받았는데 못 찾았으면, 그 범위에서는 실제로 미노출인 것으로 확정한다.
          */
-        $wanted = max(80, (int) $job->pages * 80);
-        if (! $res['found'] && $res['scanned'] < $wanted * 0.9) {
+        $perPage = 40;
+        $wanted = max($perPage, (int) $job->pages * $perPage);
+        if (! $res['found'] && $res['scanned'] < $perPage) {
             $job->failAttempt('partial:'.$res['scanned'].'/'.$wanted, 60);
 
             return response()->json(['ok' => true, 'data' => [

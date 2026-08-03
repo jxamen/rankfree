@@ -186,7 +186,29 @@
     } catch (e) { /* noop */ }
   }
 
-  async function collectFromDocAndHtml(query, count) {
+  /**
+   * 수집한 상품이 찾는 대상인가(조기 중단용 느슨한 판정).
+   * 정확한 순위 판정은 서버가 한다 — 여기서는 "더 안 긁어도 된다"만 판단한다.
+   */
+  function looksLikeTarget(p, match) {
+    if (!match) return false;
+    const pid = String(match.product_id || '').replace(/\D/g, '');
+    if (pid) {
+      const link = String(p.link || '');
+      if (link.indexOf(pid) !== -1) return true;
+      if (String(p.id || '') === pid || String(p.nvMid || '') === pid) return true;
+      if (String(p.mallProductId || '') === pid || String(p.channelProductId || '') === pid) return true;
+      return false;
+    }
+    const mall = String(match.mall_name || '').replace(/\s/g, '').toLowerCase();
+    return !!mall && String(p.mallName || '').replace(/\s/g, '').toLowerCase().indexOf(mall) !== -1;
+  }
+
+  // 이번 수집에서 네이버가 418/429 로 거부했는가 — runCollect 가 이걸 보고 '차단' 으로 보고한다
+  let blockedByNaver = false;
+
+  async function collectFromDocAndHtml(query, count, match) {
+    blockedByNaver = false;
     const seen = new Set();
     const all = [];
     let total = 0;
@@ -217,26 +239,53 @@
       }
     }
 
-    // 2) 부족하면 HTML 페이지를 추가로 GET (스크롤·API 아님)
+    // 🔴 토큰 없이 요청하면 418 이다. 페이지가 자체 검색을 호출할 때 캡처되므로 잠깐 기다린다
+    // (패널 경로 collectProducts 와 동일 — 백그라운드 탭에는 이게 빠져 있어 418 을 맞았다).
+    if (!state.ncaptchaToken) {
+      const got = await waitForToken(6000);
+      reportPage(0, 0, organicN(), count, got ? 'nCaptcha 토큰 확보' : '⚠ 토큰 없음(418 위험)');
+    }
+
+    // 2) 부족하면 페이지를 추가로 GET (스크롤 아님)
     // 페이지당 80개라 필요한 만큼만 돈다. 시장분석은 80~400(≤5p)이지만 순위체크는
     // 1000위까지 봐야 해서(구 shop.json 과 같은 범위) 상한을 요청 개수에서 계산한다.
     const startPage = havePage1 ? 2 : 1;
     const maxPage = Math.max(5, Math.ceil(count / 80) + 1);
-    for (let i = startPage; organicN() < count && i <= maxPage; i++) {
+    // 찾는 상품이 이미 나왔으면 더 긁지 않는다 — 3위 상품 때문에 13페이지를 긁으면 차단당한다
+    const found = () => all.some((p) => looksLikeTarget(p, match));
+    if (found()) reportPage(1, 0, organicN(), count, '대상 발견 — 추가 수집 생략');
+
+    for (let i = startPage; organicN() < count && i <= maxPage && ! found(); i++) {
       state.progress = '상품 수집 중… (' + organicN() + '/' + count + ')';
       render();
       const before = all.length;
+      // 검증된 collectProducts 와 같은 순서: 토큰 붙은 API 우선 → 실패 시 HTML 폴백.
+      // HTML 만 쓰면 nCaptcha 토큰이 안 실려 418 을 맞는다(실측 2026-08-03).
+      let h = null;
+      let why = '';
       try {
-        const h = await fetchHtmlPage(query, i);
-        if (!h.products.length) { reportPage(i, 0, organicN(), count, '빈 페이지(끝)'); break; }
-        add(h);
+        h = await fetchApiPage(query, i);
       } catch (e) {
-        // 왜 멈췄는지 알려야 한다 — 조용히 break 하면 "28개만 왔다"만 남고 원인을 못 찾는다
-        reportPage(i, 0, organicN(), count, String((e && e.message) || e));
+        why = 'API ' + String((e && e.message) || e);
+        try {
+          h = await fetchHtmlPage(query, i);
+        } catch (e2) {
+          why += ' / HTML ' + String((e2 && e2.message) || e2);
+          h = null;
+        }
+      }
+      if (!h || !h.products.length) {
+        reportPage(i, 0, organicN(), count, why || '빈 페이지(끝)');
+        // 🔴 418 = nCaptcha 토큰 거부. 계속 두들기면 IP 가 통째로 막힌다(실측: 사용자가 캡차를 대량으로 풀어야 했다).
+        // 다음 작업으로 넘어가지 말고 이 수집을 '차단'으로 끝내 워커 전체를 쉬게 한다.
+        if (why.indexOf('418') !== -1 || why.indexOf('429') !== -1) {
+          blockedByNaver = true;
+        }
         break;
       }
+      add(h);
       if (all.length <= before) { reportPage(i, 0, organicN(), count, '새 상품 없음(중복/끝)'); break; }
-      reportPage(i, all.length - before, organicN(), count, '');
+      reportPage(i, all.length - before, organicN(), count, found() ? '대상 발견 — 여기서 중단' : '');
       // 시장분석(≤5p)은 400ms 로 검증됐지만 순위체크는 13p 까지 간다 —
       // 깊어질수록 간격을 벌려 연속 호출로 차단당하지 않게 한다(최대 1.2초).
       await new Promise((r) => setTimeout(r, Math.min(1200, 400 + Math.max(0, i - 5) * 120)));
@@ -318,8 +367,9 @@
       return page; // null 가능
     }
 
-    // 1) 로딩된 문서 JSON + 부족분 HTML 페이지 GET (요청 최소·화면 캡처/스크롤 없음)
-    page = await collectFromDocAndHtml(query, count);
+    // 1) 로딩된 문서 JSON + 부족분 페이지 GET (요청 최소·화면 캡처/스크롤 없음)
+    // 시장분석은 목록 전체가 필요하므로 조기 중단 힌트를 주지 않는다(순위체크 전용).
+    page = await collectFromDocAndHtml(query, count, null);
     if (page) setSpCache(query, page);
     // 2) 12h 캐시
     if (!page && !force) {
@@ -465,6 +515,9 @@
     return {
       id: item.id || item.nvMid || null,
       nvMid: item.nvMid || item.id || null, // DOM 공식배지 매핑용
+      // 순위 매칭용 원본 식별자 — link 는 mallProductId 로 조립돼 채널상품번호와 다를 수 있다
+      mallProductId: item.mallProductId || null,
+      channelProductId: item.channelProductId || (item.channel && item.channel.channelProductId) || null,
       official: 0, // 공식 판매처 — 리스트 DOM(ico_public)에서 나중에 태깅
       rank: num(item.rank) || fallbackRank, // 네이버 원본 순위(정렬용)
       title,
@@ -3511,7 +3564,11 @@
 
   /** 백그라운드 수집 모드(#rfcollect=COUNT) — 다른 탭(통합검색 등)이 이 쇼핑 페이지를 열어 수집을 위임. 패널 없이 수집만 하고 결과 회신. */
   async function runCollect() {
-    const count = num((location.hash.split('=')[1]) || '') || 80;
+    const hash = String(location.hash || '');
+    const count = num((hash.split('=')[1] || '').split('&')[0]) || 80;
+    // 조기 중단 힌트(#rfcollect=N&pid=…&mall=…) — 대상을 찾으면 페이지 수집을 멈춘다
+    const hp = new URLSearchParams(hash.replace(/^#rfcollect=[^&]*&?/, ''));
+    const match = { product_id: hp.get('pid') || '', mall_name: hp.get('mall') || '' };
     const query = getQueryFromUrl();
     const out = { ok: false, products: [], total: 0, relatedTags: [], message: '' };
 
@@ -3520,10 +3577,10 @@
     try { chrome.runtime.sendMessage({ type: '__shoppingCollectStarted' }); } catch (e) { /* noop */ }
     try {
       if (!query) throw new Error('검색어 없음');
-      let page = await collectFromDocAndHtml(query, count);
+      let page = await collectFromDocAndHtml(query, count, match);
       if (!page || !page.products.length) {
         await new Promise((r) => setTimeout(r, 900)); // SSR 지연 대비 1회 재시도
-        page = await collectFromDocAndHtml(query, count);
+        page = await collectFromDocAndHtml(query, count, match);
       }
       if (page && page.products && page.products.length) {
         out.ok = true;
@@ -3531,7 +3588,8 @@
         out.total = page.total || 0;
         out.relatedTags = page.relatedTags || [];
       } else {
-        out.message = '상품 데이터를 찾지 못했습니다.';
+        out.message = blockedByNaver ? '네이버가 요청을 거부했습니다(418/429).' : '상품 데이터를 찾지 못했습니다.';
+        out.blocked = blockedByNaver;
       }
     } catch (e) {
       out.message = String((e && e.message) || e);
@@ -3540,6 +3598,7 @@
       chrome.runtime.sendMessage({
         type: '__shoppingCollected',
         ok: out.ok, products: out.products, total: out.total, relatedTags: out.relatedTags, message: out.message,
+        blocked: !!out.blocked,
       });
     } catch (e) { /* noop */ }
   }

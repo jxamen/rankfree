@@ -82,11 +82,15 @@ async function drainShopRankQueue(why) {
   const workerId = await getWorkerId();
   const startedAt = Date.now();
   try {
-    while (Date.now() - startedAt < 150000) {                 // 알람 주기 안에서만 — 다음 알람이 이어받는다
+    // 알람 주기(1분) 직전까지만 돈다 — 끝나는 즉시 다음 알람이 이어받아 '듣는 사람이 없는' 구간이 없다.
+    // 한 사이클에 처리할 작업 수 상한 — 큐가 20건 쌓였다고 연속으로 다 훑으면 네이버가 IP 를 막는다(실측).
+    let doneThisCycle = 0;
+
+    while (Date.now() - startedAt < 55000 && doneThisCycle < 3) {
       // wait: 서버가 줄 게 없으면 잠깐 붙잡고 기다린다(롱폴링) — 알람(1분)만 믿으면 픽업이 늦다.
       // 대기 중인 fetch 가 서비스워커도 깨워 두므로, 확장 화면을 열어두지 않아도 계속 돈다.
       const q = await apiFetch('/api/ext/shop-rank/claim', {
-        method: 'POST', body: { worker_id: workerId, limit: 2, wait: 20 }, apiBase,
+        method: 'POST', body: { worker_id: workerId, limit: 2, wait: 25 }, apiBase,
       });
       if (q.status === 403) {                                 // 권한 없음 — 오래 쉰다
         await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 6 * 3600 * 1000 });
@@ -99,7 +103,9 @@ async function drainShopRankQueue(why) {
         return;                                               // 일시 오류 — 다음 알람에 재시도
       }
       const items = q.json.data.items || [];
-      if (!items.length) return log('줄 작업 없음');
+      // 빈 큐라고 빠져나오면 다음 알람(1분)까지 아무도 안 듣는 구간이 생긴다 —
+      // 사용자가 그 사이 순위체크를 누르면 그만큼 늦는다. 예산 안에서는 계속 대기한다(롱폴링).
+      if (!items.length) continue;
       log('작업 ' + items.length + '건 수령:', items.map((i) => i.keyword).join(', '));
 
       for (const it of items) {
@@ -107,7 +113,7 @@ async function drainShopRankQueue(why) {
 
         let res = null;
         try {
-          res = await handlers.collectShopping({ keyword: it.keyword, count: it.count || 80 });
+          res = await handlers.collectShopping({ keyword: it.keyword, count: it.count || 80, match: it.match });
         } catch (e) {
           res = { ok: false, message: String((e && e.message) || e) };
         }
@@ -120,8 +126,9 @@ async function drainShopRankQueue(why) {
             body: { worker_id: workerId, error: captcha ? 'captcha' : ((res && res.message) || 'empty').slice(0, 60) },
           });
           if (captcha) {
-            // 이 PC 는 잠시 못 쓴다 — 작업은 서버가 다시 큐에 둬서 다른 워커가 집어간다
-            await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 30 * 60 * 1000 });
+            // 이 PC 는 한동안 못 쓴다 — 작업은 서버가 다시 큐에 둬서 다른 워커가 집어간다.
+            // 보안문자를 한 번 맞으면 곧바로 재시도할수록 더 깊이 막힌다(실측: 사용자가 캡차를 대량으로 풀어야 했다).
+            await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 2 * 3600 * 1000 });
             try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
             return;
           }
@@ -129,6 +136,21 @@ async function drainShopRankQueue(why) {
         }
 
         log('「' + it.keyword + '」 수집 완료 — ' + res.products.length + '개 (목표 ' + it.count + ')');
+
+        /*
+         * 🔴 상품을 좀 받았어도 도중에 418 을 맞았으면 그 자리에서 멈춘다.
+         * 안 그러면 "부족 → 다음 작업 → 또 418" 로 큐 전체를 훑으며 IP 가 통째로 막힌다(실측).
+         */
+        if (res.blocked) {
+          log('⛔ 네이버가 요청을 거부했습니다(418/429) — 수집을 중단하고 2시간 쉽니다');
+          await apiFetch('/api/ext/shop-rank/' + it.job_id + '/fail', {
+            method: 'POST', apiBase, body: { worker_id: workerId, error: 'blocked_418' },
+          });
+          await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 2 * 3600 * 1000 });
+          try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
+
+          return;
+        }
 
         const r = await apiFetch('/api/ext/shop-rank/' + it.job_id + '/result', {
           method: 'POST', apiBase,
@@ -146,7 +168,8 @@ async function drainShopRankQueue(why) {
           log('「' + it.keyword + '」 ' + it.count + '위 안에서 미노출');
         }
 
-        await new Promise((x) => setTimeout(x, 1200 + Math.random() * 900));   // 페이싱 — 연속 수집은 캡차를 부른다
+        doneThisCycle++;
+        await new Promise((x) => setTimeout(x, 3000 + Math.random() * 2000));   // 페이싱 — 연속 수집은 캡차를 부른다
       }
     }
   } catch (e) { /* noop */ } finally {
@@ -240,7 +263,7 @@ try {
     // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
     if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue().then(drainShopKeywordCheckQueue);
     // 쇼핑 순위체크 워커 — 위 큐와 별도 알람(각자 자기 플래그로 중복 방지)
-    if (a && a.name === SHOP_RANK_ALARM) drainShopRankQueue();
+    if (a && a.name === SHOP_RANK_ALARM) drainShopRankQueue('알람');
   });
   chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
   // 순위체크는 사람이 결과를 기다리는 경우가 있어 더 자주 본다(MV3 알람 최소 주기는 1분).
@@ -1507,7 +1530,7 @@ const handlers = {
     return { ok: true, saved: (json && json.data && json.data.saved) || products.length, total: col.total || 0 };
   },
 
-  async collectShopping({ keyword, count }) {
+  async collectShopping({ keyword, count, match }) {
     return new Promise((resolve) => {
       let tabId = null;
       let done = false;
@@ -1579,13 +1602,19 @@ const handlers = {
           return;
         }
         if (msg.type === '__shoppingCollected') {
-          finish({ ok: !!msg.ok, products: msg.products || [], total: msg.total || 0, relatedTags: msg.relatedTags || [], message: msg.message || '' });
+          finish({
+            ok: !!msg.ok, products: msg.products || [], total: msg.total || 0,
+            relatedTags: msg.relatedTags || [], message: msg.message || '',
+            blocked: !!msg.blocked,   // 418/429 — 워커가 이걸 보고 즉시 쉰다
+          });
         }
       }
       chrome.runtime.onMessage.addListener(onMsg);
       try { chrome.tabs.onUpdated.addListener(onUpd); } catch (e) { /* noop */ }
       try {
-        const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(String(keyword || '')) + '#rfcollect=' + (Number(count) || 80);
+        // 조기 중단 힌트(pid·mall)를 함께 넘긴다 — 대상을 찾으면 페이지 수집을 멈춰 차단을 피한다
+        const hint = match ? ('&pid=' + encodeURIComponent(match.product_id || '') + '&mall=' + encodeURIComponent(match.mall_name || '')) : '';
+        const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(String(keyword || '')) + '#rfcollect=' + (Number(count) || 80) + hint;
         chrome.tabs.create({ url, active: false }, (tab) => {
           if (chrome.runtime.lastError || !tab) { finish({ ok: false, message: 'tab_create_failed' }); return; }
           tabId = tab.id;
