@@ -1,125 +1,181 @@
 {
-  "manifest_version": 3,
-  "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-  "version": "0.3.19",
-  "description": "네이버 마케팅을 위한 무료 분석 도구 — 쇼핑·플레이스·키워드·블로그·상품 리뷰를 한 곳에서 분석. 사장님·마케터·셀러가 내 순위와 시장을 빠르게 파악하도록 돕습니다. rankfree.kr 무료 로그인.",
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "permissions": ["storage", "tabs", "alarms"],
-  "host_permissions": [
-    "https://rankfree.kr/*",
-    "https://*.rankfree.co.kr/*",
-    "http://127.0.0.1:8000/*",
-    "http://localhost:8000/*",
-    "https://search.shopping.naver.com/*",
-    "https://search.naver.com/*",
-    "https://m.search.naver.com/*",
-    "https://s.search.naver.com/*",
-    "https://smartstore.naver.com/*",
-    "https://brand.naver.com/*",
-    "https://shopping.naver.com/*",
-    "https://map.naver.com/*",
-    "https://pcmap.place.naver.com/*"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://search.shopping.naver.com/search/*"],
-      "js": ["content/injected.js"],
-      "world": "MAIN",
-      "run_at": "document_start"
+    "manifest_version": 3,
+    "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
+    "version": "0.3.22",
+    "description": "네이버 마케팅을 위한 무료 분석 도구 — 쇼핑·플레이스·키워드·블로그·상품 리뷰를 한 곳에서 분석. 사장님·마케터·셀러가 내 순위와 시장을 빠르게 파악하도록 돕습니다. rankfree.kr 무료 로그인.",
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
     },
-    {
-      "matches": ["https://search.shopping.naver.com/search/*"],
-      "js": ["content/content.js", "content/shop-seo.js"],
-      "css": ["content/panel.css", "content/seller-power.css", "content/shop-seo.css"],
-      "run_at": "document_idle"
+    "permissions": [
+        "storage",
+        "tabs",
+        "alarms"
+    ],
+    "host_permissions": [
+        "https://rankfree.kr/*",
+        "https://*.rankfree.co.kr/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*",
+        "https://search.shopping.naver.com/*",
+        "https://search.naver.com/*",
+        "https://m.search.naver.com/*",
+        "https://s.search.naver.com/*",
+        "https://smartstore.naver.com/*",
+        "https://brand.naver.com/*",
+        "https://shopping.naver.com/*",
+        "https://map.naver.com/*",
+        "https://pcmap.place.naver.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
     },
-    {
-      "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단). 로컬 개발 주소 포함",
-      "matches": [
-        "https://rankfree.kr/admin/*",
-        "https://*.rankfree.co.kr/admin/*",
-        "http://127.0.0.1:8000/admin/*",
-        "http://localhost:8000/admin/*"
-      ],
-      "js": ["content/admin-bridge.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "comment": "쇼핑 노출 키워드 ↔ 확장 브릿지 — 순위체크용 m.search HTML·상품정보를 브라우저에서 대신 가져온다(서버는 IP 한도). 2026-07-21 콘솔→관리자 이동(구 console 경로는 배포 전 prod 호환용 유지)",
-      "matches": [
-        "https://rankfree.kr/admin/shop-keyword*",
-        "https://*.rankfree.co.kr/admin/shop-keyword*",
-        "http://127.0.0.1:8000/admin/shop-keyword*",
-        "http://localhost:8000/admin/shop-keyword*",
-        "https://rankfree.kr/console/shop-keyword*",
-        "http://127.0.0.1:8000/console/shop-keyword*",
-        "http://localhost:8000/console/shop-keyword*"
-      ],
-      "js": ["content/console-bridge.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://shopping.naver.com/popup/seller-info/*"],
-      "js": ["content/seller-info-captcha-injected.js"],
-      "world": "MAIN",
-      "run_at": "document_start"
-    },
-    {
-      "matches": ["https://shopping.naver.com/popup/seller-info/*"],
-      "js": ["content/seller-info-captcha.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://search.naver.com/search.naver*"],
-      "js": ["content/content.js"],
-      "css": ["content/panel.css", "content/seller-power.css"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://map.naver.com/*"],
-      "js": ["content/content.js"],
-      "css": ["content/panel.css", "content/seller-power.css"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://smartstore.naver.com/*/products/*",
-        "https://brand.naver.com/*/products/*"
-      ],
-      "js": ["content/injected-store.js"],
-      "world": "MAIN",
-      "run_at": "document_start"
-    },
-    {
-      "matches": [
-        "https://smartstore.naver.com/*/products/*",
-        "https://brand.naver.com/*/products/*"
-      ],
-      "js": ["content/product.js"],
-      "css": ["content/panel.css", "content/seller-power.css"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://pcmap.place.naver.com/*"],
-      "all_frames": true,
-      "js": ["content/place-rank.js"],
-      "css": ["content/place-rank.css"],
-      "run_at": "document_idle"
+    "content_scripts": [
+        {
+            "matches": [
+                "https://search.shopping.naver.com/search/*"
+            ],
+            "js": [
+                "content/injected.js"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "https://search.shopping.naver.com/search/*"
+            ],
+            "js": [
+                "content/content.js",
+                "content/shop-seo.js"
+            ],
+            "css": [
+                "content/panel.css",
+                "content/seller-power.css",
+                "content/shop-seo.css"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "comment": "관리자 화면 ↔ 확장 브릿지 — 쇼핑 상품(상위 80) 수집 요청을 받는다(서버는 418 차단). 로컬 개발 주소 포함",
+            "matches": [
+                "https://rankfree.kr/admin/*",
+                "https://*.rankfree.co.kr/admin/*",
+                "http://127.0.0.1:8000/admin/*",
+                "http://localhost:8000/admin/*"
+            ],
+            "js": [
+                "content/admin-bridge.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "comment": "쇼핑 노출 키워드 ↔ 확장 브릿지 — 순위체크용 m.search HTML·상품정보를 브라우저에서 대신 가져온다(서버는 IP 한도). 2026-07-21 콘솔→관리자 이동(구 console 경로는 배포 전 prod 호환용 유지)",
+            "matches": [
+                "https://rankfree.kr/admin/shop-keyword*",
+                "https://*.rankfree.co.kr/admin/shop-keyword*",
+                "http://127.0.0.1:8000/admin/shop-keyword*",
+                "http://localhost:8000/admin/shop-keyword*",
+                "https://rankfree.kr/console/shop-keyword*",
+                "http://127.0.0.1:8000/console/shop-keyword*",
+                "http://localhost:8000/console/shop-keyword*"
+            ],
+            "js": [
+                "content/console-bridge.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://shopping.naver.com/popup/seller-info/*"
+            ],
+            "js": [
+                "content/seller-info-captcha-injected.js"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "https://shopping.naver.com/popup/seller-info/*"
+            ],
+            "js": [
+                "content/seller-info-captcha.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://search.naver.com/search.naver*"
+            ],
+            "js": [
+                "content/content.js"
+            ],
+            "css": [
+                "content/panel.css",
+                "content/seller-power.css"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://map.naver.com/*"
+            ],
+            "js": [
+                "content/content.js"
+            ],
+            "css": [
+                "content/panel.css",
+                "content/seller-power.css"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://smartstore.naver.com/*/products/*",
+                "https://brand.naver.com/*/products/*"
+            ],
+            "js": [
+                "content/injected-store.js"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
+        },
+        {
+            "matches": [
+                "https://smartstore.naver.com/*/products/*",
+                "https://brand.naver.com/*/products/*"
+            ],
+            "js": [
+                "content/product.js"
+            ],
+            "css": [
+                "content/panel.css",
+                "content/seller-power.css"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://pcmap.place.naver.com/*"
+            ],
+            "all_frames": true,
+            "js": [
+                "content/place-rank.js"
+            ],
+            "css": [
+                "content/place-rank.css"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_title": "RankFree 분석",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
     }
-  ],
-  "action": {
-    "default_title": "RankFree 분석",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  }
 }

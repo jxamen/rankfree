@@ -29,7 +29,8 @@ class ScheduleOverviewTest extends TestCase
         // 항상 걸려 있는 작업들(게이트 없음)
         $this->assertStringContainsString('place:track-run', $html);
         $this->assertStringContainsString('매일 11:30 · 매일 16:30', $html);   // 같은 커맨드 두 시각 → 한 줄 병합
-        $this->assertStringContainsString('shop:track-run', $html);
+        // 쇼핑 순위추적은 중단 상태 — 네이버 쇼핑 검색 API 종료(2026-07-31)
+        $this->assertStringNotContainsString('shop:track-run', $html);
         $this->assertStringContainsString('매시간', $html);
         $this->assertStringContainsString('gsc:collect', $html);
         $this->assertStringContainsString('hub:auto-publish', $html);

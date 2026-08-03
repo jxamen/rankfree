@@ -96,6 +96,8 @@ class RankTrackFixesTest extends TestCase
 
     public function test_shop_blocked_keeps_todays_valid_record(): void
     {
+        // 구 shop.json 엔진 경로 검증 — 기본값은 확장 워커 큐다(shop.json 은 2026-07-31 폐지).
+        config(["rankfree.shopping.rank_source" => "api"]);
         Http::fake(['*/v1/search/shop.json*' => Http::response(['errorMessage' => 'quota'], 429)]);
         $user = User::factory()->create();
         $slot = ShopRankSlot::create([
@@ -114,6 +116,8 @@ class RankTrackFixesTest extends TestCase
 
     public function test_shop_blocked_records_sentinel_when_no_valid_record(): void
     {
+        // 구 shop.json 엔진 경로 검증 — 기본값은 확장 워커 큐다(shop.json 은 2026-07-31 폐지).
+        config(["rankfree.shopping.rank_source" => "api"]);
         Http::fake(['*/v1/search/shop.json*' => Http::response(['errorMessage' => 'quota'], 429)]);
         $user = User::factory()->create();
         $slot = ShopRankSlot::create([

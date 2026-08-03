@@ -15,6 +15,12 @@ use Throwable;
 class NaverShoppingRankService
 {
     /**
+     * 네이버가 쇼핑 검색 API 를 종료했다(2026-07-31 · 개발자센터 공지 32564).
+     * 재시도로 복구되지 않으므로 "잠시 후 재시도" 안내를 하면 안 된다.
+     */
+    public const MSG_DISCONTINUED = '네이버가 쇼핑 검색 API 를 2026-07-31 종료해 순위조회를 일시 중단했습니다. 확장 프로그램 방식으로 전환 중입니다.';
+
+    /**
      * 상품 URL/업체명 입력 → 매칭 대상 파싱.
      * - smartstore/brand: /{...}/{...}/{...}/{...}/{productId}  → 경로 5번째
      * - search.shopping.naver.com: /.../{productId}             → 경로 4번째
@@ -112,9 +118,13 @@ class NaverShoppingRankService
         $timeout = (int) ($opts['timeout'] ?? $cfg['timeout'] ?? 15);
 
         // 키를 순차 시도: 429 만나면 다음 키로 처음부터 재스캔
+        $sawDiscontinued = false;   // 404 SE05 = API 자체가 없어짐(2026-07-31 종료)
+        $scanned = false;           // 한 키라도 전 범위를 정상 스캔했는가
+
         foreach ($keys as $key) {
             $rank = 0;
             $blocked = false;
+            $dead = false;
 
             for ($p = 1; $p <= $maxPages; $p++) {
                 $start = ($display * ($p - 1)) + 1;
@@ -135,6 +145,13 @@ class NaverShoppingRankService
                 if ($code === 429) {
                     $blocked = true;
                     break; // 다음 키로
+                }
+                // 네이버가 쇼핑 검색 API 를 종료했다(2026-07-31, 공지 32564). 재시도로 복구되지 않는다 —
+                // '한도 초과'로 뭉뚱그리면 사용자에게 "잠시 후 재시도"를 영원히 안내하게 된다.
+                if ($code === 404 && (string) $resp->json('errorCode') === 'SE05') {
+                    $dead = true;
+                    $sawDiscontinued = true;
+                    break; // 다음 키 확인(앱마다 상태가 다를 수 있다)
                 }
                 if ($code !== 200) {
                     $result['error'] = 'http_'.$code;
@@ -166,13 +183,23 @@ class NaverShoppingRankService
                 }
             }
 
+            if ($dead) {
+                continue; // 이 키로는 API 가 없어졌다 — 다음 키
+            }
             if (! $blocked) {
                 // 429 없이 전 범위 스캔 완료(미발견) — 앞 키가 429 였어도 이 키로 확인을
                 // 마쳤으므로 차단 아님(잔존 blocked 로 '순위권 밖'이 -1 차단으로 오판되던 결함).
                 $result['blocked'] = false;
+                $scanned = true;
                 break;
             }
             $result['blocked'] = true; // 이 키는 막힘 — 다음 키 시도
+        }
+
+        // 정상 스캔을 끝낸 키가 하나도 없고 API 종료 응답을 봤다면, 그건 한도가 아니라 폐지다
+        if (! $scanned && $sawDiscontinued) {
+            $result['error'] = 'api_discontinued';
+            $result['blocked'] = false;
         }
 
         $result['rank'] = 0;

@@ -63,6 +63,8 @@ class ShopRankTrackTest extends TestCase
 
     public function test_run_returns_json(): void
     {
+        // 구 shop.json 엔진 경로 검증 — 기본값은 확장 워커 큐다(shop.json 은 2026-07-31 폐지).
+        config(["rankfree.shopping.rank_source" => "api"]);
         $this->fakeShop('999');
         $user = User::factory()->create();
         $slot = ShopRankSlot::create([

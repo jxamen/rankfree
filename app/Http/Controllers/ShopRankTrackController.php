@@ -42,7 +42,7 @@ class ShopRankTrackController extends Controller
     {
         $slots = $request->user()->shopRankSlots()->with('records')->latest()->get();
 
-        $wb = new Spreadsheet();
+        $wb = new Spreadsheet;
         $wb->removeSheetByIndex(0);
         $titles = [];
 
@@ -205,9 +205,13 @@ class ShopRankTrackController extends Controller
         $res = $this->service->run($slot);
 
         $max = (int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10);
-        $msg = $res['found']
-            ? "{$res['rank']}위"
-            : ($res['blocked'] ? 'API 한도로 조회가 지연됩니다. 잠시 후 재시도하세요.' : "{$max}위 밖");
+        $msg = match (true) {
+            (bool) $res['found'] => "{$res['rank']}위",
+            // 아직 결과가 안 온 경우 — 내부 사정(워커·확장)은 알리지 않는다. 작업은 큐에 남아 처리된다.
+            ! empty($res['queued']) => '아직 확인 중입니다. 잠시 후 다시 확인해 주세요.',
+            (bool) $res['blocked'] => '아직 확인 중입니다. 잠시 후 다시 확인해 주세요.',
+            default => "{$max}위 밖",
+        };
 
         if ($request->expectsJson()) {
             return response()->json([

@@ -131,6 +131,18 @@ return [
             },
             explode(',', (string) env('NAVER_SHOPPING_API_KEYS', '')),
         ))),
+        /*
+         * 순위 수집 경로(2026-08-03) — 네이버가 openapi shop.json 을 종료했다(공지 32564).
+         *   extension = 확장 워커 큐(기본, 유일하게 동작). api = 구 shop.json(폐지 — 되돌릴 때만)
+         */
+        'rank_source' => env('SHOP_RANK_SOURCE', 'extension'),
+        // 수동 순위체크가 워커 결과를 기다리는 시간(초). 0 이면 안 기다리고 큐에만 넣는다.
+        // 1000위까지 뒤지면 수집에 2~3분 걸린다 — 화면은 그만큼 못 기다리므로 '확인 중' 으로 돌려주고
+        // 결과는 워커가 끝내는 대로 슬롯에 반영된다.
+        'worker_wait_sec' => (int) env('SHOP_RANK_WORKER_WAIT', 25),
+        // 확장 claim 롱폴링 상한(초). 알람(최소 1분)만 믿으면 픽업이 늦어 이걸로 즉시화한다.
+        // ⚠️ 붙잡힌 요청이 처리 슬롯을 먹는다. artisan serve(1프로세스)면 0 으로 두거나 PHP_CLI_SERVER_WORKERS 를 올린다.
+        'worker_longpoll_sec' => (int) env('SHOP_RANK_LONGPOLL', 20),
         'display' => 100,       // 페이지당 결과(최대 100)
         'max_pages' => (int) env('NAVER_SHOPPING_MAX_PAGES', 10),  // 100×10 = 1000위까지
         'page_delay_ms' => (int) env('NAVER_SHOPPING_PAGE_DELAY_MS', 200),

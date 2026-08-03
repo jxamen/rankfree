@@ -203,8 +203,11 @@
     }
 
     // 2) 부족하면 HTML 페이지를 추가로 GET (스크롤·API 아님)
+    // 페이지당 80개라 필요한 만큼만 돈다. 시장분석은 80~400(≤5p)이지만 순위체크는
+    // 1000위까지 봐야 해서(구 shop.json 과 같은 범위) 상한을 요청 개수에서 계산한다.
     const startPage = havePage1 ? 2 : 1;
-    for (let i = startPage; organicN() < count && i <= startPage + 4; i++) {
+    const maxPage = Math.max(5, Math.ceil(count / 80) + 1);
+    for (let i = startPage; organicN() < count && i <= maxPage; i++) {
       state.progress = '상품 수집 중… (' + organicN() + '/' + count + ')';
       render();
       const before = all.length;

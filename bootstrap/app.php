@@ -1,5 +1,15 @@
 <?php
 
+use App\Http\Middleware\AuthenticateApiKey;
+use App\Http\Middleware\AuthenticateExtToken;
+use App\Http\Middleware\AuthenticateRewardUser;
+use App\Http\Middleware\BlockProbeIps;
+use App\Http\Middleware\CaptureAttribution;
+use App\Http\Middleware\EnsureOperator;
+use App\Http\Middleware\LogAiCrawler;
+use App\Http\Middleware\MenuGate;
+use App\Http\Middleware\MenuUsageGate;
+use App\Http\Middleware\RedirectCanonicalHost;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,26 +29,26 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // 대표 도메인 통합(2026-07-27) — rankfree.co.kr(+www) → rankfree.kr 301.
         // 가장 앞에서 처리해 세션·라우팅 비용을 아낀다. 서브도메인(어드민·단축URL)은 정확일치가 아니라 통과.
-        $middleware->prepend(\App\Http\Middleware\RedirectCanonicalHost::class);
+        $middleware->prepend(RedirectCanonicalHost::class);
 
         // 취약점 탐침 IP 차단(2026-08-02) — /.env·/.aws/credentials 를 훑는 IP 를 기록·차단.
         // 나중에 prepend 한 것이 앞에 온다: 차단된 IP 는 리다이렉트·세션 비용도 쓰지 않는다.
-        $middleware->prepend(\App\Http\Middleware\BlockProbeIps::class);
+        $middleware->prepend(BlockProbeIps::class);
 
         // AI 크롤러 유입 기록(2026-07-27) — GPTBot·ChatGPT-User 등은 JS 미실행이라 GA4 에 안 잡힌다.
         // 리다이렉트 이후에 두어 대표 도메인으로 정리된 요청만 집계한다.
-        $middleware->append(\App\Http\Middleware\LogAiCrawler::class);
+        $middleware->append(LogAiCrawler::class);
 
         // 가입 유입경로(first-touch) 캡처 — 게스트 첫 방문의 외부 referrer·utm 을 쿠키에 담아 가입 시 저장한다.
-        $middleware->append(\App\Http\Middleware\CaptureAttribution::class);
+        $middleware->append(CaptureAttribution::class);
 
         $middleware->alias([
-            'operator' => \App\Http\Middleware\EnsureOperator::class,
-            'menu.gate' => \App\Http\Middleware\MenuGate::class,
-            'usage.gate' => \App\Http\Middleware\MenuUsageGate::class,
-            'auth.ext' => \App\Http\Middleware\AuthenticateExtToken::class,
-            'auth.apikey' => \App\Http\Middleware\AuthenticateApiKey::class,
-            'auth.reward' => \App\Http\Middleware\AuthenticateRewardUser::class,
+            'operator' => EnsureOperator::class,
+            'menu.gate' => MenuGate::class,
+            'usage.gate' => MenuUsageGate::class,
+            'auth.ext' => AuthenticateExtToken::class,
+            'auth.apikey' => AuthenticateApiKey::class,
+            'auth.reward' => AuthenticateRewardUser::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -47,6 +47,100 @@ async function resumeBulkIfNeeded(reason, ignoreHeartbeat) {
 const SKW_QUEUE_ALARM = 'rfShopKwProductQueue';
 let skwQueueActive = false;
 
+// ── 쇼핑 순위체크 워커(2026-08-03) ─────────────────────────────────────────
+// 네이버가 openapi shop.json 을 종료해(공지 32564) 서버가 순위를 직접 못 구한다. 서버 크롤링도 막힌다
+// (쇼핑검색 API 는 nCaptcha 토큰 없으면 418, 구 search/all 은 로그인·캡차).
+// → 확장이 켜진 PC 가 **시장분석 수집기 그대로**(collectShopping) 목록을 가져와 서버로 보내고,
+//   매칭·순위 계산은 서버가 한다. 여러 대가 켜져 있으면 서버 claim 이 원자적이라 자연히 분산된다.
+const SHOP_RANK_ALARM = 'rfShopRankWorker';
+let shopRankActive = false;
+
+/** 이 설치를 식별하는 워커 ID — 누가 잡았는지 추적하고, 남의 결과로 덮어쓰지 않기 위해 필요하다. */
+async function getWorkerId() {
+  const s = await chrome.storage.local.get(['rfWorkerId']);
+  if (s.rfWorkerId) return s.rfWorkerId;
+  const id = 'w-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  await chrome.storage.local.set({ rfWorkerId: id });
+  return id;
+}
+
+async function drainShopRankQueue(why) {
+  // 왜 안 도는지 눈에 보여야 한다 — 조용히 return 하면 "반응 없음"으로만 보인다.
+  const log = (m, ...a) => console.log('[RankFree] 순위워커(' + (why || '?') + '): ' + m, ...a);
+
+  if (shopRankActive) return log('이미 실행 중 — 건너뜀');
+  if (Date.now() - lastScreenSerpAt < 60000) return log('화면 수집이 방금 돌아 양보');
+  // 순위체크는 **서버가 시키는 일**이라 사용자 로그인·별도 설정이 필요 없다. 확장이 깔려 있으면 그냥 돈다.
+  const { apiBase } = await getStore();
+  const s = await chrome.storage.local.get(['rfShopRankSkipUntil']);
+  if (Date.now() < (s.rfShopRankSkipUntil || 0)) {
+    return log('백오프 중(캡차/권한) — 해제 ' + new Date(s.rfShopRankSkipUntil).toLocaleTimeString());
+  }
+  log('큐 조회 시작 →', apiBase);
+
+  shopRankActive = true;
+  const workerId = await getWorkerId();
+  const startedAt = Date.now();
+  try {
+    while (Date.now() - startedAt < 150000) {                 // 알람 주기 안에서만 — 다음 알람이 이어받는다
+      // wait: 서버가 줄 게 없으면 잠깐 붙잡고 기다린다(롱폴링) — 알람(1분)만 믿으면 픽업이 늦다.
+      // 대기 중인 fetch 가 서비스워커도 깨워 두므로, 확장 화면을 열어두지 않아도 계속 돈다.
+      const q = await apiFetch('/api/ext/shop-rank/claim', {
+        method: 'POST', body: { worker_id: workerId, limit: 2, wait: 20 }, apiBase,
+      });
+      if (q.status === 403) {                                 // 권한 없음 — 오래 쉰다
+        await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 6 * 3600 * 1000 });
+        return;
+      }
+      if (!q.ok || !q.json || !q.json.data) {
+        // 404 면 서버 주소가 워커 API 없는 곳(미배포 서버), 401 이면 토큰 만료
+        console.warn('[RankFree] 순위워커 claim 실패:', q.status, apiBase);
+
+        return;                                               // 일시 오류 — 다음 알람에 재시도
+      }
+      const items = q.json.data.items || [];
+      if (!items.length) return log('줄 작업 없음');
+      log('작업 ' + items.length + '건 수령:', items.map((i) => i.keyword).join(', '));
+
+      for (const it of items) {
+        if (Date.now() - lastScreenSerpAt < 60000) return;    // 도중에 화면이 시작되면 즉시 양보
+
+        let res = null;
+        try {
+          res = await handlers.collectShopping({ keyword: it.keyword, count: it.count || 80 });
+        } catch (e) {
+          res = { ok: false, message: String((e && e.message) || e) };
+        }
+
+        if (!res || res.ok === false || !Array.isArray(res.products) || !res.products.length) {
+          const captcha = !!(res && (res.captcha || res.blocked));
+          await apiFetch('/api/ext/shop-rank/' + it.job_id + '/fail', {
+            method: 'POST', apiBase,
+            body: { worker_id: workerId, error: captcha ? 'captcha' : ((res && res.message) || 'empty').slice(0, 60) },
+          });
+          if (captcha) {
+            // 이 PC 는 잠시 못 쓴다 — 작업은 서버가 다시 큐에 둬서 다른 워커가 집어간다
+            await chrome.storage.local.set({ rfShopRankSkipUntil: Date.now() + 30 * 60 * 1000 });
+            try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
+            return;
+          }
+          continue;
+        }
+
+        const r = await apiFetch('/api/ext/shop-rank/' + it.job_id + '/result', {
+          method: 'POST', apiBase,
+          body: { worker_id: workerId, products: res.products, total: res.total || 0 },
+        });
+        if (r.status === 401 || r.status === 403) return;
+
+        await new Promise((x) => setTimeout(x, 1200 + Math.random() * 900));   // 페이싱 — 연속 수집은 캡차를 부른다
+      }
+    }
+  } catch (e) { /* noop */ } finally {
+    shopRankActive = false;
+  }
+}
+
 async function drainShopKeywordProductQueue() {
   if (skwQueueActive) return;                       // 이 SW 에서 이미 수집 중
   const { token, apiBase } = await getStore();
@@ -132,9 +226,27 @@ try {
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
     // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
     if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue().then(drainShopKeywordCheckQueue);
+    // 쇼핑 순위체크 워커 — 위 큐와 별도 알람(각자 자기 플래그로 중복 방지)
+    if (a && a.name === SHOP_RANK_ALARM) drainShopRankQueue();
   });
   chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
+  // 순위체크는 사람이 결과를 기다리는 경우가 있어 더 자주 본다(MV3 알람 최소 주기는 1분).
+  chrome.alarms.create(SHOP_RANK_ALARM, { periodInMinutes: 1, delayInMinutes: 0.5 });
 } catch (e) { /* noop */ }
+
+/*
+ * 서비스워커가 뜨자마자 한 번 — 알람(첫 30초)만 기다리면 확장을 갓 재로드했을 때 반응이 없어
+ * "동작하는지 안 하는지" 알 수가 없다. 브라우저 시작·확장 재로드·워커 부활 모두 여기로 들어온다.
+ */
+try {
+  chrome.runtime.onStartup.addListener(() => { drainShopRankQueue('브라우저시작'); });
+  chrome.runtime.onInstalled.addListener(() => { drainShopRankQueue('설치/갱신'); });
+} catch (e) { /* noop */ }
+// 이 배너가 콘솔에 안 보이면 **로드된 확장이 구버전**이다(chrome://extensions 에서 새로고침 필요).
+try {
+  console.log('[RankFree] background ' + (chrome.runtime.getManifest().version) + ' 로드 — 순위워커 활성');
+} catch (e) { /* noop */ }
+setTimeout(() => { try { drainShopRankQueue('워커기동'); } catch (e) { /* noop */ } }, 1500);
 
 async function getStore() {
   const data = await chrome.storage.local.get(['rfToken', 'rfUser', 'rfApiBase', 'rfApiKey']);
@@ -1390,8 +1502,10 @@ const handlers = {
       let started = false;   // content script(document_idle) 시작 신호 — 수집 스크립트가 돈다
       let stall = null;      // '떴는데 수집 스크립트가 안 붙음'(에러 페이지 등) 판정용
 
-      // 상품 5페이지(약 20초) + 가격비교 카탈로그 확장(예산 20초) + 여유
-      const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), 75000);
+      // 상품 5페이지(약 20초) + 가격비교 카탈로그 확장(예산 20초) + 여유.
+      // 순위체크는 1000위(13페이지)까지 뒤지므로 요청 개수에 비례해 늘린다 — 고정 75초면 깊은 스캔이 항상 타임아웃난다.
+      const budgetMs = Math.min(300000, 75000 + Math.max(0, (Number(count) || 80) - 400) * 90);
+      const to = setTimeout(() => finish({ ok: false, timeout: true, message: '상품 수집 시간이 초과되었습니다.' }), budgetMs);
 
       // '안 열림 = 차단' 판정. 예전엔 시작 신호를 12초 안 받으면 차단으로 봤으나, 동시 수집(백그라운드 탭 N개)에서는
       //   크롬이 background 탭의 document_idle content script 주입을 뒤로 미뤄, 페이지는 3~4초에 떠도 시작 신호가

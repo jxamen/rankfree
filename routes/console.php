@@ -34,8 +34,11 @@ Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->withoutOverlapping()->runInBackground();
 
 // 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST, 2026-07-24 매시간→2회 축소). 활성 슬롯 순위 조회·기록(openapi shop.json).
-Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
-Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
+// 🔴 중단(2026-08-03) — 네이버가 쇼핑 검색 API 를 2026-07-31 종료(개발자센터 공지 32564).
+//    남겨두면 죽은 API 를 매일 두 번 두들기며 슬롯마다 '미발견' 기록을 남긴다.
+//    확장 워커 방식으로 전환 후 되살린다(.claude/14_SHOPPING_RANK.md).
+// Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
+// Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
 
 // 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
 Schedule::command('orders:dispatch-due')->timezone('Asia/Seoul')->dailyAt('09:00')->withoutOverlapping()->runInBackground();

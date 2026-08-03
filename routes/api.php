@@ -1,19 +1,26 @@
 <?php
 
 use App\Http\Controllers\Api\CompeteController;
-use App\Http\Controllers\Api\ExtQuizController;
 use App\Http\Controllers\Api\ExtAuthController;
 use App\Http\Controllers\Api\ExtKeywordController;
+use App\Http\Controllers\Api\ExtKeywordShopSerpController;
 use App\Http\Controllers\Api\ExtMarketController;
 use App\Http\Controllers\Api\ExtPlaceController;
 use App\Http\Controllers\Api\ExtProductController;
 use App\Http\Controllers\Api\ExtProductInfoController;
+use App\Http\Controllers\Api\ExtQuizController;
 use App\Http\Controllers\Api\ExtSellerCaptchaController;
 use App\Http\Controllers\Api\ExtSellerInfoController;
 use App\Http\Controllers\Api\ExtSellerPowerController;
+use App\Http\Controllers\Api\ExtShopKeywordController;
 use App\Http\Controllers\Api\ExtShoppingSeoController;
+use App\Http\Controllers\Api\ExtShopRankController;
 use App\Http\Controllers\Api\KeywordController;
+use App\Http\Controllers\Api\KeywordSuggestController;
+use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\RankController;
+use App\Http\Controllers\Api\ShopKeywordApiController;
+use App\Http\Controllers\Api\VendorMissionApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -24,6 +31,16 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('ext')->group(function (): void {
     Route::post('/login', [ExtAuthController::class, 'login'])->middleware('throttle:10,1');
 
+    /*
+     * 쇼핑 순위체크 워커(2026-08-03) — shop.json 종료로 서버가 순위를 직접 못 구한다.
+     * **사용자 로그인과 무관하다**(서버가 시키는 일). 운영자 발급 워커 키 또는 확장 토큰으로 통과.
+     */
+    Route::group([], function (): void {
+        Route::post('/shop-rank/claim', [ExtShopRankController::class, 'claim'])->middleware('throttle:120,1');
+        Route::post('/shop-rank/{job}/result', [ExtShopRankController::class, 'result'])->whereNumber('job')->middleware('throttle:120,1');
+        Route::post('/shop-rank/{job}/fail', [ExtShopRankController::class, 'fail'])->whereNumber('job')->middleware('throttle:120,1');
+    });
+
     Route::middleware('auth.ext')->group(function (): void {
         Route::get('/me', [ExtAuthController::class, 'me']);
         Route::post('/logout', [ExtAuthController::class, 'logout']);
@@ -32,9 +49,9 @@ Route::prefix('ext')->group(function (): void {
         // '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 확장이 서버에서 받아 표시(DOM scrape 대체)
         Route::get('/keyword-together', [KeywordController::class, 'together'])->middleware('throttle:20,1');
         // 확장이 수집한 쇼핑 노출 상품(상위 80) 저장 — 서버는 search.shopping 418 이라 직접 수집 불가
-        Route::post('/keyword-shop-serp', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1');
+        Route::post('/keyword-shop-serp', [ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1');
         // 대량 자동 수집 대기열 — 미수집·오래된 키워드를 검색량 순으로(확장이 연속 수집)
-        Route::get('/keyword-shop-serp/queue', [\App\Http\Controllers\Api\ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1');
+        Route::get('/keyword-shop-serp/queue', [ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1');
         // 판매자 정보 팝업의 수동 입력용 퀴즈 문구/이미지 저장. 정답 추론·제출은 하지 않는다.
         Route::post('/seller-captchas', [ExtSellerCaptchaController::class, 'store'])->middleware('throttle:60,1');
         // 캡차 통과 후 표시되는 판매자(사업자) 정보 — 업체(채널) 기준 저장
@@ -60,11 +77,11 @@ Route::prefix('ext')->group(function (): void {
 
         // 쇼핑 유입키워드 상품정보 자동 수집(2026-07-29) — 외부 API 로 만든 분석도 화면 없이 채워진다.
         // 확장이 큐를 폴링 → 상품페이지 수집 → 반영(조합 재생성·순위확인 자동 시작). shop_keyword 권한자 전용.
-        Route::get('/shop-keyword/product-queue', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1');
-        Route::post('/shop-keyword/{analysis}/product-info', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
+        Route::get('/shop-keyword/product-queue', [ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1');
+        Route::post('/shop-keyword/{analysis}/product-info', [ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
         // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버 자동 체크 없음. 조합 1건당 1회 제출이라 한도를 넉넉히.
-        Route::get('/shop-keyword/check-queue', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1');
-        Route::post('/shop-keyword/{analysis}/check-html', [\App\Http\Controllers\Api\ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1');
+        Route::get('/shop-keyword/check-queue', [ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1');
+        Route::post('/shop-keyword/{analysis}/check-html', [ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1');
 
         // 상품 분석(리뷰 분석) 저장/내역
         Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');
@@ -118,35 +135,35 @@ Route::prefix('v1')->group(function (): void {
 
     // 마케팅 상품 주문 (scope: order) — 상품 조회·주문 생성·상태 조회. 웹 주문과 동일 로직(OrderPlacer)
     Route::middleware('auth.apikey:order')->group(function (): void {
-        Route::get('/products', [\App\Http\Controllers\Api\OrderApiController::class, 'products']);
-        Route::get('/products/{id}', [\App\Http\Controllers\Api\OrderApiController::class, 'product'])->whereNumber('id');
-        Route::get('/orders', [\App\Http\Controllers\Api\OrderApiController::class, 'index']);
-        Route::post('/orders', [\App\Http\Controllers\Api\OrderApiController::class, 'store'])->middleware('throttle:30,1');
-        Route::get('/orders/{orderNo}', [\App\Http\Controllers\Api\OrderApiController::class, 'show']);
+        Route::get('/products', [OrderApiController::class, 'products']);
+        Route::get('/products/{id}', [OrderApiController::class, 'product'])->whereNumber('id');
+        Route::get('/orders', [OrderApiController::class, 'index']);
+        Route::post('/orders', [OrderApiController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/orders/{orderNo}', [OrderApiController::class, 'show']);
     });
 
     // 리워드 미션 연동 (scope: mission) — 벤더 S2S(design-04 §3). 목록·클릭검증+상세·참여 제출(멱등)·정산 대사.
     // 벤더별 토큰버킷(throttle:reward-vendor — rate_limit_rps, AppServiceProvider) + 키 일일 한도가 보호한다.
     Route::middleware(['auth.apikey:mission', 'throttle:reward-vendor'])->group(function (): void {
-        Route::get('/missions', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'index']);
-        Route::post('/missions/assign', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'assign']);
-        Route::get('/missions/{mission}', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'show'])->whereNumber('mission');
-        Route::post('/missions/{mission}/participations', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'store'])->whereNumber('mission');
-        Route::get('/participations', [\App\Http\Controllers\Api\VendorMissionApiController::class, 'participations']);
+        Route::get('/missions', [VendorMissionApiController::class, 'index']);
+        Route::post('/missions/assign', [VendorMissionApiController::class, 'assign']);
+        Route::get('/missions/{mission}', [VendorMissionApiController::class, 'show'])->whereNumber('mission');
+        Route::post('/missions/{mission}/participations', [VendorMissionApiController::class, 'store'])->whereNumber('mission');
+        Route::get('/participations', [VendorMissionApiController::class, 'participations']);
     });
 
     // 쇼핑 유입키워드 (scope: shop_keyword) — 분석 생성(추출·조합) → 순위 확인 자동 완주 → Short URL 그룹 생성.
     // check_method=api(기본)는 서버가 shop.json 으로 확인해 확장 없이 완결된다(25·28 참조).
     Route::middleware('auth.apikey:shop_keyword')->group(function (): void {
-        Route::get('/shop-keywords', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'index']);
-        Route::post('/shop-keywords', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'store'])->middleware('throttle:30,1');
-        Route::get('/shop-keywords/{analysis}', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'show'])->whereNumber('analysis');
+        Route::get('/shop-keywords', [ShopKeywordApiController::class, 'index']);
+        Route::post('/shop-keywords', [ShopKeywordApiController::class, 'store'])->middleware('throttle:30,1');
+        Route::get('/shop-keywords/{analysis}', [ShopKeywordApiController::class, 'show'])->whereNumber('analysis');
         // Short URL — 생성(그룹 분배) · 목록 · 재배정(URL 유지, 키워드만 다시 나눔)
-        Route::get('/shop-keywords/{analysis}/short-links', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'shortLinks'])
+        Route::get('/shop-keywords/{analysis}/short-links', [ShopKeywordApiController::class, 'shortLinks'])
             ->whereNumber('analysis');
-        Route::post('/shop-keywords/{analysis}/short-links', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'storeShortLinks'])
+        Route::post('/shop-keywords/{analysis}/short-links', [ShopKeywordApiController::class, 'storeShortLinks'])
             ->whereNumber('analysis')->middleware('throttle:30,1');
-        Route::post('/shop-keywords/{analysis}/short-links/reassign', [\App\Http\Controllers\Api\ShopKeywordApiController::class, 'reassignShortLinks'])
+        Route::post('/shop-keywords/{analysis}/short-links/reassign', [ShopKeywordApiController::class, 'reassignShortLinks'])
             ->whereNumber('analysis')->middleware('throttle:30,1');
     });
 });
@@ -159,5 +176,5 @@ Route::prefix('v1')->group(function (): void {
 | ⚠️ origin=hub 강제 — 빠지면 타 사용자의 검색 내역(origin=user)이 공개된다(21 비공개 원칙).
 | 응답은 JSON 이라 meta robots 를 못 쓴다 → X-Robots-Tag 헤더로 색인 차단(컨트롤러).
 */
-Route::get('/keywords/suggest', [\App\Http\Controllers\Api\KeywordSuggestController::class, 'index'])
+Route::get('/keywords/suggest', [KeywordSuggestController::class, 'index'])
     ->middleware('throttle:60,1')->name('api.keywords.suggest');

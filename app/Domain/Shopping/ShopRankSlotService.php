@@ -2,6 +2,7 @@
 
 namespace App\Domain\Shopping;
 
+use App\Models\ShopRankJob;
 use App\Models\ShopRankRecord;
 use App\Models\ShopRankSlot;
 use App\Models\User;
@@ -91,6 +92,12 @@ class ShopRankSlotService
     /** 슬롯 1개 실시간 순위 조회 + 일별 기록 저장(멱등). */
     public function run(ShopRankSlot $slot): array
     {
+        // shop.json 종료(공지 32564) 후 기본 경로 — 확장 워커에 맡기고 즉시 반환한다.
+        // 서버가 직접 부를 수 있는 소스가 없으므로 여기서 순위를 만들어낼 방법이 없다.
+        if ((string) config('rankfree.shopping.rank_source', 'extension') === 'extension') {
+            return $this->runViaWorker($slot);
+        }
+
         $res = $this->engine->checkRank($slot->keyword, [
             'type' => $slot->target_type,
             'product_id' => (string) $slot->product_id,
@@ -144,5 +151,120 @@ class ShopRankSlotService
         }
 
         return $res + ['stored_rank' => $rank];
+    }
+
+    /**
+     * 확장 워커에 맡기고 **결과가 올 때까지 기다렸다 돌려준다** — 수동 체크는 사람이 화면에서 결과를 본다.
+     * 던져만 놓으면 처리가 됐는지 안 됐는지 알 수 없다는 게 실사용에서 드러난 문제였다.
+     *
+     * 세 갈래로 정직하게 나눈다: 결과 도착 / 확장 꺼짐 / 시간 초과(계속 진행 중).
+     */
+    private function runViaWorker(ShopRankSlot $slot): array
+    {
+        $job = $this->enqueue($slot);
+
+        $base = [
+            'blocked' => false, 'found' => false, 'rank' => 0, 'total' => 0,
+            'job_id' => (int) $job->id, 'product_id' => (string) $slot->product_id,
+            'title' => '', 'mall_name' => (string) $slot->mall_name, 'price' => 0, 'link' => '', 'image' => '',
+        ];
+
+        if (! ShopRankJob::workerOnline()) {
+            // 켜진 PC 가 없다 — 기다려도 소용없고, 작업은 큐에 남아 나중에 처리된다
+            return $base + ['queued' => true, 'no_worker' => true];
+        }
+
+        $done = $job->waitForResult((int) config('rankfree.shopping.worker_wait_sec', 40));
+
+        if (! $done) {
+            return $base + ['queued' => true, 'pending' => true];   // 아직 처리 중
+        }
+        if ($done->status === 'failed') {
+            return $base + ['error' => (string) ($done->error ?: 'worker_failed')];
+        }
+
+        return [
+            'blocked' => false,
+            'found' => (bool) $done->found,
+            'rank' => (int) $done->rank,
+            'ad' => (bool) $done->ad_exposed,
+            'total' => (int) $done->list_total,
+            'job_id' => (int) $done->id,
+            'product_id' => (string) ($done->product_id ?: $slot->product_id),
+            'title' => (string) $done->title,
+            'mall_name' => (string) ($done->mall_name ?: $slot->mall_name),
+            'price' => (int) $done->price,
+            'link' => (string) $done->link,
+            'image' => (string) $done->image,
+            'stored_rank' => (int) $done->rank,
+        ];
+    }
+
+    /**
+     * 확장 워커에게 순위체크를 맡긴다(2026-08-03) — shop.json 종료 후의 기본 경로.
+     * 같은 슬롯에 대기 중인 작업이 있으면 새로 만들지 않는다(폴링·중복 클릭으로 큐가 불어나지 않게).
+     */
+    public function enqueue(ShopRankSlot $slot, ?int $pages = null): ShopRankJob
+    {
+        // 기본은 구 shop.json 과 같은 범위(100×10 = 1000위). 얕게 끊으면 실제로 노출된 상품이
+        // '미노출'로 기록돼 순위추적 그래프가 거짓이 된다.
+        $pages ??= (int) ceil(
+            ((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) / 80
+        );
+
+        $pending = ShopRankJob::where('slot_id', $slot->id)
+            ->whereIn('status', ['pending', 'claimed'])->first();
+        if ($pending) {
+            return $pending;
+        }
+
+        // 슬롯에는 id_kind 컬럼이 없다 — 저장된 상품 URL 에서 다시 파생한다
+        // (가격비교 /catalog/{nvMid} 와 스마트스토어 channelProductId 는 매칭 필드가 다르다).
+        $idKind = 'channel';
+        if ((string) $slot->product_url !== '') {
+            $idKind = (string) ($this->engine->resolveTarget((string) $slot->product_url)['id_kind'] ?? 'channel');
+        }
+
+        return ShopRankJob::create([
+            'keyword' => (string) $slot->keyword,
+            'target_type' => (string) $slot->target_type,
+            'product_id' => (string) $slot->product_id,
+            'id_kind' => $idKind,
+            'mall_name' => (string) $slot->mall_name,
+            'pages' => max(1, $pages),
+            'source' => 'slot',
+            'slot_id' => $slot->id,
+            'user_id' => $slot->user_id,
+        ]);
+    }
+
+    /**
+     * 워커가 돌려준 결과를 슬롯·일별기록에 반영한다. run() 의 저장부와 같은 규칙.
+     * 슬롯 작업이 아니면(게스트 조회 등) 아무것도 하지 않는다.
+     */
+    public function applyJobResult(ShopRankJob $job): void
+    {
+        if ($job->source !== 'slot' || ! $job->slot_id) {
+            return;
+        }
+        $slot = ShopRankSlot::find($job->slot_id);
+        if (! $slot) {
+            return;
+        }
+
+        $rank = (int) $job->rank;
+
+        ShopRankRecord::updateOrCreate(
+            ['slot_id' => $slot->id, 'checked_date' => now()->toDateString()],
+            ['rank' => $rank, 'price' => $job->price ?: null, 'list_total' => (int) $job->list_total, 'created_at' => now()],
+        );
+
+        $slot->last_rank = $rank;
+        $slot->last_price = $job->price ?: null;
+        $slot->last_checked_at = now();
+        if ((string) $job->title !== '' && ! $slot->product_title) {
+            $slot->product_title = $job->title;
+        }
+        $slot->save();
     }
 }

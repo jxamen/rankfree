@@ -7,6 +7,7 @@ use App\Domain\Shopping\ShopRankSlotService;
 use App\Http\Controllers\Controller;
 use App\Models\PlaceRankSlot;
 use App\Models\ShopRankSlot;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 /**
@@ -47,7 +48,7 @@ class RankTrackingController extends Controller
             'q' => $q,
             'active' => $active,
             'userId' => $userId,
-            'filterUser' => $userId > 0 ? \App\Models\User::find($userId, ['id', 'name', 'email']) : null,
+            'filterUser' => $userId > 0 ? User::find($userId, ['id', 'name', 'email']) : null,
         ]);
     }
 
@@ -83,7 +84,7 @@ class RankTrackingController extends Controller
             'q' => $q,
             'active' => $active,
             'userId' => $userId,
-            'filterUser' => $userId > 0 ? \App\Models\User::find($userId, ['id', 'name', 'email']) : null,
+            'filterUser' => $userId > 0 ? User::find($userId, ['id', 'name', 'email']) : null,
         ]);
     }
 
@@ -134,9 +135,12 @@ class RankTrackingController extends Controller
         $r = $service->run($slot);
         $max = (int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10);
         $found = ! empty($r['found']);
-        $msg = $found
-            ? "{$r['rank']}위"
-            : (! empty($r['blocked']) ? 'API 한도로 조회가 지연됩니다. 잠시 후 재시도하세요.' : "{$max}위 밖");
+        $msg = match (true) {
+            $found => "{$r['rank']}위",
+            ! empty($r['queued']) => '아직 확인 중입니다. 잠시 후 다시 확인해 주세요.',
+            ! empty($r['blocked']) => '아직 확인 중입니다. 잠시 후 다시 확인해 주세요.',
+            default => "{$max}위 밖",
+        };
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -213,7 +217,7 @@ class RankTrackingController extends Controller
             'keywords.*' => ['nullable', 'string', 'max:100'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
-        $target = \App\Models\User::findOrFail($data['user_id']);
+        $target = User::findOrFail($data['user_id']);
         try {
             $res = $service->addMany($target, $data['place'], $data['keywords'], $data['label'] ?? null, true);
         } catch (\DomainException $e) {
@@ -290,7 +294,7 @@ class RankTrackingController extends Controller
             'keywords.*' => ['nullable', 'string', 'max:120'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
-        $target = \App\Models\User::findOrFail($data['user_id']);
+        $target = User::findOrFail($data['user_id']);
         try {
             $res = $service->addMany($target, $data['target'], $data['keywords'], $data['label'] ?? null, true);
         } catch (\DomainException $e) {

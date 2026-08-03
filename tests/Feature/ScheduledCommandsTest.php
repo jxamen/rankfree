@@ -36,7 +36,8 @@ class ScheduledCommandsTest extends TestCase
         $joined = implode(' ', $cmds);
 
         $this->assertStringContainsString('place:track-run', $joined);
-        $this->assertStringContainsString('shop:track-run', $joined);
+        // 쇼핑 순위추적은 스케줄에서 빠져 있어야 한다 — 네이버가 쇼핑 검색 API 를 2026-07-31 종료했다.
+        $this->assertStringNotContainsString('shop:track-run', $joined);
         $this->assertStringContainsString('smartplace:collect', $joined);
         $this->assertStringContainsString('hub:partition-rotate', $joined);
     }
