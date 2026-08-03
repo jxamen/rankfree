@@ -114,6 +114,7 @@ async function drainShopRankQueue(why) {
 
         if (!res || res.ok === false || !Array.isArray(res.products) || !res.products.length) {
           const captcha = !!(res && (res.captcha || res.blocked));
+          log('❌ 「' + it.keyword + '」 수집 실패' + (captcha ? '(보안문자)' : '') + ' — ' + ((res && res.message) || '이유 없음'));
           await apiFetch('/api/ext/shop-rank/' + it.job_id + '/fail', {
             method: 'POST', apiBase,
             body: { worker_id: workerId, error: captcha ? 'captcha' : ((res && res.message) || 'empty').slice(0, 60) },
@@ -127,11 +128,23 @@ async function drainShopRankQueue(why) {
           continue;
         }
 
+        log('「' + it.keyword + '」 수집 완료 — ' + res.products.length + '개 (목표 ' + it.count + ')');
+
         const r = await apiFetch('/api/ext/shop-rank/' + it.job_id + '/result', {
           method: 'POST', apiBase,
           body: { worker_id: workerId, products: res.products, total: res.total || 0 },
         });
         if (r.status === 401 || r.status === 403) return;
+
+        // 결과를 눈으로 확인할 수 있게 — 순위가 몇 위로 잡혔는지, 부족해서 되돌려졌는지
+        const d = (r.json && r.json.data) || {};
+        if (d.partial) {
+          log('⚠ 「' + it.keyword + '」 수집 부족(' + d.scanned + '/' + d.wanted + ') — 미노출로 기록하지 않고 재시도');
+        } else if (d.found) {
+          log('✅ 「' + it.keyword + '」 ' + d.rank + '위' + (d.ad ? ' (광고 노출도 있음)' : ''));
+        } else {
+          log('「' + it.keyword + '」 ' + it.count + '위 안에서 미노출');
+        }
 
         await new Promise((x) => setTimeout(x, 1200 + Math.random() * 900));   // 페이싱 — 연속 수집은 캡차를 부른다
       }
@@ -1559,6 +1572,12 @@ const handlers = {
         if (!sender || !sender.tab || sender.tab.id !== tabId || !msg) return;
         // 수집 스크립트가 떴다 — 페이지는 정상이니 차단 판정 타이머를 모두 끈다(수집 자체는 계속 기다린다)
         if (msg.type === '__shoppingCollectStarted') { started = true; clearBlockTimers(); return; }
+        // 페이지별 진행 — 몇 페이지에서 몇 개를 받았고 왜 멈췄는지가 여기서만 보인다
+        if (msg.type === '__shoppingCollectProgress') {
+          console.log('[RankFree]   ' + msg.page + '페이지: +' + msg.got
+            + ' (누적 ' + msg.organic + '/' + msg.target + ')' + (msg.note ? ' — ' + msg.note : ''));
+          return;
+        }
         if (msg.type === '__shoppingCollected') {
           finish({ ok: !!msg.ok, products: msg.products || [], total: msg.total || 0, relatedTags: msg.relatedTags || [], message: msg.message || '' });
         }

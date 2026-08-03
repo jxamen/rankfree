@@ -177,6 +177,15 @@
    * 로딩된 문서 JSON을 먼저 파싱하고, 조직 상품이 count에 못 미치면 HTML 페이지를 추가로 GET.
    * 스크롤·화면 캡처·/api/search POST 없이, 페이지 HTML에 들어있는 JSON만 사용한다.
    */
+  /** 백그라운드 수집(#rfcollect) 진행상황을 서비스워커 콘솔로 — 패널이 없어 화면으로는 안 보인다. */
+  function reportPage(page, got, organic, target, note) {
+    try {
+      chrome.runtime.sendMessage({
+        type: '__shoppingCollectProgress', page, got, organic, target, note: note || '',
+      });
+    } catch (e) { /* noop */ }
+  }
+
   async function collectFromDocAndHtml(query, count) {
     const seen = new Set();
     const all = [];
@@ -199,7 +208,13 @@
     let havePage1 = false;
     if (!state.urlChangedSinceLoad) {
       const d = domNextData();
-      if (d && d.products && d.products.length) { add(d); havePage1 = true; }
+      if (d && d.products && d.products.length) {
+        add(d);
+        havePage1 = true;
+        reportPage(1, d.products.length, organicN(), count, '문서 내장분');
+      } else {
+        reportPage(1, 0, 0, count, '문서에 상품 JSON 없음 — HTML 요청으로 진행');
+      }
     }
 
     // 2) 부족하면 HTML 페이지를 추가로 GET (스크롤·API 아님)
@@ -213,12 +228,15 @@
       const before = all.length;
       try {
         const h = await fetchHtmlPage(query, i);
-        if (!h.products.length) break; // 마지막 페이지
+        if (!h.products.length) { reportPage(i, 0, organicN(), count, '빈 페이지(끝)'); break; }
         add(h);
       } catch (e) {
-        break; // 더 못 받으면 지금까지로
+        // 왜 멈췄는지 알려야 한다 — 조용히 break 하면 "28개만 왔다"만 남고 원인을 못 찾는다
+        reportPage(i, 0, organicN(), count, String((e && e.message) || e));
+        break;
       }
-      if (all.length <= before) break; // 새 상품 없음(중복/끝) → 중단
+      if (all.length <= before) { reportPage(i, 0, organicN(), count, '새 상품 없음(중복/끝)'); break; }
+      reportPage(i, all.length - before, organicN(), count, '');
       // 시장분석(≤5p)은 400ms 로 검증됐지만 순위체크는 13p 까지 간다 —
       // 깊어질수록 간격을 벌려 연속 호출로 차단당하지 않게 한다(최대 1.2초).
       await new Promise((r) => setTimeout(r, Math.min(1200, 400 + Math.max(0, i - 5) * 120)));
