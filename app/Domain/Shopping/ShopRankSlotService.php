@@ -168,7 +168,7 @@ class ShopRankSlotService
         }
         $slot->save();
 
-        // 3일 연속 미노출(순위 0 = 1000위 밖) 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
+        // 3일 연속 미노출(순위 0 = track_depth 위 밖) 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
         // 삭제 아님 — 목록 [재개] 버튼으로 다시 켤 수 있다. 차단(-1) 기록은 판정에 안 쓴다.
         if ($rank === 0 && $slot->is_active) {
             $recent = ShopRankRecord::where('slot_id', $slot->id)->where('rank', '>=', 0)
@@ -234,11 +234,9 @@ class ShopRankSlotService
      */
     public function enqueue(ShopRankSlot $slot, ?int $pages = null): ShopRankJob
     {
-        // 기본은 구 shop.json 과 같은 범위(100×10 = 1000위). 얕게 끊으면 실제로 노출된 상품이
-        // '미노출'로 기록돼 순위추적 그래프가 거짓이 된다.
-        $pages ??= (int) ceil(
-            ((int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10)) / 80
-        );
+        // 서버 배치와 같은 깊이(track_depth)로 맞춘다 — 실시간(확장)과 배치가 다른 깊이를 보면
+        // 같은 슬롯의 순위가 경로에 따라 달라지고 '미노출' 판정도 어긋난다. 1페이지 = 80개.
+        $pages ??= (int) ceil((int) config('rankfree.shopping.track_depth', 400) / 80);
 
         $pending = ShopRankJob::where('slot_id', $slot->id)
             ->whereIn('status', ['pending', 'claimed'])->first();

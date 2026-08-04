@@ -59,7 +59,7 @@
         $imgName = '랭크프리-쇼핑순위-'.$slot->keyword.'.png';
         $editTargetKey = 'target';
         $editTargetVal = $slot->product_url ?: ($slot->mall_name ?: $slot->product_id);
-        $stopHint = '3일 연속 미노출(1000위 밖) 시 자동 중단됩니다 — [재개]로 다시 켤 수 있어요';
+        $stopHint = '3일 연속 미노출('.number_format((int) config('rankfree.shopping.track_depth', 400)).'위 밖) 시 자동 중단됩니다 — [재개]로 다시 켤 수 있어요';
     }
 
     // 제목 수집(어드민 쇼핑, 스마트스토어/브랜드 상품만) — 미노출(순위 밖) 상품은 순위체크로 제목이

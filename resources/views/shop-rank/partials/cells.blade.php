@@ -7,7 +7,7 @@
         ->when($from, fn ($c) => $c->filter(fn ($r) => $r->checked_date->toDateString() >= $from))
         ->when($to, fn ($c) => $c->filter(fn ($r) => $r->checked_date->toDateString() <= $to))
         ->sortByDesc('checked_date')->values()->take($from || $to ? 120 : 60);
-    $max = (int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10);
+    $max = (int) config('rankfree.shopping.track_depth', 400);
 @endphp
 <div class="p-4 flex flex-wrap gap-2">
     @forelse ($recs as $i => $rec)

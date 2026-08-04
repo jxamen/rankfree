@@ -178,8 +178,11 @@ return [
         // 확장 claim 롱폴링 상한(초). 알람(최소 1분)만 믿으면 픽업이 늦어 이걸로 즉시화한다.
         // ⚠️ 붙잡힌 요청이 처리 슬롯을 먹는다. artisan serve(1프로세스)면 0 으로 두거나 PHP_CLI_SERVER_WORKERS 를 올린다.
         'worker_longpoll_sec' => (int) env('SHOP_RANK_LONGPOLL', 20),
+        // 순위추적이 훑는 깊이(위). 화면 표기("400+")·확장 수집 페이지 수·자동중단 판정의 단일 기준.
+        // 구 UI "80개씩 보기" 1페이지=80위 → 400 = 5페이지(server_collect.pages 와 같은 깊이).
+        'track_depth' => (int) env('SHOP_RANK_TRACK_DEPTH', 400),
         'display' => 100,       // 페이지당 결과(최대 100)
-        'max_pages' => (int) env('NAVER_SHOPPING_MAX_PAGES', 10),  // 100×10 = 1000위까지
+        'max_pages' => (int) env('NAVER_SHOPPING_MAX_PAGES', 10),
         'page_delay_ms' => (int) env('NAVER_SHOPPING_PAGE_DELAY_MS', 200),
         'timeout' => (int) env('NAVER_SHOPPING_TIMEOUT', 15),
         // 노출 키워드 분석(25) — 조합 후보를 순위체크할 때의 상한(쿼터 보호)

@@ -133,7 +133,7 @@ class RankTrackingController extends Controller
     public function runShop(Request $request, ShopRankSlot $slot, ShopRankSlotService $service)
     {
         $r = $service->run($slot);
-        $max = (int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10);
+        $max = (int) config('rankfree.shopping.track_depth', 400);
         $found = ! empty($r['found']);
         $msg = match (true) {
             $found => "{$r['rank']}위",

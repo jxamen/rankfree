@@ -204,7 +204,7 @@ class ShopRankTrackController extends Controller
 
         $res = $this->service->run($slot);
 
-        $max = (int) config('rankfree.shopping.display', 100) * (int) config('rankfree.shopping.max_pages', 10);
+        $max = (int) config('rankfree.shopping.track_depth', 400);
         $msg = match (true) {
             (bool) $res['found'] => "{$res['rank']}위",
             // 아직 결과가 안 온 경우 — 내부 사정(워커·확장)은 알리지 않는다. 작업은 큐에 남아 처리된다.

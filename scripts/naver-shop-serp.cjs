@@ -148,7 +148,7 @@ function normalize(p, page, seq) {
         console.log(JSON.stringify({ ok: false, blocked: true, status, query: opt.query, items: [] }));
         process.exit(3);
     }
-    await page.waitForTimeout(3500);
+    await page.waitForTimeout(2000);
 
     // 1페이지 — ns-portal slot API (토큰 불필요). 페이지 컨텍스트에서 부르면 418 을 피한다.
     try {
@@ -172,26 +172,47 @@ function normalize(p, page, seq) {
     // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 매 회차 바닥까지 내린 뒤 찾는다.
     const NEXT_SELECTORS = ['button:has-text("다음 리스트")', 'a:has-text("다음 리스트")', 'text=다음 리스트 보기'];
     const targetItems = opt.pages * PAGE_SIZE;      // --pages 5 → 400개(=400위)까지
+
+    // ⏱ 고정 대기 대신 **일이 끝나는 즉시** 넘어간다 — 페이지당 4.4초 고정이 실제 소요(약 1초)의 4배였다.
+    /** 조건이 참이 될 때까지 100ms 간격 폴링. 참이 되면 즉시 true. */
+    const until = async (fn, ms) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+            if (await fn()) return true;
+            await page.waitForTimeout(100);
+        }
+        return false;
+    };
+
     let dry = 0;
     while (items.length < targetItems && Date.now() < deadline && dry < 3) {
         const before = items.length;
 
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-        await page.waitForTimeout(1200);
+
+        // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 붙을 때까지만 기다린다(보통 0.2초).
+        let btn = null;
+        await until(async () => {
+            for (const sel of NEXT_SELECTORS) {
+                const l = page.locator(sel).first();
+                if (await l.count().catch(() => 0)) { btn = l; return true; }
+            }
+            return false;
+        }, 2500);
 
         let clicked = false;
-        for (const sel of NEXT_SELECTORS) {
-            const btn = page.locator(sel).first();
-            if (!(await btn.count().catch(() => 0))) continue;
+        if (btn) {
             await btn.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-            clicked = await btn.click({ timeout: 6000 }).then(() => true).catch(() => false);
-            if (clicked) { log('클릭:', sel); break; }
+            clicked = await btn.click({ timeout: 5000 }).then(() => true).catch(() => false);
         }
         if (!clicked) {
             log('버튼 못 찾음 — 스크롤로 유도');
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
-        await page.waitForTimeout(clicked ? 3200 : 2200);
+
+        // 응답 리스너가 새 상품을 담을 때까지. 담기면 같은 응답의 나머지 파싱 여유만 짧게 준다.
+        const grew = await until(async () => items.length > before, clicked ? 8000 : 4000);
+        if (grew) { await page.waitForTimeout(150); }
         if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
     }
 
