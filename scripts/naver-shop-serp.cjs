@@ -8,6 +8,15 @@
 //       (쿠키·토큰·헤더를 그대로 붙여도 418 — TLS 지문 기반 차단).
 //     → 따라서 실제 브라우저(Playwright/chromium)로만 2페이지 이상을 수집할 수 있다.
 //
+//   ⛔ 커서 직접호출로 빠르게 하려던 시도는 **되돌렸다**(2026-08-04). 남겨두는 실측:
+//     · x-wtm-ncaptcha-token 은 **1회만 재사용**되고 두 번째 호출부터 418 (토큰은 WASM 생성이라 자체 발급 불가)
+//     · pageSize 는 50 이 상한(100 은 418), 토큰 없이도 418
+//     · 클릭 1회(새 토큰) + 직접호출 1회 교대로 27초까지 줄었으나(56초→27초),
+//       duplicatedNvMids 를 떼고 pageSize 를 강제하면 **결과 구성이 달라져 상품이 빠진다** —
+//       실측: 강아지피부사료 397개를 수집하고도 110위 상품을 못 찾아 미노출로 기록됐다.
+//     → 순위 정확도가 속도보다 우선이라 버튼 클릭 방식을 유지한다. 다시 시도한다면
+//       cursor 만 바꾸고 나머지 파라미터는 원본 그대로 둔 뒤 클릭 방식과 순위를 대조해 검증할 것.
+//
 //   쿠키/세션: persistent profile 에 유지된다. 만료되면 `--headful` 로 1회 열어 갱신(크론으로 주기 실행 가능).
 //
 //   실행:
@@ -111,36 +120,24 @@ function normalize(p, page, seq) {
     });
     const page = ctx.pages()[0] || await ctx.newPage();
 
-    /** 응답의 data 를 목록에 담는다(중복 nvMid 제외). 리스너·커서 직접호출이 같은 경로를 쓴다. */
-    function absorb(d) {
-        if (!d || !Array.isArray(d.data)) return 0;
+    // 2페이지 이후는 이 응답으로만 들어온다
+    page.on('response', async (res) => {
+        if (!res.url().includes('paged-composite-cards')) return;
+        let j = null;
+        try { j = await res.json(); } catch (e) { return; }
+        const d = j && j.data;
+        if (!d || !Array.isArray(d.data)) return;
         if (d.total != null) total = d.total;
         if (d.cursor != null) lastCursor = d.cursor;
         if (d.hasMore != null) hasMore = d.hasMore;
-        let added = 0;
         for (const it of d.data) {
             const prod = it && it.card && it.card.product;
             const n = normalize(prod, it.page ?? null, items.length + 1);
             if (!n || !n.nvMid || seenNvMid.has(n.nvMid)) continue;
             seenNvMid.add(n.nvMid);
             items.push(n);
-            added++;
             if (n.page != null) pagesSeen.add(n.page);
         }
-        return added;
-    }
-
-    // 2페이지 이후는 이 응답으로 들어온다. **페이지가 스스로 낸 요청**(버튼 클릭)일 때만 리스너로 담는다 —
-    // 우리가 직접 부른 응답까지 담으면 같은 응답을 두 번 넣으려다 진행 판정이 꼬인다.
-    let listenerOn = false;
-    let directCall = false;  // 우리가 낸 fetch 인 동안 true — 이때의 요청은 lastReq 로 잡지 않는다
-    let lastReq = null;      // 커서 직접호출에 쓸 요청 형태(URL·토큰 헤더)
-    page.on('request', (req) => {
-        if (!directCall && req.url().includes('paged-composite-cards')) lastReq = { url: req.url(), headers: req.headers() };
-    });
-    page.on('response', async (res) => {
-        if (!listenerOn || !res.url().includes('paged-composite-cards')) return;
-        try { absorb((await res.json())?.data); } catch (e) { /* 파싱 실패는 무시 */ }
     });
 
     // ⚠️ 검색 전에 쇼핑 홈을 먼저 거친다 — nstore_session 은 **세션 쿠키**라 브라우저를 새로 띄우면 사라지고,
@@ -160,7 +157,7 @@ function normalize(p, page, seq) {
         console.log(JSON.stringify({ ok: false, blocked: true, status, query: opt.query, items: [] }));
         process.exit(3);
     }
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3500);
 
     // 1페이지 — ns-portal slot API (토큰 불필요). 페이지 컨텍스트에서 부르면 418 을 피한다.
     try {
@@ -184,93 +181,27 @@ function normalize(p, page, seq) {
     // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 매 회차 바닥까지 내린 뒤 찾는다.
     const NEXT_SELECTORS = ['button:has-text("다음 리스트")', 'a:has-text("다음 리스트")', 'text=다음 리스트 보기'];
     const targetItems = opt.pages * PAGE_SIZE;      // --pages 5 → 400개(=400위)까지
+    let dry = 0;
+    while (items.length < targetItems && Date.now() < deadline && dry < 3) {
+        const before = items.length;
 
-    // ⏱ 고정 대기 대신 **일이 끝나는 즉시** 넘어간다 — 페이지당 4.4초 고정이 실제 소요(약 1초)의 4배였다.
-    /** 조건이 참이 될 때까지 100ms 간격 폴링. 참이 되면 즉시 true. */
-    const until = async (fn, ms) => {
-        const end = Date.now() + ms;
-        while (Date.now() < end) {
-            if (await fn()) return true;
-            await page.waitForTimeout(100);
-        }
-        return false;
-    };
-
-    // 2페이지 이후는 **클릭 1회 → 직접호출 1회** 교대가 최적이다(실측 2026-08-04).
-    //   · 버튼 클릭: 네이버 앱이 약 4초 간격으로만 받아줘 페이지당 5초가 바닥이다. 대신 새 토큰이 함께 발급된다.
-    //   · 직접호출: 같은 요청을 커서만 올려 페이지 안에서 fetch — 0.25초. 단 **토큰 1개당 1회만** 통하고
-    //     두 번째부터 418 이다. pageSize 는 50 이 상한(100 은 418), 토큰 없이도 418.
-    //   → 클릭이 발급한 토큰으로 한 장을 공짜로 더 받는 구조. 페이지당 평균 5초 → 2.7초.
-    const HDR = ['x-wtm-ncaptcha-token', 'x-nstore-pagesession-id', 'content-type', 'accept-language', 'referer'];
-
-    /**
-     * 버튼을 눌러 **새 토큰만** 받아온다.
-     * 페이지가 가져오는 장은 우리가 커서로 이미 앞질러 간 구간이라 대개 전부 중복이다 —
-     * 그래서 결과가 담기기를 기다리지 않고(6초 낭비), 새 토큰이 잡히는 즉시 넘어간다.
-     * 혹시 새 상품이 오면 리스너가 담는다(중복은 absorb 가 걸러낸다).
-     */
-    const mintToken = async () => {
-        const prev = lastReq ? lastReq.headers['x-wtm-ncaptcha-token'] : null;
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-        await page.waitForTimeout(600);             // 버튼이 목록 맨 아래에 lazy 로 붙을 시간
+        await page.waitForTimeout(1200);
 
-        let btn = null;
+        let clicked = false;
         for (const sel of NEXT_SELECTORS) {
-            const l = page.locator(sel).first();
-            if (await l.count().catch(() => 0)) { btn = l; break; }
-        }
-        listenerOn = true;                          // 페이지가 낸 응답은 리스너가 담는다
-        if (btn) {
+            const btn = page.locator(sel).first();
+            if (!(await btn.count().catch(() => 0))) continue;
             await btn.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-            await btn.click({ timeout: 5000 }).catch(() => {});
-        } else {
+            clicked = await btn.click({ timeout: 6000 }).then(() => true).catch(() => false);
+            if (clicked) { log('클릭:', sel); break; }
+        }
+        if (!clicked) {
             log('버튼 못 찾음 — 스크롤로 유도');
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
-        const got = await until(async () => lastReq && lastReq.headers['x-wtm-ncaptcha-token'] !== prev, 6000);
-        await page.waitForTimeout(150);             // 응답이 왔다면 담길 여유
-        listenerOn = false;
-
-        return got;
-    };
-
-    /** 직전 요청을 커서만 올려 그대로 재호출. 토큰이 소진됐으면 418 이 온다. */
-    const directNext = async () => {
-        const u = new URL(lastReq.url);
-        u.searchParams.set('cursor', String(lastCursor != null ? lastCursor : items.length));
-        u.searchParams.set('pageSize', '50');
-        u.searchParams.delete('duplicatedNvMids');   // 커서가 올라가면 의미 없는 목록 — URL 만 길어진다
-        const headers = {};
-        for (const k of HDR) if (lastReq.headers[k]) headers[k] = lastReq.headers[k];
-
-        directCall = true;                          // 우리가 낸 요청은 lastReq 로 잡지 않는다(토큰이 갱신되지 않으므로)
-        const r = await page.evaluate(async ({ url, headers }) => {
-            try {
-                const res = await fetch(url, { headers, credentials: 'include' });
-                return { status: res.status, json: res.ok ? await res.json() : null };
-            } catch (e) { return { status: -1, json: null }; }
-        }, { url: u.toString(), headers });
-        directCall = false;
-
-        return (r.status === 200 && r.json) ? absorb(r.json.data) : 0;
-    };
-
-    let dry = 0;
-    while (items.length < targetItems && hasMore !== false && Date.now() < deadline && dry < 2) {
-        const before = items.length;
-
-        if (lastReq) {
-            await directNext();                     // 0.25초 — 토큰이 살아 있으면 여기서 끝난다
-        }
-        if (items.length === before) {
-            // 토큰 소진(또는 첫 회차) — 클릭으로 새 토큰을 받고 그 토큰으로 곧장 한 장 가져온다
-            if (await mintToken() && lastReq) {
-                await directNext();
-            }
-        }
-
-        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); }
-        else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
+        await page.waitForTimeout(clicked ? 3200 : 2200);
+        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
     }
 
     await ctx.close();
