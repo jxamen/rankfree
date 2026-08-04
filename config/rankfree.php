@@ -133,9 +133,34 @@ return [
         ))),
         /*
          * 순위 수집 경로(2026-08-03) — 네이버가 openapi shop.json 을 종료했다(공지 32564).
-         *   extension = 확장 워커 큐(기본, 유일하게 동작). api = 구 shop.json(폐지 — 되돌릴 때만)
+         *   extension = 확장 워커 큐(기본). server = 서버 브라우저 수집(2026-08-04). api = 구 shop.json(폐지)
          */
         'rank_source' => env('SHOP_RANK_SOURCE', 'extension'),
+
+        /*
+         * 서버 브라우저 수집(rank_source=server) — Playwright 로 쇼핑 검색을 직접 연다.
+         * 쇼핑 검색은 headful + persistent 프로필 + 로그인 세션 + 기기등록 통과를 **모두** 갖춰야 200 이다
+         * (실측 2026-08-04: 하나라도 빠지면 405/418, 순수 curl 은 토큰·쿠키가 있어도 전부 418).
+         * 세션은 프로필 디렉터리에 유지하고 `artisan shoprank:login`(크론)으로 갱신한다.
+         */
+        'server_collect' => [
+            'profile' => env('SHOP_RANK_PROFILE', base_path('scripts/.naver-shop-profile')),
+            'node' => env('RANKFREE_NODE', 'node'),
+            'playwright' => env('RANKFREE_PLAYWRIGHT', ''),
+            // 리눅스는 가상 디스플레이가 필요하다(headless 는 차단). 윈도우 로컬은 빈 값으로 두면 직접 실행.
+            'xvfb' => env('SHOP_RANK_XVFB', PHP_OS_FAMILY === 'Linux' ? 'xvfb-run -a' : ''),
+            'login' => [
+                'id' => env('NAVER_SHOP_LOGIN_ID', ''),
+                'pw' => env('NAVER_SHOP_LOGIN_PW', ''),
+            ],
+            // 한 번에 훑을 페이지 수(1페이지 20위 + 이후 페이지당 약 40~50개)
+            'pages' => (int) env('SHOP_RANK_PAGES', 5),
+            'timeout' => (int) env('SHOP_RANK_COLLECT_TIMEOUT', 180),
+            // 같은 키워드를 여러 슬롯이 쓰므로 수집 결과를 잠깐 재사용한다(초).
+            'cache_ttl' => (int) env('SHOP_RANK_CACHE_TTL', 600),
+            // 브라우저는 서버 자원을 먹는다 — 동시에 1개만 돌린다(락 대기 상한, 초).
+            'lock_wait' => (int) env('SHOP_RANK_LOCK_WAIT', 120),
+        ],
         // 수동 순위체크가 워커 결과를 기다리는 시간(초). 0 이면 안 기다리고 큐에만 넣는다.
         // 1000위까지 뒤지면 수집에 2~3분 걸린다 — 화면은 그만큼 못 기다리므로 '확인 중' 으로 돌려주고
         // 결과는 워커가 끝내는 대로 슬롯에 반영된다.

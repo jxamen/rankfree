@@ -18,7 +18,10 @@ class ShopRankSlotService
     /** 차단(429 로 전 키 소진) 시 기록 rank 센티널. */
     public const RANK_BLOCKED = -1;
 
-    public function __construct(private NaverShoppingRankService $engine) {}
+    public function __construct(
+        private NaverShoppingRankService $engine,
+        private ShopSerpBrowserCollector $browser,
+    ) {}
 
     /** 상품 URL/업체명 입력 → 대상 파싱(미리보기·저장용). */
     public function resolve(string $input): array
@@ -93,17 +96,20 @@ class ShopRankSlotService
     public function run(ShopRankSlot $slot): array
     {
         // shop.json 종료(공지 32564) 후 기본 경로 — 확장 워커에 맡기고 즉시 반환한다.
-        // 서버가 직접 부를 수 있는 소스가 없으므로 여기서 순위를 만들어낼 방법이 없다.
-        if ((string) config('rankfree.shopping.rank_source', 'extension') === 'extension') {
+        $source = (string) config('rankfree.shopping.rank_source', 'extension');
+        if ($source === 'extension') {
             return $this->runViaWorker($slot);
         }
 
-        $res = $this->engine->checkRank($slot->keyword, [
-            'type' => $slot->target_type,
-            'product_id' => (string) $slot->product_id,
-            'mall_name' => (string) $slot->mall_name,
-            'url' => (string) $slot->product_url,
-        ]);
+        // server = 서버 브라우저 수집(2026-08-04). 순수 curl 은 418 이라 실제 브라우저로만 가능하다.
+        $res = $source === 'server'
+            ? $this->browser->checkRank($slot)
+            : $this->engine->checkRank($slot->keyword, [
+                'type' => $slot->target_type,
+                'product_id' => (string) $slot->product_id,
+                'mall_name' => (string) $slot->mall_name,
+                'url' => (string) $slot->product_url,
+            ]);
 
         $rank = ($res['blocked'] && ! $res['found']) ? self::RANK_BLOCKED : (int) $res['rank'];
 

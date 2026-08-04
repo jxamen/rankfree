@@ -20,6 +20,15 @@ Schedule::command('searchadweb:login --if-stale')
     ->withoutOverlapping()
     ->runInBackground();
 
+// 쇼핑 순위수집 세션 유지 — 서버 브라우저 수집일 때만. 세션이 살아 있으면 스크립트가 로그인을 생략한다.
+// (쇼핑 검색은 로그인 세션이 끊기면 405/418 이라 순위가 통째로 미확인이 된다)
+if (config('rankfree.shopping.rank_source') === 'server') {
+    Schedule::command('shoprank:login')
+        ->everyFourHours()
+        ->withoutOverlapping()
+        ->runInBackground();
+}
+
 // 커뮤니티 페르소나 자동 활동 — 살아있는 게시판(설정으로 on/off). 30분마다 소량 활동.
 if (config('rankfree.community.schedule_enabled', true)) {
     Schedule::command('community:simulate')
