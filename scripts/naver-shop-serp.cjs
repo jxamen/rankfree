@@ -203,11 +203,16 @@ function normalize(p, page, seq) {
     //   → 클릭이 발급한 토큰으로 한 장을 공짜로 더 받는 구조. 페이지당 평균 5초 → 2.7초.
     const HDR = ['x-wtm-ncaptcha-token', 'x-nstore-pagesession-id', 'content-type', 'accept-language', 'referer'];
 
-    /** 버튼을 눌러 페이지가 스스로 다음 장을 불러오게 한다(새 토큰 동반). 담겼으면 true. */
-    const clickNext = async () => {
-        const before = items.length;
+    /**
+     * 버튼을 눌러 **새 토큰만** 받아온다.
+     * 페이지가 가져오는 장은 우리가 커서로 이미 앞질러 간 구간이라 대개 전부 중복이다 —
+     * 그래서 결과가 담기기를 기다리지 않고(6초 낭비), 새 토큰이 잡히는 즉시 넘어간다.
+     * 혹시 새 상품이 오면 리스너가 담는다(중복은 absorb 가 걸러낸다).
+     */
+    const mintToken = async () => {
+        const prev = lastReq ? lastReq.headers['x-wtm-ncaptcha-token'] : null;
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-        await page.waitForTimeout(1200);            // 버튼이 목록 맨 아래에 lazy 로 붙을 시간
+        await page.waitForTimeout(600);             // 버튼이 목록 맨 아래에 lazy 로 붙을 시간
 
         let btn = null;
         for (const sel of NEXT_SELECTORS) {
@@ -222,11 +227,11 @@ function normalize(p, page, seq) {
             log('버튼 못 찾음 — 스크롤로 유도');
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
-        const grew = await until(async () => items.length > before, 6000);
-        if (grew) await page.waitForTimeout(150);   // 같은 응답의 나머지 항목 파싱 여유
+        const got = await until(async () => lastReq && lastReq.headers['x-wtm-ncaptcha-token'] !== prev, 6000);
+        await page.waitForTimeout(150);             // 응답이 왔다면 담길 여유
         listenerOn = false;
 
-        return grew;
+        return got;
     };
 
     /** 직전 요청을 커서만 올려 그대로 재호출. 토큰이 소진됐으면 418 이 온다. */
@@ -258,7 +263,10 @@ function normalize(p, page, seq) {
             await directNext();                     // 0.25초 — 토큰이 살아 있으면 여기서 끝난다
         }
         if (items.length === before) {
-            await clickNext();                      // 막혔으면(또는 첫 회차) 클릭으로 한 장 + 새 토큰
+            // 토큰 소진(또는 첫 회차) — 클릭으로 새 토큰을 받고 그 토큰으로 곧장 한 장 가져온다
+            if (await mintToken() && lastReq) {
+                await directNext();
+            }
         }
 
         if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); }
