@@ -20,9 +20,10 @@ Schedule::command('searchadweb:login --if-stale')
     ->withoutOverlapping()
     ->runInBackground();
 
-// 쇼핑 순위수집 세션 유지 — 서버 브라우저 수집일 때만. 세션이 살아 있으면 스크립트가 로그인을 생략한다.
-// (쇼핑 검색은 로그인 세션이 끊기면 405/418 이라 순위가 통째로 미확인이 된다)
-if (config('rankfree.shopping.rank_source') === 'server') {
+// 쇼핑 순위수집 세션 유지 — 전용 계정이 설정돼 있으면 유지한다(일 2회 배치의 --deep 이 이 세션을 쓴다).
+// 세션이 살아 있으면 스크립트가 로그인을 생략하므로 그대로 크론에 걸면 된다.
+// (쇼핑 검색은 로그인 세션이 끊기면 405/418 이라 깊은 순위가 통째로 미확인이 된다)
+if (config('rankfree.shopping.server_collect.login.id')) {
     Schedule::command('shoprank:login')
         ->everyFourHours()
         ->withoutOverlapping()
@@ -42,12 +43,15 @@ if (config('rankfree.community.schedule_enabled', true)) {
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->withoutOverlapping()->runInBackground();
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->withoutOverlapping()->runInBackground();
 
-// 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST, 2026-07-24 매시간→2회 축소). 활성 슬롯 순위 조회·기록(openapi shop.json).
-// 🔴 중단(2026-08-03) — 네이버가 쇼핑 검색 API 를 2026-07-31 종료(개발자센터 공지 32564).
-//    남겨두면 죽은 API 를 매일 두 번 두들기며 슬롯마다 '미발견' 기록을 남긴다.
-//    확장 워커 방식으로 전환 후 되살린다(.claude/14_SHOPPING_RANK.md).
-// Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
-// Schedule::command('shop:track-run')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
+// 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST). 활성 슬롯 순위 조회·기록.
+// 2026-08-03 shop.json 종료(공지 32564)로 중단했다가, 2026-08-04 서버 수집으로 되살렸다.
+//   --deep: 20위까지는 slot API 1콜(0.3초)로 끝내고, 그 밖만 서버 브라우저로 본다(키워드당 20~30초).
+//   확장(사용자 PC)이 꺼져 있어도 완결된다 — 배치라 느려도 무방하다.
+//   전제: `shoprank:login` 이 유지하는 네이버 세션. 브라우저는 실행 중에만 뜬다(xvfb-run, 동시 1개).
+if (config('rankfree.shopping.track_schedule_enabled', true)) {
+    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
+    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
+}
 
 // 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
 Schedule::command('orders:dispatch-due')->timezone('Asia/Seoul')->dailyAt('09:00')->withoutOverlapping()->runInBackground();

@@ -92,18 +92,23 @@ class ShopRankSlotService
         return $r['created'][0];
     }
 
-    /** 슬롯 1개 실시간 순위 조회 + 일별 기록 저장(멱등). */
-    public function run(ShopRankSlot $slot): array
+    /**
+     * 슬롯 1개 순위 조회 + 일별 기록 저장(멱등).
+     *
+     * @param  bool  $deep  20위 밖을 서버 브라우저로 끝까지 본다(일 2회 배치 전용).
+     *                      확장이 안 켜져 있어도 완결되지만 키워드당 20~30초 걸리므로 실시간에는 쓰지 않는다.
+     */
+    public function run(ShopRankSlot $slot, bool $deep = false): array
     {
         $source = (string) config('rankfree.shopping.rank_source', 'extension');
 
         if ($source === 'extension') {
             // 상위 20위는 서버가 slot API 1콜(약 0.3초)로 즉시 끝낸다 — 확장 큐를 태우지 않는다.
-            // 20위 밖이면 null 이 오고, 깊은 순위는 종전대로 확장 워커가 맡는다
-            // (확장은 실사용자 브라우저·IP 라 차단이 적고, 서버 브라우저보다 훨씬 빠르다).
             $quick = config('rankfree.shopping.quick_top20', true) ? $this->browser->quickCheck($slot) : null;
             if ($quick === null) {
-                return $this->runViaWorker($slot);
+                // 20위 밖 — 배치면 서버 브라우저가 끝까지 보고(무인), 실시간이면 확장 워커에 맡긴다
+                // (확장은 실사용자 브라우저·IP 라 훨씬 빠르지만 PC 가 켜져 있어야 한다).
+                return $deep ? $this->storeResult($slot, $this->browser->checkRank($slot)) : $this->runViaWorker($slot);
             }
             $res = $quick;
         } else {
@@ -118,6 +123,16 @@ class ShopRankSlotService
                 ]);
         }
 
+        return $this->storeResult($slot, $res);
+    }
+
+    /**
+     * 순위 조회 결과를 일별 기록·슬롯에 반영한다(멱등).
+     *
+     * @param  array  $res  checkRank 형태(blocked/found/rank/total/price/title/mall_name/product_id)
+     */
+    private function storeResult(ShopRankSlot $slot, array $res): array
+    {
         $rank = ($res['blocked'] && ! $res['found']) ? self::RANK_BLOCKED : (int) $res['rank'];
 
         // 차단(전 키 429)이라도 오늘 이미 유효 순위가 기록돼 있으면 -1 로 덮지 않는다 —

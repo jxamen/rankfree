@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 /** 활성 쇼핑 순위 추적 슬롯의 현재 순위를 조회·기록 (스케줄러 — 매시간). */
 class ShopTrackRun extends Command
 {
-    protected $signature = 'shop:track-run {--slot= : 특정 슬롯만} {--user= : 특정 유저만}';
+    protected $signature = 'shop:track-run {--slot= : 특정 슬롯만} {--user= : 특정 유저만} {--deep : 20위 밖도 서버 브라우저로 끝까지 조회(무인 배치용, 키워드당 20~30초)}';
 
     protected $description = '활성 쇼핑 순위 추적 슬롯의 순위 조회·기록';
 
@@ -25,9 +25,10 @@ class ShopTrackRun extends Command
         $slots = $q->get();
         $this->info($slots->count().'개 슬롯 처리 시작');
 
+        $deep = (bool) $this->option('deep');
         $done = 0;
         foreach ($slots as $slot) {
-            $r = $service->run($slot);
+            $r = $service->run($slot, $deep);
             if (! empty($r['blocked']) && empty($r['found'])) {
                 $this->warn('쇼핑 API 한도(429) — 중단 (다음 실행에서 재개)');
                 break;

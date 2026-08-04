@@ -144,6 +144,9 @@ return [
          */
         'quick_top20' => (bool) env('SHOP_RANK_QUICK_TOP20', true),
 
+        // 일 2회(08:00·20:00 KST) 순위추적 배치. 20위 밖은 서버 브라우저가 보므로 사용자 PC 가 꺼져 있어도 돈다.
+        'track_schedule_enabled' => (bool) env('SHOP_RANK_TRACK_SCHEDULE', true),
+
         /*
          * 서버 브라우저 수집(rank_source=server) — Playwright 로 쇼핑 검색을 직접 연다.
          * 쇼핑 검색은 headful + persistent 프로필 + 로그인 세션 + 기기등록 통과를 **모두** 갖춰야 200 이다
