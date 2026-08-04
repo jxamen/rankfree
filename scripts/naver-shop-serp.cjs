@@ -111,24 +111,35 @@ function normalize(p, page, seq) {
     });
     const page = ctx.pages()[0] || await ctx.newPage();
 
-    // 2페이지 이후는 이 응답으로만 들어온다
-    page.on('response', async (res) => {
-        if (!res.url().includes('paged-composite-cards')) return;
-        let j = null;
-        try { j = await res.json(); } catch (e) { return; }
-        const d = j && j.data;
-        if (!d || !Array.isArray(d.data)) return;
+    /** 응답의 data 를 목록에 담는다(중복 nvMid 제외). 리스너·커서 직접호출이 같은 경로를 쓴다. */
+    function absorb(d) {
+        if (!d || !Array.isArray(d.data)) return 0;
         if (d.total != null) total = d.total;
         if (d.cursor != null) lastCursor = d.cursor;
         if (d.hasMore != null) hasMore = d.hasMore;
+        let added = 0;
         for (const it of d.data) {
             const prod = it && it.card && it.card.product;
             const n = normalize(prod, it.page ?? null, items.length + 1);
             if (!n || !n.nvMid || seenNvMid.has(n.nvMid)) continue;
             seenNvMid.add(n.nvMid);
             items.push(n);
+            added++;
             if (n.page != null) pagesSeen.add(n.page);
         }
+        return added;
+    }
+
+    // 2페이지 이후는 이 응답으로 들어온다. 부트스트랩(버튼 1회 클릭) 동안만 켜 두고,
+    // 이후 커서 직접호출 구간에서는 끈다 — 켜 두면 같은 응답을 두 번 담으려다 진행 판정이 꼬인다.
+    let listenerOn = true;
+    let lastReq = null;      // 커서 직접호출에 쓸 요청 형태(URL·토큰 헤더)
+    page.on('request', (req) => {
+        if (req.url().includes('paged-composite-cards')) lastReq = { url: req.url(), headers: req.headers() };
+    });
+    page.on('response', async (res) => {
+        if (!listenerOn || !res.url().includes('paged-composite-cards')) return;
+        try { absorb((await res.json())?.data); } catch (e) { /* 파싱 실패는 무시 */ }
     });
 
     // ⚠️ 검색 전에 쇼핑 홈을 먼저 거친다 — nstore_session 은 **세션 쿠키**라 브라우저를 새로 띄우면 사라지고,
@@ -184,39 +195,53 @@ function normalize(p, page, seq) {
         return false;
     };
 
-    let dry = 0;
-    while (items.length < targetItems && Date.now() < deadline && dry < 3) {
-        const before = items.length;
-
+    // (1) 부트스트랩 — 요청 형태(커서 URL + nCaptcha 토큰)를 얻으려고 버튼을 **한 번만** 누른다.
+    for (let i = 0; i < 3 && !lastReq && Date.now() < deadline; i++) {
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
-        // 직전 페이지의 버튼이 잠깐 남아 있다 — 바로 찾으면 그 낡은 버튼을 눌러 한 사이클을 통째로 버린다(실측).
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(1200);            // 버튼이 목록 맨 아래에 lazy 로 붙을 시간
 
-        // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 붙을 때까지만 기다린다(보통 0.2초).
         let btn = null;
-        await until(async () => {
-            for (const sel of NEXT_SELECTORS) {
-                const l = page.locator(sel).first();
-                if (await l.count().catch(() => 0)) { btn = l; return true; }
-            }
-            return false;
-        }, 2500);
-
-        let clicked = false;
+        for (const sel of NEXT_SELECTORS) {
+            const l = page.locator(sel).first();
+            if (await l.count().catch(() => 0)) { btn = l; break; }
+        }
         if (btn) {
             await btn.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-            clicked = await btn.click({ timeout: 5000 }).then(() => true).catch(() => false);
-        }
-        if (!clicked) {
+            await btn.click({ timeout: 5000 }).catch(() => {});
+        } else {
             log('버튼 못 찾음 — 스크롤로 유도');
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
+        await until(async () => !!lastReq, 5000);
+    }
+    await until(async () => items.length > 20, 2000);   // 부트스트랩 응답이 담길 여유
+    listenerOn = false;
+    if (!lastReq) log('커서 요청을 확보하지 못했습니다 — 1페이지만 수집됩니다.');
 
-        // 응답 리스너가 새 상품을 담을 때까지. 담기면 같은 응답의 나머지 파싱 여유만 짧게 준다.
-        // 정상 응답은 약 1초 — 3초를 넘기면 헛클릭이므로 오래 붙들지 말고 다음 회차에서 다시 누른다.
-        const grew = await until(async () => items.length > before, clicked ? 3000 : 2500);
-        if (grew) { await page.waitForTimeout(150); }
-        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
+    // (2) 이후는 커서만 올려 페이지 컨텍스트에서 직접 호출한다.
+    //   · 버튼 클릭 방식은 네이버 앱이 4초 간격으로만 받아줘 페이지당 5초가 걸렸다(실측 2026-08-04)
+    //   · 직접 호출은 0.25초. 토큰은 재사용이 통하고, pageSize 는 50 을 넘기면 418 이다(실측)
+    const HDR = ['x-wtm-ncaptcha-token', 'x-nstore-pagesession-id', 'content-type', 'accept-language', 'referer'];
+    while (lastReq && items.length < targetItems && hasMore !== false && Date.now() < deadline) {
+        const u = new URL(lastReq.url);
+        u.searchParams.set('cursor', String(lastCursor != null ? lastCursor : items.length));
+        u.searchParams.set('pageSize', '50');
+        u.searchParams.delete('duplicatedNvMids');   // 커서가 올라가면 의미 없는 목록 — URL 만 길어진다
+        const headers = {};
+        for (const k of HDR) if (lastReq.headers[k]) headers[k] = lastReq.headers[k];
+
+        const r = await page.evaluate(async ({ url, headers }) => {
+            try {
+                const res = await fetch(url, { headers, credentials: 'include' });
+                return { status: res.status, json: res.ok ? await res.json() : null };
+            } catch (e) { return { status: -1, json: null }; }
+        }, { url: u.toString(), headers });
+
+        if (r.status !== 200 || !r.json) { log('커서 호출 중단 status=' + r.status); break; }
+        const added = absorb(r.json.data);
+        log('누적', items.length, '/', targetItems, '개');
+        if (!added) break;                          // 더 줄 게 없다
+        await page.waitForTimeout(250);             // 페이싱 — 과속으로 막히지 않게
     }
 
     await ctx.close();
