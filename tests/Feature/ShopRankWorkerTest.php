@@ -126,10 +126,10 @@ class ShopRankWorkerTest extends TestCase
     }
 
     /**
-     * 🔴 순위추적은 구 shop.json 과 같은 1000위 범위를 봐야 한다.
+     * 🔴 순위추적은 shopping.track_depth(기본 400위) 범위를 봐야 한다 — 서버 배치와 같은 깊이.
      * 시장분석 기본값(80)을 그대로 쓰면 80위 밖 상품이 전부 '미노출'로 기록된다.
      */
-    public function test_기본_수집_범위는_1000위다(): void
+    public function test_기본_수집_범위는_track_depth다(): void
     {
         $user = User::factory()->create();
         $slot = ShopRankSlot::create([
@@ -137,14 +137,15 @@ class ShopRankWorkerTest extends TestCase
             'product_id' => '222', 'is_active' => true,
         ]);
 
+        $depth = (int) config('rankfree.shopping.track_depth', 400);
         $job = app(ShopRankSlotService::class)->enqueue($slot);
 
-        $this->assertGreaterThanOrEqual(13, $job->pages, '80개씩 13페이지 = 1040위');
+        $this->assertSame((int) ceil($depth / 80), $job->pages, "80개씩 세어 {$depth}위");
 
-        // 확장에 넘기는 count 도 1000 이상이어야 한다
+        // 확장에 넘기는 count 도 같은 깊이여야 한다(실시간·배치가 갈라지지 않게)
         ShopRankJob::touchWorkerSeen('w1');
         $res = $this->postJson('/api/ext/shop-rank/claim', ['worker_id' => 'w1', 'limit' => 1])->assertOk();
-        $this->assertGreaterThanOrEqual(1000, (int) $res->json('data.items.0.count'));
+        $this->assertGreaterThanOrEqual($depth, (int) $res->json('data.items.0.count'));
     }
 
     /** 🔴 워커 여러 대가 같은 작업을 가져가면 중복 수집이다 — claim 은 원자적이어야 한다. */

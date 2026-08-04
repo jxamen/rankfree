@@ -79,8 +79,8 @@ class ExtShopRankController extends Controller
                 'keyword' => (string) $j->keyword,
                 'pages' => (int) $j->pages,
                 // 수집만 시키고 매칭은 서버가 한다 — 규칙이 두 곳으로 갈라지지 않게.
-                // count = 몇 위까지 뒤질지. 순위추적은 구 shop.json 과 같은 1000위가 기본이다
-                // (시장분석의 80~400 과 목적이 다르다 — 여기서 얕게 끊으면 순위가 '미노출'로 잘못 나온다).
+                // count = 몇 위까지 뒤질지. 순위추적은 shopping.track_depth(기본 400위)를 본다
+                // (서버 배치와 같은 깊이 — 여기서 얕게 끊으면 순위가 '미노출'로 잘못 나온다).
                 'count' => max(80, (int) $j->pages * 80),
                 /*
                  * 🔴 조기 중단 힌트 — 대상을 찾으면 그 자리에서 페이지 수집을 멈추라는 뜻이다.
