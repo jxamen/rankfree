@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Shopping\NaverShopExposureService;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordAnalysisItem;
@@ -56,6 +57,15 @@ class ShopKeywordExposureController extends Controller
         }
         if ($tooLong = $cores->first(fn ($k) => mb_strlen($k) > 120)) {
             return back()->withInput()->withErrors(['core_keyword' => "핵심 키워드가 너무 깁니다: {$tooLong}"]);
+        }
+
+        // 빠른 확인(api)은 slot API 1콜이라 상위 20위까지만 판정된다 — 그 밖을 미노출로 오기록하지 않도록 막는다.
+        $method = $data['check_method'] ?? 'api';
+        $slotMax = NaverShopExposureService::SLOT_MAX;
+        if ($method === 'api' && (int) ($data['threshold'] ?? 0) > $slotMax) {
+            return back()->withInput()->withErrors([
+                'threshold' => "빠른 확인 방식은 상위 {$slotMax}위까지만 판정할 수 있습니다. {$slotMax} 이하로 지정하거나 통합검색 크롤링을 선택하세요.",
+            ]);
         }
 
         // 조합 수는 선택하지 않는다 — 만들 수 있는 조합 전부 생성(hard_cap 안전선).

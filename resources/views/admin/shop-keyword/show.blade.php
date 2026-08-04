@@ -416,7 +416,7 @@ window.__SK = {
     needTitle: @json(! $analysis->product_title && (string) $analysis->product_id !== ''),
     needSupplement: @json($needSupplement),
     paused: @json($analysis->status === 'paused'),
-    method: @json($analysis->check_method ?? 'api'),   // api=서버 shop.json 폴링 | search=확장 통합검색 크롤링
+    method: @json($analysis->check_method ?? 'api'),   // api=서버 slot API 폴링(상위 20위) | search=확장 통합검색 크롤링
 
     urls: {
         check: '{{ route('admin.shop-keyword.check', $analysis) }}',
@@ -889,7 +889,7 @@ window.__SK = {
         if (extMode && !stopped) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다
         if (!box) return;   // 미확인 조합 없음 — 보충만 수행
         if (stopped) return;   // 서버 저장된 중단 — "이어서 확인" 클릭 전까지 시작하지 않는다
-        // api 방식은 서버 shop.json 폴링으로 처리(빠름·차단 없음) — 확장 크롤링 루프는 통합검색 방식 전용
+        // api 방식은 서버 slot API 폴링으로 처리(빠름·차단 없음, 상위 20위) — 확장 크롤링 루프는 통합검색 방식 전용
         if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
     })();
 })();

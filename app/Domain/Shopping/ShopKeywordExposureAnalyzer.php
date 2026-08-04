@@ -172,16 +172,14 @@ class ShopKeywordExposureAnalyzer
                 }
                 try {
                     if ($useApi) {
-                        // shop.json 상위 40 안 순위(1페이지 1콜 — threshold 최대 40 커버). 광고 판별 없음.
-                        $api = $this->shop->checkRank($item->keyword, $target, [
-                            'display' => 40, 'max_pages' => 1,
-                            'timeout' => max(2, min($httpTimeout, (int) ceil($budget - $elapsed))),
-                        ]);
-                        // ⚠️ checkRank 는 일부 키가 429 여도 다음 키로 성공하면 blocked=true + found 를 함께 준다(실측)
-                        //    — found 면 성공으로 확정하고, 못 찾았는데 blocked 일 때만 중단(미노출 오기록 방지).
-                        $res = ! empty($api['found'])
-                            ? ['rank' => (int) $api['rank'], 'ad' => false, 'blocked' => false, 'error' => null]
-                            : ['rank' => 0, 'ad' => false, 'blocked' => ! empty($api['blocked']), 'error' => $api['error'] ?? null];
+                        // ns-portal slot API 1콜 — 상위 20위까지, 광고(SUPER_POINT) 구분 포함(2026-08-04).
+                        // 종전 shop.json 방식은 네이버가 2026-07-31 API 를 종료해 더 이상 동작하지 않는다(공지 32564).
+                        // ⚠️ 이 API 는 20위까지만 준다 — threshold 가 20 을 넘으면 그 밖의 상품은 미노출로 기록된다.
+                        $res = $this->exposure->exposureBySlotApi(
+                            $item->keyword,
+                            $target,
+                            max(2, min($httpTimeout, (int) ceil($budget - $elapsed)))
+                        );
                     } else {
                         // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
                         $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));

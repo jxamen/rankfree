@@ -17,6 +17,11 @@ class NaverShopExposureService
 {
     private const MO_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
+    private const PC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+    /** slot API 가 실제로 돌려주는 상한(실측) — 더 크게 요청해도 20위까지만 온다. */
+    public const SLOT_MAX = 20;
+
     /**
      * @param  array  $target  resolveTarget() 결과(type/product_id/mall_name)
      * @return array{found:bool, rank:int, ad:bool, total:int, blocked:bool, error?:string}
@@ -52,6 +57,100 @@ class NaverShopExposureService
         }
 
         return $this->rankFromHtml($r->body(), $target) + $out;
+    }
+
+    /**
+     * 쇼핑 상위 노출 판정 — ns-portal slot API 1콜(2026-08-04 도입).
+     *
+     * openapi shop.json 이 2026-07-31 종료되면서 서버 판정 수단이 사라졌다. 이 API 는
+     * **토큰·쿠키 없이 서버 curl 로 200** 이고 광고(SUPER_POINT)까지 구분돼, 상위 N위 노출 여부
+     * 판정(노출 키워드 분석)에 그대로 쓸 수 있다.
+     *
+     * 한계(실측 2026-08-04): page 파라미터를 무시하고 **최대 20위**까지만 준다
+     * (page=1·2·5·10 응답 동일, pageSize 40·80 이어도 20위, 120 은 빈 응답).
+     * 20위를 넘는 깊은 순위는 이 API 로 얻을 수 없다.
+     *
+     * @param  array  $target  resolveTarget() 결과(id_kind/product_id/mall_name)
+     * @return array{found:bool, rank:int, ad:bool, total:int, blocked:bool, error?:string}
+     */
+    public function exposureBySlotApi(string $keyword, array $target, int $timeout = 8): array
+    {
+        $out = ['found' => false, 'rank' => 0, 'ad' => false, 'total' => 0, 'blocked' => false];
+        $kw = trim($keyword);
+        if ($kw === '') {
+            $out['error'] = 'empty_keyword';
+
+            return $out;
+        }
+
+        try {
+            $r = Http::withHeaders([
+                'accept' => 'application/json, text/plain, */*',
+                'accept-language' => 'ko-KR,ko;q=0.9',
+                'referer' => 'https://search.shopping.naver.com/',
+            ])->withUserAgent(self::PC_UA)
+                ->timeout($timeout)
+                ->get('https://ns-portal.shopping.naver.com/api/v2/shopping-paged-slot', [
+                    'query' => $kw,
+                    'source' => 'shp_gui',
+                    'page' => 1,
+                    'pageSize' => self::SLOT_MAX,
+                ]);
+        } catch (Throwable) {
+            $out['blocked'] = true;
+            $out['error'] = 'http_exception';
+
+            return $out;
+        }
+
+        if (! $r->ok()) {
+            $out['blocked'] = true;                 // 418/429 = 차단 — 미노출로 오기록하지 않는다
+            $out['error'] = 'http_'.$r->status();
+
+            return $out;
+        }
+
+        $slots = $this->slotsFromApi($r->json());
+        if ($slots === null) {
+            $out['blocked'] = true;
+            $out['error'] = 'parse_failed';
+
+            return $out;
+        }
+
+        return $this->rankFromSlots($slots, $target) + $out;
+    }
+
+    /**
+     * slot API 응답 → rankFromSlots 가 쓰는 슬롯 배열. 구조가 깨졌으면 null(미노출과 구분).
+     *
+     * @return list<array>|null
+     */
+    private function slotsFromApi(mixed $json): ?array
+    {
+        if (! is_array($json) || ! isset($json['data']) || ! is_array($json['data'])) {
+            return null;
+        }
+        $out = [];
+        foreach ($json['data'] as $block) {
+            foreach ((array) ($block['slots'] ?? []) as $slot) {
+                $d = $slot['data'] ?? null;
+                if (! is_array($d)) {
+                    continue;
+                }
+                $out[] = [
+                    'sourceType' => (string) ($d['sourceType'] ?? ''),   // SAS=오가닉 / SUPER_POINT=광고성
+                    'channelProductId' => (string) ($d['channelProductId'] ?? ''),
+                    'nvMid' => (string) ($d['nvMid'] ?? ''),
+                    'mallName' => (string) ($d['mallName'] ?? ''),
+                    'productName' => trim(strip_tags((string) ($d['productName'] ?? ''))),
+                    'rank' => (int) ($d['rank'] ?? 0),
+                    'price' => (int) ($d['discountedSalePrice'] ?? $d['salePrice'] ?? 0),
+                ];
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -138,11 +237,23 @@ class NaverShopExposureService
      */
     public function rankFromHtml(string $html, array $target): array
     {
-        $out = ['found' => false, 'rank' => 0, 'ad' => false, 'total' => 0, 'me' => null];
         $slots = $this->parseSlots($html);
         if (! $slots) {
-            return $out;   // 가격비교 미노출 키워드 — 노출 0(오류 아님)
+            return ['found' => false, 'rank' => 0, 'ad' => false, 'total' => 0, 'me' => null];   // 가격비교 미노출 키워드 — 노출 0(오류 아님)
         }
+
+        return $this->rankFromSlots($slots, $target);
+    }
+
+    /**
+     * 슬롯 목록(순서대로) → 오가닉 순위·광고노출 판정. HTML·slot API 양쪽이 공유한다.
+     *
+     * @param  list<array>  $slots  sourceType/channelProductId/nvMid/mallName/productName(+rank,price)
+     * @return array{found:bool, rank:int, ad:bool, total:int, me:?array{title:string, mall:string, price:int}}
+     */
+    public function rankFromSlots(array $slots, array $target): array
+    {
+        $out = ['found' => false, 'rank' => 0, 'ad' => false, 'total' => 0, 'me' => null];
 
         $idKind = (string) ($target['id_kind'] ?? 'channel');   // 'channel' | 'nvmid'
         $pid = (string) ($target['product_id'] ?? '');

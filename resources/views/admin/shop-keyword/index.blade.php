@@ -12,6 +12,7 @@
 @endif
 @error('core_keyword')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 @error('product')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
+@error('threshold')<div class="card-soft px-4 py-3 mb-4 text-error" style="font-size:var(--fs-xs);">{{ $message }}</div>@enderror
 
 <form method="POST" action="{{ route('admin.shop-keyword.store') }}" class="card p-5 mb-5">
     @csrf
@@ -42,7 +43,7 @@
             @endforeach
         </div>
         <div class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">
-            <b class="text-muted">쇼핑 API(기본)</b>: openapi 쇼핑검색 기준 순위 — 서버에서 빠르게 끝나고 차단이 없습니다(쇼핑 순위추적과 동일 기준, 광고 노출 판별 없음).
+            <b class="text-muted">쇼핑 API(기본)</b>: 쇼핑 검색 슬롯 API 기준 순위 — 서버에서 빠르게 끝나고 차단이 없으며 광고(슈퍼적립) 노출도 구분합니다. <b class="text-muted">상위 {{ \App\Domain\Shopping\NaverShopExposureService::SLOT_MAX }}위까지만</b> 판정됩니다(그보다 깊은 순위는 통합검색 방식).
             <b class="text-muted">통합검색 크롤링</b>: 실제 모바일 통합검색 화면의 오가닉 순위 + 광고 노출 판별 — 정확하지만 느리고 보안문자·차단(429)이 걸릴 수 있습니다.
         </div>
     </div>
