@@ -36,8 +36,9 @@ const fs = require('fs');
 
 // (UA 는 프로필 Chrome 의 실제 값을 그대로 쓴다 — 덮어쓰면 418)
 
-// 깊이 기준 — 구 UI "80개씩 보기" 1페이지. 네이버 신 UI 의 내부 페이지는 30~50개로 들쭉날쭉해
-// 페이지 수로 세면 순위 깊이가 키워드마다 달라진다(실측: 5페이지가 166위). 그래서 개수로 센다.
+// 깊이 기준 — 구 UI "80개씩 보기" 1페이지(광고 제외 오가닉 80개). 네이버 신 UI 의 내부 페이지는
+// 30~50개로 들쭉날쭉해 페이지 수로 세면 깊이가 키워드마다 달라진다(실측: 5페이지가 166위).
+// 광고까지 세도 안 된다 — 순위가 광고 제외 기준이라 400개를 채워도 오가닉은 370개대에서 끊긴다.
 const PAGE_SIZE = 80;
 
 function log(...a) { console.error('[' + new Date().toISOString() + ']', ...a); }
@@ -108,6 +109,19 @@ function normalize(p, page, seq) {
     const seenNvMid = new Set();
     const pagesSeen = new Set();
     let total = null, lastCursor = null, hasMore = null;
+    // 깊이는 **광고를 뺀 오가닉 개수**로 센다 — 순위 자체가 광고 제외 기준이라,
+    // 광고까지 세면 400개를 채워도 오가닉은 370개대에서 끊긴다(실측: 416개 중 광고 42개).
+    let organic = 0;
+    /** 목록에 담고 오가닉이면 카운트. 중복(nvMid)은 담지 않는다. */
+    const push = (n) => {
+        if (!n || !n.nvMid || seenNvMid.has(n.nvMid)) return false;
+        seenNvMid.add(n.nvMid);
+        items.push(n);
+        if (!n.isAd) organic++;
+        if (n.page != null) pagesSeen.add(n.page);
+
+        return true;
+    };
 
     // ⚠️ 항상 headful 이어야 한다 — headless 는 `--headless=new` 까지 전부 418 로 차단된다(실측 2026-08-04).
     //    리눅스 서버에서는 이 프로세스를 xvfb-run 으로 감싼다(config: shopping.server_collect.xvfb).
@@ -132,11 +146,7 @@ function normalize(p, page, seq) {
         if (d.hasMore != null) hasMore = d.hasMore;
         for (const it of d.data) {
             const prod = it && it.card && it.card.product;
-            const n = normalize(prod, it.page ?? null, items.length + 1);
-            if (!n || !n.nvMid || seenNvMid.has(n.nvMid)) continue;
-            seenNvMid.add(n.nvMid);
-            items.push(n);
-            if (n.page != null) pagesSeen.add(n.page);
+            push(normalize(prod, it.page ?? null, items.length + 1));
         }
     });
 
@@ -168,21 +178,17 @@ function normalize(p, page, seq) {
         }, opt.query);
         const slots = first && first.data && first.data[0] && first.data[0].slots || [];
         for (const s of slots) {
-            const n = normalize(s.data, 1, items.length + 1);
-            if (!n || !n.nvMid || seenNvMid.has(n.nvMid)) continue;
-            seenNvMid.add(n.nvMid);
-            items.push(n);
-            pagesSeen.add(1);
+            push(normalize(s.data, 1, items.length + 1));
         }
-        log('1페이지 수집:', slots.length, '개');
+        log('1페이지 수집:', slots.length, '개 (오가닉', organic, ')');
     } catch (e) { log('1페이지 수집 실패:', e.message); }
 
     // 2페이지 이후 — "다음 리스트 보기" 클릭 + 스크롤로 유도하고 응답 리스너가 담는다
     // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 매 회차 바닥까지 내린 뒤 찾는다.
     const NEXT_SELECTORS = ['button:has-text("다음 리스트")', 'a:has-text("다음 리스트")', 'text=다음 리스트 보기'];
-    const targetItems = opt.pages * PAGE_SIZE;      // --pages 5 → 400개(=400위)까지
+    const targetItems = opt.pages * PAGE_SIZE;      // --pages 5 → 오가닉 400개(=400위)까지
     let dry = 0;
-    while (items.length < targetItems && Date.now() < deadline && dry < 3) {
+    while (organic < targetItems && Date.now() < deadline && dry < 3) {
         const before = items.length;
 
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
@@ -201,7 +207,7 @@ function normalize(p, page, seq) {
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
         await page.waitForTimeout(clicked ? 3200 : 2200);
-        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
+        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적 오가닉', organic, '/', targetItems, '(광고포함', items.length, ')'); }
     }
 
     await ctx.close();
@@ -215,6 +221,7 @@ function normalize(p, page, seq) {
         lastCursor,
         hasMore,
         count: items.length,
+        organic,                     // 광고를 뺀 개수 = 확인한 순위 깊이
         items,
         collectedAt: new Date().toISOString(),
     };
