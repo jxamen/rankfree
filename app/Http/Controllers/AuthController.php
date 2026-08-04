@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\CaptureAttribution;
 use App\Models\MemberGrade;
 use App\Models\User;
 use App\Support\PhoneVerification;
@@ -110,7 +111,7 @@ class AuthController extends Controller
 
         PhoneVerification::clear();
         app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리
-        $this->saveSignupAttribution($request, $user);                  // 유입경로(first-touch 쿠키) 기록
+        CaptureAttribution::applyTo($request, $user);                   // 유입경로(first-touch 쿠키) 기록
         Auth::login($user, true);   // 가입 직후에도 로그인 유지(소셜 로그인과 동일하게 remember)
 
         // GTM 회원가입 전환 신호 — 도착 페이지에 ?conv=sign_up 표식, dataLayer.push 1회 후 URL 정리(새로고침·재로그인 중복 없음)
@@ -125,23 +126,5 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
-    }
-
-    /**
-     * 가입 유입경로 저장 — CaptureAttribution 이 심은 first-touch 쿠키(rf_attr)에서
-     * referrer·utm·landing 을 읽어 users 에 기록한다. 쿠키가 없으면(직접 유입) 아무것도 안 한다.
-     */
-    private function saveSignupAttribution(Request $request, User $user): void
-    {
-        $raw = $request->cookie('rf_attr');
-        $d = is_string($raw) ? json_decode($raw, true) : null;
-        if (! is_array($d)) {
-            return;
-        }
-        $user->forceFill([
-            'signup_referrer' => $d['referrer'] ?? null,
-            'signup_utm' => (! empty($d['utm']) && is_array($d['utm'])) ? $d['utm'] : null,
-            'signup_landing' => $d['landing'] ?? null,
-        ])->save();
     }
 }

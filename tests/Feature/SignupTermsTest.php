@@ -76,7 +76,7 @@ class SignupTermsTest extends TestCase
         $this->post(route('register'), $this->payload([
             'email' => $email,
             'terms' => ['service' => '1', 'marketing' => '1', 'third_party' => '1'],
-        ]))->assertRedirect(route('console.dashboard'));
+        ]))->assertRedirect(route('console.dashboard', ['conv' => 'sign_up']));   // GTM 가입 전환 표식
 
         $user = User::where('email', $email)->first();
         $this->assertNotNull($user);
@@ -101,7 +101,7 @@ class SignupTermsTest extends TestCase
         $this->post(route('register'), $this->payload([
             'email' => $email,
             'terms' => ['service' => '1'],
-        ]))->assertSessionDoesntHaveErrors()->assertRedirect(route('console.dashboard'));
+        ]))->assertSessionDoesntHaveErrors()->assertRedirect(route('console.dashboard', ['conv' => 'sign_up']));
 
         $user = User::where('email', $email)->first();
         $this->assertArrayNotHasKey('marketing', (array) $user->term_agreements);

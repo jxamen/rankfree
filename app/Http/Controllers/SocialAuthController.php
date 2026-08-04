@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\CaptureAttribution;
 use App\Models\MemberGrade;
 use App\Models\User;
 use App\Support\PhoneVerification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -161,8 +163,11 @@ class SocialAuthController extends Controller
         session()->forget('social_signup');
         PhoneVerification::clear();
         app(\App\Domain\Member\ReferralService::class)->apply($user);   // 추천 링크 가입 자동 처리(소셜 가입 포함)
+        CaptureAttribution::applyTo($request, $user);                   // 유입경로(first-touch 쿠키) 기록 — 이메일 가입과 동일
         Auth::login($user, true);
 
-        return redirect()->route('console.dashboard');
+        // GTM 회원가입 전환 — 이메일 가입과 동일하게 ?conv=sign_up 표식(없으면 소셜 가입분이 GA4 에서 통째로 누락된다)
+        return redirect()->route('console.dashboard', ['conv' => 'sign_up'])
+            ->withCookie(Cookie::forget('rf_attr'));   // 유입 쿠키 소진
     }
 }

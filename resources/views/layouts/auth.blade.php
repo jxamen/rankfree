@@ -17,6 +17,7 @@
     @include('partials.seo', ['title' => $__title, 'description' => $__desc])
     @vite(['resources/css/app.css'])
     @stack('head')
+    @include('partials.custom-head')   {{-- GTM 컨테이너 — 없으면 로그인/가입 페이지 유입(gclid·referrer)이 GA4·Ads 에서 통째로 빠진다 --}}
 </head>
 <body class="bg-surface-page min-h-screen flex items-center justify-center font-sans antialiased text-body" style="padding:24px;">
 @include('partials.custom-body')

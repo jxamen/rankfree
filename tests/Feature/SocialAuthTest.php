@@ -64,7 +64,7 @@ class SocialAuthTest extends TestCase
     {
         $this->withSession(['phone_verified' => '01012345678'])->post('/register', [
             'name' => '홍길동', 'email' => 'a@rf.kr', 'phone' => '010-1234-5678', 'password' => 'password123',
-        ] + self::TERMS)->assertRedirect(route('console.dashboard'));
+        ] + self::TERMS)->assertRedirect(route('console.dashboard', ['conv' => 'sign_up']));   // GTM 가입 전환 표식
 
         $this->assertDatabaseHas('users', ['email' => 'a@rf.kr', 'phone' => '01012345678']);
         $this->assertNotNull(User::where('email', 'a@rf.kr')->first()->phone_verified_at);
@@ -111,7 +111,7 @@ class SocialAuthTest extends TestCase
             'phone_verified' => '01055556666',
         ])->post('/auth/complete', [
             'name' => '구글회원', 'email' => 'g@rf.kr', 'phone' => '010-5555-6666',
-        ] + self::TERMS)->assertRedirect(route('console.dashboard'));
+        ] + self::TERMS)->assertRedirect(route('console.dashboard', ['conv' => 'sign_up']));   // 소셜 가입도 GTM 전환 표식
 
         $this->assertDatabaseHas('users', ['email' => 'g@rf.kr', 'phone' => '01055556666', 'provider' => 'google']);
         // 소셜 가입도 약관 동의 이력이 저장된다
