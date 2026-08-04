@@ -130,12 +130,13 @@ function normalize(p, page, seq) {
         return added;
     }
 
-    // 2페이지 이후는 이 응답으로 들어온다. 부트스트랩(버튼 1회 클릭) 동안만 켜 두고,
-    // 이후 커서 직접호출 구간에서는 끈다 — 켜 두면 같은 응답을 두 번 담으려다 진행 판정이 꼬인다.
-    let listenerOn = true;
+    // 2페이지 이후는 이 응답으로 들어온다. **페이지가 스스로 낸 요청**(버튼 클릭)일 때만 리스너로 담는다 —
+    // 우리가 직접 부른 응답까지 담으면 같은 응답을 두 번 넣으려다 진행 판정이 꼬인다.
+    let listenerOn = false;
+    let directCall = false;  // 우리가 낸 fetch 인 동안 true — 이때의 요청은 lastReq 로 잡지 않는다
     let lastReq = null;      // 커서 직접호출에 쓸 요청 형태(URL·토큰 헤더)
     page.on('request', (req) => {
-        if (req.url().includes('paged-composite-cards')) lastReq = { url: req.url(), headers: req.headers() };
+        if (!directCall && req.url().includes('paged-composite-cards')) lastReq = { url: req.url(), headers: req.headers() };
     });
     page.on('response', async (res) => {
         if (!listenerOn || !res.url().includes('paged-composite-cards')) return;
@@ -195,8 +196,16 @@ function normalize(p, page, seq) {
         return false;
     };
 
-    // (1) 부트스트랩 — 요청 형태(커서 URL + nCaptcha 토큰)를 얻으려고 버튼을 **한 번만** 누른다.
-    for (let i = 0; i < 3 && !lastReq && Date.now() < deadline; i++) {
+    // 2페이지 이후는 **클릭 1회 → 직접호출 1회** 교대가 최적이다(실측 2026-08-04).
+    //   · 버튼 클릭: 네이버 앱이 약 4초 간격으로만 받아줘 페이지당 5초가 바닥이다. 대신 새 토큰이 함께 발급된다.
+    //   · 직접호출: 같은 요청을 커서만 올려 페이지 안에서 fetch — 0.25초. 단 **토큰 1개당 1회만** 통하고
+    //     두 번째부터 418 이다. pageSize 는 50 이 상한(100 은 418), 토큰 없이도 418.
+    //   → 클릭이 발급한 토큰으로 한 장을 공짜로 더 받는 구조. 페이지당 평균 5초 → 2.7초.
+    const HDR = ['x-wtm-ncaptcha-token', 'x-nstore-pagesession-id', 'content-type', 'accept-language', 'referer'];
+
+    /** 버튼을 눌러 페이지가 스스로 다음 장을 불러오게 한다(새 토큰 동반). 담겼으면 true. */
+    const clickNext = async () => {
+        const before = items.length;
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
         await page.waitForTimeout(1200);            // 버튼이 목록 맨 아래에 lazy 로 붙을 시간
 
@@ -205,6 +214,7 @@ function normalize(p, page, seq) {
             const l = page.locator(sel).first();
             if (await l.count().catch(() => 0)) { btn = l; break; }
         }
+        listenerOn = true;                          // 페이지가 낸 응답은 리스너가 담는다
         if (btn) {
             await btn.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
             await btn.click({ timeout: 5000 }).catch(() => {});
@@ -212,17 +222,15 @@ function normalize(p, page, seq) {
             log('버튼 못 찾음 — 스크롤로 유도');
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
-        await until(async () => !!lastReq, 5000);
-    }
-    await until(async () => items.length > 20, 2000);   // 부트스트랩 응답이 담길 여유
-    listenerOn = false;
-    if (!lastReq) log('커서 요청을 확보하지 못했습니다 — 1페이지만 수집됩니다.');
+        const grew = await until(async () => items.length > before, 6000);
+        if (grew) await page.waitForTimeout(150);   // 같은 응답의 나머지 항목 파싱 여유
+        listenerOn = false;
 
-    // (2) 이후는 커서만 올려 페이지 컨텍스트에서 직접 호출한다.
-    //   · 버튼 클릭 방식은 네이버 앱이 4초 간격으로만 받아줘 페이지당 5초가 걸렸다(실측 2026-08-04)
-    //   · 직접 호출은 0.25초. 토큰은 재사용이 통하고, pageSize 는 50 을 넘기면 418 이다(실측)
-    const HDR = ['x-wtm-ncaptcha-token', 'x-nstore-pagesession-id', 'content-type', 'accept-language', 'referer'];
-    while (lastReq && items.length < targetItems && hasMore !== false && Date.now() < deadline) {
+        return grew;
+    };
+
+    /** 직전 요청을 커서만 올려 그대로 재호출. 토큰이 소진됐으면 418 이 온다. */
+    const directNext = async () => {
         const u = new URL(lastReq.url);
         u.searchParams.set('cursor', String(lastCursor != null ? lastCursor : items.length));
         u.searchParams.set('pageSize', '50');
@@ -230,18 +238,31 @@ function normalize(p, page, seq) {
         const headers = {};
         for (const k of HDR) if (lastReq.headers[k]) headers[k] = lastReq.headers[k];
 
+        directCall = true;                          // 우리가 낸 요청은 lastReq 로 잡지 않는다(토큰이 갱신되지 않으므로)
         const r = await page.evaluate(async ({ url, headers }) => {
             try {
                 const res = await fetch(url, { headers, credentials: 'include' });
                 return { status: res.status, json: res.ok ? await res.json() : null };
             } catch (e) { return { status: -1, json: null }; }
         }, { url: u.toString(), headers });
+        directCall = false;
 
-        if (r.status !== 200 || !r.json) { log('커서 호출 중단 status=' + r.status); break; }
-        const added = absorb(r.json.data);
-        log('누적', items.length, '/', targetItems, '개');
-        if (!added) break;                          // 더 줄 게 없다
-        await page.waitForTimeout(250);             // 페이싱 — 과속으로 막히지 않게
+        return (r.status === 200 && r.json) ? absorb(r.json.data) : 0;
+    };
+
+    let dry = 0;
+    while (items.length < targetItems && hasMore !== false && Date.now() < deadline && dry < 2) {
+        const before = items.length;
+
+        if (lastReq) {
+            await directNext();                     // 0.25초 — 토큰이 살아 있으면 여기서 끝난다
+        }
+        if (items.length === before) {
+            await clickNext();                      // 막혔으면(또는 첫 회차) 클릭으로 한 장 + 새 토큰
+        }
+
+        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); }
+        else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
     }
 
     await ctx.close();
