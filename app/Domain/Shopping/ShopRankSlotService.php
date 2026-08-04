@@ -95,21 +95,28 @@ class ShopRankSlotService
     /** 슬롯 1개 실시간 순위 조회 + 일별 기록 저장(멱등). */
     public function run(ShopRankSlot $slot): array
     {
-        // shop.json 종료(공지 32564) 후 기본 경로 — 확장 워커에 맡기고 즉시 반환한다.
         $source = (string) config('rankfree.shopping.rank_source', 'extension');
-        if ($source === 'extension') {
-            return $this->runViaWorker($slot);
-        }
 
-        // server = 서버 브라우저 수집(2026-08-04). 순수 curl 은 418 이라 실제 브라우저로만 가능하다.
-        $res = $source === 'server'
-            ? $this->browser->checkRank($slot)
-            : $this->engine->checkRank($slot->keyword, [
-                'type' => $slot->target_type,
-                'product_id' => (string) $slot->product_id,
-                'mall_name' => (string) $slot->mall_name,
-                'url' => (string) $slot->product_url,
-            ]);
+        if ($source === 'extension') {
+            // 상위 20위는 서버가 slot API 1콜(약 0.3초)로 즉시 끝낸다 — 확장 큐를 태우지 않는다.
+            // 20위 밖이면 null 이 오고, 깊은 순위는 종전대로 확장 워커가 맡는다
+            // (확장은 실사용자 브라우저·IP 라 차단이 적고, 서버 브라우저보다 훨씬 빠르다).
+            $quick = config('rankfree.shopping.quick_top20', true) ? $this->browser->quickCheck($slot) : null;
+            if ($quick === null) {
+                return $this->runViaWorker($slot);
+            }
+            $res = $quick;
+        } else {
+            // server = 서버 브라우저 수집. 깊은 순위는 20초 이상 걸려 실사용에는 권하지 않는다.
+            $res = $source === 'server'
+                ? $this->browser->checkRank($slot)
+                : $this->engine->checkRank($slot->keyword, [
+                    'type' => $slot->target_type,
+                    'product_id' => (string) $slot->product_id,
+                    'mall_name' => (string) $slot->mall_name,
+                    'url' => (string) $slot->product_url,
+                ]);
+        }
 
         $rank = ($res['blocked'] && ! $res['found']) ? self::RANK_BLOCKED : (int) $res['rank'];
 

@@ -138,6 +138,13 @@ return [
         'rank_source' => env('SHOP_RANK_SOURCE', 'extension'),
 
         /*
+         * 확장 경로에서 상위 20위를 서버가 먼저 확인한다(2026-08-04).
+         * slot API 1콜 약 0.3초·서버 부담 없음 — 20위 안이면 확장을 거치지 않고 즉시 결과가 나오고,
+         * 확장 워커 부하도 그만큼 준다. 20위 밖이면 종전대로 확장이 깊은 순위를 맡는다.
+         */
+        'quick_top20' => (bool) env('SHOP_RANK_QUICK_TOP20', true),
+
+        /*
          * 서버 브라우저 수집(rank_source=server) — Playwright 로 쇼핑 검색을 직접 연다.
          * 쇼핑 검색은 headful + persistent 프로필 + 로그인 세션 + 기기등록 통과를 **모두** 갖춰야 200 이다
          * (실측 2026-08-04: 하나라도 빠지면 405/418, 순수 curl 은 토큰·쿠키가 있어도 전부 418).

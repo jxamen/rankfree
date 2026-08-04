@@ -111,6 +111,39 @@ class ShopSerpBrowserCollector
     }
 
     /**
+     * 상위 20위만 **서버 curl 1콜**(약 0.3초)로 확인한다.
+     * 찾으면 checkRank 와 같은 형태로 돌려주고, 20위 안에 없거나 차단이면 null 을 준다
+     * (null = "더 깊이 봐야 한다" — 확장 워커나 브라우저 수집으로 넘긴다. 미노출로 단정하지 않는다).
+     */
+    public function quickCheck(ShopRankSlot $slot): ?array
+    {
+        $target = $this->engine->resolveTarget((string) $slot->product_url);
+        $r = $this->exposure->exposureBySlotApi((string) $slot->keyword, [
+            'id_kind' => (string) ($target['id_kind'] ?? 'channel'),
+            'product_id' => (string) ($slot->product_id ?: ($target['product_id'] ?? '')),
+            'mall_name' => (string) $slot->mall_name,
+        ]);
+        if (empty($r['found'])) {
+            return null;
+        }
+
+        $me = (array) ($r['me'] ?? []);
+
+        return [
+            'blocked' => false,
+            'found' => true,
+            'rank' => (int) $r['rank'],
+            'total' => (int) ($r['total'] ?? 0),
+            'product_id' => (string) $slot->product_id,
+            'title' => (string) ($me['title'] ?? ''),
+            'mall_name' => (string) ($me['mall'] ?? $slot->mall_name),
+            'price' => (int) ($me['price'] ?? 0),
+            'link' => '',
+            'image' => '',
+        ];
+    }
+
+    /**
      * 슬롯 1개의 순위 판정 — NaverShoppingRankService::checkRank 와 같은 형태로 돌려준다.
      *
      * @return array{blocked:bool, found:bool, rank:int, total:int, product_id:string, title:string, mall_name:string, price:int, link:string, image:string, error?:string}
@@ -128,26 +161,9 @@ class ShopSerpBrowserCollector
         $pid = (string) ($slot->product_id ?: ($target['product_id'] ?? ''));
         $mall = $this->norm((string) $slot->mall_name);
 
-        /*
-         * 1) 빠른 경로 — slot API 1콜(약 0.3초, 서버 부담 없음)로 상위 20위를 먼저 본다.
-         *    여기서 찾으면 브라우저를 아예 띄우지 않는다(브라우저 수집은 15~20초).
-         *    못 찾았을 때만 2)로 내려가므로, 상위 노출 상품이 많을수록 브라우저 사용이 줄어든다.
-         */
-        $quick = $this->exposure->exposureBySlotApi((string) $slot->keyword, [
-            'id_kind' => $idKind,
-            'product_id' => $pid,
-            'mall_name' => (string) $slot->mall_name,
-        ]);
-        if (! empty($quick['found'])) {
-            $me = (array) ($quick['me'] ?? []);
-            $res['found'] = true;
-            $res['rank'] = (int) $quick['rank'];
-            $res['total'] = (int) ($quick['total'] ?? 0);
-            $res['title'] = (string) ($me['title'] ?? '');
-            $res['mall_name'] = (string) ($me['mall'] ?? $res['mall_name']);
-            $res['price'] = (int) ($me['price'] ?? 0);
-
-            return $res;
+        // 1) 빠른 경로 — 상위 20위는 slot API 1콜로 끝낸다(브라우저를 띄우지 않는다)
+        if (($quick = $this->quickCheck($slot)) !== null) {
+            return $quick;
         }
 
         // 2) 20위 안에 없다 — 브라우저로 깊은 순위를 수집한다.
