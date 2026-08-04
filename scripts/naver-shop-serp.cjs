@@ -189,6 +189,8 @@ function normalize(p, page, seq) {
         const before = items.length;
 
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+        // 직전 페이지의 버튼이 잠깐 남아 있다 — 바로 찾으면 그 낡은 버튼을 눌러 한 사이클을 통째로 버린다(실측).
+        await page.waitForTimeout(500);
 
         // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 붙을 때까지만 기다린다(보통 0.2초).
         let btn = null;
@@ -211,7 +213,8 @@ function normalize(p, page, seq) {
         }
 
         // 응답 리스너가 새 상품을 담을 때까지. 담기면 같은 응답의 나머지 파싱 여유만 짧게 준다.
-        const grew = await until(async () => items.length > before, clicked ? 8000 : 4000);
+        // 정상 응답은 약 1초 — 3초를 넘기면 헛클릭이므로 오래 붙들지 말고 다음 회차에서 다시 누른다.
+        const grew = await until(async () => items.length > before, clicked ? 3000 : 2500);
         if (grew) { await page.waitForTimeout(150); }
         if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
     }
