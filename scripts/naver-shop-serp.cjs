@@ -14,7 +14,7 @@
 //     node scripts/naver-shop-serp.cjs --query 여름브라 --pages 5 --out-file storage/app/shop-serp/여름브라.json
 //   옵션:
 //     --query <검색어>       (필수)
-//     --pages <N>            수집할 페이지 수 (기본 3, 1페이지 포함)
+//     --pages <N>            수집 깊이 — 구 UI "80개씩 보기" 기준 페이지 수 (5 = 400위, 기본 3)
 //     --out-file <path>      결과 JSON 저장 경로 (없으면 stdout 으로만 출력)
 //     --profile <path>       브라우저 프로필 디렉터리 (기본 scripts/.naver-shop-profile)
 //     --headful              창을 띄운다(최초 세션 확보·디버깅용)
@@ -26,6 +26,10 @@ const path = require('path');
 const fs = require('fs');
 
 // (UA 는 프로필 Chrome 의 실제 값을 그대로 쓴다 — 덮어쓰면 418)
+
+// 깊이 기준 — 구 UI "80개씩 보기" 1페이지. 네이버 신 UI 의 내부 페이지는 30~50개로 들쭉날쭉해
+// 페이지 수로 세면 순위 깊이가 키워드마다 달라진다(실측: 5페이지가 166위). 그래서 개수로 센다.
+const PAGE_SIZE = 80;
 
 function log(...a) { console.error('[' + new Date().toISOString() + ']', ...a); }
 
@@ -167,8 +171,9 @@ function normalize(p, page, seq) {
     // 2페이지 이후 — "다음 리스트 보기" 클릭 + 스크롤로 유도하고 응답 리스너가 담는다
     // 버튼은 목록 맨 아래에 lazy 로 붙는다 — 매 회차 바닥까지 내린 뒤 찾는다.
     const NEXT_SELECTORS = ['button:has-text("다음 리스트")', 'a:has-text("다음 리스트")', 'text=다음 리스트 보기'];
+    const targetItems = opt.pages * PAGE_SIZE;      // --pages 5 → 400개(=400위)까지
     let dry = 0;
-    while (pagesSeen.size < opt.pages && Date.now() < deadline && dry < 3) {
+    while (items.length < targetItems && Date.now() < deadline && dry < 3) {
         const before = items.length;
 
         await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
@@ -187,7 +192,7 @@ function normalize(p, page, seq) {
             await page.mouse.wheel(0, 12000).catch(() => {});
         }
         await page.waitForTimeout(clicked ? 3200 : 2200);
-        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '개 / 페이지', [...pagesSeen].sort((a, b) => a - b).join(',')); }
+        if (items.length === before) { dry++; log('추가 수집 없음 (dry=' + dry + ')'); } else { dry = 0; log('누적', items.length, '/', targetItems, '개'); }
     }
 
     await ctx.close();

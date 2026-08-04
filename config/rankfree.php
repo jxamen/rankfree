@@ -163,7 +163,7 @@ return [
                 'id' => env('NAVER_SHOP_LOGIN_ID', ''),
                 'pw' => env('NAVER_SHOP_LOGIN_PW', ''),
             ],
-            // 한 번에 훑을 페이지 수(1페이지 20위 + 이후 페이지당 약 40~50개)
+            // 수집 깊이 — 구 UI "80개씩 보기" 기준 페이지 수. 5 = 400위까지.
             'pages' => (int) env('SHOP_RANK_PAGES', 5),
             'timeout' => (int) env('SHOP_RANK_COLLECT_TIMEOUT', 180),
             // 같은 키워드를 여러 슬롯이 쓰므로 수집 결과를 잠깐 재사용한다(초).

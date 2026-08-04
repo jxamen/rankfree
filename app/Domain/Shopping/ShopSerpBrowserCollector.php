@@ -88,12 +88,15 @@ class ShopSerpBrowserCollector
             // 결과는 **파일**로 받는다 — 수집 JSON 이 수십 KB 라 stdout 으로 받으면 유실된다(실측).
             $out = storage_path('app/shop-serp/'.md5($kw.'|'.$pages).'.json');
             @unlink($out);
+            // --timeout 을 넘기지 않으면 스크립트가 자체 기본값(120초)에서 끊어 깊은 순위를 못 채운다.
+            $sec = (int) ($cfg['timeout'] ?? 180);
             $this->runNode([
                 base_path('scripts/naver-shop-serp.cjs'),
                 '--query', $kw,
                 '--pages', (string) $pages,
+                '--timeout', (string) ($sec * 1000),
                 '--out-file', $out,
-            ], [], (int) ($cfg['timeout'] ?? 180) + 20);
+            ], [], $sec + 20);
 
             $json = is_file($out) ? json_decode((string) file_get_contents($out), true) : null;
             @unlink($out);
