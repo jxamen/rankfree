@@ -78,7 +78,7 @@
 
 {{-- 상태 탭 — 자동 중단된 슬롯을 따로 모아 본다. 회원 필터 화면에서도 쓰므로 @unless 밖에 둔다 --}}
 <x-rank.tabs :current="$active" :tabs="[
-    ['key' => '', 'label' => '전체', 'count' => $tabCounts[''], 'url' => request()->fullUrlWithQuery(['active' => null, 'page' => null])],
+    ['key' => '', 'label' => '전체', 'count' => $tabCounts[''], 'url' => request()->fullUrlWithoutQuery(['active', 'page'])],
     ['key' => '1', 'label' => '추적 중', 'count' => $tabCounts['1'], 'url' => request()->fullUrlWithQuery(['active' => '1', 'page' => null])],
     ['key' => '0', 'label' => '체크 중단됨', 'count' => $tabCounts['0'], 'url' => request()->fullUrlWithQuery(['active' => '0', 'page' => null])],
 ]" />

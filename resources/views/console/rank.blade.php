@@ -45,7 +45,7 @@
 
 {{-- 상태 탭 — 자동 중단된 슬롯을 따로 모아 본다(활성 목록에 섞이면 [재개]를 놓친다) --}}
 <x-rank.tabs :current="$tab" :tabs="[
-    ['key' => 'active', 'label' => '추적 중', 'count' => $tabCounts['active'], 'url' => request()->fullUrlWithQuery(['tab' => null])],
+    ['key' => 'active', 'label' => '추적 중', 'count' => $tabCounts['active'], 'url' => request()->fullUrlWithoutQuery(['tab'])],
     ['key' => 'stopped', 'label' => '체크 중단됨', 'count' => $tabCounts['stopped'], 'url' => request()->fullUrlWithQuery(['tab' => 'stopped'])],
 ]" />
 
