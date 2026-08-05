@@ -20,7 +20,9 @@ class RankTrackingController extends Controller
     public function place(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
-        $active = (string) $request->query('active', '');   // ''=전체 · '1'=활성 · '0'=중지
+        // '1'=추적 중(기본) · '0'=체크 중단됨 · ''=전체.
+        // 파라미터가 아예 없을 때만 기본값이 먹는다 — '전체' 탭은 `?active=` 로 빈 값을 실어 보낸다.
+        $active = (string) $request->query('active', '1');
         $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
         // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
@@ -67,7 +69,7 @@ class RankTrackingController extends Controller
     public function shop(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
-        $active = (string) $request->query('active', '');
+        $active = (string) $request->query('active', '1');   // 기본은 추적 중(중단된 건 탭에서 본다)
         $userId = (int) $request->query('user', 0);
 
         // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
