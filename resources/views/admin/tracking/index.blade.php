@@ -80,7 +80,7 @@
 <x-rank.tabs :current="$active" :tabs="[
     ['key' => '1', 'label' => '추적 중', 'count' => $tabCounts['1'], 'url' => request()->fullUrlWithoutQuery(['active', 'page'])],
     ['key' => '0', 'label' => '체크 중단됨', 'count' => $tabCounts['0'], 'url' => request()->fullUrlWithQuery(['active' => '0', 'page' => null])],
-    ['key' => '', 'label' => '전체', 'count' => $tabCounts[''], 'url' => request()->fullUrlWithQuery(['active' => '', 'page' => null])],
+    ['key' => 'all', 'label' => '전체', 'count' => $tabCounts['all'], 'url' => request()->fullUrlWithQuery(['active' => 'all', 'page' => null])],
 ]" />
 
 {{-- 슬롯 목록 — 콘솔과 동일한 카드(공용 컴포넌트 x-rank.slot-card). 회원 뱃지로 어느 회원인지 표시.

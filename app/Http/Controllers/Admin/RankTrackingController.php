@@ -20,9 +20,10 @@ class RankTrackingController extends Controller
     public function place(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
-        // '1'=추적 중(기본) · '0'=체크 중단됨 · ''=전체.
-        // 파라미터가 아예 없을 때만 기본값이 먹는다 — '전체' 탭은 `?active=` 로 빈 값을 실어 보낸다.
-        $active = (string) $request->query('active', '1');
+        // '1'=추적 중(기본) · '0'=체크 중단됨 · 'all'=전체.
+        // ⚠️ 전체를 `?active=` (빈 값)로 보내면 안 된다 — ConvertEmptyStringsToNull 이 null 로 바꾸고
+        //    InputBag::get 이 null 을 '없음'으로 봐 기본값('1')으로 되돌린다. 그래서 'all' 을 쓴다.
+        $active = $this->activeFilter($request);
         $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
         // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
@@ -48,7 +49,7 @@ class RankTrackingController extends Controller
 
         return view('admin.tracking.index', [
             'tabCounts' => [
-                '' => $filtered()->count(),
+                'all' => $filtered()->count(),
                 '1' => $filtered()->where('is_active', true)->count(),
                 '0' => $filtered()->where('is_active', false)->count(),
             ],
@@ -69,7 +70,7 @@ class RankTrackingController extends Controller
     public function shop(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
-        $active = (string) $request->query('active', '1');   // 기본은 추적 중(중단된 건 탭에서 본다)
+        $active = $this->activeFilter($request);   // 기본은 추적 중(중단된 건 탭에서 본다)
         $userId = (int) $request->query('user', 0);
 
         // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
@@ -95,7 +96,7 @@ class RankTrackingController extends Controller
 
         return view('admin.tracking.index', [
             'tabCounts' => [
-                '' => $filtered()->count(),
+                'all' => $filtered()->count(),
                 '1' => $filtered()->where('is_active', true)->count(),
                 '0' => $filtered()->where('is_active', false)->count(),
             ],
@@ -411,6 +412,14 @@ class RankTrackingController extends Controller
             'users' => (clone $query)->distinct('user_id')->count('user_id'),
             'checked7' => (clone $query)->where('last_checked_at', '>=', now()->subDays(7))->count(),
         ];
+    }
+
+    /** 상태 탭 값 — '1'=추적 중(기본) · '0'=체크 중단됨 · 'all'=전체. 그 외 입력은 기본으로 본다. */
+    private function activeFilter(Request $request): string
+    {
+        $v = (string) $request->query('active', '1');
+
+        return in_array($v, ['0', '1', 'all'], true) ? $v : '1';
     }
 
     /** LIKE 와일드카드 이스케이프. */
