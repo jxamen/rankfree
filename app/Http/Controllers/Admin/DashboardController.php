@@ -6,9 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CommunityPost;
 use App\Models\GaStat;
 use App\Models\KeywordCandidate;
-use App\Models\KeywordSearch;
 use App\Models\MarketingOrder;
-use App\Models\MarketAnalysis;
 use App\Models\PlaceRankSlot;
 use App\Models\Qna;
 use App\Models\ShopRankSlot;
@@ -31,13 +29,9 @@ class DashboardController extends Controller
             ->where(fn ($q) => $q->whereNull('subscription_expires_at')->orWhere('subscription_expires_at', '>', now()))
             ->count();
 
-        $systemUserId = User::where('email', (string) config('rankfree.hub.system_user_email', 'hub-system@rankfree.kr'))->value('id');
-        $placeDocs = fn ($from = null) => KeywordSearch::where('origin', 'hub')
-            ->whereHas('category', fn ($q) => $q->where('type', 'place'))
-            ->when($from, fn ($q) => $q->where('created_at', '>=', $from));
-        $shoppingDocs = fn ($from = null) => MarketAnalysis::query()
-            ->when($systemUserId, fn ($q) => $q->where('user_id', $systemUserId), fn ($q) => $q->whereRaw('1 = 0'))
-            ->when($from, fn ($q) => $q->where('created_at', '>=', $from));
+        // 허브 발행 문서수(플레이스/쇼핑 분석 건수)는 대시보드에서 뺐다(2026-08-05) —
+        // keyword_searches(149,024행) 풀스캔이라 집계 하나에 10초, 대시보드가 멈추는 수준이었다.
+        // 필요하면 키워드 허브(/admin/keyword-hub)에서 본다.
 
         $kpi = [
             'users' => User::count(),
@@ -51,13 +45,6 @@ class DashboardController extends Controller
             'posts' => CommunityPost::count(),
             'postsUser' => CommunityPost::where('author_type', 'user')->count(),
             'posts7' => CommunityPost::where('created_at', '>=', $d7)->count(),
-            'hubDocs' => $placeDocs()->count() + $shoppingDocs()->count(),
-            'hubToday' => $placeDocs($todayStart)->count() + $shoppingDocs($todayStart)->count(),
-            'hub7' => $placeDocs($d7)->count() + $shoppingDocs($d7)->count(),
-            'hubPlace' => $placeDocs()->count(),
-            'hubShopping' => $shoppingDocs()->count(),
-            'hubPlace7' => $placeDocs($d7)->count(),
-            'hubShopping7' => $shoppingDocs($d7)->count(),
             'qnaOpen' => Qna::where('status', '!=', 'answered')->count(),
             'qnaTotal' => Qna::count(),
             'orders' => MarketingOrder::count(),
