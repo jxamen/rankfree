@@ -1546,7 +1546,17 @@ const handlers = {
     const { token, apiBase } = await getStore();
     if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
 
-    const col = await handlers.collectShopping({ keyword: kw, count: Number(count) || 400 });
+    // 대상 해석은 서버에 맡긴다(확장이 URL 파싱을 따로 갖지 않게) — 조기중단 힌트로만 쓴다.
+    // 힌트가 있으면 대상을 찾는 즉시 수집을 멈춘다: 상위권 상품은 1페이지에서 끝나 훨씬 빠르고
+    // 네이버 트래픽도 줄어든다. 실패해도 힌트 없이 끝까지 훑을 뿐 결과는 같다.
+    const rs = await apiFetch('/api/ext/shop-rank/resolve', { method: 'POST', body: { target: tg }, token, apiBase });
+    const hint = (rs && rs.ok && rs.json && rs.json.data) ? rs.json.data : null;
+
+    const col = await handlers.collectShopping({
+      keyword: kw,
+      count: Number(count) || 400,
+      match: hint ? { product_id: hint.product_id || '', mall_name: hint.mall_name || '' } : undefined,
+    });
     if (!col || !col.ok || !Array.isArray(col.products) || !col.products.length) {
       return {
         ok: false,

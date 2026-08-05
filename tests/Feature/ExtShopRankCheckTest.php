@@ -88,4 +88,19 @@ class ExtShopRankCheckTest extends TestCase
             'products' => $this->products(),
         ])->assertUnauthorized();
     }
+
+    /** 조기중단 힌트용 대상 해석 — 확장이 URL 파싱을 따로 갖지 않게 서버가 해석해 준다. */
+    public function test_대상_해석은_상품번호와_업체명을_돌려준다(): void
+    {
+        $h = $this->authed();
+
+        $this->withHeaders($h)->postJson('/api/ext/shop-rank/resolve', [
+            'target' => 'https://brand.naver.com/dermadog/products/4231683592',
+        ])->assertOk()->assertJson(['ok' => true, 'data' => [
+            'type' => 'product', 'product_id' => '4231683592', 'id_kind' => 'channel',
+        ]]);
+
+        $this->withHeaders($h)->postJson('/api/ext/shop-rank/resolve', ['target' => '내몰'])
+            ->assertOk()->assertJson(['ok' => true, 'data' => ['type' => 'mall', 'mall_name' => '내몰']]);
+    }
 }

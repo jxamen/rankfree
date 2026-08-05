@@ -74,6 +74,24 @@ class ExtShopRankController extends Controller
     }
 
     /**
+     * 대상(상품 URL·업체명) 해석만 — 확장이 **수집 조기중단 힌트**로 쓴다.
+     * 판정 규칙은 그대로 서버(check)에 있고, 여기서 주는 건 "이걸 찾으면 그만 긁어도 된다"는 신호뿐이다.
+     * 확장이 URL 파싱을 따로 구현하지 않게 하려고 서버가 해석해 준다.
+     */
+    public function resolve(Request $request, NaverShoppingRankService $engine): JsonResponse
+    {
+        $data = $request->validate(['target' => 'required|string|max:1000']);
+        $t = $engine->resolveTarget(trim($data['target']));
+
+        return response()->json(['ok' => true, 'data' => [
+            'type' => (string) ($t['type'] ?? 'mall'),
+            'product_id' => (string) ($t['product_id'] ?? ''),
+            'mall_name' => (string) ($t['mall_name'] ?? ''),
+            'id_kind' => (string) ($t['id_kind'] ?? 'channel'),
+        ]]);
+    }
+
+    /**
      * 작업 가져가기. 줄 게 없으면 빈 배열 — 확장은 그냥 다음 주기에 다시 묻는다.
      * 워커 식별자는 확장 설치 단위로 고정된 값을 보낸다(누가 잡았는지 추적·리스 회수용).
      */
