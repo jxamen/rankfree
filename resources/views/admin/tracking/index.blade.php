@@ -64,11 +64,8 @@
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
         @if (($userId ?? 0) > 0)<input type="hidden" name="user" value="{{ $userId }}">@endif
-        <select name="active" class="input" style="width:130px;font-size:var(--fs-xs);" onchange="this.form.submit()">
-            <option value="">전체 상태</option>
-            <option value="1" @selected($active === '1')>활성</option>
-            <option value="0" @selected($active === '0')>중지</option>
-        </select>
+        {{-- 상태는 아래 탭으로 고른다 — 검색해도 보고 있던 탭에 머문다 --}}
+        @if ($active !== '')<input type="hidden" name="active" value="{{ $active }}">@endif
         @if ($q !== '' || $active !== '')
             <a href="{{ route($routeName) }}" class="btn btn-ghost btn-sm">초기화</a>
         @endif
@@ -79,13 +76,24 @@
 </form>
 @endunless
 
+{{-- 상태 탭 — 자동 중단된 슬롯을 따로 모아 본다. 회원 필터 화면에서도 쓰므로 @unless 밖에 둔다 --}}
+<x-rank.tabs :current="$active" :tabs="[
+    ['key' => '', 'label' => '전체', 'count' => $tabCounts[''], 'url' => request()->fullUrlWithQuery(['active' => null, 'page' => null])],
+    ['key' => '1', 'label' => '추적 중', 'count' => $tabCounts['1'], 'url' => request()->fullUrlWithQuery(['active' => '1', 'page' => null])],
+    ['key' => '0', 'label' => '체크 중단됨', 'count' => $tabCounts['0'], 'url' => request()->fullUrlWithQuery(['active' => '0', 'page' => null])],
+]" />
+
 {{-- 슬롯 목록 — 콘솔과 동일한 카드(공용 컴포넌트 x-rank.slot-card). 회원 뱃지로 어느 회원인지 표시.
      열람 어드민이라 수정/삭제/추가는 없고, 중단/재개·순위체크·공유·이미지만. --}}
 @forelse ($slots as $s)
     <x-rank.slot-card :rank-slot="$s" :mode="$mode" area="admin" :show-member="true" :from="null" :to="null" />
 @empty
     <div class="card text-center text-muted-soft" style="padding:56px 20px;font-size:var(--fs-xs);">
-        {{ ($filterUser ?? null) ? '이 회원의 추적 슬롯이 없습니다.' : (($q !== '' || $active !== '') ? '조건에 맞는 슬롯이 없습니다.' : '등록된 순위추적 슬롯이 없습니다.') }}
+        @if ($active === '0')
+            자동 중단된 슬롯이 없습니다.
+        @else
+            {{ ($filterUser ?? null) ? '이 회원의 추적 슬롯이 없습니다.' : (($q !== '' || $active !== '') ? '조건에 맞는 슬롯이 없습니다.' : '등록된 순위추적 슬롯이 없습니다.') }}
+        @endif
     </div>
 @endforelse
 

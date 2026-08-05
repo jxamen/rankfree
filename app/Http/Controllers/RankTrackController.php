@@ -23,10 +23,20 @@ class RankTrackController extends Controller
         $from = ($from && strtotime((string) $from)) ? date('Y-m-d', strtotime((string) $from)) : null;
         $to = ($to && strtotime((string) $to)) ? date('Y-m-d', strtotime((string) $to)) : null;
 
+        // 상태 탭 — 중단된 슬롯이 활성 슬롯에 섞이면 눈에 안 띄어 [재개]를 놓친다.
+        // 검색 조건은 그대로 두고 상태만 가른다(개수도 같은 조건에서 센다).
+        $tab = $request->query('tab') === 'stopped' ? 'stopped' : 'active';
+        $filtered = fn () => $user->rankSlots()
+            ->when($q !== '', fn ($qq) => $qq->where('keyword', 'like', '%'.$q.'%'));
+
         return view('console.rank', [
-            'slots' => $user->rankSlots()
-                ->when($q !== '', fn ($qq) => $qq->where('keyword', 'like', '%'.$q.'%'))
+            'slots' => $filtered()->where('is_active', $tab === 'active')
                 ->with('records')->latest()->get(),
+            'tab' => $tab,
+            'tabCounts' => [
+                'active' => $filtered()->where('is_active', true)->count(),
+                'stopped' => $filtered()->where('is_active', false)->count(),
+            ],
             'usedSlots' => $user->rankSlotsUsedTotal(),
             'maxSlots' => $user->rankSlotLimit(),
             'q' => $q,

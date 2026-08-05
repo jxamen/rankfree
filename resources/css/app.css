@@ -297,6 +297,42 @@
         box-shadow: inset 0 -2px 0 var(--color-primary);
     }
 
+    /* 순위추적 목록 탭 — 추적 중 / 중단됨 분리. 콘솔·어드민, 플레이스·쇼핑 공용(components/rank/tabs) */
+    .rf-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        border-bottom: 1px solid var(--color-hairline);
+        margin-bottom: 16px;
+    }
+    .rf-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 14px;
+        font-size: var(--fs-sm);
+        font-weight: 600;
+        color: var(--color-muted);
+        box-shadow: inset 0 -2px 0 transparent;
+        transition: color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .rf-tab:hover { color: var(--color-ink); }
+    .rf-tab.on {
+        color: var(--color-primary);
+        box-shadow: inset 0 -2px 0 var(--color-primary);
+    }
+    .rf-tab-n {
+        padding: 1px 7px;
+        border-radius: var(--radius-pill);
+        background: var(--color-surface-soft);
+        color: var(--color-muted);
+        font-size: var(--fs-xs);
+    }
+    .rf-tab.on .rf-tab-n {
+        background: color-mix(in srgb, var(--color-primary) 10%, var(--color-canvas));
+        color: var(--color-primary);
+    }
+
     /* ---- 상단 메가 메뉴 (NAVER Cloud 스타일) --------------------- */
     /* .nav-item은 position 없이 둔다 — 패널이 헤더(sticky) 전폭 기준으로 붙도록.
        헤더 전체 높이로 늘여(트리거~패널 사이 틈 제거) 호버가 끊기지 않게 한다 */

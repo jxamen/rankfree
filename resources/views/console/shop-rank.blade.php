@@ -14,6 +14,8 @@
 {{-- 액션(좌) + 기간·키워드 검색(우) — 카드 --}}
 <form method="GET" class="card p-3 mb-4">
     <div class="flex items-center flex-wrap gap-2">
+        {{-- 검색해도 보고 있던 탭에 머문다 --}}
+        @if ($tab === 'stopped')<input type="hidden" name="tab" value="stopped">@endif
         {{-- 액션 버튼 (좌) --}}
         @if (auth()->user()->isOperator())
             {{-- 전체 순위체크 — 운영자/슈퍼어드민 전용 --}}
@@ -41,13 +43,25 @@
     <div class="mb-4 px-4 py-3 rounded-md" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
 @endif
 
+{{-- 상태 탭 — 자동 중단된 슬롯을 따로 모아 본다(활성 목록에 섞이면 [재개]를 놓친다) --}}
+<x-rank.tabs :current="$tab" :tabs="[
+    ['key' => 'active', 'label' => '추적 중', 'count' => $tabCounts['active'], 'url' => request()->fullUrlWithQuery(['tab' => null])],
+    ['key' => 'stopped', 'label' => '체크 중단됨', 'count' => $tabCounts['stopped'], 'url' => request()->fullUrlWithQuery(['tab' => 'stopped'])],
+]" />
+
 {{-- 슬롯 목록 — 키워드(슬롯)별로 각각 이미지 저장 --}}
 @forelse ($slots as $slot)
     <x-rank.slot-card :rank-slot="$slot" mode="shop" area="console" :from="$from ?? null" :to="$to ?? null" />
 @empty
     <div class="card text-center" style="padding:56px 20px;color:var(--color-muted);">
-        <div style="font-size:var(--fs-2xl);opacity:.4;">🛒</div>
-        <p class="mt-2" style="font-size:var(--fs-xs);">추적 중인 상품이 없습니다. 우측 상단 "＋ 추적 추가"로 상품 URL(또는 업체명)과 키워드를 등록하세요.</p>
+        <div style="font-size:var(--fs-2xl);opacity:.4;">{{ $tab === 'stopped' ? '✅' : '🛒' }}</div>
+        <p class="mt-2" style="font-size:var(--fs-xs);">
+            @if ($tab === 'stopped')
+                자동 중단된 키워드가 없습니다. 3일 연속 {{ number_format((int) config('rankfree.shopping.track_depth', 400)) }}위 밖이면 여기로 모입니다.
+            @else
+                추적 중인 상품이 없습니다. 우측 상단 "＋ 추적 추가"로 상품 URL(또는 업체명)과 키워드를 등록하세요.
+            @endif
+        </p>
     </div>
 @endforelse
 @include('console.partials._image-save')

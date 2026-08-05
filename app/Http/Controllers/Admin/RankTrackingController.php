@@ -23,22 +23,33 @@ class RankTrackingController extends Controller
         $active = (string) $request->query('active', '');   // ''=전체 · '1'=활성 · '0'=중지
         $userId = (int) $request->query('user', 0);          // 회원(아이디 클릭) 필터 — 업체별 추적 리스트
 
-        // 회원(업체) 보기 — 검색·페이지네이션 없이 그 업체의 전체 키워드를 콘솔형 카드로 전부 표시
+        // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
+        $filtered = fn () => PlaceRankSlot::query()
+            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
+            ->when($userId === 0 && $q !== '', fn ($x) => $x->where(fn ($w) => $w
+                ->where('keyword', 'like', $this->like($q))
+                ->orWhere('place_name', 'like', $this->like($q))
+                ->orWhereHas('user', fn ($u) => $u
+                    ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))));
+
+        $byActive = fn ($x) => $x
+            ->when($active === '1', fn ($y) => $y->where('is_active', true))
+            ->when($active === '0', fn ($y) => $y->where('is_active', false));
+
+        // 회원(업체) 보기 — 페이지네이션 없이 그 업체의 키워드를 콘솔형 카드로 전부 표시
         $slots = $userId > 0
-            ? PlaceRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
-            : PlaceRankSlot::with('user:id,name,email')
+            ? $byActive($filtered()->with('user:id,name,email', 'records'))->latest('id')->get()
+            : $byActive($filtered()->with('user:id,name,email')
                 // 카드 날짜별 셀 표시 상한(60일)에 맞춰 로드 — limit(2)면 2일치만 보임
-                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)])
-                ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
-                    ->where('keyword', 'like', $this->like($q))
-                    ->orWhere('place_name', 'like', $this->like($q))
-                    ->orWhereHas('user', fn ($u) => $u
-                        ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
-                ->when($active === '1', fn ($x) => $x->where('is_active', true))
-                ->when($active === '0', fn ($x) => $x->where('is_active', false))
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)]))
                 ->latest('id')->paginate(30)->withQueryString();
 
         return view('admin.tracking.index', [
+            'tabCounts' => [
+                '' => $filtered()->count(),
+                '1' => $filtered()->where('is_active', true)->count(),
+                '0' => $filtered()->where('is_active', false)->count(),
+            ],
             'mode' => 'place',
             'title' => '플레이스 추적',
             'desc' => '회원들이 등록한 플레이스 순위추적 슬롯 전체를 조회합니다',
@@ -59,22 +70,33 @@ class RankTrackingController extends Controller
         $active = (string) $request->query('active', '');
         $userId = (int) $request->query('user', 0);
 
+        // 상태(active)를 뺀 검색·회원 필터 — 목록과 탭 개수가 같은 기준을 쓰도록 한 곳에서 만든다
+        $filtered = fn () => ShopRankSlot::query()
+            ->when($userId > 0, fn ($x) => $x->where('user_id', $userId))
+            ->when($userId === 0 && $q !== '', fn ($x) => $x->where(fn ($w) => $w
+                ->where('keyword', 'like', $this->like($q))
+                ->orWhere('product_title', 'like', $this->like($q))
+                ->orWhere('mall_name', 'like', $this->like($q))
+                ->orWhereHas('user', fn ($u) => $u
+                    ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))));
+
+        $byActive = fn ($x) => $x
+            ->when($active === '1', fn ($y) => $y->where('is_active', true))
+            ->when($active === '0', fn ($y) => $y->where('is_active', false));
+
         $slots = $userId > 0
-            ? ShopRankSlot::with('user:id,name,email', 'records')->where('user_id', $userId)->latest('id')->get()
-            : ShopRankSlot::with('user:id,name,email')
+            ? $byActive($filtered()->with('user:id,name,email', 'records'))->latest('id')->get()
+            : $byActive($filtered()->with('user:id,name,email')
                 // 카드 날짜별 셀 표시 상한(60일)에 맞춰 로드
-                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)])
-                ->when($q !== '', fn ($x) => $x->where(fn ($w) => $w
-                    ->where('keyword', 'like', $this->like($q))
-                    ->orWhere('product_title', 'like', $this->like($q))
-                    ->orWhere('mall_name', 'like', $this->like($q))
-                    ->orWhereHas('user', fn ($u) => $u
-                        ->where('name', 'like', $this->like($q))->orWhere('email', 'like', $this->like($q)))))
-                ->when($active === '1', fn ($x) => $x->where('is_active', true))
-                ->when($active === '0', fn ($x) => $x->where('is_active', false))
+                ->with(['records' => fn ($r) => $r->reorder()->orderByDesc('checked_date')->limit(60)]))
                 ->latest('id')->paginate(30)->withQueryString();
 
         return view('admin.tracking.index', [
+            'tabCounts' => [
+                '' => $filtered()->count(),
+                '1' => $filtered()->where('is_active', true)->count(),
+                '0' => $filtered()->where('is_active', false)->count(),
+            ],
             'mode' => 'shop',
             'title' => '쇼핑 추적',
             'desc' => '회원들이 등록한 쇼핑 순위추적 슬롯 전체를 조회합니다',
