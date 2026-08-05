@@ -57,6 +57,7 @@
     urlChangedSinceLoad: false, // SPA 내 이동 후에는 DOM의 SSR 데이터를 신뢰하지 않음
     seller: { loading: false, error: null, result: null, targetTitle: '', count: 80 }, // 셀러력 탭(수집 개수)
     product: { loading: false, error: null, html: '', targetTitle: '', targetLink: '' }, // 상품 분석 탭(리뷰 분석 in-panel)
+    shopRank: { loading: false, error: null, result: null, kw: '', target: '' }, // 순위체크 탭(키워드×상품URL 1회 조회)
     captured: {}, // 페이지가 스스로 받은 검색 응답 캡처(키워드별) — 우리 재요청 없이 사용
   };
 
@@ -120,6 +121,8 @@
 
   // ── 수집 캐시 ─ 같은 키워드는 12시간에 1번만 실제 수집(새로고침 시 재수집 방지) ──
   const SP_CACHE_TTL = 24 * 3600 * 1000; // 24시간 — 동일 키워드는 하루 1회만 실제 수집(다시 수집 버튼은 강제)
+  // 순위체크가 훑는 깊이(광고 제외 오가닉 기준). 서버 순위추적(shopping.track_depth)과 같은 400위.
+  const SHOP_RANK_DEPTH = 400;
   function spCacheKey(q) {
     // v2: talkAccountId 추출 추가 이후 캐시 무효화(옛 캐시엔 talkId 없음)
     return 'rfSpCache:v2:' + String(q || '').trim().toLowerCase();
@@ -1214,6 +1217,10 @@
       // 상품 분석 탭 — 리스트 없음. 분석 결과 있으면 리포트, 없으면 빈 상태(분석은 '상품 목록' 탭에서만).
       body.innerHTML = productHtml();
       bindProduct(body);
+    } else if (state.tab === 'rank') {
+      // 순위체크 탭 — 키워드 × 상품URL 직접 입력(상품 분석의 수동 입력과 같은 패턴)
+      body.innerHTML = shopRankHtml();
+      bindShopRank(body);
     } else if (state.tab === 'history') {
       body.innerHTML = historyHtml();
       bindHistory(body);
@@ -1245,6 +1252,7 @@
       { key: 'seller', label: '상품 목록' },
       { key: 'market', label: '시장 분석' },
       { key: 'product', label: '상품 분석' },
+      { key: 'rank', label: '순위체크' },
     ] },
     { key: 'history', label: '내역', tab: 'history' }, // 하위 없음 — 저장된 분석 내역(매장분석 포함)
   ];
@@ -1922,6 +1930,94 @@
     return '<div class="rf-card rf-empty-card">' +
       '<p class="rf-empty-d"><b>상품 목록</b> 탭에서 상품분석을 누르거나, 아래에 상품 URL을 넣어 분석하세요.</p>' +
       manual + goListBtn + '</div>';
+  }
+
+  // ── 쇼핑 · 순위체크 ────────────────────────────────────────────────────
+  // 키워드 × 상품URL(또는 업체명)로 지금 순위를 확인한다. 수집은 시장분석과 같은 수집기,
+  // **판정(광고 제외 오가닉 순위)은 서버**가 한다 — 순위추적 워커와 규칙을 하나로 유지.
+
+  /** 순위체크 탭 본문 — 입력 폼 + (있으면) 결과 카드 */
+  function shopRankHtml() {
+    const s = state.shopRank;
+    const kw = s.kw || state.query || getQueryFromUrl() || '';
+    const depth = SHOP_RANK_DEPTH;
+
+    const form =
+      '<div class="rf-manual-col">' +
+      '<input type="text" class="rf-input" data-ctl="sr-kw" placeholder="키워드 (예: 강아지 사료)" value="' + esc(kw) + '">' +
+      '<input type="text" class="rf-input" data-ctl="sr-target" placeholder="상품 URL 붙여넣기 (또는 업체명)" value="' + esc(s.target || '') + '">' +
+      '<button type="button" class="rf-btn-primary" data-act="sr-run">순위체크</button></div>' +
+      '<p class="rf-note">스마트스토어·브랜드스토어·가격비교 상품 URL을 넣으세요. 업체명만 넣으면 그 업체의 상품 중 가장 높은 순위를 찾습니다. ' +
+      '광고를 제외한 <b>' + depth + '위</b>까지 확인하며, 기록에는 남지 않습니다.</p>';
+
+    if (s.loading) {
+      return '<div class="rf-card rf-empty-card">' +
+        '<div class="rf-loading"><div class="rf-spinner"></div>‘' + esc(String(s.kw).slice(0, 24)) + '’ 순위 확인 중…' +
+        '<br><span class="rf-loading-sub">검색 결과를 ' + depth + '위까지 훑는 중입니다. 30초 정도 걸릴 수 있어요.</span></div></div>';
+    }
+
+    let result = '';
+    if (s.result) {
+      const r = s.result;
+      const badge = r.found
+        ? '<span class="rf-sr-rank">' + r.rank + '위</span>'
+        : '<span class="rf-sr-rank rf-sr-out">' + depth + '위 밖</span>';
+      const rows = [
+        ['키워드', esc(r.keyword || s.kw)],
+        ['확인 깊이', esc(String(r.scanned || 0)) + '개 수집 · 광고 제외'],
+        r.title ? ['상품', esc(r.title)] : null,
+        r.mall_name ? ['업체', esc(r.mall_name)] : null,
+        r.price ? ['가격', Number(r.price).toLocaleString() + '원'] : null,
+        ['광고 노출', r.ad ? '있음' : '없음'],
+      ].filter(Boolean);
+      result =
+        '<div class="rf-card"><div class="rf-card-title">순위 결과 ' + badge + '</div>' +
+        '<table class="rf-sr-table"><tbody>' +
+        rows.map((x) => '<tr><th>' + x[0] + '</th><td>' + x[1] + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    const err = s.error ? '<div class="rf-error" style="margin-bottom:12px;">' + esc(s.error) + '</div>' : '';
+
+    return '<div class="rf-card rf-empty-card">' + err + form + '</div>' + result;
+  }
+
+  /** 순위체크 실행 — 수집(확장) → 판정(서버). 새 탭이 잠깐 열렸다 닫힌다. */
+  async function runShopRank(body) {
+    const kwEl = body.querySelector('[data-ctl="sr-kw"]');
+    const tgEl = body.querySelector('[data-ctl="sr-target"]');
+    const kw = String((kwEl && kwEl.value) || '').trim();
+    const target = String((tgEl && tgEl.value) || '').trim();
+
+    state.shopRank.kw = kw;
+    state.shopRank.target = target;
+    if (!kw) { state.shopRank.error = '키워드를 입력하세요.'; render(); return; }
+    if (!target) { state.shopRank.error = '상품 URL 또는 업체명을 입력하세요.'; render(); return; }
+
+    state.shopRank.loading = true;
+    state.shopRank.error = null;
+    state.shopRank.result = null;
+    render();
+
+    const res = await sendBg('shopRankCheck', { keyword: kw, target, count: SHOP_RANK_DEPTH });
+    state.shopRank.loading = false;
+    if (res && res.ok && res.data) {
+      state.shopRank.result = Object.assign({}, res.data, { scanned: res.scanned || 0 });
+    } else {
+      state.shopRank.error = (res && res.loggedIn === false)
+        ? '로그인이 필요합니다.'
+        : ((res && res.message) || '순위를 확인하지 못했습니다.');
+    }
+    render();
+  }
+
+  function bindShopRank(body) {
+    const btn = body.querySelector('[data-act="sr-run"]');
+    if (btn) btn.addEventListener('click', () => runShopRank(body));
+    // 입력칸에서 엔터로도 실행
+    body.querySelectorAll('[data-ctl="sr-kw"], [data-ctl="sr-target"]').forEach((el) => {
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') runShopRank(body); });
+    });
   }
 
   /** 수동 입력 URL 분석 — 스마트스토어/브랜드스토어 상세 상품만 허용 */

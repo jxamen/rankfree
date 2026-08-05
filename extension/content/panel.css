@@ -1488,3 +1488,45 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- 쇼핑 · 순위체크 ---------- */
+/* 결과 카드 — 순위 배지 + 항목 표. 판정은 서버(광고 제외 오가닉)라 여기선 표시만 한다. */
+#rankfree-panel .rf-sr-rank {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 82, 255, 0.08);
+  color: var(--rf-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+#rankfree-panel .rf-sr-rank.rf-sr-out {
+  background: var(--rf-surface-strong);
+  color: var(--rf-muted);
+}
+#rankfree-panel .rf-sr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+#rankfree-panel .rf-sr-table th,
+#rankfree-panel .rf-sr-table td {
+  padding: 7px 0;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--rf-hairline-soft);
+}
+#rankfree-panel .rf-sr-table tr:first-child th,
+#rankfree-panel .rf-sr-table tr:first-child td {
+  border-top: 0;
+}
+#rankfree-panel .rf-sr-table th {
+  width: 78px;
+  color: var(--rf-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+#rankfree-panel .rf-sr-table td {
+  color: var(--rf-ink);
+  word-break: break-all;
+}

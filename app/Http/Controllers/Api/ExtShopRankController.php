@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Shopping\NaverShoppingRankService;
 use App\Domain\Shopping\ShopRankFromProducts;
 use App\Domain\Shopping\ShopRankSlotService;
 use App\Http\Controllers\Controller;
@@ -24,6 +25,53 @@ class ExtShopRankController extends Controller
         private ShopRankFromProducts $ranker,
         private ShopRankSlotService $slots,
     ) {}
+
+    /**
+     * 확장 패널(쇼핑 → 순위체크)의 1회성 판정 — 슬롯·큐를 만들지 않고 결과만 돌려준다.
+     *
+     * 확장은 목록 수집만 하고 **매칭·순위 계산은 여기서** 한다 — result() 와 같은 판정기를 써
+     * 규칙이 두 곳으로 갈라지지 않게 한다(광고 제외 오가닉 순위, 광고 노출은 ad 로 따로).
+     */
+    public function check(Request $request, NaverShoppingRankService $engine): JsonResponse
+    {
+        $data = $request->validate([
+            'keyword' => 'required|string|max:100',
+            'target' => 'required|string|max:1000',   // 상품 URL·상품ID 또는 업체(스토어)명
+            'products' => 'required|array|max:2000',
+            'products.*' => 'array',
+            'total' => 'nullable|integer|min:0',
+        ]);
+
+        $raw = trim($data['target']);
+
+        // resolveTarget 은 파싱에 실패한 입력을 **업체명 후보**로 넘긴다 — 엉뚱한 URL 을 붙여넣으면
+        // 그 URL 문자열로 업체명 매칭을 하다 조용히 '미노출'이 된다. 입력 단계에서 걸러 알려준다.
+        if (preg_match('#^https?://#i', $raw) && ! str_contains(strtolower($raw), 'naver.com')) {
+            return response()->json([
+                'ok' => false,
+                'message' => '네이버 쇼핑 상품 URL이 아닙니다. 스마트스토어·브랜드스토어·가격비교 URL 또는 업체명을 넣어주세요.',
+            ], 422);
+        }
+
+        $target = $engine->resolveTarget($raw);
+        if ((string) ($target['product_id'] ?? '') === '' && (string) ($target['mall_name'] ?? '') === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => '상품 URL(스마트스토어·브랜드스토어·가격비교) 또는 업체명을 확인하세요.',
+            ], 422);
+        }
+
+        $res = $this->ranker->rank(
+            array_values((array) $data['products']),
+            $target,
+            (int) ($data['total'] ?? 0),
+        );
+
+        return response()->json(['ok' => true, 'data' => $res + [
+            'keyword' => trim($data['keyword']),
+            'target_type' => (string) ($target['type'] ?? ''),
+        ]]);
+    }
 
     /**
      * 작업 가져가기. 줄 게 없으면 빈 배열 — 확장은 그냥 다음 주기에 다시 묻는다.

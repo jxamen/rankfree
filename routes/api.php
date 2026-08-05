@@ -44,6 +44,8 @@ Route::prefix('ext')->group(function (): void {
     Route::middleware('auth.ext')->group(function (): void {
         Route::get('/me', [ExtAuthController::class, 'me']);
         Route::post('/logout', [ExtAuthController::class, 'logout']);
+        // 확장 패널(쇼핑 → 순위체크) 1회성 판정 — 확장이 수집한 목록에서 순위만 계산해 돌려준다(기록 없음)
+        Route::post('/shop-rank/check', [ExtShopRankController::class, 'check'])->middleware('throttle:30,1');
         Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1');
         Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1');
         // '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 확장이 서버에서 받아 표시(DOM scrape 대체)

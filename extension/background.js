@@ -1530,6 +1530,44 @@ const handlers = {
     return { ok: true, saved: (json && json.data && json.data.saved) || products.length, total: col.total || 0 };
   },
 
+  /**
+   * 쇼핑 순위체크(패널 UI) — 키워드 × 상품URL/업체명으로 지금 순위를 확인한다.
+   *
+   * 수집은 시장분석과 같은 수집기(collectShopping)로 하고, **순위 판정은 서버**가 한다 —
+   * 워커(claim/result)와 같은 판정기를 써야 규칙(광고 제외 오가닉)이 두 곳으로 갈라지지 않는다.
+   * 슬롯·큐를 만들지 않으므로 기록에 남지 않는 1회성 조회다.
+   */
+  async shopRankCheck({ keyword, target, count }) {
+    const kw = String(keyword || '').trim();
+    const tg = String(target || '').trim();
+    if (!kw) return { ok: false, message: '키워드를 입력하세요.' };
+    if (!tg) return { ok: false, message: '상품 URL 또는 업체명을 입력하세요.' };
+
+    const { token, apiBase } = await getStore();
+    if (!token) return { ok: false, loggedIn: false, message: '확장에 로그인해 주세요.' };
+
+    const col = await handlers.collectShopping({ keyword: kw, count: Number(count) || 400 });
+    if (!col || !col.ok || !Array.isArray(col.products) || !col.products.length) {
+      return {
+        ok: false,
+        blocked: !!(col && col.blocked),
+        message: (col && col.message) || '상품 목록을 가져오지 못했습니다.',
+      };
+    }
+
+    const { ok, json } = await apiFetch('/api/ext/shop-rank/check', {
+      method: 'POST',
+      body: { keyword: kw, target: tg, products: col.products, total: col.total || 0 },
+      token,
+      apiBase,
+    });
+    if (!ok || !json || !json.ok) {
+      return { ok: false, message: (json && json.message) || '순위 판정에 실패했습니다.' };
+    }
+
+    return { ok: true, data: json.data, scanned: col.products.length, total: col.total || 0 };
+  },
+
   async collectShopping({ keyword, count, match }) {
     return new Promise((resolve) => {
       let tabId = null;
