@@ -197,4 +197,61 @@ class RankTrackTest extends TestCase
         $this->assertDatabaseCount('place_rank_records', 1);
         $this->assertSame(9, PlaceRankRecord::first()->rank);
     }
+
+    /** 순위조회를 가짜로 — 호출 순서대로 주어진 순위를 돌려준다(300 = 미노출). */
+    private function fakeChecker(int ...$ranks): void
+    {
+        $this->mock(\App\Domain\Place\PlaceRankChecker::class, function ($m) use ($ranks) {
+            $m->shouldReceive('check')->andReturnValues(array_map(fn ($rank) => [
+                'blocked' => false, 'found' => $rank > 0 && $rank < 300, 'rank' => $rank,
+                'review_count' => 0, 'blog_review_count' => 0, 'save_count' => null, 'review_score' => null,
+                'list_total' => 300, 'place_id' => '123', 'place_name' => '라온헤어', 'category' => 'place',
+            ], $ranks));
+        });
+    }
+
+    private function outSlot(): \App\Models\PlaceRankSlot
+    {
+        return $this->makeUser('out@rankfree.kr')->rankSlots()->create([
+            'keyword' => 'kw', 'place_id' => '123', 'category' => 'place', 'is_active' => true,
+        ]);
+    }
+
+    /**
+     * 🔴 플레이스 미노출은 **300** 으로 기록된다(쇼핑은 0). 0 만 보면 자동 중단이 영영 안 걸린다 —
+     * 실측 2026-08-05: 최근 7일 미노출 기록 196건인데 중단된 슬롯 0개였다.
+     */
+    public function test_3일_연속_300위_밖이면_추적이_중단된다(): void
+    {
+        $this->fakeChecker(300, 300, 300);
+        $slot = $this->outSlot();
+        $service = app(RankSlotService::class);
+        $base = now()->startOfDay()->addHours(9);
+
+        foreach ([0, 1] as $d) {
+            $this->travelTo($base->copy()->addDays($d));
+            $service->run($slot->fresh());
+            $this->assertTrue($slot->fresh()->is_active, ($d + 1).'일차엔 아직 중단하지 않는다');
+        }
+
+        $this->travelTo($base->copy()->addDays(2));
+        $service->run($slot->fresh());
+        $this->assertFalse($slot->fresh()->is_active, '3일 연속 300위 밖이면 중단한다');
+    }
+
+    /** 중간에 한 번이라도 순위가 잡히면 연속이 끊긴다 — 계속 추적해야 한다. */
+    public function test_중간에_순위가_잡히면_중단하지_않는다(): void
+    {
+        $this->fakeChecker(300, 12, 300);
+        $slot = $this->outSlot();
+        $service = app(RankSlotService::class);
+        $base = now()->startOfDay()->addHours(9);
+
+        foreach ([0, 1, 2] as $d) {
+            $this->travelTo($base->copy()->addDays($d));
+            $service->run($slot->fresh());
+        }
+
+        $this->assertTrue($slot->fresh()->is_active, '연속 3일이 아니면 중단하지 않는다');
+    }
 }

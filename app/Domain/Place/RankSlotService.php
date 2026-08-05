@@ -10,7 +10,19 @@ use DomainException;
 /** 순위 추적 슬롯 도메인 로직 — 웹 콘솔·배치·API 가 공유. */
 class RankSlotService
 {
+    /**
+     * 순위 밖 센티넬 — 플레이스는 미노출을 **300** 으로 기록한다(PlaceRankChecker: `$found ? $rank : 300`).
+     * 쇼핑은 0 을 쓴다. 자동 중단 판정이 이 차이를 놓치면 영원히 중단되지 않는다.
+     */
+    public const RANK_OUT = 300;
+
     public function __construct(private PlaceRankChecker $checker) {}
+
+    /** 순위 밖인가 — 300(미노출) 또는 0(대상 미확정 등 조회 불가). */
+    private static function isOut(int $rank): bool
+    {
+        return $rank === 0 || $rank >= self::RANK_OUT;
+    }
 
     /**
      * 입력(URL·단축URL·ID·업체명) → 플레이스 메타 확정. 업체명·카테고리 자동조회.
@@ -157,12 +169,15 @@ class RankSlotService
             'last_checked_at' => now(),
         ]);
 
-        // 3일 연속 미노출(순위 0 = 300위 밖) 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
+        // 3일 연속 순위 밖이면 자동 중단(2026-07-24) — 트래픽 부담만 늘어 체크 중지.
         // 삭제 아님 — 목록 [재개] 버튼으로 다시 켤 수 있다.
-        if ((int) $r['rank'] === 0 && $slot->is_active) {
+        // ⚠️ 0 만 보면 안 된다 — 플레이스 미노출은 300 으로 기록되므로 중단이 한 번도 걸리지 않았다
+        //    (실측 2026-08-05: 최근 7일 미노출 기록 196건, rank=0 은 0건, 중단된 슬롯 0개).
+        // 차단(토큰 만료·429)은 위에서 기록 자체를 건너뛰므로 판정에 섞이지 않는다.
+        if (self::isOut((int) $r['rank']) && $slot->is_active) {
             $recent = PlaceRankRecord::where('slot_id', $slot->id)
                 ->orderByDesc('checked_date')->limit(3)->pluck('rank');
-            if ($recent->count() === 3 && $recent->every(fn ($v) => (int) $v === 0)) {
+            if ($recent->count() === 3 && $recent->every(fn ($v) => self::isOut((int) $v))) {
                 $slot->update(['is_active' => false]);
             }
         }
