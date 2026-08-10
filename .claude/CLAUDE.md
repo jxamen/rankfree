@@ -91,7 +91,7 @@
 | [27_PRODUCT_PACKAGE.md](./27_PRODUCT_PACKAGE.md) | 마케팅 상품 — 고정 수량·기간 패키지(고객은 그대로 주문, 서버 강제) + 상품 복제(필드·배분 포함, 비활성 시작) |
 | [28_ORDER_API.md](./28_ORDER_API.md) | 외부 주문 API v1(scope: order) — 상품 조회·주문 생성·조회. **주문 규칙은 OrderPlacer 단일 소스**(웹·API 공유), 공개 문서 /developers |
 | [29_JCURVE_DEV_SERVER.md](./29_JCURVE_DEV_SERVER.md) | dev.j-curve.co.kr — 같은 서버에 외부 개발자용 **격리 배포 환경**(전용 계정 jcdev·ACL 차단·전용 php-fpm 풀·전용 DB·HTTP-01 인증서). **php83 필수·sudo 금지** 함정 포함 |
-| [30_EXTENSION_PUBLIC_INTERNAL_SPLIT.md](./30_EXTENSION_PUBLIC_INTERNAL_SPLIT.md) | 확장 **공개 배포본 분리**(v0.4.0) — 웹스토어 정책 위반 소지 제거(캡차 자동풀이 완전 삭제, 서버배정 크롤 워커는 공개본에서만 제외). `extension/`=작업본(평소 로드), `extension-public/`=생성물이지만 **커밋**(운영 서버엔 node 없음). 게시 전 `node scripts/build-extension-public.mjs` 필수 — 버전·유출 가드가 막는다 |
+| [30_EXTENSION_STORE_COMPLIANCE.md](./30_EXTENSION_STORE_COMPLIANCE.md) | 확장 웹스토어 게시·심사 리스크 — 게시 차단 원인(Privacy practices 탭)·**캡차 자동풀이 제거**(재유입 시 게시 중단 가드)·백그라운드 수집을 남긴 판단 근거·개인정보 신고 답안 |
 | [reward/design-05-mission-types.md](./reward/design-05-mission-types.md) | **미션 타입 체계(설계만·미구현)** — kind+variant 2단, 정답 소스·문구 세트·응답 필드를 capability 로 묶음. 타입 확정이 벤더 배분 구현보다 선행 |
 | [reward/API-miniapp-integration.md](./reward/API-miniapp-integration.md) | **리워드 미니앱 연동 가이드(퀴즈농장)** — `/api/farm/*` 인증(x-user-key)·단건 할당·제출·상태 API 계약. 예제는 실서버 응답 캡처본 |
 | [reward/HANDOFF-rankfree.md](./reward/HANDOFF-rankfree.md) | **대규모 리워드 참여시스템** 백엔드(**퀴즈농장 전용 아님** — 퀴즈농장은 첫 매체, 다양한 매체에 제공) — 진입점. 상세는 [reward/](./reward/): 스키마·런타임(한도/쿨다운)·정산·어드민 설정·미니앱 API·인프라 제약. 일 100만 참여는 산정 기준선(상한 아님) |

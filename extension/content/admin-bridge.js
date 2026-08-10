@@ -20,22 +20,8 @@
     collectShop: (m) => ['collectShopSerp', { keyword: String(m.keyword || ''), count: Number(m.count) || 80 }],
     // 상품페이지(스마트스토어/브랜드)를 백그라운드 탭으로 열어 제목·가격·이미지를 수집 — 순위추적 관리의 '제목 수집'
     collectProductPage: (m) => ['collectProductPage', { url: String(m.url || '') }],
-    collectSellerCaptchas: (m) => ['sellerCaptchaStart', {
-      products: Array.isArray(m.products) ? m.products : [],
-      active: !!m.active,
-      force: !!m.force,
-      concurrency: Number(m.concurrency) || 0,
-      keepOpen: !!m.keepOpen,
-    }],
-    sellerCaptchaStart: (m) => ['sellerCaptchaStart', {
-      products: Array.isArray(m.products) ? m.products : [],
-      active: !!m.active,
-      force: !!m.force,
-      concurrency: Number(m.concurrency) || 0,
-      keepOpen: !!m.keepOpen,
-    }],
-    sellerCaptchaStatus: () => ['sellerCaptchaStatus', {}],
-    sellerCaptchaStop: () => ['sellerCaptchaStop', {}],
+    // (제거됨 2026-08-10) 판매자정보 캡차 자동풀이 — 봇 방지 우회라 확장에서 들어냈다.
+    //   라우트만 남기면 응답 없는 호출로 화면이 영구히 잠긴다(callExt 에 타임아웃이 없다).
     bulkStart: (m) => ['bulkShopStart', {
       limit: Number(m.limit) || 0, delayMs: Number(m.delayMs) || 6000,
       concurrency: Number(m.concurrency) || 2, force: !!m.force,

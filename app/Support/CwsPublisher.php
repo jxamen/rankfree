@@ -25,19 +25,14 @@ class CwsPublisher
         return trim((string) AppSetting::read(self::ID_KEY));
     }
 
-    /**
-     * 게시 대상 디렉터리 — **공개 배포본**.
-     * extension/ 은 사내 워커·브릿지가 든 작업용 폴더라 그대로 올리면 정책 위반 코드가 나간다.
-     * 이 디렉터리는 `node scripts/build-extension-public.mjs` 로 만들어 git 에 커밋한다
-     * (운영 서버엔 node 가 없어 여기서 빌드할 수 없다).
-     */
-    private const PUBLIC_DIR = 'extension-public';
+    private const PUBLIC_DIR = 'extension';
 
-    /** 공개 패키지에 절대 들어가면 안 되는 심볼 — scripts/build-extension-public.mjs 와 같은 목록. */
-    private const FORBIDDEN = [
-        'drainShopRankQueue', 'bulkShopStart', 'collectShopSerp',
-        'solveQuiz', 'sellerCaptcha', 'rfWorkerId', 'chrome.alarms',
-    ];
+    /**
+     * 게시 패키지에 다시 들어오면 안 되는 심볼 — **캡차 자동 풀이**(2026-08-10 제거).
+     * 캡차 이미지를 서버로 보내 정답을 받아 자동 제출하는 동작은 봇 방지 우회라
+     * 심사에서 항목 삭제까지 갈 수 있다. 실수로 되살아나면 게시를 막는다.
+     */
+    private const FORBIDDEN = ['solveQuiz', 'sellerCaptcha'];
 
     /** manifest 버전. */
     public static function version(): string
@@ -153,15 +148,7 @@ class CwsPublisher
         }
         $extDir = base_path(self::PUBLIC_DIR);
         if (! is_dir($extDir)) {
-            return [null, $version, self::PUBLIC_DIR.' 디렉터리가 없습니다 — 로컬에서 `node scripts/build-extension-public.mjs` 로 만들어 커밋·배포하세요.'];
-        }
-
-        // 작업본(extension/)을 고쳐 놓고 공개본을 다시 만들지 않으면 낡은 코드가 게시된다.
-        $src = json_decode((string) @file_get_contents(base_path('extension/manifest.json')), true);
-        $srcVersion = (string) ($src['version'] ?? '');
-        if ($srcVersion !== '' && $srcVersion !== $version) {
-            return [null, $version, "공개본이 낡았습니다(extension=v{$srcVersion}, ".self::PUBLIC_DIR."=v{$version}). "
-                .'로컬에서 `node scripts/build-extension-public.mjs` 를 다시 실행해 커밋·배포하세요.'];
+            return [null, $version, 'extension 디렉터리를 찾을 수 없습니다.'];
         }
 
         $zipPath = storage_path('app/rankfree-extension-v'.$version.'.zip');
@@ -184,16 +171,15 @@ class CwsPublisher
             if (preg_match('#(^|/)\w+\.md$#i', $local)) {
                 continue;
             }
-            // 마지막 방어선 — 사내 전용 코드가 섞이면 게시하지 않는다(2026-08-10).
-            // 서버가 배정한 크롤 워커·캡차 자동풀이는 웹스토어 정책 위반이라 항목이 내려간다.
+            // 마지막 방어선 — 캡차 자동 풀이가 되살아나면 게시하지 않는다(2026-08-10 제거).
             if (str_ends_with($local, '.js')) {
                 foreach (self::FORBIDDEN as $needle) {
                     if (str_contains((string) @file_get_contents($file->getPathname()), $needle)) {
                         $zip->close();
                         @unlink($zipPath);
 
-                        return [null, $version, "공개본에 사내 전용 코드가 남아 있어 게시를 중단했습니다({$local} → {$needle}). "
-                            .'`node scripts/build-extension-public.mjs` 로 다시 만들어 커밋·배포하세요.'];
+                        return [null, $version, "캡차 자동 풀이 코드가 패키지에 남아 있어 게시를 중단했습니다({$local} → {$needle}). "
+                            .'봇 방지 우회는 심사에서 항목 삭제 사유입니다.'];
                     }
                 }
             }

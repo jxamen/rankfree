@@ -19,10 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// 게시 대상은 **공개 배포본**이다. extension/ 은 사내 워커·브릿지가 들어 있는 작업용 폴더라
-// 그대로 올리면 정책 위반 코드가 그대로 나간다. 생성은 scripts/build-extension-public.mjs.
-const EXT_DIR = path.join(ROOT, 'extension-public');
-const SRC_DIR = path.join(ROOT, 'extension');
+const EXT_DIR = path.join(ROOT, 'extension');
 const argv = new Set(process.argv.slice(2));
 const DRY = argv.has('--dry-run');
 const UPLOAD_ONLY = argv.has('--upload-only');
@@ -64,16 +61,7 @@ if (!REFRESH_TOKEN) missing.push('CWS_REFRESH_TOKEN');
 if (!EXTENSION_ID) missing.push('CWS_EXTENSION_ID');
 
 // ── manifest 버전 → zip 파일명 ────────────────────────────────────────────────
-if (!fs.existsSync(path.join(EXT_DIR, 'manifest.json'))) {
-  die('extension-public/ 이 없습니다. 먼저 `node scripts/build-extension-public.mjs` 를 실행하세요.');
-}
 const manifest = JSON.parse(fs.readFileSync(path.join(EXT_DIR, 'manifest.json'), 'utf8'));
-// 작업본을 고쳐 놓고 공개본을 다시 만들지 않으면 낡은 코드가 게시된다 — 버전이 어긋나면 막는다.
-const srcVersion = JSON.parse(fs.readFileSync(path.join(SRC_DIR, 'manifest.json'), 'utf8')).version;
-if (srcVersion !== manifest.version) {
-  die(`공개본이 낡았습니다(extension=${srcVersion}, extension-public=${manifest.version}).`
-    + '\n  → node scripts/build-extension-public.mjs 를 다시 실행하세요.');
-}
 const VERSION = manifest.version;
 const ZIP = path.join(ROOT, `rankfree-extension-v${VERSION}.zip`);
 
