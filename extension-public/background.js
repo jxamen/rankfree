@@ -702,9 +702,3 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     .catch((e) => sendResponse({ ok: false, message: String((e && e.message) || e) }));
   return true; // async 응답
 });
-
-// ── 사내 전용 오버레이 ─────────────────────────────────────────────
-// 워커·대량수집·브릿지 핸들러. 공개 배포본(extension-public/)에서는 이 줄과
-// internal/ 디렉터리가 통째로 빠진다 — scripts/build-extension-public.mjs 참조.
-// **반드시 파일 끝**: `const handlers` 가 TDZ 라 위에서 부르면 SW 가 죽는다.
-importScripts('internal/internal.js');

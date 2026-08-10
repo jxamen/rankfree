@@ -2,7 +2,7 @@
 @section('page-title', '수집 상품')
 
 @section('admin-content')
-<x-console.page-head title="수집 상품" desc="지금까지 수집한 네이버 쇼핑 상품을 상품 기준으로 봅니다. 스마트스토어/브랜드스토어 상품의 판매자정보 퀴즈 이미지를 확장으로 수집할 수 있습니다." />
+<x-console.page-head title="수집 상품" desc="지금까지 수집한 네이버 쇼핑 상품을 상품 기준으로 봅니다. 이미 수집된 판매자정보는 '정보 보기'로 확인할 수 있습니다." />
 
 <div class="card p-4 mb-4">
     <form method="GET" action="{{ route('admin.shop-products') }}" class="flex items-center gap-2" style="flex-wrap:nowrap;overflow-x:auto;">
@@ -52,17 +52,8 @@
         </span>
     </form>
 
-    <div class="mt-3 flex items-center gap-2 flex-wrap">
-        <button type="button" id="rf-seller-captcha-all" class="btn btn-primary btn-sm">현재 페이지 판매자정보 수집</button>
-        <select id="rf-seller-captcha-conc" class="input" style="height:32px;width:108px;">
-            <option value="1">동시 1개</option>
-            <option value="2">동시 2개</option>
-            <option value="3" selected>동시 3개</option>
-            <option value="4">동시 4개</option>
-        </select>
-        <button type="button" id="rf-seller-captcha-stop" class="btn btn-secondary btn-sm" hidden>중단</button>
-        <span id="rf-seller-captcha-msg" class="text-muted" style="font-size:var(--fs-xs);">상품별 수집 버튼 또는 현재 페이지 일괄 수집을 사용할 수 있습니다.</span>
-    </div>
+    {{-- 판매자정보 '수집' UI 는 제거됐다(2026-08-10) — 캡차 자동풀이가 크롬 웹스토어 정책에
+         걸려 확장에서 들어냈기 때문. 이미 수집된 정보의 '열람'만 남긴다. --}}
 </div>
 
 <div class="card">
@@ -144,15 +135,7 @@
                             <div class="flex items-center gap-1" style="flex-wrap:wrap;">
                                 @if ($hasInfo)
                                     <button type="button" class="btn btn-primary btn-sm rf-cap-toggle" data-target="cap-{{ $loop->index }}">정보 보기</button>
-                                @endif
-                                @if (!empty($p->link))
-                                    <button type="button" class="btn btn-secondary btn-sm rf-seller-captcha-one"
-                                            data-url="{{ $p->link }}"
-                                            data-title="{{ $p->title }}"
-                                            data-store="{{ $storeId }}">
-                                        {{ $hasInfo ? '재수집' : '수집' }}
-                                    </button>
-                                @elseif (!$hasInfo)
+                                @else
                                     <span class="text-muted-soft">—</span>
                                 @endif
                             </div>
@@ -200,147 +183,6 @@
 @endif
 
 <script>
-    (function () {
-        var allBtn = document.getElementById('rf-seller-captcha-all');
-        var stopBtn = document.getElementById('rf-seller-captcha-stop');
-        var conc = document.getElementById('rf-seller-captcha-conc');
-        var msg = document.getElementById('rf-seller-captcha-msg');
-        var pollTimer = null;
-
-        function hasExtension() {
-            return document.documentElement.getAttribute('data-rf-ext') === '1';
-        }
-
-        function callExt(type, payload, cb) {
-            var onRes = function (e) {
-                var m = e.data;
-                if (!m || m.source !== 'rankfree-ext' || m.type !== type + 'Result') return;
-                window.removeEventListener('message', onRes);
-                cb(m);
-            };
-            window.addEventListener('message', onRes);
-            window.postMessage(Object.assign({ source: 'rankfree-admin', type: type }, payload || {}), '*');
-        }
-
-        function productFromButton(btn) {
-            return {
-                url: btn.getAttribute('data-url') || '',
-                title: btn.getAttribute('data-title') || '',
-                storeId: btn.getAttribute('data-store') || ''
-            };
-        }
-
-        function currentProducts() {
-            return Array.prototype.slice.call(document.querySelectorAll('.rf-seller-captcha-one'))
-                .map(productFromButton)
-                .filter(function (p) { return p.url; });
-        }
-
-        function setRunning(on) {
-            if (allBtn) allBtn.disabled = on;
-            if (conc) conc.disabled = on;
-            if (stopBtn) stopBtn.hidden = !on;
-            document.querySelectorAll('.rf-seller-captcha-one').forEach(function (b) { b.disabled = on; });
-        }
-
-        function renderJob(job) {
-            job = job || {};
-            var running = !!job.running;
-            var text = (running ? '수집 중 ' : '수집 종료 ') + (job.done || 0) + '/' + (job.total || 0) +
-                ' · 저장 ' + (job.saved || 0) +
-                ' · 실패 ' + (job.failed || 0);
-            if (running && job.inFlight) text += ' · 처리 중 ' + job.inFlight;
-            if (job.concurrency) text += ' · 동시 ' + job.concurrency;
-            if (running && job.current) text += ' · 현재: ' + job.current;
-            if (job.lastError) text += ' · 최근 오류: ' + job.lastError;
-            msg.textContent = text;
-        }
-
-        function poll() {
-            callExt('sellerCaptchaStatus', {}, function (res) {
-                var job = res && res.job;
-                renderJob(job);
-                if (job && job.running) {
-                    pollTimer = setTimeout(poll, 1000);
-                } else {
-                    setRunning(false);
-                    pollTimer = null;
-                }
-            });
-        }
-
-        function selectedConcurrency() {
-            return Math.max(1, Math.min(4, Number(conc && conc.value) || 3));
-        }
-
-        function start(products, options) {
-            options = options || {};
-            if (!hasExtension()) {
-                msg.style.color = 'var(--color-error)';
-                msg.textContent = '확장이 설치돼 있지 않습니다. RankFree 확장을 리로드하고 로그인해 주세요.';
-                return;
-            }
-            if (!products.length) {
-                msg.style.color = 'var(--color-error)';
-                msg.textContent = '처리할 상품 URL이 없습니다.';
-                return;
-            }
-            msg.style.color = '';
-            msg.textContent = '판매자정보 수집 작업을 시작합니다...';
-            setRunning(true);
-            callExt('sellerCaptchaStart', {
-                products: products,
-                concurrency: options.concurrency || selectedConcurrency(),
-                active: !!options.active,
-                keepOpen: !!options.keepOpen
-            }, function (res) {
-                if (!res || !res.ok) {
-                    setRunning(false);
-                    msg.style.color = 'var(--color-error)';
-                    msg.textContent = (res && res.message) || '판매자정보 수집 시작에 실패했습니다.';
-                    return;
-                }
-                poll();
-            });
-        }
-
-        if (allBtn) {
-            allBtn.addEventListener('click', function () {
-                start(currentProducts(), { concurrency: selectedConcurrency() });
-            });
-        }
-        if (stopBtn) {
-            stopBtn.addEventListener('click', function () {
-                callExt('sellerCaptchaStop', {}, function () {
-                    msg.textContent = '중단 요청을 보냈습니다. 현재 처리 중인 상품을 정리하고 멈춥니다.';
-                    setRunning(true);
-                    if (!pollTimer) poll();
-                });
-            });
-        }
-        document.addEventListener('click', function (e) {
-            var btn = e.target.closest && e.target.closest('.rf-seller-captcha-one');
-            if (!btn) return;
-            start([productFromButton(btn)], { active: true, keepOpen: true, concurrency: 1 });
-        });
-
-        (function recover(n) {
-            if (hasExtension()) {
-                callExt('sellerCaptchaStatus', {}, function (res) {
-                    if (res && res.job) {
-                        renderJob(res.job);
-                        if (res.job.running) {
-                            setRunning(true);
-                            if (!pollTimer) poll();
-                        }
-                    }
-                });
-                return;
-            }
-            if (n > 0) setTimeout(function () { recover(n - 1); }, 300);
-        })(20);
-    })();
-
     // 수집된 판매자정보 펼치기/접기
     document.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('.rf-cap-toggle');

@@ -1,0 +1,161 @@
+/* RankFree 셀러력 — 상품 페이지 패널의 '셀러력' 탭 스타일 (rf-sp- 네임스페이스, 라이트 고정) */
+/* 변수는 독립 루트(#rf-sp-root)와 통합 패널(#rankfree-panel) 양쪽에서 공유 */
+#rf-sp-root, #rankfree-panel {
+  /* Coinbase 디자인 시스템 (primary #0052ff) */
+  --brand: #0052ff; --brand-soft: #e5edff; --ink: #0a0b0d; --muted: #5c626b; --faint: #767d86;
+  --line: #dee1e6; --line-soft: #eef0f3; --panel: #fff; --soft: #f7f7f7; --track: #eef0f3;
+}
+#rf-sp-root {
+  all: initial;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+}
+#rf-sp-root * { box-sizing: border-box; }
+
+.rf-sp-fab {
+  position: fixed; right: 20px; bottom: 172px; z-index: 2147483000;
+  width: 50px; height: 50px; border-radius: 15px; border: none; cursor: pointer;
+  background: var(--brand); color: #fff; font-size: 22px; line-height: 1;
+  box-shadow: 0 8px 24px -6px rgba(20,22,28,.5); transition: transform .12s;
+}
+.rf-sp-fab:hover { transform: translateY(-2px); }
+#rf-sp-root.open .rf-sp-fab { display: none; }
+
+.rf-sp-panel {
+  position: fixed; top: 0; right: 0; z-index: 2147483000;
+  width: 408px; max-width: 96vw; height: 100vh; background: var(--panel);
+  border-left: 1px solid var(--line); box-shadow: -12px 0 40px -16px rgba(20,22,28,.3);
+  display: flex; flex-direction: column; transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.7,.2,1);
+  color: var(--ink); font-size: 13px; line-height: 1.5;
+}
+#rf-sp-root.open .rf-sp-panel { transform: none; }
+
+.rf-sp-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); flex: none; }
+.rf-sp-head .lg { width: 26px; height: 26px; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 800; font-size: 13px; display: grid; place-items: center; }
+.rf-sp-head .t { font-weight: 700; font-size: 13.5px; }
+.rf-sp-head .s { font-size: 12.5px; color: var(--faint); }
+.rf-sp-x { margin-left: auto; width: 26px; height: 26px; border: none; background: none; cursor: pointer; color: var(--faint); font-size: 14px; border-radius: 7px; }
+.rf-sp-x:hover { background: var(--soft); color: var(--muted); }
+
+.rf-sp-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+/* 입력 폼 */
+.rf-sp-form label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 6px; }
+.rf-sp-form input {
+  width: 100%; height: 42px; padding: 0 13px; border: 1px solid var(--line); border-radius: 11px;
+  font-size: 14px; color: var(--ink); outline: none; font-family: inherit;
+}
+.rf-sp-form input:focus { border-color: var(--brand); }
+.rf-sp-btn {
+  width: 100%; height: 46px; margin-top: 10px; border: none; border-radius: 12px; cursor: pointer;
+  background: var(--brand); color: #fff; font-size: 14px; font-weight: 700; font-family: inherit; transition: transform .12s;
+}
+.rf-sp-btn:hover { transform: translateY(-1px); }
+.rf-sp-note { font-size: 12.5px; color: var(--faint); margin-top: 12px; line-height: 1.6; }
+.rf-sp-err { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: #fce8e9; color: #c0343a; font-size: 12px; }
+.rf-sp-msg { text-align: center; padding: 40px 16px; color: var(--muted); font-size: 13px; }
+.rf-sp-msg span { font-size: 12px; color: var(--faint); }
+
+/* 로딩 */
+.rf-sp-loading { text-align: center; padding: 48px 20px; }
+.rf-sp-loading .spin { width: 34px; height: 34px; margin: 0 auto 16px; border: 3px solid var(--track); border-top-color: var(--brand); border-radius: 50%; animation: rfspin 0.8s linear infinite; }
+@keyframes rfspin { to { transform: rotate(360deg); } }
+.rf-sp-loading .step { font-size: 13.5px; font-weight: 600; }
+.rf-sp-loading .hint { font-size: 12.5px; color: var(--faint); margin-top: 8px; }
+
+/* 히어로 */
+.rf-sp-hero { text-align: center; padding: 4px 0 6px; }
+.rf-sp-hero .kw { display: inline-block; font-size: 12.5px; color: var(--brand); background: var(--brand-soft); padding: 4px 11px; border-radius: 99px; font-weight: 600; margin-bottom: 12px; }
+.rf-sp-hero .gauge { position: relative; width: 150px; height: 150px; margin: 0 auto; }
+.rf-sp-hero .gc { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.rf-sp-hero .sn { font-size: 46px; font-weight: 850; letter-spacing: -.03em; line-height: .9; }
+.rf-sp-hero .sm { font-size: 12px; color: var(--faint); font-weight: 600; margin-top: 3px; }
+.rf-sp-hero .grade { display: inline-block; margin-top: 10px; padding: 4px 14px; border-radius: 99px; font-weight: 800; font-size: 13px; }
+.rf-sp-hero .verdict { font-size: 12.5px; color: var(--muted); margin: 12px auto 0; max-width: 34ch; line-height: 1.55; }
+.rf-sp-hero .verdict b { color: var(--ink); }
+.rf-sp-hero .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px; }
+.rf-sp-hero .stats > div { background: var(--soft); border: 1px solid var(--line-soft); border-radius: 11px; padding: 10px 12px; text-align: left; }
+.rf-sp-hero .stats span { font-size: 12px; color: var(--muted); font-weight: 600; display: block; }
+.rf-sp-hero .stats b { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+
+/* 섹션 */
+.rf-sp-sec { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
+.rf-sp-sec .st { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+
+/* 레이더 */
+.rf-sp-sec .radar-row { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.rf-sp-sec canvas { width: 300px; height: 300px; max-width: 100%; }
+.rf-sp-sec .legs { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.rf-sp-leg { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.rf-sp-leg .lh { display: flex; align-items: center; justify-content: space-between; }
+.rf-sp-leg .n { font-weight: 600; color: var(--ink); }
+.rf-sp-leg .v b { font-size: 14px; }
+.rf-sp-leg .v s { color: var(--faint); text-decoration: none; font-size: 12px; margin: 0 5px; }
+.rf-sp-leg .v em { font-style: normal; font-size: 11.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; }
+/* 가로 그래프(시장분석 스타일) — rf 프리픽스로 호스트 페이지 클래스 충돌 방지 */
+.rf-sp-leg .rfbar { position: relative; display: block !important; height: 10px !important; background: var(--track); border-radius: 99px; overflow: visible; }
+.rf-sp-leg .rfbar .rffill { position: absolute; left: 0; top: 0; bottom: 0; height: 100% !important; min-width: 3px; border-radius: 99px; transition: width .3s; }
+.rf-sp-leg .rfbar .rfavgmk { position: absolute; top: -2px; width: 2px; height: 14px; background: var(--ink); opacity: .6; border-radius: 2px; transform: translateX(-1px); }
+/* 상품명(클릭 → 상품 페이지) */
+.rf-sp-pname { display: block; font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; margin-bottom: 12px; line-height: 1.4; }
+a.rf-sp-pname:hover { text-decoration: underline; }
+.rlegend { display: flex; gap: 14px; justify-content: center; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.rlegend span { display: inline-flex; align-items: center; gap: 6px; }
+.rlegend i { width: 12px; height: 3px; border-radius: 2px; }
+.rlegend i.mine { background: var(--brand); }
+.rlegend i.avg { border-top: 2px dashed var(--faint); height: 0; }
+
+/* 손해 — 모노크롬 플랫(하이라인 카드, 컬러바·파스텔 제거) */
+.rf-sp-loss { display: flex; gap: 12px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; margin-top: 8px; align-items: flex-start; }
+.rf-sp-loss .rk { font-size: 12.5px; font-weight: 800; color: var(--ink); width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 6px; display: grid; place-items: center; flex: none; margin-top: 1px; }
+.rf-sp-loss .lt { font-size: 13px; font-weight: 700; color: var(--ink); }
+.rf-sp-loss .ld { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.rf-sp-loss .ld b { color: var(--ink); font-weight: 600; }
+.rf-sp-loss .tg { display: flex; gap: 8px; margin-top: 9px; align-items: center; }
+.rf-sp-loss .tg .gain { font-size: 12px; font-weight: 700; color: var(--ink); background: var(--soft); border: 1px solid var(--line-soft); padding: 2px 8px; border-radius: 6px; }
+.rf-sp-loss .tg .diff { font-size: 12px; color: var(--faint); font-weight: 500; }
+
+/* 처방 */
+.rf-sp-rxg .ax { font-size: 12px; font-weight: 700; padding: 10px 2px 6px; }
+.rf-sp-rx { display: flex; align-items: flex-start; gap: 9px; padding: 8px 2px; border-top: 1px solid var(--line-soft); font-size: 12px; }
+.rf-sp-rx .mk { width: 18px; height: 18px; border-radius: 6px; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 800; margin-top: 1px; }
+.rf-sp-rx b { font-weight: 600; }
+.rf-sp-rx span { color: var(--muted); }
+
+.rf-sp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.rf-sp-tag { font-size: 12.5px; color: var(--muted); background: var(--soft); border: 1px solid var(--line-soft); border-radius: 7px; padding: 3px 9px; }
+.rf-sp-saved { margin-top: 16px; text-align: center; font-size: 12.5px; color: #05b169; background: #e6f6ee; padding: 9px; border-radius: 10px; }
+.rf-sp-refresh-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; }
+/* 상품분석 상단 바 — 스크롤해도 상단 고정. 상단 여백은 시장분석 탭과 동일(body padding만) */
+#rankfree-panel .rf-sp-refresh-bar.rf-sticky { position: sticky; top: 0; z-index: 6; background: var(--rf-canvas); margin: 0 -16px 0; padding: 0 16px 9px; border-bottom: 1px solid var(--rf-hairline); }
+/* 리뷰 요약 위 상품명(클릭 → 상품 페이지) — 고정 바에 가리지 않게 위 간격 확보 */
+#rankfree-panel .rf-prod-name { display: block; font-size: 14px; font-weight: 700; color: var(--rf-ink); text-decoration: none; margin: 12px 0 4px; line-height: 1.4; }
+#rankfree-panel a.rf-prod-name:hover { text-decoration: underline; color: var(--rf-primary); }
+#rankfree-panel .rf-prod-meta { font-size: 12px; color: var(--rf-muted); margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+.rf-sp-bar-left { display: flex; flex-wrap: wrap; gap: 6px; }
+.rf-sp-refresh { display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer; font-family: inherit; white-space: nowrap; box-sizing: border-box; text-decoration: none; }
+.rf-sp-refresh:hover { border-color: var(--ink); }
+
+/* 셀러력 상품 리스트(검색 탭) */
+.rf-sp-list-head { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rf-sp-list-head b { color: var(--ink); }
+.rf-sp-count { margin-left: auto; height: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); font-size: 12.5px; color: var(--ink); font-family: inherit; padding: 0 6px; cursor: pointer; }
+.rf-sp-recollect { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--muted); cursor: pointer; font-size: 12px; }
+.rf-sp-recollect:hover { border-color: var(--ink); color: var(--ink); }
+.rf-sp-list { display: flex; flex-direction: column; gap: 6px; }
+.rf-sp-item { display: flex; align-items: center; gap: 10px; width: 100%; position: relative; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); font-family: inherit; transition: border-color .12s; }
+.rf-sp-item:hover { border-color: var(--brand); }
+.rf-sp-item .rk { font-size: 13px; font-weight: 800; color: var(--faint); width: 22px; text-align: center; flex: none; }
+.rf-sp-item .rk.ad { width: auto; min-width: 28px; font-size: 11.5px; font-weight: 700; color: #b06a00; background: #fff3e0; border-radius: 6px; padding: 2px 5px; }
+.rf-sp-item.is-ad { background: #fffdf9; }
+.rf-sp-item .ti { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.rf-sp-item .mt { display: block; font-size: 12px; color: var(--faint); font-weight: 400; margin-top: 2px; }
+/* hover 시 액션 버튼 */
+.rf-sp-item .acts { display: none; gap: 5px; flex: none; }
+.rf-sp-item:hover .acts { display: flex; }
+.rf-sp-act { height: 28px; padding: 0 10px; border-radius: 8px; border: none; cursor: pointer; font-size: 12.5px; font-weight: 700; font-family: inherit; white-space: nowrap; }
+.rf-sp-act.seller { background: var(--brand); color: #fff; }
+.rf-sp-act.review { background: var(--brand-soft); color: var(--brand); }
+.rf-sp-act:hover { opacity: .88; }
+/* 스마트스토어 외 상품 — 분석 불가 표시 */
+.rf-sp-act-na { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--faint); background: var(--surface-soft, #f4f5f7); white-space: nowrap; cursor: default; }
+.rf-sp-item.is-na .ti { color: var(--faint); }

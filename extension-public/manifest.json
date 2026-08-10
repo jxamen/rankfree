@@ -10,8 +10,7 @@
     },
     "permissions": [
         "storage",
-        "tabs",
-        "alarms"
+        "tabs"
     ],
     "host_permissions": [
         "https://rankfree.kr/*",
@@ -21,11 +20,7 @@
         "https://smartstore.naver.com/*",
         "https://brand.naver.com/*",
         "https://map.naver.com/*",
-        "https://pcmap.place.naver.com/*",
-        "http://127.0.0.1:8000/*",
-        "http://localhost:8000/*",
-        "https://m.search.naver.com/*",
-        "https://s.search.naver.com/*"
+        "https://pcmap.place.naver.com/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -117,35 +112,6 @@
             ],
             "css": [
                 "content/place-rank.css"
-            ],
-            "run_at": "document_idle"
-        },
-        {
-            "comment": "관리자 화면 ↔ 확장 브릿지 — 대량 수집·상품정보 수집 요청을 받는다",
-            "matches": [
-                "https://rankfree.kr/admin/*",
-                "https://*.rankfree.co.kr/admin/*",
-                "http://127.0.0.1:8000/admin/*",
-                "http://localhost:8000/admin/*"
-            ],
-            "js": [
-                "content/admin-bridge.js"
-            ],
-            "run_at": "document_idle"
-        },
-        {
-            "comment": "쇼핑 노출 키워드 ↔ 확장 브릿지 — m.search HTML·상품정보를 브라우저에서 대신 가져온다",
-            "matches": [
-                "https://rankfree.kr/admin/shop-keyword*",
-                "https://*.rankfree.co.kr/admin/shop-keyword*",
-                "http://127.0.0.1:8000/admin/shop-keyword*",
-                "http://localhost:8000/admin/shop-keyword*",
-                "https://rankfree.kr/console/shop-keyword*",
-                "http://127.0.0.1:8000/console/shop-keyword*",
-                "http://localhost:8000/console/shop-keyword*"
-            ],
-            "js": [
-                "content/console-bridge.js"
             ],
             "run_at": "document_idle"
         }
