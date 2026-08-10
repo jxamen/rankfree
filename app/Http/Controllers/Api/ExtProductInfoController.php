@@ -31,18 +31,24 @@ class ExtProductInfoController extends Controller
             fn ($s) => trim((string) $s), (array) ($data['seller_tags'] ?? [])
         ))));
 
+        $attrs = [
+            'title' => $data['title'] ?? null,
+            'brand' => $data['brand'] ?? null,
+            'mall_name' => $data['mall_name'] ?? null,
+            'price' => $data['price'] ?? null,
+            'category' => $data['category'] ?? null,
+            'thumbnail_url' => $data['thumbnail_url'] ?? null,
+            'collected_at' => now(),
+        ];
+        // 태그가 비어 왔으면 기존 값을 유지한다 — 네이버 상태 JSON 구조가 바뀌면 확장이 제목만 뽑고
+        // 태그를 못 뽑는데(2026-08-10 실제 발생), 그대로 덮으면 모아둔 태그가 날아간다.
+        if ($tags !== []) {
+            $attrs['seller_tags'] = $tags;
+        }
+
         $row = ShopProductInfo::updateOrCreate(
             ['user_id' => $request->user()?->id, 'channel_product_id' => $data['channel_product_id']],
-            [
-                'title' => $data['title'] ?? null,
-                'brand' => $data['brand'] ?? null,
-                'mall_name' => $data['mall_name'] ?? null,
-                'price' => $data['price'] ?? null,
-                'seller_tags' => $tags,
-                'category' => $data['category'] ?? null,
-                'thumbnail_url' => $data['thumbnail_url'] ?? null,
-                'collected_at' => now(),
-            ],
+            $attrs,
         );
 
         return response()->json(['ok' => true, 'id' => $row->id]);

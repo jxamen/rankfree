@@ -44,7 +44,22 @@ class ExtShopKeywordController extends Controller
         $base = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->whereNotNull('product_id')->where('product_id', '!=', '')
             ->whereNotNull('product_url')->where('product_url', '!=', '')
-            ->where(fn ($q) => $q->whereNull('product_title')->orWhere('product_title', ''));
+            ->where(function ($q) {
+                // ① 아직 한 번도 안 채워진 분석
+                $q->whereNull('product_title')->orWhere('product_title', '')
+                    // ② 제목은 채워졌지만 **태그가 빈** 분석 — 다시 수집한다.
+                    //    네이버가 상태 JSON 구조를 바꾸면(2026-08-10 실제 발생) 확장이 제목만 뽑고
+                    //    태그를 비운 채 저장하는데, 예전 조건은 제목만 봐서 이런 건이 큐에서 영영 빠졌다.
+                    //    확장을 고쳐도 재수집이 안 돌아 API 응답의 seller_tags 가 계속 빈 배열이었다.
+                    //    태그가 원래 없는 상품에서 무한 재수집이 되지 않도록 **24시간에 한 번**만 다시 시도한다.
+                    ->orWhereNotExists(function ($s) {
+                        $s->selectRaw('1')->from('shop_product_infos')
+                            ->whereColumn('shop_product_infos.user_id', 'shop_keyword_analyses.user_id')
+                            ->whereColumn('shop_product_infos.channel_product_id', 'shop_keyword_analyses.product_id')
+                            ->where(fn ($w) => $w->whereRaw('LENGTH(shop_product_infos.seller_tags) > 2')
+                                ->orWhere('shop_product_infos.collected_at', '>=', now()->subDay()));
+                    });
+            });
 
         $rows = (clone $base)->latest('id')->limit($limit)
             ->get(['id', 'core_keyword', 'product_id', 'product_url']);
@@ -89,20 +104,28 @@ class ExtShopKeywordController extends Controller
             return response()->json(['ok' => false, 'message' => '이 분석의 상품 정보가 아닙니다.'], 422);
         }
 
+        $tags = array_values(array_unique(array_filter(array_map(
+            fn ($s) => trim((string) $s), (array) ($info['seller_tags'] ?? [])
+        ))));
+
+        $attrs = [
+            'title' => $info['title'],
+            'brand' => $info['brand'] ?? null,
+            'mall_name' => $info['mall_name'] ?? null,
+            'price' => $info['price'] ?? null,
+            'category' => $info['category'] ?? null,
+            'thumbnail_url' => $info['thumbnail_url'] ?? null,
+            'collected_at' => now(),
+        ];
+        // 태그가 비어 왔으면 기존 값을 지우지 않는다 — 네이버가 상태 JSON 구조를 바꾸면(2026-08-10 실제 발생)
+        // 확장이 제목만 뽑고 태그는 빈 채로 보내는데, 그걸 그대로 덮으면 잘 모아둔 태그가 통째로 날아간다.
+        if ($tags !== []) {
+            $attrs['seller_tags'] = $tags;
+        }
+
         ShopProductInfo::updateOrCreate(
             ['user_id' => $analysis->user_id, 'channel_product_id' => (string) $analysis->product_id],
-            [
-                'title' => $info['title'],
-                'brand' => $info['brand'] ?? null,
-                'mall_name' => $info['mall_name'] ?? null,
-                'price' => $info['price'] ?? null,
-                'seller_tags' => array_values(array_unique(array_filter(array_map(
-                    fn ($s) => trim((string) $s), (array) ($info['seller_tags'] ?? [])
-                )))),
-                'category' => $info['category'] ?? null,
-                'thumbnail_url' => $info['thumbnail_url'] ?? null,
-                'collected_at' => now(),
-            ],
+            $attrs,
         );
 
         $r = $this->analyzer->refreshProductInfo($analysis);
