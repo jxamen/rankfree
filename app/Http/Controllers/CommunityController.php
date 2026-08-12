@@ -6,8 +6,10 @@ use App\Models\CommunityCategory;
 use App\Models\CommunityComment;
 use App\Models\CommunityLike;
 use App\Models\CommunityPost;
+use App\Models\CommunityPostAttachment;
 use App\Support\HtmlSanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * 공개 커뮤니티 — 비로그인 열람, 로그인 시 글/댓글/좋아요 작성.
@@ -15,6 +17,7 @@ use Illuminate\Http\Request;
  */
 class CommunityController extends Controller
 {
+
     /** 목록 — 카테고리 필터 + 최신순. */
     public function index(Request $request)
     {
@@ -49,12 +52,13 @@ class CommunityController extends Controller
             'category_id' => 'required|exists:community_categories,id',
             'title' => 'required|string|max:150',
             'body' => 'required|string|max:20000',
-        ]);
+        ] + $this->attachmentRules($request));
         $data['body'] = HtmlSanitizer::clean($data['body']);
-        $post = CommunityPost::create($data + [
+        $post = CommunityPost::create(collect($data)->only(['category_id', 'title', 'body'])->all() + [
             'author_type' => 'user',
             'user_id' => $request->user()->id,
         ]);
+        $this->storeAttachments($request, $post);
         \Illuminate\Support\Facades\Cache::forget('sitemap:xml'); // 새 글 즉시 sitemap 반영
 
         return redirect()->route('community.show', $post)->with('status', '글을 등록했습니다.');
@@ -79,9 +83,10 @@ class CommunityController extends Controller
             'category_id' => 'required|exists:community_categories,id',
             'title' => 'required|string|max:150',
             'body' => 'required|string|max:20000',
-        ]);
+        ] + $this->attachmentRules($request, $post));
         $data['body'] = HtmlSanitizer::clean($data['body']);
-        $post->update($data);
+        $post->update(collect($data)->only(['category_id', 'title', 'body'])->all());
+        $this->storeAttachments($request, $post);
 
         return redirect()->route('community.show', $post)->with('status', '글을 수정했습니다.');
     }
@@ -93,7 +98,7 @@ class CommunityController extends Controller
         $post->timestamps = false;
         $post->increment('views');
         $post->timestamps = true;
-        $post->load(['persona', 'user', 'category']);
+        $post->load(['persona', 'user', 'category', 'attachments']);
 
         $comments = $post->comments()->with(['persona', 'user', 'replies.persona', 'replies.user'])
             ->whereNull('parent_id')->orderBy('id')->get();
@@ -175,14 +180,72 @@ class CommunityController extends Controller
         return response()->json(['liked' => $liked, 'count' => $post->fresh()->likes_count]);
     }
 
+    /** 첨부파일 다운로드 — 글을 볼 수 있으면 누구나(비로그인 포함). 원본 파일명으로 내려준다. */
+    public function attachmentDownload(CommunityPostAttachment $attachment)
+    {
+        abort_unless(Storage::disk(CommunityPostAttachment::DISK)->exists($attachment->path), 404);
+        $attachment->increment('download_count');
+
+        return Storage::disk(CommunityPostAttachment::DISK)
+            ->download($attachment->path, $attachment->original_name, ['X-Content-Type-Options' => 'nosniff']);
+    }
+
+    /** 첨부파일 삭제 — 등록과 같은 권한(운영자). 파일 실체는 모델 이벤트가 지운다. */
+    public function attachmentDestroy(Request $request, CommunityPostAttachment $attachment)
+    {
+        abort_unless($this->canManageAttachments($request->user()), 403);
+        $attachment->delete();
+
+        return back()->with('status', '첨부파일을 삭제했습니다.');
+    }
+
     /** 글 삭제 — 본인 글 또는 운영자. */
     public function destroy(Request $request, CommunityPost $post)
     {
         abort_unless($this->canManagePost($post, $request->user()), 403);
+        // 행은 FK cascade 로 지워지지만 파일 실체는 남는다 — 모델 이벤트를 태워 함께 정리
+        $post->attachments()->get()->each->delete();
         $post->delete();
         \Illuminate\Support\Facades\Cache::forget('sitemap:xml'); // 삭제 글 sitemap 즉시 제거
 
         return redirect()->route('community')->with('status', '글을 삭제했습니다.');
+    }
+
+    /** 첨부 등록·삭제 권한 — 운영자만(일반 회원은 첨부를 올리지 못한다). */
+    private function canManageAttachments($user): bool
+    {
+        return (bool) $user?->isOperator();
+    }
+
+    /** 첨부 검증 규칙 — 운영자가 아니면 파일 입력 자체를 받지 않는다. */
+    private function attachmentRules(Request $request, ?CommunityPost $post = null): array
+    {
+        if (! $this->canManageAttachments($request->user())) {
+            return [];
+        }
+        $remain = max(0, CommunityPostAttachment::MAX_COUNT - ($post ? $post->attachments()->count() : 0));
+
+        return [
+            'attachments' => 'nullable|array|max:'.$remain,
+            'attachments.*' => 'file|max:'.CommunityPostAttachment::MAX_KB.'|extensions:'.CommunityPostAttachment::EXTENSIONS,
+        ];
+    }
+
+    /** 업로드된 첨부 저장 — 운영자만. 파일명은 랜덤(원본명은 DB 에만 둔다). */
+    private function storeAttachments(Request $request, CommunityPost $post): void
+    {
+        if (! $this->canManageAttachments($request->user()) || ! $request->hasFile('attachments')) {
+            return;
+        }
+        foreach ($request->file('attachments') as $file) {
+            $path = $file->store('community-attachments/'.$post->id, CommunityPostAttachment::DISK);
+            $post->attachments()->create([
+                'original_name' => mb_substr(basename($file->getClientOriginalName()), 0, 191),
+                'path' => $path,
+                'mime' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
     }
 
     /** 글 관리 권한 — 본인이 쓴 글이거나 운영자(전체 글 수정·삭제·이동). */

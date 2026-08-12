@@ -48,6 +48,21 @@
         </div>
         <div class="text-body mt-5 rf-post-body" style="font-size:var(--fs-base);line-height:1.8;">{!! $post->bodyHtml() !!}</div>
 
+        {{-- 첨부파일 — 등록은 운영자만, 내려받기는 글을 보는 누구나(비로그인 포함) --}}
+        @if ($post->attachments->isNotEmpty())
+            <div class="card-soft mt-6 p-4">
+                <div class="text-muted mb-2" style="font-size:var(--fs-xs);">첨부파일 {{ $post->attachments->count() }}개</div>
+                @foreach ($post->attachments as $file)
+                    <div class="flex items-center gap-2 py-1.5" style="border-top:{{ $loop->first ? '0' : '1px solid var(--color-hairline-soft)' }};">
+                        <span class="text-muted-soft flex-none" aria-hidden="true">📎</span>
+                        <a href="{{ route('community.attachment.download', $file) }}"
+                           class="text-accent hover:underline" style="font-size:var(--fs-sm);word-break:break-all;">{{ $file->original_name }}</a>
+                        <span class="text-muted-soft flex-none" style="font-size:var(--fs-xs);">{{ $file->sizeLabel() }}</span>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
         {{-- 좋아요 · 공유 --}}
         <div class="mt-6 flex justify-center gap-2">
             @auth

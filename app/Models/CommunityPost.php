@@ -35,6 +35,12 @@ class CommunityPost extends Model
         return $this->hasMany(CommunityLike::class, 'likeable_id')->where('likeable_type', 'post');
     }
 
+    /** 첨부파일 — 등록은 운영자만, 다운로드는 글을 보는 누구나. */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(CommunityPostAttachment::class, 'post_id');
+    }
+
     /** 본문 미리보기(목록·검색용) — HTML 태그 제거한 평문. */
     public function excerpt(int $len = 120): string
     {

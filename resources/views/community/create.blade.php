@@ -11,7 +11,7 @@
         <div class="card-soft px-4 py-3 mb-4" style="background:color-mix(in srgb,var(--color-error) 8%,var(--color-canvas));color:var(--color-error);font-size:var(--fs-xs);">{{ $errors->first() }}</div>
     @endif
 
-    <form method="POST" action="{{ route('community.store') }}" class="card p-6">
+    <form method="POST" action="{{ route('community.store') }}" class="card p-6" enctype="multipart/form-data">
         @csrf
         <div class="mb-4">
             <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">카테고리</label>
@@ -29,6 +29,7 @@
             <label class="text-muted block mb-1" style="font-size:var(--fs-xs);">내용</label>
             @include('admin.partials.editor', ['name' => 'body', 'value' => \App\Support\HtmlSanitizer::clean(old('body')), 'height' => 360, 'placeholder' => '내용을 입력하세요…', 'uploadUrl' => route('upload.image')])
         </div>
+        @include('community._attachment_input')
         <div class="flex items-center gap-2">
             <button type="submit" class="btn btn-primary">등록</button>
             <a href="{{ route('community') }}" class="btn btn-secondary">취소</a>

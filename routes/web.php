@@ -168,6 +168,8 @@ Route::get('/self-marketing', [SelfMarketingController::class, 'index'])->name('
 // 커뮤니티 (공개 열람, 작성은 로그인 필요)
 Route::get('/community', [CommunityController::class, 'index'])->name('community');
 Route::get('/community/post/{post}', [CommunityController::class, 'show'])->name('community.show');
+// 첨부파일 다운로드 — 글을 볼 수 있으면 누구나(등록만 운영자 전용)
+Route::get('/community/attachment/{attachment}', [CommunityController::class, 'attachmentDownload'])->name('community.attachment.download');
 Route::middleware('auth')->group(function () {
     // 에디터 이미지 첨부 업로드 (로그인 사용자 공용)
     Route::post('/upload/image', [UploadController::class, 'image'])->middleware('throttle:30,1')->name('upload.image');
@@ -181,6 +183,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/community/comment/{comment}', [CommunityController::class, 'commentDestroy'])->name('community.comment.destroy');
     Route::post('/community/post/{post}/like', [CommunityController::class, 'like'])->name('community.like');
     Route::delete('/community/post/{post}', [CommunityController::class, 'destroy'])->name('community.destroy');
+    Route::delete('/community/attachment/{attachment}', [CommunityController::class, 'attachmentDestroy'])->name('community.attachment.destroy');
 });
 
 // 인증
