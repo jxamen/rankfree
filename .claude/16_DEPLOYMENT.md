@@ -134,11 +134,16 @@ pm.start_servers = 4
 pm.min_spare_servers = 2
 pm.max_spare_servers = 8
 php_admin_value[upload_max_filesize] = 20M
-php_admin_value[post_max_size] = 24M
+php_admin_value[post_max_size] = 110M
 ```
 ```bash
 systemctl enable --now php83-php-fpm
 ```
+
+> **업로드 한도는 이 풀에서만 올린다(2026-08-12 실적용)** — php.ini 전역은 `upload_max_filesize=2M`·`post_max_size=8M` 이라
+> 커뮤니티 첨부(개당 20MB·글당 5개)가 통째로 막혔다. `rankfree.conf` 에 위 두 `php_admin_value` 를 넣고
+> `sudo systemctl reload php83-php-fpm` 하면 **crm(www)·jcdev 풀은 그대로** 두고 rankfree 만 20M/110M 이 된다
+> (110M = 20MB × 5개 동시 업로드 여유). jcurve 는 `/etc` 쓰기 권한이 없어 `sudo` 가 필요하다.
 
 ### 4) MariaDB — rankfree 전용 DB (crm DB 무변경)
 ```sql
