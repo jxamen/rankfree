@@ -263,14 +263,11 @@ class RewardHardeningTest extends TestCase
     /** @return array{0: string, 1: RewardMedia} */
     private function vendorKey(): array
     {
-        $user = User::create(['name' => '벤더H', 'email' => 'vh@rankfree.kr',
-            'password' => 'secret1234', 'api_scopes' => ['mission']]);
-        [, $key] = ApiKey::issue($user, '키', ['mission'], null, null, null);
         $media = RewardMedia::query()->create([
             'slug' => 'ow-h', 'name' => '오퍼월H', 'type' => RewardMedia::TYPE_VENDOR_API,
-            'api_user_id' => $user->id, 'verify_mode' => 'server', 'is_active' => true, 'rate_limit_rps' => 100,
+            'verify_mode' => 'server', 'is_active' => true, 'rate_limit_rps' => 100,
         ]);
 
-        return [$key, $media];
+        return [$media->issueKey(), $media];
     }
 }

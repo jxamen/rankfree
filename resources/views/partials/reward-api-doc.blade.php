@@ -39,21 +39,21 @@
 
 <h2 class="font-display text-ink doc-h2">시작하기</h2>
 <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
-    연동은 <b class="text-ink">제휴 매체 승인 → API 키 발급 → 미션 수신 → 참여 제출 → 정산 대조</b> 순서로 진행합니다.
-    운영자가 계정에 <code class="doc-code">mission</code> 권한을 부여하면 <b class="text-ink">별도 등록 절차 없이 바로 호출</b>할 수 있습니다 — 제휴 매체는 첫 호출 때 자동으로 만들어집니다.
+    연동은 <b class="text-ink">제휴 매체 등록 → 전용 키 수령 → 미션 수신 → 참여 제출 → 정산 대조</b> 순서로 진행합니다.
+    운영자가 매체를 등록하면 <b class="text-ink">그 매체의 전용 키</b>가 함께 발급되어 전달됩니다 — 받은 키를 그대로 헤더에 넣으면 바로 호출됩니다.
 </p>
 <table class="doc-table mt-4">
     <thead><tr><th style="width:120px;">항목</th><th>값</th></tr></thead>
     <tbody>
         <tr><td>Base URL</td><td><code class="doc-code">{{ url('/api/v1') }}</code></td></tr>
-        <tr><td>인증 헤더</td><td><code class="doc-code">Authorization: Bearer rk_…</code> 또는 <code class="doc-code">X-API-KEY: rk_…</code></td></tr>
-        <tr><td>권한(scope)</td><td><code class="doc-code">mission</code> — 키 발급 시 이 권한이 있어야 합니다</td></tr>
+        <tr><td>인증 헤더</td><td><code class="doc-code">Authorization: Bearer rkm_…</code> 또는 <code class="doc-code">X-API-KEY: rkm_…</code></td></tr>
+        <tr><td>키</td><td><b class="text-ink">제휴 매체 전용 키</b>(<code class="doc-code">rkm_</code> 로 시작) — 운영자가 매체를 등록할 때 발급해 전달합니다. 랭크프리 <b class="text-ink">회원 API 키와는 별개</b>라 회원가입이 필요 없습니다</td></tr>
         <tr><td>응답 형식</td><td>JSON (UTF-8). 시각은 ISO-8601 한국 시간(<code class="doc-code">+09:00</code>)</td></tr>
     </tbody>
 </table>
 
 <div class="doc-copy-wrap mt-3"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -X POST "{{ url('/api/v1') }}/missions/assign" \
-     -H "Authorization: Bearer rk_xxxxxxxxxxxxxxxx" \
+     -H "Authorization: Bearer rkm_xxxxxxxxxxxxxxxx" \
      -H "Content-Type: application/json" \
      -d '{"participant_hash":"u_9f2c1a"}'</pre></div>
 
@@ -62,11 +62,11 @@
     <thead><tr><th style="width:80px;">코드</th><th>의미</th></tr></thead>
     <tbody>
         <tr><td><code class="doc-code">400</code></td><td><code class="doc-code">Idempotency-Key</code> 헤더 누락 (참여 제출)</td></tr>
-        <tr><td><code class="doc-code">401</code></td><td>키 없음/잘못됨 · 비활성화됨 · 유효기간 만료</td></tr>
-        <tr><td><code class="doc-code">403</code></td><td>허용되지 않은 IP · 키에 <code class="doc-code">mission</code> 권한 없음 · 계정에 <code class="doc-code">mission</code> 기능 미허용 · <b class="text-ink">제휴 매체가 비활성</b></td></tr>
+        <tr><td><code class="doc-code">401</code></td><td>키 없음/잘못됨 · 재발급으로 무효가 된 키 · <b class="text-ink">회원 API 키로 호출</b>(체계가 다릅니다)</td></tr>
+        <tr><td><code class="doc-code">403</code></td><td><b class="text-ink">제휴 매체가 중지 상태</b> — 운영자에게 문의하세요</td></tr>
         <tr><td><code class="doc-code">410</code></td><td>존재하지 않는 미션</td></tr>
         <tr><td><code class="doc-code">422</code></td><td>파라미터 검증 실패 · 참여 거절(<code class="doc-code">reason</code> 동봉)</td></tr>
-        <tr><td><code class="doc-code">429</code></td><td>제휴 매체 초당 호출 한도 초과 · 키 일일 한도 초과 — 백오프 후 재시도</td></tr>
+        <tr><td><code class="doc-code">429</code></td><td>제휴 매체 초당 호출 한도 초과 — 백오프 후 재시도</td></tr>
     </tbody>
 </table>
 
@@ -143,7 +143,7 @@
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -X POST {{ url('/api/v1') }}/missions/assign \
-  -H "Authorization: Bearer rk_..." \
+  -H "Authorization: Bearer rkm_..." \
   -H "Content-Type: application/json" \
   -d '{"participant_hash":"u_9f2c1a"}'</pre></div>
             <div class="ep-l">응답 예시</div>
@@ -207,7 +207,7 @@ Retry-After: 5931</pre></div>
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl "{{ url('/api/v1') }}/missions?participant_hash=u_9f2c1a" \
-  -H "Authorization: Bearer rk_..." \
+  -H "Authorization: Bearer rkm_..." \
   -H "If-None-Match: \"e3b0c44298fc1c149afbf4c8996fb924\""</pre></div>
             <div class="ep-l">응답 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
@@ -261,7 +261,7 @@ Retry-After: 5931</pre></div>
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl "{{ url('/api/v1') }}/missions/2?participant_hash=u_9f2c1a" \
-  -H "Authorization: Bearer rk_..."</pre></div>
+  -H "Authorization: Bearer rkm_..."</pre></div>
             <div class="ep-l">응답 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
   "status": "ok",
@@ -306,7 +306,7 @@ Retry-After: 5931</pre></div>
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -X POST {{ url('/api/v1') }}/missions/2/participations \
-  -H "Authorization: Bearer rk_..." \
+  -H "Authorization: Bearer rkm_..." \
   -H "Idempotency-Key: 6f1c0b7e-2d54-4a9f-8c31-b0d2e7a1f902" \
   -H "Content-Type: application/json" \
   -d '{"participant_hash":"u_9f2c1a","answer":"무선충전"}'</pre></div>
@@ -372,7 +372,7 @@ Retry-After: 5931</pre></div>
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl "{{ url('/api/v1') }}/participations?date=2026-07-31" \
-  -H "Authorization: Bearer rk_..."</pre></div>
+  -H "Authorization: Bearer rkm_..."</pre></div>
             <div class="ep-l">응답 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
   "date": "2026-07-31",
@@ -397,7 +397,7 @@ Retry-After: 5931</pre></div>
 <div class="card-soft mt-12 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
     <div>
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">제휴 매체 연동을 시작하시겠어요?</div>
-        <p class="text-muted mt-1" style="font-size:var(--fs-xs);"><code class="doc-code">mission</code> 권한을 받은 뒤 콘솔에서 키를 발급하면 바로 호출할 수 있습니다.</p>
+        <p class="text-muted mt-1" style="font-size:var(--fs-xs);">운영자가 제휴 매체를 등록하면 전용 키를 전달해 드립니다. 받는 즉시 호출할 수 있습니다.</p>
     </div>
     <a href="{{ route('console.api-keys') }}" class="btn btn-primary btn-sm">API 키 발급</a>
 </div>

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\RewardMedia;
 use App\Models\RewardMission;
-use App\Models\User;
 use App\Support\RewardDay;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,7 +39,6 @@ class RewardMediaController extends Controller
     {
         return view('admin.reward.media.form', [
             'medium' => $medium,
-            'apiUsers' => User::query()->whereNotNull('api_scopes')->orderBy('name')->get(['id', 'name', 'email']),
             'allocations' => DB::table('reward_media_allocations')
                 ->where('media_id', $medium->id)->orderBy('scope')->orderBy('scope_key')->get(),
             'payouts' => DB::table('reward_media_payouts')
@@ -55,7 +53,6 @@ class RewardMediaController extends Controller
     {
         return view('admin.reward.media.form', [
             'medium' => new RewardMedia(['type' => RewardMedia::TYPE_VENDOR_API, 'rate_limit_rps' => 100, 'verify_mode' => 'server']),
-            'apiUsers' => User::query()->whereNotNull('api_scopes')->orderBy('name')->get(['id', 'name', 'email']),
             'allocations' => collect(),
             'payouts' => collect(),
             'missions' => collect(),
@@ -67,7 +64,20 @@ class RewardMediaController extends Controller
     {
         $medium = RewardMedia::query()->create($this->validated($request, null));
 
-        return redirect()->route('admin.reward.media.edit', $medium)->with('status', '매체를 등록했습니다.');
+        // 등록과 동시에 매체 전용 키를 발급한다 — 매체를 만들었는데 호출 수단이 없는 상태를 없앤다
+        $medium->issueKey();
+
+        return redirect()->route('admin.reward.media.edit', $medium)
+            ->with('status', '제휴 매체를 등록하고 API 키를 발급했습니다. 아래 키를 매체에 전달하세요.');
+    }
+
+    /** 키 재발급 — 유출·교체 시. 이전 키는 즉시 무효가 된다. */
+    public function regenerateKey(RewardMedia $medium)
+    {
+        $medium->issueKey();
+
+        return redirect()->route('admin.reward.media.edit', $medium)
+            ->with('status', 'API 키를 재발급했습니다. 이전 키는 즉시 사용할 수 없습니다.');
     }
 
     public function update(Request $request, RewardMedia $medium)
@@ -98,7 +108,6 @@ class RewardMediaController extends Controller
             'slug' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9-]+$/',
                 'unique:reward_media,slug'.($id ? ','.$id : '')],
             'type' => ['required', 'in:miniapp,vendor_api'],
-            'api_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'payout_unit_price' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'rate_limit_rps' => ['nullable', 'integer', 'min:1', 'max:10000'],
             'verify_mode' => ['required', 'in:server,vendor'],

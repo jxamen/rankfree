@@ -23,6 +23,34 @@
     </div>
 @endif
 
+@if ($medium->exists)
+    {{-- 매체 전용 API 키 — 고객용 회원 키(api_keys)와 별개 체계. 매체가 곧 인증 주체다 --}}
+    <div class="card p-4 mb-4">
+        <div class="text-ink font-semibold mb-1" style="font-size:var(--fs-sm);">API 키</div>
+        <p class="text-muted mb-3" style="font-size:var(--fs-xs);line-height:1.8;">
+            이 제휴 매체가 미션 API 를 호출할 때 쓰는 키입니다. 고객용 회원 API 키와 별개라
+            <b class="text-ink">매체는 회원가입이 필요 없습니다</b>.
+            <code style="font-family:var(--font-mono);">Authorization: Bearer &lt;키&gt;</code> 헤더로 보냅니다.
+        </p>
+
+        <div class="flex items-center gap-2 flex-wrap">
+            <input type="text" class="input" readonly style="flex:1;min-width:260px;font-family:var(--font-mono);"
+                value="{{ $medium->plainKey() ?? ($medium->api_key_prefix ? $medium->api_key_prefix.'…' : '(발급 안 됨)') }}">
+            <form method="POST" action="{{ route('admin.reward.media.regenerate-key', $medium) }}"
+                @if ($medium->api_key_prefix)
+                    data-confirm="API 키를 재발급할까요?" data-confirm-text="이전 키는 즉시 사용할 수 없습니다. 매체에 새 키를 전달해야 합니다."
+                    data-confirm-ok="재발급"
+                @endif>
+                @csrf
+                <button type="submit" class="btn btn-secondary">{{ $medium->api_key_prefix ? '재발급' : '키 발급' }}</button>
+            </form>
+        </div>
+        <p class="text-muted mt-2" style="font-size:var(--fs-xs);">
+            마지막 사용: {{ $medium->api_key_last_used_at ? $medium->api_key_last_used_at->format('Y-m-d H:i') : '없음' }}
+        </p>
+    </div>
+@endif
+
 <form method="POST" action="{{ $medium->exists ? route('admin.reward.media.update', $medium) : route('admin.reward.media.store') }}">
     @csrf
     @if ($medium->exists) @method('PUT') @endif
@@ -45,15 +73,6 @@
                 <select name="type" class="input" style="width:100%;">
                     <option value="vendor_api" @selected(old('type', $medium->type) === 'vendor_api')>벤더 API (API 키로 연동)</option>
                     <option value="miniapp" @selected(old('type', $medium->type) === 'miniapp')>미니앱 (x-user-key)</option>
-                </select>
-            </div>
-            <div>
-                <label class="form-label" style="font-size:var(--fs-xs);">API 키 소유 회원 <span class="text-muted">(벤더 API 전용)</span></label>
-                <select name="api_user_id" class="input" style="width:100%;">
-                    <option value="">연결 안 함</option>
-                    @foreach ($apiUsers as $u)
-                        <option value="{{ $u->id }}" @selected((int) old('api_user_id', $medium->api_user_id) === $u->id)>{{ $u->name }} ({{ $u->email }})</option>
-                    @endforeach
                 </select>
             </div>
             <div>

@@ -146,9 +146,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/orders/{orderNo}', [OrderApiController::class, 'show']);
     });
 
-    // 리워드 미션 연동 (scope: mission) — 벤더 S2S(design-04 §3). 목록·클릭검증+상세·참여 제출(멱등)·정산 대사.
-    // 벤더별 토큰버킷(throttle:reward-vendor — rate_limit_rps, AppServiceProvider) + 키 일일 한도가 보호한다.
-    Route::middleware(['auth.apikey:mission', 'throttle:reward-vendor'])->group(function (): void {
+    // 리워드 미션 연동 — 제휴 매체 S2S(design-04 §3). 목록·클릭검증+상세·참여 제출(멱등)·정산 대사.
+    // 인증은 **매체 전용 키**(auth.media — rkm_…)다. 고객용 회원 API 키와 별개 체계이므로
+    // 제휴 매체는 회원 계정이 필요 없다. 매체별 토큰버킷(throttle:reward-vendor — rate_limit_rps)이 보호한다.
+    Route::middleware(['auth.media', 'throttle:reward-vendor'])->group(function (): void {
         Route::get('/missions', [VendorMissionApiController::class, 'index']);
         Route::post('/missions/assign', [VendorMissionApiController::class, 'assign']);
         Route::get('/missions/{mission}', [VendorMissionApiController::class, 'show'])->whereNumber('mission');

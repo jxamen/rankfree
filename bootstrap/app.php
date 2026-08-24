@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\AuthenticateExtToken;
+use App\Http\Middleware\AuthenticateRewardMedia;
 use App\Http\Middleware\AuthenticateRewardUser;
 use App\Http\Middleware\BlockProbeIps;
 use App\Http\Middleware\CaptureAttribution;
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.ext' => AuthenticateExtToken::class,
             'auth.apikey' => AuthenticateApiKey::class,
             'auth.reward' => AuthenticateRewardUser::class,
+            'auth.media' => AuthenticateRewardMedia::class,   // 제휴 매체 전용 키(회원 키와 분리)
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

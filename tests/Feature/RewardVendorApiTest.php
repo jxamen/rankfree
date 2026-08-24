@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * Phase 3.5 완료 판정 — 벤더 S2S 미션 API(scope: mission).
- * 스코프 게이트·슬롯 잔여 노출·클릭 검증·멱등 제출(같은 키 = 카운터 1회)·거절 규약.
+ * Phase 3.5 완료 판정 — 제휴 매체 S2S 미션 API(인증: 매체 전용 키).
+ * 키 게이트·슬롯 잔여 노출·클릭 검증·멱등 제출(같은 키 = 카운터 1회)·거절 규약.
  */
 class RewardVendorApiTest extends TestCase
 {
@@ -23,8 +23,6 @@ class RewardVendorApiTest extends TestCase
     private const TAGS = ['vtag-one', 'vtag-two', 'vtag-three'];
 
     private const DAY = '2026-07-31';
-
-    private User $user;
 
     private string $key;
 
@@ -37,14 +35,11 @@ class RewardVendorApiTest extends TestCase
         parent::setUp();
         Carbon::setTestNow(Carbon::parse(self::DAY.' 10:00', 'Asia/Seoul'));   // S2(slot 1)
 
-        $this->user = User::create(['name' => '벤더연동', 'email' => 'vendor@rankfree.kr',
-            'password' => 'secret1234', 'api_scopes' => ['mission']]);
-        [, $this->key] = ApiKey::issue($this->user, '벤더키', ['mission'], null, null, null);
-
         $this->media = RewardMedia::query()->create([
             'slug' => 'offerwall-a', 'name' => '오퍼월A', 'type' => RewardMedia::TYPE_VENDOR_API,
-            'api_user_id' => $this->user->id, 'verify_mode' => 'server', 'is_active' => true,
+            'verify_mode' => 'server', 'is_active' => true,
         ]);
+        $this->key = $this->media->issueKey();   // 매체 전용 키 — 회원 계정 불필요
 
         $this->mission = RewardMission::query()->create([
             'order_item_id' => 910001, 'order_id' => 910, 'status' => 'active',
@@ -80,33 +75,30 @@ class RewardVendorApiTest extends TestCase
         return self::TAGS[$idx - 1];
     }
 
-    public function test_scope가_없거나_매체가_비활성이면_거부된다(): void
+    public function test_알_수_없는_키는_401_중지된_매체는_403(): void
     {
-        [, $noScope] = ApiKey::issue($this->user, '스코프없음', ['rank'], null, null, null);
-        $this->withHeader('Authorization', 'Bearer '.$noScope)->getJson('/api/v1/missions')->assertStatus(403);
+        $this->withHeader('Authorization', 'Bearer rkm_없는키')
+            ->getJson('/api/v1/missions')->assertStatus(401);
+
+        // 고객용 회원 키로는 미션 API 를 호출할 수 없다(체계 분리)
+        $member = User::create(['name' => '광고주', 'email' => 'adv@rankfree.kr', 'password' => 'secret1234']);
+        [, $memberKey] = ApiKey::issue($member, '회원키', ['rank'], null, null, null);
+        $this->withHeader('Authorization', 'Bearer '.$memberKey)
+            ->getJson('/api/v1/missions')->assertStatus(401);
 
         $this->media->update(['is_active' => false]);
         $this->api('GET', '/api/v1/missions')->assertStatus(403);   // 운영자가 끈 매체는 의도된 차단
     }
 
-    /** 승인된 회원(mission scope)은 매체 사전 등록 없이도 호출된다 — 매체를 기본값으로 자동 발급 */
-    public function test_매체가_없으면_자동_발급되고_목록이_열린다(): void
+    /** 매체 키는 등록 시 발급되고, 재발급하면 이전 키가 즉시 무효가 된다 */
+    public function test_키_재발급하면_이전_키는_무효다(): void
     {
-        $newUser = User::create(['name' => '신규벤더', 'email' => 'vendor2@rankfree.kr',
-            'password' => 'secret1234', 'api_scopes' => ['mission']]);
-        [, $newKey] = ApiKey::issue($newUser, '신규벤더키', ['mission'], null, null, null);
+        $old = $this->key;
+        $new = $this->media->issueKey();
 
-        $this->assertDatabaseMissing('reward_media', ['api_user_id' => $newUser->id]);
-
-        $this->withHeader('Authorization', 'Bearer '.$newKey)
-            ->getJson('/api/v1/missions')->assertOk()
-            ->assertJsonPath('meta.verifyMode', 'server');
-
-        $created = RewardMedia::query()->where('api_user_id', $newUser->id)->sole();
-        $this->assertSame(RewardMedia::TYPE_VENDOR_API, $created->type);
-        $this->assertTrue($created->is_active);
-        $this->assertNull($created->vendor_id);            // 발주 업체와 무관한 인바운드 채널
-        $this->assertSame(0, (int) $created->payout_unit_price);
+        $this->assertNotSame($old, $new);
+        $this->withHeader('Authorization', 'Bearer '.$old)->getJson('/api/v1/missions')->assertStatus(401);
+        $this->withHeader('Authorization', 'Bearer '.$new)->getJson('/api/v1/missions')->assertOk();
     }
 
     public function test_목록은_슬롯_잔여만_노출하고_정답을_싣지_않는다(): void

@@ -104,7 +104,11 @@ Schema::create('reward_media', function (Blueprint $t) {
     $t->string('name', 120);
     $t->string('type', 20);                       // miniapp | vendor_api
     $t->foreignId('vendor_id')->nullable()->constrained('vendors')->nullOnDelete(); // 전용 배분 매체만(§2-1) — 공유 풀 매체는 NULL
-    $t->foreignId('api_user_id')->nullable();     // vendor_api: API 키 소유 회원(users) — scope 게이트와 연결
+    // 2026-08-24: api_user_id 제거 → 매체 전용 키 컬럼으로 대체(아래 '제휴 매체 전용 키')
+    $t->string('api_key_prefix', 16)->nullable();           // 화면 표시용 앞자리(rkm_…)
+    $t->string('api_key_hash', 64)->nullable()->unique();   // 인증 조회 키
+    $t->text('api_key_encrypted')->nullable();              // 운영자 재전달용 원문(암호화)
+    $t->timestamp('api_key_last_used_at')->nullable();
     $t->unsignedInteger('rate_limit_rps')->default(100);   // 벤더별 초당 요청 상한(§4-2 ①)
     $t->unsignedInteger('payout_unit_price')->default(0);  // 참여 1건당 벤더 지급 단가(원) — 정산 입력(§5)
     $t->string('verify_mode', 20)->default('server');      // server(우리 채점) | vendor(벤더 자율+사후 감사)
@@ -122,15 +126,21 @@ Schema::create('reward_media', function (Blueprint $t) {
   유형별 행이 있으면 그 값, 없으면 매체 기본 `payout_unit_price` 폴백. 어드민 매체 설정에서 유형 행을 추가·삭제한다
   (행을 지우면 기본 단가로 되돌아간다). **대량 집계는 행마다 `payoutFor()` 를 부르지 말고 이 테이블을 조인**한다.
   현재 이 값을 읽는 정산 집계는 아직 없다 — 지출 계산의 입력만 준비된 상태.
-- **제휴 매체 자동 발급 (2026-08-24 결정)** — `vendor_api` 매체를 운영자가 **미리 등록하지 않아도 된다.**
-  `auth.apikey:mission` 이 이미 **키 scope + 회원 기능 권한**(관리자만 부여하는 `users.api_scopes`)을 이중 검사하므로,
-  통과한 요청에 매체가 없으면 기본값(`slug=vendor-api-{userId}` · rps 100 · 지급단가 0 · `verify_mode=server` · 활성)으로
-  **첫 호출 때 생성**한다(`VendorMissionApiController::media()`). 단가·배분은 생성 뒤 어드민에서 조정한다.
-  이미 있는 매체가 **비활성**이면 운영자의 의도된 차단이므로 403 을 유지한다.
-  **발주 거래처(`vendors` — 주문을 구글시트/API로 내보내는 푸시)와 제휴 매체(주문을 API로 가져가는 풀)는 별개 개념**이므로
-  자동 발급 행의 `vendor_id` 는 NULL(공유 풀). 두 개념을 하나로 합치지 않는다.
+- **제휴 매체 전용 키 — 고객용 회원 키와 분리 (2026-08-24 확정)**
+  종전에는 미션 API 인증에 **광고주용 회원 키**(`api_keys.scopes=mission` + `users.api_scopes`)를 재사용했다.
+  그 결과 ① 제휴 매체가 회원가입을 해야 했고 ② `reward_media.api_user_id` 로 회원↔매체를 되짚는 우회 매핑이 생겼고
+  ③ 매체를 등록해도 호출 수단이 안 생겼다(운영에서 실제로 발생 — 매체는 등록됐는데 키가 없었다).
+  → **키가 곧 매체다.** `reward_media` 에 `api_key_hash`/`api_key_prefix`/`api_key_encrypted`/`api_key_last_used_at` 을 두고
+  **매체 등록 시 `issueKey()` 로 발급**한다(어드민에서 재발급 가능, 이전 키는 즉시 무효).
+  인증은 전용 미들웨어 `auth.media`(`AuthenticateRewardMedia`) — 키 유효 → 매체 활성 순으로 검사하고
+  통과하면 request attribute `reward_media` 에 매체를 담는다. **401**=키 무효(회원 키로 호출한 경우 포함), **403**=매체 중지.
+  레이트리미터도 `RewardMedia::forKey()` 로 키에서 직접 매체를 해석한다(회원 경유 조회 폐기).
+  **폐기**: `api_user_id` 컬럼 · `forApiUser()` · `ApiKey::SCOPES['mission']` · 같은 날 잠깐 넣었던 **매체 자동 발급**
+  (슈퍼관리자가 전 scope 를 통과해 운영자 계정 이름으로 쓰레기 매체가 생겼다 — 키 분리로 근본 원인이 사라졌다).
+  **발주 거래처(`vendors` — 주문을 구글시트/API로 내보내는 푸시)와 제휴 매체(주문을 API로 가져가는 풀)는 별개 개념**이다.
+  두 개념을 하나로 합치지 않는다(`vendor_id` 는 전용 배분 매체에만 쓴다).
 
-## 3. 벤더 API 계약 v1 (scope: `mission`)
+## 3. 제휴 매체 API 계약 v1 (인증: 매체 전용 키 `rkm_…` — §2 '제휴 매체 전용 키')
 
 ### 3-0. 미션 제공 2방식 (2026-07-31 지시)
 

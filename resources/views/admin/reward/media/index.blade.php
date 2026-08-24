@@ -21,6 +21,7 @@
             <tr style="background:var(--color-surface-soft);">
                 <th class="text-left" style="padding:10px 12px;">매체</th>
                 <th class="text-left" style="padding:10px 12px;width:110px;">유형</th>
+                <th class="text-left" style="padding:10px 12px;width:150px;">API 키</th>
                 <th class="text-right" style="padding:10px 12px;width:110px;">지급 단가</th>
                 <th class="text-right" style="padding:10px 12px;width:100px;">초당 한도</th>
                 <th class="text-left" style="padding:10px 12px;width:100px;">검증</th>
@@ -38,6 +39,14 @@
                         <div class="text-muted" style="font-family:var(--font-mono);">{{ $m->slug }}</div>
                     </td>
                     <td style="padding:10px 12px;">{{ $m->type === 'miniapp' ? '미니앱' : '벤더 API' }}</td>
+                    <td style="padding:10px 12px;">
+                        @if ($m->api_key_prefix)
+                            <div style="font-family:var(--font-mono);">{{ $m->api_key_prefix }}…</div>
+                            <div class="text-muted">{{ $m->api_key_last_used_at ? $m->api_key_last_used_at->format('m-d H:i').' 사용' : '미사용' }}</div>
+                        @else
+                            <span class="text-muted">미발급</span>
+                        @endif
+                    </td>
                     <td class="text-right" style="padding:10px 12px;font-variant-numeric:tabular-nums;">
                         @if ($m->payout_unit_price > 0)
                             {{ number_format($m->payout_unit_price) }}원
@@ -67,8 +76,8 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" class="text-muted text-center" style="padding:28px;">
-                    등록된 제휴 매체가 없습니다. <code style="font-family:var(--font-mono);">mission</code> 권한을 받은 회원이 API 를 호출하면 자동으로 생성됩니다.
+                <tr><td colspan="10" class="text-muted text-center" style="padding:28px;">
+                    등록된 제휴 매체가 없습니다. <b class="text-ink">제휴 매체 등록</b>으로 추가하면 API 키가 함께 발급됩니다.
                 </td></tr>
             @endforelse
         </tbody>

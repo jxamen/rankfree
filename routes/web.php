@@ -587,6 +587,7 @@ $__admin->group(function () {
     Route::get('/reward/media/{medium}/edit', [\App\Http\Controllers\Admin\RewardMediaController::class, 'edit'])->name('reward.media.edit');
     Route::put('/reward/media/{medium}', [\App\Http\Controllers\Admin\RewardMediaController::class, 'update'])->name('reward.media.update');
     Route::post('/reward/media/{medium}/toggle', [\App\Http\Controllers\Admin\RewardMediaController::class, 'toggle'])->name('reward.media.toggle');
+    Route::post('/reward/media/{medium}/regenerate-key', [\App\Http\Controllers\Admin\RewardMediaController::class, 'regenerateKey'])->name('reward.media.regenerate-key');
 
     // 리워드 미션 API 테스트 — 매체가 받는 응답을 실제 엔드포인트로 호출해 확인(.claude/reward)
     Route::get('/reward/api-test', [\App\Http\Controllers\Admin\RewardApiTestController::class, 'index'])->name('reward.api-test');

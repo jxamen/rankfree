@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Reward\MissionAssigner;
 use App\Domain\Reward\MissionCopy;
 use App\Domain\Reward\MissionSnapshot;
-use App\Domain\Reward\RewardCache;
 use App\Domain\Reward\SlotCap;
 use App\Domain\Reward\TagIndex;
 use App\Domain\Reward\VendorSubmitService;
@@ -18,7 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * 벤더 S2S 미션 API v1 (scope: mission — design-04 §3).
+ * 제휴 매체 S2S 미션 API v1 (인증: 매체 전용 키 auth.media — design-04 §3).
  * 리스트(오퍼월) 방식: 목록 → 클릭 검증+상세 → 참여 제출(멱등키 필수).
  * remaining 은 하루 전체가 아니라 **현재 슬롯 잔여**만 노출한다(§7 — 몰아치기 원천 차단).
  * 정답·태그 목록은 어떤 응답에도 싣지 않는다.
@@ -26,52 +25,18 @@ use Illuminate\Support\Facades\DB;
 class VendorMissionApiController extends Controller
 {
     /**
-     * API 키 소유 회원 ↔ vendor_api 매체(거래처) 매핑.
-     * auth.apikey:mission 이 이미 **키 scope + 회원 권한(관리자 부여)** 을 이중 검사하므로,
-     * 매체가 없으면 기본값으로 자동 발급한다 — 승인된 회원이 사전 등록을 기다리지 않게(단가·배분은 어드민에서 조정).
-     * 발주 업체(vendors)와 무관한 인바운드 채널이므로 vendor_id 는 NULL(공유 풀).
-     * 운영자가 매체를 **비활성**으로 꺼둔 경우는 의도된 차단이므로 403 을 유지한다.
+     * 요청을 보낸 제휴 매체 — auth.media 미들웨어가 키를 검증해 담아둔 값을 그대로 쓴다.
+     * 키가 곧 매체이므로 회원↔매체 매핑도, 매체 자동 발급도 필요 없다(2026-08-24 분리).
      */
-    private function media(Request $request): RewardMedia|JsonResponse
+    private function media(Request $request): RewardMedia
     {
-        $user = $request->user();
-
-        $media = RewardMedia::query()
-            ->where('type', RewardMedia::TYPE_VENDOR_API)
-            ->where('api_user_id', $user->id)
-            ->first();
-
-        if ($media !== null) {
-            return $media->is_active
-                ? $media
-                : response()->json(['message' => '이 계정의 리워드 매체가 비활성 상태입니다. 관리자에게 문의하세요.'], 403);
-        }
-
-        $media = RewardMedia::query()->firstOrCreate(
-            ['type' => RewardMedia::TYPE_VENDOR_API, 'api_user_id' => $user->id],
-            [
-                'slug' => 'vendor-api-'.$user->id,
-                'name' => $user->name !== '' && $user->name !== null ? $user->name : '벤더 '.$user->id,
-                'rate_limit_rps' => 100,
-                'payout_unit_price' => 0,
-                'verify_mode' => 'server',
-                'is_active' => true,
-            ],
-        );
-
-        // 레이트리미터 L1 캐시가 '매체 없음' 센티널을 물고 있으면 자동 발급이 30초 늦게 반영된다
-        RewardCache::forget('reward:media:u'.$user->id);
-
-        return $media;
+        return $request->attributes->get('reward_media');
     }
 
     /** 미션 목록 — 현재 슬롯 잔여가 있는 미션만. ?participant_hash= 를 주면 그 사용자 기준 제외 반영(§8) */
     public function index(Request $request): JsonResponse
     {
         $media = $this->media($request);
-        if ($media instanceof JsonResponse) {
-            return $media;
-        }
 
         $day = RewardDay::current();
         $slotNo = SlotCap::slotNo();
@@ -129,9 +94,6 @@ class VendorMissionApiController extends Controller
     public function assign(Request $request): JsonResponse
     {
         $media = $this->media($request);
-        if ($media instanceof JsonResponse) {
-            return $media;
-        }
 
         $data = $request->validate(['participant_hash' => 'required|string|max:128']);
         $day = RewardDay::current();
@@ -180,9 +142,6 @@ class VendorMissionApiController extends Controller
     public function show(Request $request, int $mission): JsonResponse
     {
         $media = $this->media($request);
-        if ($media instanceof JsonResponse) {
-            return $media;
-        }
 
         $data = $request->validate(['participant_hash' => 'required|string|max:128']);
         $day = RewardDay::current();
@@ -231,9 +190,6 @@ class VendorMissionApiController extends Controller
     public function store(Request $request, int $mission): JsonResponse
     {
         $media = $this->media($request);
-        if ($media instanceof JsonResponse) {
-            return $media;
-        }
 
         $idemKey = trim((string) $request->header('Idempotency-Key'));
         if ($idemKey === '' || mb_strlen($idemKey) > 80) {
@@ -255,9 +211,6 @@ class VendorMissionApiController extends Controller
     public function participations(Request $request): JsonResponse
     {
         $media = $this->media($request);
-        if ($media instanceof JsonResponse) {
-            return $media;
-        }
 
         $date = (string) $request->query('date', RewardDay::current());
         abort_unless(preg_match('/^\d{4}-\d{2}-\d{2}$/', $date), 422);

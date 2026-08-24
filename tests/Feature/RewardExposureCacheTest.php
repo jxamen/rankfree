@@ -121,11 +121,10 @@ class RewardExposureCacheTest extends TestCase
     {
         $user = User::create(['name' => '벤더', 'email' => 'v4@rankfree.kr',
             'password' => 'secret1234', 'api_scopes' => ['mission']]);
-        [, $key] = ApiKey::issue($user, '키', ['mission'], null, null, null);
-        RewardMedia::query()->create([
+        $key = RewardMedia::query()->create([
             'slug' => 'ow-4', 'name' => '오퍼월4', 'type' => RewardMedia::TYPE_VENDOR_API,
-            'api_user_id' => $user->id, 'is_active' => true, 'rate_limit_rps' => 2,
-        ]);
+            'is_active' => true, 'rate_limit_rps' => 2,
+        ])->issueKey();
 
         $first = $this->withHeader('Authorization', 'Bearer '.$key)->getJson('/api/v1/missions')->assertOk();
         $etag = $first->headers->get('ETag');

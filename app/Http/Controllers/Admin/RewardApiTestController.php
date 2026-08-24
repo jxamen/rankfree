@@ -28,7 +28,7 @@ class RewardApiTestController extends Controller
             'slotNo' => $slotNo,
             'closed' => $slotNo === null,
             'vendorMedia' => RewardMedia::query()->where('type', RewardMedia::TYPE_VENDOR_API)
-                ->orderBy('name')->get(['id', 'slug', 'name', 'is_active', 'api_user_id', 'verify_mode']),
+                ->orderBy('name')->get(['id', 'slug', 'name', 'is_active', 'api_key_prefix', 'verify_mode']),
             'miniappMedia' => RewardMedia::query()->where('type', RewardMedia::TYPE_MINIAPP)
                 ->orderBy('name')->get(['id', 'slug', 'name', 'is_active']),
             'activeMissions' => RewardMission::query()->where('status', 'active')

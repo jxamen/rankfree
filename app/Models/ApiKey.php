@@ -18,7 +18,7 @@ class ApiKey extends Model
         'keyword_detail' => '키워드 상세분석',
         'order' => '마케팅 상품 주문',
         'shop_keyword' => '쇼핑 유입키워드',
-        'mission' => '리워드 미션 연동',
+        // 'mission' 은 2026-08-24 제거 — 제휴 매체는 회원 키가 아니라 **매체 전용 키**(reward_media)로 인증한다
     ];
 
     protected $fillable = [
