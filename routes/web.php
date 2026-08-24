@@ -419,6 +419,7 @@ $__admin->group(function () {
     Route::post('/orders/{order}/cancel-dispatches', [MarketingOrderController::class, 'cancelDispatches'])->name('orders.dispatches.cancel');
     // 세부주문서(일할) — 생성·일괄수정·개별 발주/취소
     Route::post('/orders/{order}/items/generate', [MarketingOrderController::class, 'generateItems'])->name('orders.items.generate');
+    Route::post('/orders/{order}/items/append', [MarketingOrderController::class, 'appendItems'])->name('orders.items.append');
     Route::put('/orders/{order}/items', [MarketingOrderController::class, 'updateItems'])->name('orders.items.update');
     Route::post('/orders/items/{item}/dispatch', [MarketingOrderController::class, 'dispatchItem'])->name('orders.items.dispatch');
     Route::post('/orders/items/{item}/cancel', [MarketingOrderController::class, 'cancelItem'])->name('orders.items.cancel');

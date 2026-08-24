@@ -161,6 +161,20 @@ class MarketingOrderController extends Controller
         return back()->with('status', "세부주문 {$n}건을 생성했습니다 — 일 발주량 = 일수량 × 이행률, 업체 비율로 분배(일별 합이 일 발주량을 넘지 않음).");
     }
 
+    /**
+     * 부족분 추가 — 기간을 늘렸는데 이미 전송된 회차가 있어 재생성이 막힌 주문용.
+     * 기존 회차는 그대로 두고 빠진 회차만 마지막 진행일 다음 날부터 이어 만든다.
+     */
+    public function appendItems(MarketingOrder $order, \App\Domain\Order\OrderItemPlanner $planner)
+    {
+        $n = $planner->appendMissingDays($order);
+        if ($n < 1) {
+            return back()->withErrors(['items' => '추가할 회차가 없습니다 — 기간형 주문이 아니거나 이미 기간만큼 세부주문이 있습니다.']);
+        }
+
+        return back()->with('status', "세부주문 {$n}건을 추가했습니다 — 기존 회차는 그대로 두고 빠진 회차만 이어서 만들었습니다. 진행일·업체는 표에서 조정할 수 있습니다.");
+    }
+
     /** 세부주문 일괄 수정 — 회차별 진행일·수량·업체·Short URL 전부 편집 가능(2026-07-23). */
     public function updateItems(Request $request, MarketingOrder $order)
     {

@@ -139,7 +139,16 @@
         <div class="grid grid-cols-1 {{ $hiddenFields->isNotEmpty() ? 'lg:grid-cols-2' : '' }} gap-4">
         <div class="card p-6">
             <div class="flex items-center justify-between gap-2 flex-wrap mb-4">
-                <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 입력 정보</div>
+                {{-- 연결된 쇼핑 유입키워드는 타이틀 옆에 붙인다(2026-08-24) — 아래 본문에 있으면 눈에 안 띈다.
+                     노출·확인 수치와 수집 일시는 분석 화면에서 보므로 여기선 키워드와 Short URL 개수만. --}}
+                <div class="flex items-baseline gap-2 flex-wrap">
+                    <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 입력 정보</span>
+                    @foreach ($order->shopKeywordAnalyses as $a)
+                        <a href="{{ route('admin.shop-keyword.show', $a) }}" class="text-accent hover:underline font-semibold"
+                           style="font-size:var(--fs-xs);">{{ $a->core_keyword }} ↗</a>
+                        <span class="text-muted" style="font-size:var(--fs-xs);">Short URL <b class="font-mono">{{ $a->shortLinks->count() }}</b>개</span>
+                    @endforeach
+                </div>
                 @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
                     <form method="POST" action="{{ route('admin.orders.shop-keyword', $order) }}">
                         @csrf
@@ -147,20 +156,7 @@
                     </form>
                 @endif
             </div>
-            {{-- 쇼핑 유입키워드 수집 — 연결 분석 요약(카드 통합, 2026-07-23) --}}
-            @if ($order->shopKeywordAnalyses->isNotEmpty())
-                <div class="text-muted font-semibold mb-2" style="font-size:var(--fs-xs);">쇼핑 유입키워드</div>
-                <div class="flex flex-col gap-2 mb-4 pb-1" style="border-bottom:1px solid var(--color-hairline-soft);">
-                    @foreach ($order->shopKeywordAnalyses as $a)
-                        <div class="flex items-center gap-3 flex-wrap" style="font-size:var(--fs-xs);padding-bottom:8px;">
-                            <a href="{{ route('admin.shop-keyword.show', $a) }}" class="text-ink font-semibold">{{ $a->core_keyword }} ↗</a>
-                            <span class="text-muted">노출 <b class="font-mono text-success">{{ number_format($a->exposed_count) }}</b> / 확인 <span class="font-mono">{{ number_format($a->checked_count) }}</span></span>
-                            <span class="text-muted">Short URL <b class="font-mono">{{ $a->shortLinks->count() }}</b>개</span>
-                            <span class="text-muted-soft">{{ $a->created_at->format('y.m.d H:i') }}</span>
-                        </div>
-                    @endforeach
-                </div>
-            @elseif ($order->shopKeywordSource())
+            @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
                 <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집 요청 시 주문의 키워드·상품 URL 로 노출 키워드 분석을 만들고 이 주문과 연결합니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 씁니다.</p>
             @endif
             {{-- 주문 수정(2026-07-25) — 잘못 들어온 주문을 관리자가 바로잡는다.
@@ -189,8 +185,30 @@
                 @if (empty($order->field_values))
                     <p class="text-muted-soft" style="font-size:var(--fs-xs);">입력 항목이 없습니다.</p>
                 @else
+                    @php
+                        // 시작일·종료일은 한 줄에 나란히 둔다(2026-08-24) — 따로 있으면 기간을 한눈에 못 본다
+                        $pairDates = array_key_exists('start_date', (array) $order->field_values)
+                            && array_key_exists('end_date', (array) $order->field_values)
+                            && ! in_array('start_date', $hiddenKeys, true) && ! in_array('end_date', $hiddenKeys, true);
+                    @endphp
                     @foreach ($order->field_values as $key => $val)
                         @continue(in_array($key, $hiddenKeys, true))
+                        @continue($pairDates && $key === 'end_date')
+
+                        @if ($pairDates && $key === 'start_date')
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
+                                <div class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">{{ $fieldMap->get('start_date')->label ?? '시작일' }} · {{ $fieldMap->get('end_date')->label ?? '종료일' }}</div>
+                                <div class="sm:col-span-3 flex items-center gap-2 flex-wrap">
+                                    <input type="date" name="fields[start_date]" value="{{ $val }}"
+                                           class="input" data-date-key="start_date" style="width:170px;font-size:var(--fs-xs);">
+                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">~</span>
+                                    <input type="date" name="fields[end_date]" value="{{ $order->field_values['end_date'] }}"
+                                           class="input" data-date-key="end_date" style="width:170px;font-size:var(--fs-xs);">
+                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">종료일은 시작일·기간에 맞춰 자동 계산</span>
+                                </div>
+                            </div>
+                            @continue
+                        @endif
                         @php
                             $f = $fieldMap->get($key);
                             $label = $f->label ?? $key;
@@ -302,12 +320,23 @@
 
         {{-- 세부주문서(일할, 2026-07-23) — 기간형 주문의 회차별 관리: 업체 분산·Short URL 순차·개별 발주/취소 --}}
         @if ($order->items->isNotEmpty())
-            @php $itemColor = ['pending' => 'var(--color-muted)', 'sent' => 'var(--color-success)', 'failed' => 'var(--color-error)', 'canceled' => 'var(--color-muted-soft)']; @endphp
+            @php
+                $itemColor = ['pending' => 'var(--color-muted)', 'sent' => 'var(--color-success)', 'failed' => 'var(--color-error)', 'canceled' => 'var(--color-muted-soft)'];
+                // 기간을 늘렸는데 빠진 회차 — 전송분이 있어 재생성이 막힌 주문도 여기서 이어 만들 수 있다
+                $missingDays = app(\App\Domain\Order\OrderItemPlanner::class)->missingDayNos($order);
+            @endphp
             <div class="card p-6 mb-6">
                 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <span class="text-ink font-semibold" style="font-size:var(--fs-sm);">세부주문서
                         <span class="text-muted-soft" style="font-weight:400;">일 발주량(일수량×이행률)을 업체 비율로 분배 · 진행일 아침(09:00) 자동 전송</span></span>
                     <span class="flex items-center gap-1.5">
+                        @if (count($missingDays) > 0)
+                            {{-- 기간을 늘린 뒤 빠진 회차 — 기존 회차를 지우지 않으므로 전송분이 있어도 쓸 수 있다 --}}
+                            <form method="POST" action="{{ route('admin.orders.items.append', $order) }}">
+                                @csrf
+                                <button type="submit" class="btn btn-primary btn-sm">{{ count($missingDays) }}회차 추가 생성</button>
+                            </form>
+                        @endif
                         @if ($order->items->where('status', 'sent')->isEmpty())
                             <form method="POST" action="{{ route('admin.orders.items.generate', $order) }}"
                                   data-confirm="세부주문을 다시 생성할까요?" data-confirm-text="기존 세부주문(대기·실패·취소분)을 지우고 현재 이행률·업체 배분 기준으로 새로 만듭니다. 수동 수정한 URL·업체는 사라집니다." data-confirm-ok="재생성">

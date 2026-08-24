@@ -32,47 +32,126 @@ class OrderItemPlanner
             return 0;
         }
 
-        // 이행률 — 미설정·0 이하는 100% 취급
-        $rate = (float) ($order->product->default_fulfillment ?? 100);
-        if ($rate <= 0) {
-            $rate = 100.0;
-        }
-        $dailyBase = (int) floor($order->quantity * $rate / 100);
+        $dailyBase = $this->dailyBase($order);
         if ($dailyBase < 1) {
             return 0;
         }
 
-        $rows = $order->product->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()
-            ->filter(fn ($pv) => $pv->vendor && $pv->vendor->is_active)->values();
-
-        $fv = (array) $order->field_values;
-        $start = trim((string) ($fv['start_date'] ?? ''));
-        $startDate = $start !== '' ? Carbon::parse($start) : $order->product->earliestStartDate();
+        $rows = $this->allocationRows($order);
+        $startDate = $this->startDate($order);
 
         $n = 0;
         for ($i = 1; $i <= $days; $i++) {
-            $date = $startDate->copy()->addDays($i - 1)->toDateString();
-            if ($rows->isEmpty()) {
-                // 배분 미설정 — 업체 미지정 1건(발주 시 배분 1순위 필요)
-                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date, 'end_date' => $date,
-                    'quantity' => $dailyBase, 'status' => 'pending']);
-                $n++;
-
-                continue;
-            }
-            foreach ($this->dispatcher->allocate($dailyBase, $rows) as [$pv, $q]) {
-                if ($q < 1) {
-                    continue;   // 배분 0 업체는 그 날 세부주문 없음
-                }
-                MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $i, 'work_date' => $date, 'end_date' => $date,
-                    'quantity' => $q, 'vendor_id' => $pv->vendor->id, 'status' => 'pending']);
-                $n++;
-            }
+            $n += $this->createDay($order, $i, $startDate->copy()->addDays($i - 1)->toDateString(), $dailyBase, $rows);
         }
 
         $this->assignShortUrls($order);
 
         return $n;
+    }
+
+    /**
+     * 부족분 추가 — 기간을 늘렸는데 **이미 전송된 회차가 있어 재생성이 막힌** 주문을 위한 경로.
+     * 기존 회차는 손대지 않고 비어 있는 day_no 만 채운다.
+     * 날짜는 마지막 회차 다음 날부터 이어 붙인다 — 진행일을 수동으로 밀어둔 주문이 많아
+     * 시작일 기준으로 다시 깔면 이미 끝난 회차와 날짜가 겹친다.
+     *
+     * @return int 생성 수
+     */
+    public function appendMissingDays(MarketingOrder $order): int
+    {
+        $order->loadMissing('product');
+        $days = (int) $order->days;
+        if (! $order->product || $order->product->quantity_mode !== 'daily' || $days < 1) {
+            return 0;
+        }
+
+        $missing = $this->missingDayNos($order);
+        if ($missing === []) {
+            return 0;
+        }
+
+        $dailyBase = $this->dailyBase($order);
+        if ($dailyBase < 1) {
+            return 0;
+        }
+        $rows = $this->allocationRows($order);
+
+        // 이어 붙일 기준일 — 마지막 회차 다음 날(회차가 하나도 없으면 generate 와 같은 시작일 규칙)
+        $last = $order->items()->max('work_date');
+        $cursor = $last ? Carbon::parse($last)->addDay() : $this->startDate($order);
+
+        $n = 0;
+        foreach ($missing as $dayNo) {
+            $n += $this->createDay($order, $dayNo, $cursor->toDateString(), $dailyBase, $rows);
+            $cursor->addDay();
+        }
+
+        $this->assignShortUrls($order->load('items'));
+
+        return $n;
+    }
+
+    /** 기간(days) 대비 아직 만들어지지 않은 회차 번호 — 화면 버튼 노출 판단에도 쓴다. @return list<int> */
+    public function missingDayNos(MarketingOrder $order): array
+    {
+        $days = (int) $order->days;
+        if ($days < 1) {
+            return [];
+        }
+        $have = $order->items()->pluck('day_no')->map(fn ($d) => (int) $d)->all();
+
+        return array_values(array_filter(range(1, $days), fn ($i) => ! in_array($i, $have, true)));
+    }
+
+    /** 한 회차 생성 — 업체 배분이 있으면 업체별로, 없으면 미지정 1건. @return int 생성 수 */
+    private function createDay(MarketingOrder $order, int $dayNo, string $date, int $dailyBase, \Illuminate\Support\Collection $rows): int
+    {
+        if ($rows->isEmpty()) {
+            // 배분 미설정 — 업체 미지정 1건(발주 시 배분 1순위 필요)
+            MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $dayNo, 'work_date' => $date, 'end_date' => $date,
+                'quantity' => $dailyBase, 'status' => 'pending']);
+
+            return 1;
+        }
+
+        $n = 0;
+        foreach ($this->dispatcher->allocate($dailyBase, $rows) as [$pv, $q]) {
+            if ($q < 1) {
+                continue;   // 배분 0 업체는 그 날 세부주문 없음
+            }
+            MarketingOrderItem::create(['order_id' => $order->id, 'day_no' => $dayNo, 'work_date' => $date, 'end_date' => $date,
+                'quantity' => $q, 'vendor_id' => $pv->vendor->id, 'status' => 'pending']);
+            $n++;
+        }
+
+        return $n;
+    }
+
+    /** 일 발주량 = 고객 일수량 × 상품 기본 이행률(%). 미설정·0 이하는 100% 취급 */
+    private function dailyBase(MarketingOrder $order): int
+    {
+        $rate = (float) ($order->product->default_fulfillment ?? 100);
+        if ($rate <= 0) {
+            $rate = 100.0;
+        }
+
+        return (int) floor($order->quantity * $rate / 100);
+    }
+
+    /** 활성 업체 배분 행(업체도 활성인 것만) */
+    private function allocationRows(MarketingOrder $order): \Illuminate\Support\Collection
+    {
+        return $order->product->vendorAllocations()->with('vendor')->where('is_active', true)->orderBy('sort_order')->get()
+            ->filter(fn ($pv) => $pv->vendor && $pv->vendor->is_active)->values();
+    }
+
+    /** 주문 시작일 — 입력값이 없으면 상품의 최소 시작일 */
+    private function startDate(MarketingOrder $order): Carbon
+    {
+        $start = trim((string) (((array) $order->field_values)['start_date'] ?? ''));
+
+        return $start !== '' ? Carbon::parse($start) : $order->product->earliestStartDate();
     }
 
     /** 재생성 — 전송된 회차가 없을 때만(대기·실패·취소 전부 삭제 후 새 기준으로). @return -1 = 전송분 존재 */
