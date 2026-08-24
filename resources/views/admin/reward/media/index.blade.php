@@ -1,10 +1,10 @@
 {{-- 매체(벤더) 목록 — 단가·처리 능력·배분이 매체마다 다르다(design-04 §2-1) --}}
 @extends('admin.layout')
-@section('title', '리워드 매체')
+@section('title', '제휴 매체 관리')
 
 @section('admin-content')
-<x-console.page-head title="리워드 매체"
-    desc="참여를 공급하는 채널 · 매체마다 지급 단가와 처리 능력이 달라 배분 비율을 따로 겁니다" />
+<x-console.page-head title="제휴 매체 관리"
+    desc="참여를 공급하는 제휴 채널 · 매체마다 지급 단가와 처리 능력이 달라 배분 비율을 따로 겁니다" />
 
 @if (session('status'))
     <div class="alert alert-success mb-4" style="font-size:var(--fs-xs);">{{ session('status') }}</div>
@@ -12,7 +12,7 @@
 
 <div class="flex items-center justify-between mb-3">
     <span class="text-muted" style="font-size:var(--fs-xs);">오늘({{ $day }}) 기준 참여 집계</span>
-    <a href="{{ route('admin.reward.media.create') }}" class="btn btn-primary btn-sm">매체 등록</a>
+    <a href="{{ route('admin.reward.media.create') }}" class="btn btn-primary btn-sm">제휴 매체 등록</a>
 </div>
 
 <div class="card" style="overflow-x:auto;">
@@ -68,7 +68,7 @@
                 </tr>
             @empty
                 <tr><td colspan="9" class="text-muted text-center" style="padding:28px;">
-                    등록된 매체가 없습니다. 매체를 등록해야 참여 API 를 쓸 수 있습니다.
+                    등록된 제휴 매체가 없습니다. <code style="font-family:var(--font-mono);">mission</code> 권한을 받은 회원이 API 를 호출하면 자동으로 생성됩니다.
                 </td></tr>
             @endforelse
         </tbody>
@@ -76,7 +76,8 @@
 </div>
 
 <p class="text-muted mt-3" style="font-size:var(--fs-xs);line-height:1.8;">
-    <b class="text-ink">지급 단가</b>는 참여 1건당 매체에 지급하는 금액입니다(정산 입력값).
+    <b class="text-ink">지급 단가</b>는 참여 1건당 매체에 지급하는 금액입니다(지출 계산 입력값).
+    미션 유형마다 금액이 다르면 각 매체의 설정에서 <b class="text-ink">미션 유형별 지급 단가</b>를 걸 수 있고, 유형별 행이 없으면 이 기본 단가가 쓰입니다.
     <b class="text-ink">배분 규칙</b>이 없으면 그 매체는 제한 없이 공유 풀에서 가져갑니다 —
     단가가 비싼 매체가 물량을 다 가져가지 않게 하려면 비율이나 상한을 거세요.
 </p>

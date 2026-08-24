@@ -117,6 +117,11 @@ Schema::create('reward_media', function (Blueprint $t) {
   **중단 + 알림**한다. 전용 배분 매체(§2-1)는 자기 `vendor_id` 행이 추가 필터가 된다. 이름 문자열 매칭 금지
   (vendors.name unique 없음).
 
+- **미션 유형별 지급 단가 (2026-08-24)** — 매체 지급 단가가 미션 유형마다 다르므로 `reward_media_payouts`
+  (`media_id` × `kind` unique, `unit_price`)에 유형별 단가를 둔다. 해석은 `RewardMedia::payoutFor($kind)` —
+  유형별 행이 있으면 그 값, 없으면 매체 기본 `payout_unit_price` 폴백. 어드민 매체 설정에서 유형 행을 추가·삭제한다
+  (행을 지우면 기본 단가로 되돌아간다). **대량 집계는 행마다 `payoutFor()` 를 부르지 말고 이 테이블을 조인**한다.
+  현재 이 값을 읽는 정산 집계는 아직 없다 — 지출 계산의 입력만 준비된 상태.
 - **제휴 매체 자동 발급 (2026-08-24 결정)** — `vendor_api` 매체를 운영자가 **미리 등록하지 않아도 된다.**
   `auth.apikey:mission` 이 이미 **키 scope + 회원 기능 권한**(관리자만 부여하는 `users.api_scopes`)을 이중 검사하므로,
   통과한 요청에 매체가 없으면 기본값(`slug=vendor-api-{userId}` · rps 100 · 지급단가 0 · `verify_mode=server` · 활성)으로

@@ -1,15 +1,16 @@
 {{-- 매체 설정 — 기본 정보 + 배분 규칙(어떤 미션을 어떤 비율로 줄지) --}}
 @extends('admin.layout')
-@section('title', $medium->exists ? '매체 설정' : '매체 등록')
+@section('title', $medium->exists ? '제휴 매체 설정' : '제휴 매체 등록')
 
 @section('admin-content')
 <style>
     .al-row { display:grid; grid-template-columns:120px minmax(160px,1fr) 90px 110px 110px 40px; gap:8px; align-items:center; }
     .al-head { font-size:var(--fs-xs); color:var(--color-muted); font-weight:700; }
-    @media (max-width: 900px) { .al-row { grid-template-columns:minmax(0,1fr); } .al-head { display:none; } }
+    .pay-row { display:grid; grid-template-columns:minmax(140px,1fr) 140px 40px; gap:8px; align-items:center; }
+    @media (max-width: 900px) { .al-row, .pay-row { grid-template-columns:minmax(0,1fr); } .al-head { display:none; } }
 </style>
 
-<x-console.page-head :title="$medium->exists ? $medium->name : '매체 등록'"
+<x-console.page-head :title="$medium->exists ? $medium->name : '제휴 매체 등록'"
     desc="지급 단가·처리 능력·배분 비율 · 매체가 활성이어야 참여 API 가 동작합니다" />
 
 @if (session('status'))
@@ -119,9 +120,40 @@
                 비율과 상한을 <b>둘 다 비우면</b> 저장 시 그 규칙은 삭제됩니다(= 제한 없음).
             </p>
         </div>
+        {{-- 미션 유형별 지급 단가 — 지출 계산의 입력. 유형별 행이 없으면 위 '지급 단가'로 폴백 --}}
+        <div class="card p-4 mb-4">
+            <input type="hidden" name="payout_submitted" value="1">
+            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">미션 유형별 지급 단가</div>
+            <p class="text-muted mb-3" style="font-size:var(--fs-xs);line-height:1.8;">
+                이 제휴 매체에 <b>참여 1건당 얼마를 지급할지</b> 미션 유형별로 정합니다.
+                유형별 행이 없으면 위 기본 <b>지급 단가</b>({{ number_format((int) $medium->payout_unit_price) }}원)가 적용됩니다.
+            </p>
+
+            <div class="pay-row al-head mb-1">
+                <div>미션 유형</div><div>지급 단가(원)</div><div></div>
+            </div>
+
+            <div id="payout-rows" class="flex flex-col gap-2">
+                @foreach ($payouts as $i => $p)
+                    <div class="pay-row payout-row">
+                        <input type="text" name="payout[{{ $i }}][kind]" class="input" style="font-family:var(--font-mono);"
+                            value="{{ $p->kind }}" placeholder="유형 코드">
+                        <input type="number" name="payout[{{ $i }}][unit_price]" class="input text-right" min="0" value="{{ $p->unit_price }}">
+                        <button type="button" class="btn btn-secondary btn-sm pay-del">×</button>
+                    </div>
+                @endforeach
+            </div>
+
+            <button type="button" class="btn btn-secondary btn-sm mt-3" id="payout-add">유형 추가</button>
+
+            <p class="text-muted mt-3" style="font-size:var(--fs-xs);">
+                미션 유형 코드: {{ $kinds->isEmpty() ? '(아직 없음)' : $kinds->implode(' · ') }} ·
+                유형 코드나 단가를 <b>비우면</b> 저장 시 그 유형은 삭제됩니다(= 기본 단가 적용).
+            </p>
+        </div>
     @else
         <div class="card p-4 mb-4">
-            <p class="text-muted" style="font-size:var(--fs-xs);">배분 규칙은 매체를 등록한 뒤 설정할 수 있습니다.</p>
+            <p class="text-muted" style="font-size:var(--fs-xs);">배분 규칙과 미션 유형별 지급 단가는 매체를 등록한 뒤 설정할 수 있습니다.</p>
         </div>
     @endif
 
@@ -175,6 +207,39 @@
             row.querySelectorAll('[name^="alloc["]').forEach(function (el) {
                 el.name = el.name.replace(/^alloc\[[^\]]+\]/, 'alloc[' + idx + ']');
                 el.disabled = false;   // disabled 필드는 전송되지 않아 '전체' 규칙이 사라진다
+            });
+        });
+    });
+})();
+</script>
+
+<template id="payout-tpl">
+    <div class="pay-row payout-row">
+        <input type="text" name="payout[__i__][kind]" class="input" style="font-family:var(--font-mono);" placeholder="유형 코드">
+        <input type="number" name="payout[__i__][unit_price]" class="input text-right" min="0">
+        <button type="button" class="btn btn-secondary btn-sm pay-del">×</button>
+    </div>
+</template>
+
+<script>
+(function () {
+    const wrap = document.getElementById('payout-rows');
+    if (!wrap) return;
+    const tpl = document.getElementById('payout-tpl');
+
+    document.getElementById('payout-add').addEventListener('click', function () {
+        wrap.insertAdjacentHTML('beforeend', tpl.innerHTML.replace(/__i__/g, String(Date.now() % 100000)));
+    });
+
+    wrap.addEventListener('click', function (e) {
+        if (e.target.classList.contains('pay-del')) e.target.closest('.payout-row').remove();
+    });
+
+    // 제출 직전 인덱스를 다시 매긴다(중간 삭제 대비)
+    document.querySelector('form').addEventListener('submit', function () {
+        wrap.querySelectorAll('.payout-row').forEach(function (row, idx) {
+            row.querySelectorAll('[name^="payout["]').forEach(function (el) {
+                el.name = el.name.replace(/^payout\[[^\]]+\]/, 'payout[' + idx + ']');
             });
         });
     });

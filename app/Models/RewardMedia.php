@@ -36,6 +36,25 @@ class RewardMedia extends Model
     }
 
     /**
+     * 미션 유형별 지급 단가(원) — 지출 계산의 입력.
+     * 유형(reward_missions.kind)별 행이 있으면 그 값, 없으면 매체 기본 단가로 폴백한다.
+     * 대량 집계는 이 메서드를 행마다 부르지 말고 reward_media_payouts 를 조인한다.
+     */
+    public function payoutFor(?string $kind): int
+    {
+        $kind = trim((string) $kind);
+        if ($kind !== '') {
+            $price = \Illuminate\Support\Facades\DB::table('reward_media_payouts')
+                ->where('media_id', $this->id)->where('kind', $kind)->value('unit_price');
+            if ($price !== null) {
+                return (int) $price;
+            }
+        }
+
+        return (int) $this->payout_unit_price;
+    }
+
+    /**
      * API 키 소유 회원 → 벤더 매체 경량 조회(rate limiter 용, L1 30초).
      * 캐시엔 순수 배열만 — 매체 없으면 ['id' => null] 센티널.
      *

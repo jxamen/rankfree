@@ -43,6 +43,8 @@ class RewardMediaController extends Controller
             'apiUsers' => User::query()->whereNotNull('api_scopes')->orderBy('name')->get(['id', 'name', 'email']),
             'allocations' => DB::table('reward_media_allocations')
                 ->where('media_id', $medium->id)->orderBy('scope')->orderBy('scope_key')->get(),
+            'payouts' => DB::table('reward_media_payouts')
+                ->where('media_id', $medium->id)->orderBy('kind')->get(),
             'missions' => RewardMission::query()->whereIn('status', ['active', 'draft', 'paused'])
                 ->orderByDesc('id')->limit(50)->get(['id', 'title', 'daily_quota']),
             'kinds' => RewardMission::query()->select('kind')->distinct()->pluck('kind')->filter()->values(),
@@ -55,6 +57,7 @@ class RewardMediaController extends Controller
             'medium' => new RewardMedia(['type' => RewardMedia::TYPE_VENDOR_API, 'rate_limit_rps' => 100, 'verify_mode' => 'server']),
             'apiUsers' => User::query()->whereNotNull('api_scopes')->orderBy('name')->get(['id', 'name', 'email']),
             'allocations' => collect(),
+            'payouts' => collect(),
             'missions' => collect(),
             'kinds' => collect(),
         ]);
@@ -73,6 +76,9 @@ class RewardMediaController extends Controller
 
         if ($request->has('alloc_submitted')) {
             $this->saveAllocations($request, $medium);
+        }
+        if ($request->has('payout_submitted')) {
+            $this->savePayouts($request, $medium);
         }
 
         return redirect()->route('admin.reward.media.edit', $medium)->with('status', '매체 설정을 저장했습니다.');
@@ -150,5 +156,35 @@ class RewardMediaController extends Controller
             ->get(['id', 'scope', 'scope_key'])
             ->reject(fn ($r) => in_array($r->scope.':'.$r->scope_key, $keep, true))
             ->each(fn ($r) => DB::table('reward_media_allocations')->where('id', $r->id)->delete());
+    }
+
+    /**
+     * 미션 유형별 지급 단가 저장 — 지출 계산의 입력.
+     * 유형 코드가 비면 그 행은 무시하고, 화면에서 지운 유형은 실제로 삭제한다(= 기본 단가로 되돌림).
+     */
+    private function savePayouts(Request $request, RewardMedia $medium): void
+    {
+        $request->validate([
+            'payout' => ['nullable', 'array', 'max:50'],
+            'payout.*.kind' => ['nullable', 'string', 'max:12'],
+            'payout.*.unit_price' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+        ], [], ['payout.*.unit_price' => '유형별 지급 단가']);
+
+        $keep = [];
+        foreach ((array) $request->input('payout', []) as $row) {
+            $kind = trim((string) ($row['kind'] ?? ''));
+            if ($kind === '' || ($row['unit_price'] ?? '') === '') {
+                continue;
+            }
+
+            DB::table('reward_media_payouts')->updateOrInsert(
+                ['media_id' => $medium->id, 'kind' => $kind],
+                ['unit_price' => (int) $row['unit_price'], 'updated_at' => now(), 'created_at' => now()],
+            );
+            $keep[] = $kind;
+        }
+
+        DB::table('reward_media_payouts')->where('media_id', $medium->id)
+            ->whereNotIn('kind', $keep === [] ? [''] : $keep)->delete();
     }
 }
