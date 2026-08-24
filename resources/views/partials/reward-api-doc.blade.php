@@ -34,13 +34,13 @@
 
 <p class="text-body" style="font-size:var(--fs-sm);line-height:1.75;">
     광고주가 발주한 <b class="text-ink">참여형 미션</b>을 API로 받아, 여러분의 사용자에게 노출하고 참여 결과를 제출하는 연동입니다.
-    오퍼월 · 미니앱 · 포인트 앱처럼 <b class="text-ink">사용자를 보유한 매체</b>가 대상이며, <b class="text-ink">수락된 참여 건수로 정산</b>합니다.
+    오퍼월 · 미니앱 · 포인트 앱처럼 <b class="text-ink">사용자를 보유한 제휴 매체</b>가 대상이며, <b class="text-ink">수락된 참여 건수로 정산</b>합니다.
 </p>
 
 <h2 class="font-display text-ink doc-h2">시작하기</h2>
 <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
-    연동은 <b class="text-ink">매체 등록 → API 키 발급 → 미션 수신 → 참여 제출 → 정산 대조</b> 순서로 진행합니다.
-    매체 등록은 운영자가 처리하므로 먼저 문의해 주세요 — <b class="text-ink">매체가 연결되지 않은 키</b>로 호출하면 계속 <code class="doc-code">403</code>을 받습니다.
+    연동은 <b class="text-ink">제휴 매체 승인 → API 키 발급 → 미션 수신 → 참여 제출 → 정산 대조</b> 순서로 진행합니다.
+    운영자가 계정에 <code class="doc-code">mission</code> 권한을 부여하면 <b class="text-ink">별도 등록 절차 없이 바로 호출</b>할 수 있습니다 — 제휴 매체는 첫 호출 때 자동으로 만들어집니다.
 </p>
 <table class="doc-table mt-4">
     <thead><tr><th style="width:120px;">항목</th><th>값</th></tr></thead>
@@ -63,10 +63,10 @@
     <tbody>
         <tr><td><code class="doc-code">400</code></td><td><code class="doc-code">Idempotency-Key</code> 헤더 누락 (참여 제출)</td></tr>
         <tr><td><code class="doc-code">401</code></td><td>키 없음/잘못됨 · 비활성화됨 · 유효기간 만료</td></tr>
-        <tr><td><code class="doc-code">403</code></td><td>허용되지 않은 IP · <code class="doc-code">mission</code> 권한 없음 · <b class="text-ink">계정에 연결된 매체가 없음</b></td></tr>
+        <tr><td><code class="doc-code">403</code></td><td>허용되지 않은 IP · 키에 <code class="doc-code">mission</code> 권한 없음 · 계정에 <code class="doc-code">mission</code> 기능 미허용 · <b class="text-ink">제휴 매체가 비활성</b></td></tr>
         <tr><td><code class="doc-code">410</code></td><td>존재하지 않는 미션</td></tr>
         <tr><td><code class="doc-code">422</code></td><td>파라미터 검증 실패 · 참여 거절(<code class="doc-code">reason</code> 동봉)</td></tr>
-        <tr><td><code class="doc-code">429</code></td><td>매체 초당 호출 한도 초과 · 키 일일 한도 초과 — 백오프 후 재시도</td></tr>
+        <tr><td><code class="doc-code">429</code></td><td>제휴 매체 초당 호출 한도 초과 · 키 일일 한도 초과 — 백오프 후 재시도</td></tr>
     </tbody>
 </table>
 
@@ -117,7 +117,7 @@
             </tr>
             <tr>
                 <td>호출 한도</td>
-                <td>매체별로 <b class="text-ink">초당 호출 한도</b>가 설정됩니다(연동 시 안내). 초과 시 <code class="doc-code">429</code> — 백오프 후 <b class="text-ink">같은 Idempotency-Key</b> 로 재시도하세요. 목록은 <code class="doc-code">ETag</code> 를 지원하므로 <code class="doc-code">If-None-Match</code> 로 폴링 부하를 줄일 수 있습니다</td>
+                <td>제휴 매체별로 <b class="text-ink">초당 호출 한도</b>가 설정됩니다(연동 시 안내). 초과 시 <code class="doc-code">429</code> — 백오프 후 <b class="text-ink">같은 Idempotency-Key</b> 로 재시도하세요. 목록은 <code class="doc-code">ETag</code> 를 지원하므로 <code class="doc-code">If-None-Match</code> 로 폴링 부하를 줄일 수 있습니다</td>
             </tr>
             <tr>
                 <td>운영 시간</td>
@@ -238,7 +238,7 @@ Retry-After: 5931</pre></div>
                     <tr><td><code class="doc-code">missions[].remaining</code></td><td>int</td><td>지금 받을 수 있는 남은 수량. <b class="text-ink">0인 미션은 목록에 나오지 않습니다</b></td></tr>
                     <tr><td><code class="doc-code">meta.slot</code></td><td>int</td><td>내부 참조용 값 — 연동에서 사용하지 않습니다</td></tr>
                     <tr><td><code class="doc-code">meta.closed</code></td><td>bool</td><td><code class="doc-code">true</code> 면 운영 시간이 아님(02~06시). <code class="doc-code">opensAt</code> 에 다음 오픈 시각</td></tr>
-                    <tr><td><code class="doc-code">meta.verifyMode</code></td><td>string</td><td><code class="doc-code">server</code> = 정답 검증을 랭크프리가 수행 / <code class="doc-code">vendor</code> = 매체가 자체 검증</td></tr>
+                    <tr><td><code class="doc-code">meta.verifyMode</code></td><td>string</td><td><code class="doc-code">server</code> = 정답 검증을 랭크프리가 수행 / <code class="doc-code">vendor</code> = 제휴 매체가 자체 검증</td></tr>
                 </tbody>
             </table>
         </div>
@@ -396,8 +396,8 @@ Retry-After: 5931</pre></div>
 
 <div class="card-soft mt-12 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
     <div>
-        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">매체 연동을 시작하시겠어요?</div>
-        <p class="text-muted mt-1" style="font-size:var(--fs-xs);">매체 등록 후 콘솔에서 <code class="doc-code">mission</code> 권한 키를 발급하면 바로 호출할 수 있습니다.</p>
+        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">제휴 매체 연동을 시작하시겠어요?</div>
+        <p class="text-muted mt-1" style="font-size:var(--fs-xs);"><code class="doc-code">mission</code> 권한을 받은 뒤 콘솔에서 키를 발급하면 바로 호출할 수 있습니다.</p>
     </div>
     <a href="{{ route('console.api-keys') }}" class="btn btn-primary btn-sm">API 키 발급</a>
 </div>

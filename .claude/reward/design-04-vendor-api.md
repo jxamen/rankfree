@@ -117,6 +117,14 @@ Schema::create('reward_media', function (Blueprint $t) {
   **중단 + 알림**한다. 전용 배분 매체(§2-1)는 자기 `vendor_id` 행이 추가 필터가 된다. 이름 문자열 매칭 금지
   (vendors.name unique 없음).
 
+- **제휴 매체 자동 발급 (2026-08-24 결정)** — `vendor_api` 매체를 운영자가 **미리 등록하지 않아도 된다.**
+  `auth.apikey:mission` 이 이미 **키 scope + 회원 기능 권한**(관리자만 부여하는 `users.api_scopes`)을 이중 검사하므로,
+  통과한 요청에 매체가 없으면 기본값(`slug=vendor-api-{userId}` · rps 100 · 지급단가 0 · `verify_mode=server` · 활성)으로
+  **첫 호출 때 생성**한다(`VendorMissionApiController::media()`). 단가·배분은 생성 뒤 어드민에서 조정한다.
+  이미 있는 매체가 **비활성**이면 운영자의 의도된 차단이므로 403 을 유지한다.
+  **발주 거래처(`vendors` — 주문을 구글시트/API로 내보내는 푸시)와 제휴 매체(주문을 API로 가져가는 풀)는 별개 개념**이므로
+  자동 발급 행의 `vendor_id` 는 NULL(공유 풀). 두 개념을 하나로 합치지 않는다.
+
 ## 3. 벤더 API 계약 v1 (scope: `mission`)
 
 ### 3-0. 미션 제공 2방식 (2026-07-31 지시)

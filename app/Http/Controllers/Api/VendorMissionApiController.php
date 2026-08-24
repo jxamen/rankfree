@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Reward\MissionAssigner;
 use App\Domain\Reward\MissionCopy;
 use App\Domain\Reward\MissionSnapshot;
+use App\Domain\Reward\RewardCache;
 use App\Domain\Reward\SlotCap;
 use App\Domain\Reward\TagIndex;
 use App\Domain\Reward\VendorSubmitService;
@@ -24,16 +25,44 @@ use Illuminate\Support\Facades\DB;
  */
 class VendorMissionApiController extends Controller
 {
-    /** API 키 소유 회원 ↔ vendor_api 매체 매핑 — 매체가 없으면 403 */
+    /**
+     * API 키 소유 회원 ↔ vendor_api 매체(거래처) 매핑.
+     * auth.apikey:mission 이 이미 **키 scope + 회원 권한(관리자 부여)** 을 이중 검사하므로,
+     * 매체가 없으면 기본값으로 자동 발급한다 — 승인된 회원이 사전 등록을 기다리지 않게(단가·배분은 어드민에서 조정).
+     * 발주 업체(vendors)와 무관한 인바운드 채널이므로 vendor_id 는 NULL(공유 풀).
+     * 운영자가 매체를 **비활성**으로 꺼둔 경우는 의도된 차단이므로 403 을 유지한다.
+     */
     private function media(Request $request): RewardMedia|JsonResponse
     {
+        $user = $request->user();
+
         $media = RewardMedia::query()
             ->where('type', RewardMedia::TYPE_VENDOR_API)
-            ->where('api_user_id', $request->user()->id)
-            ->where('is_active', true)
+            ->where('api_user_id', $user->id)
             ->first();
 
-        return $media ?: response()->json(['message' => '이 계정에 연결된 리워드 매체가 없습니다. 관리자에게 문의하세요.'], 403);
+        if ($media !== null) {
+            return $media->is_active
+                ? $media
+                : response()->json(['message' => '이 계정의 리워드 매체가 비활성 상태입니다. 관리자에게 문의하세요.'], 403);
+        }
+
+        $media = RewardMedia::query()->firstOrCreate(
+            ['type' => RewardMedia::TYPE_VENDOR_API, 'api_user_id' => $user->id],
+            [
+                'slug' => 'vendor-api-'.$user->id,
+                'name' => $user->name !== '' && $user->name !== null ? $user->name : '벤더 '.$user->id,
+                'rate_limit_rps' => 100,
+                'payout_unit_price' => 0,
+                'verify_mode' => 'server',
+                'is_active' => true,
+            ],
+        );
+
+        // 레이트리미터 L1 캐시가 '매체 없음' 센티널을 물고 있으면 자동 발급이 30초 늦게 반영된다
+        RewardCache::forget('reward:media:u'.$user->id);
+
+        return $media;
     }
 
     /** 미션 목록 — 현재 슬롯 잔여가 있는 미션만. ?participant_hash= 를 주면 그 사용자 기준 제외 반영(§8) */

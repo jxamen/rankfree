@@ -80,13 +80,33 @@ class RewardVendorApiTest extends TestCase
         return self::TAGS[$idx - 1];
     }
 
-    public function test_scope와_매체_연결이_없으면_거부된다(): void
+    public function test_scope가_없거나_매체가_비활성이면_거부된다(): void
     {
         [, $noScope] = ApiKey::issue($this->user, '스코프없음', ['rank'], null, null, null);
         $this->withHeader('Authorization', 'Bearer '.$noScope)->getJson('/api/v1/missions')->assertStatus(403);
 
         $this->media->update(['is_active' => false]);
-        $this->api('GET', '/api/v1/missions')->assertStatus(403);   // 매체 미연결/비활성
+        $this->api('GET', '/api/v1/missions')->assertStatus(403);   // 운영자가 끈 매체는 의도된 차단
+    }
+
+    /** 승인된 회원(mission scope)은 매체 사전 등록 없이도 호출된다 — 매체를 기본값으로 자동 발급 */
+    public function test_매체가_없으면_자동_발급되고_목록이_열린다(): void
+    {
+        $newUser = User::create(['name' => '신규벤더', 'email' => 'vendor2@rankfree.kr',
+            'password' => 'secret1234', 'api_scopes' => ['mission']]);
+        [, $newKey] = ApiKey::issue($newUser, '신규벤더키', ['mission'], null, null, null);
+
+        $this->assertDatabaseMissing('reward_media', ['api_user_id' => $newUser->id]);
+
+        $this->withHeader('Authorization', 'Bearer '.$newKey)
+            ->getJson('/api/v1/missions')->assertOk()
+            ->assertJsonPath('meta.verifyMode', 'server');
+
+        $created = RewardMedia::query()->where('api_user_id', $newUser->id)->sole();
+        $this->assertSame(RewardMedia::TYPE_VENDOR_API, $created->type);
+        $this->assertTrue($created->is_active);
+        $this->assertNull($created->vendor_id);            // 발주 업체와 무관한 인바운드 채널
+        $this->assertSame(0, (int) $created->payout_unit_price);
     }
 
     public function test_목록은_슬롯_잔여만_노출하고_정답을_싣지_않는다(): void
