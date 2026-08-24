@@ -149,12 +149,15 @@
                         <span class="text-muted" style="font-size:var(--fs-xs);">Short URL <b class="font-mono">{{ $a->shortLinks->count() }}</b>개</span>
                     @endforeach
                 </div>
-                @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
-                    <form method="POST" action="{{ route('admin.orders.shop-keyword', $order) }}">
-                        @csrf
-                        <button type="submit" class="btn btn-primary btn-sm">유입키워드 수집 요청</button>
-                    </form>
-                @endif
+                <div class="flex items-center gap-1.5">
+                    @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
+                        <form method="POST" action="{{ route('admin.orders.shop-keyword', $order) }}">
+                            @csrf
+                            <button type="submit" class="btn btn-secondary btn-sm">유입키워드 수집 요청</button>
+                        </form>
+                    @endif
+                    <button type="submit" form="order-info-form" class="btn btn-primary btn-sm">저장</button>
+                </div>
             </div>
             @if ($order->shopKeywordAnalyses->isEmpty() && $order->shopKeywordSource())
                 <p class="text-muted-soft mb-4" style="font-size:var(--fs-xs);">유입키워드 수집 요청 시 주문의 키워드·상품 URL 로 노출 키워드 분석을 만들고 이 주문과 연결합니다 — 노출 키워드가 모이면 Short URL 을 생성해 발주에 씁니다.</p>
@@ -194,6 +197,9 @@
                     @foreach ($order->field_values as $key => $val)
                         @continue(in_array($key, $hiddenKeys, true))
                         @continue($pairDates && $key === 'end_date')
+                        {{-- 일수량(daily_qty)은 위 '수량 · 기간'과 같은 값이다 — 여기서 고쳐도 실제 수량은 안 바뀌므로 숨긴다(2026-08-24).
+                             저장 시 컨트롤러가 quantity 로 맞춰 준다. --}}
+                        @continue($key === 'daily_qty')
 
                         @if ($pairDates && $key === 'start_date')
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center" style="border-bottom:1px solid var(--color-hairline-soft);padding-bottom:10px;">
@@ -204,7 +210,7 @@
                                     <span class="text-muted-soft" style="font-size:var(--fs-xs);">~</span>
                                     <input type="date" name="fields[end_date]" value="{{ $order->field_values['end_date'] }}"
                                            class="input" data-date-key="end_date" style="width:170px;font-size:var(--fs-xs);">
-                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">종료일은 시작일·기간에 맞춰 자동 계산</span>
+                                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">종료일 자동 계산</span>
                                 </div>
                             </div>
                             @continue
@@ -233,24 +239,24 @@
                                         <span class="text-muted-soft" style="font-size:var(--fs-xs);">시작일·기간에 맞춰 자동 계산</span>
                                     @endif
                                 @else
-                                    <input type="text" name="fields[{{ $key }}]" value="{{ is_array($val) ? implode(', ', $val) : $val }}"
-                                           class="input w-full" style="font-size:var(--fs-xs);"
-                                           placeholder="{{ is_array($val) ? '콤마로 구분' : '값 입력' }}">
-                                    @if ($type === 'URL' && $val)
-                                        <a href="{{ $val }}" target="_blank" class="text-accent hover:underline" style="font-size:var(--fs-xs);">열기 ↗</a>
-                                    @endif
+                                    {{-- URL 은 입력칸 오른쪽에 [열기] — 아래에 링크로 두면 줄만 늘어난다(2026-08-24) --}}
+                                    <div class="flex items-center gap-2">
+                                        <input type="text" name="fields[{{ $key }}]" value="{{ is_array($val) ? implode(', ', $val) : $val }}"
+                                               class="input" style="flex:1;min-width:0;font-size:var(--fs-xs);"
+                                               placeholder="{{ is_array($val) ? '콤마로 구분' : '값 입력' }}">
+                                        @if ($type === 'URL' && $val)
+                                            <a href="{{ $val }}" target="_blank" class="btn btn-secondary btn-sm" style="flex:none;white-space:nowrap;">열기 ↗</a>
+                                        @endif
+                                    </div>
                                 @endif
                             </div>
                         </div>
                     @endforeach
                 @endif
 
-                <div class="flex items-center justify-end gap-2 flex-wrap">
-                    @if ($order->items()->exists())
-                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">수량·기간을 바꾸면 세부주문을 다시 만들어야 합니다.</span>
-                    @endif
-                    <button type="submit" class="btn btn-primary btn-sm">주문 정보 저장</button>
-                </div>
+                @if ($order->items()->exists())
+                    <span class="text-muted-soft" style="font-size:var(--fs-xs);">수량·기간을 바꾸면 세부주문을 다시 만들어야 합니다.</span>
+                @endif
             </form>
             <script>
             (function () {

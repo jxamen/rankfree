@@ -298,6 +298,12 @@ class MarketingOrderController extends Controller
             $fv[$key] = $val !== '' ? $val : null;
         }
 
+        // 일수량(daily_qty)은 주문 접수 때 수량의 원천이었을 뿐 이후 기준은 quantity 다.
+        // 화면에서 감췄으므로(중복 입력) 저장할 때 quantity 로 맞춰 기록이 어긋나지 않게 한다.
+        if (array_key_exists('daily_qty', $fv)) {
+            $fv['daily_qty'] = (string) $qty;
+        }
+
         // 시작일을 바꾸면 종료일을 기간으로 다시 계산한다(주문 생성 OrderPlacer 와 동일 규칙: 시작일 + 기간 − 1).
         // 종료일 항목이 있는 주문에만 적용한다.
         $start = trim((string) ($fv['start_date'] ?? ''));
