@@ -92,6 +92,14 @@
                 <button type="button" id="kw-suggest" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">키워드 자동 추천</button>
             </div>
             <textarea name="search_keywords" required class="input" style="font-size:var(--fs-xs);line-height:1.6;height:150px;">{{ $v('search_keywords') }}</textarea>
+            {{-- 추천 결과 — 키워드마다 통합검색 플레이스 영역 노출 순위를 옆에 붙여 보여준다(2026-08-27) --}}
+            @php $savedRanks = array_filter((array) ($draft['keyword_ranks'] ?? []), fn ($r) => (int) $r > 0); @endphp
+            <input type="hidden" name="keyword_ranks" id="kw-ranks" value="{{ json_encode($draft['keyword_ranks'] ?? [], JSON_UNESCAPED_UNICODE) }}">
+            <div id="kw-list" class="flex flex-wrap gap-1.5" style="{{ $savedRanks ? '' : 'display:none;' }}">
+                @foreach ($savedRanks as $kw => $rk)
+                    <span class="badge border border-hairline" style="font-size:var(--fs-xs);padding:3px 10px;">{{ $kw }} <b class="font-mono" style="color:var(--color-success);">{{ $rk }}위</b></span>
+                @endforeach
+            </div>
             <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>실제 검색 화면의 플레이스 영역에 뜨는 키워드만</b>(더보기 포함 · 상위 20위) 노출 순위와 함께 골라 채웁니다.</span>
             <div id="kw-missed" class="text-muted-soft" style="font-size:var(--fs-xs);display:none;"></div>
         </div>
@@ -127,7 +135,10 @@
         </div>
 
         <div class="flex items-center gap-2 justify-end" style="border-top:1px solid var(--color-hairline-soft);padding-top:14px;">
+            <span id="kw-saved" class="text-muted-soft" style="font-size:var(--fs-xs);margin-right:auto;">{{ ($draft['saved_at'] ?? '') !== '' ? '저장됨 '.$draft['saved_at'] : '' }}</span>
             <a href="{{ route('admin.orders.show', $order) }}" class="btn btn-ghost btn-sm">취소</a>
+            {{-- 접수하지 않고 지금 값만 주문에 저장 — 다시 열면 이어서 작업(2026-08-27) --}}
+            <button type="button" id="kw-save" class="btn btn-secondary btn-sm">저장</button>
             <button type="submit" class="btn btn-primary btn-sm" @disabled(! $configured)>부스팅샵으로 주문</button>
         </div>
     </form>
@@ -218,9 +229,9 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
         }
         if (d.exposed.length) {
             ta.value = d.exposed.map(function (x) { return x.keyword; }).join('\n');
+            renderRanks(d.exposed);
             if (!d.failed) {
-                const ranks = d.exposed.map(function (x) { return x.keyword + ' ' + x.rank + '위'; }).join(' · ');
-                status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 플레이스 영역에 노출됩니다 — ' + ranks;
+                status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 플레이스 영역에 노출됩니다 — 아래 순위를 확인하고 [저장]을 누르세요.';
             }
         } else if (!d.failed) {
             status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 플레이스 영역에 뜨는 키워드가 없었습니다 — 직접 입력하세요.';
@@ -231,6 +242,51 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
         }
     } catch (e) {
         status.textContent = '오류: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
+});
+
+/** 추천 결과를 키워드 옆 순위 배지로 그린다 + 저장용 hidden 갱신. */
+function renderRanks(exposed) {
+    const list = document.getElementById('kw-list');
+    const hidden = document.getElementById('kw-ranks');
+    const map = {};
+    list.innerHTML = '';
+    exposed.forEach(function (x) {
+        map[x.keyword] = x.rank;
+        const el = document.createElement('span');
+        el.className = 'badge border border-hairline';
+        el.style.cssText = 'font-size:var(--fs-xs);padding:3px 10px;';
+        el.innerHTML = x.keyword + ' <b class="font-mono" style="color:var(--color-success);">' + x.rank + '위</b>';
+        list.appendChild(el);
+    });
+    list.style.display = exposed.length ? '' : 'none';
+    hidden.value = JSON.stringify(map);
+}
+
+/** 저장 — 접수하지 않고 지금 입력값과 순위를 주문에 남긴다(확인창 없이 바로 저장). */
+document.getElementById('kw-save')?.addEventListener('click', async function () {
+    const btn = this;
+    const form = btn.closest('form');
+    const saved = document.getElementById('kw-saved');
+    const label = btn.textContent;
+
+    btn.disabled = true;
+    btn.textContent = '저장 중…';
+    try {
+        const res = await fetch(@json(route('admin.orders.boosting-shop.save', $order)), {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': form.querySelector('input[name="_token"]').value },
+            body: new FormData(form),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.ok) throw new Error(d.message || '저장에 실패했습니다.');
+        saved.textContent = '저장됨 ' + d.saved_at;
+        Swal.fire({ icon: 'success', title: '저장했습니다', timer: 1200, showConfirmButton: false });
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: '저장 실패', text: e.message });
     } finally {
         btn.disabled = false;
         btn.textContent = label;

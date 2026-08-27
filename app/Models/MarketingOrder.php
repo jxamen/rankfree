@@ -19,13 +19,14 @@ class MarketingOrder extends Model
     ];
 
     protected $fillable = [
-        'order_no', 'product_id', 'user_id', 'quantity', 'days', 'field_values',
+        'order_no', 'product_id', 'user_id', 'quantity', 'days', 'field_values', 'boosting_draft',
         'unit_price', 'total_price', 'status', 'orderer_name', 'orderer_contact',
         'user_coupon_id', 'discount_amount', 'shop_rank_slot_id', 'place_rank_slot_id',
     ];
 
     protected $casts = [
         'field_values' => 'array',
+        'boosting_draft' => 'array',   // 부스팅샵 전송값 저장분(2026-08-27) — 확인 화면에서 다듬은 값·노출 순위
         'quantity' => 'integer', 'days' => 'integer',
         'unit_price' => 'decimal:2', 'total_price' => 'decimal:2', 'discount_amount' => 'decimal:2',
     ];

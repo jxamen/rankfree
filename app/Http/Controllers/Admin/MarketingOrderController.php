@@ -561,9 +561,17 @@ class MarketingOrderController extends Controller
     {
         $order->load('product.fields');
 
+        $draft = $this->boostingShopDraft($order);
+        // 저장해 둔 전송값이 있으면 그쪽이 우선 — 운영자가 다듬어 저장한 내용을 자동 수집값이 덮지 않게(2026-08-27)
+        foreach ((array) $order->boosting_draft as $k => $v) {
+            if ($k !== 'profile' && $v !== null && $v !== '') {
+                $draft[$k] = $v;
+            }
+        }
+
         return view('admin.orders.boosting-shop', [
             'order' => $order,
-            'draft' => $this->boostingShopDraft($order),
+            'draft' => $draft,
             'configured' => $client->configured(),
             'products' => \App\Domain\Order\BoostingShopClient::PLACE_PRODUCTS,   // 상품번호 셀렉트(유입/저장 × 등급)
             'sentDispatch' => $order->dispatches()
@@ -659,6 +667,43 @@ class MarketingOrderController extends Controller
             "주문 {$order->order_no} 을(를) 부스팅샵으로 접수했습니다 — 부스팅샵 주문번호 {$result['order_no']}"
             .(isset($body['total_quantity']) ? " · 총 {$body['total_quantity']}건" : '')
             .' (발주 기록 #'.$dispatch->id.')');
+    }
+
+    /**
+     * 부스팅샵 전송값 저장(2026-08-27) — 접수하지 않고 지금 화면의 값만 주문에 남긴다.
+     * 상호명·상품번호·추천받은 유입 키워드와 노출 순위를 저장해, 다시 열었을 때 그대로 이어서 작업한다.
+     */
+    public function boostingShopSave(Request $request, MarketingOrder $order)
+    {
+        // 저장은 준비 중인 값도 받아야 하므로 형식만 느슨하게 확인한다(전송 시 본검증)
+        $data = $request->validate([
+            'product_no' => ['nullable', 'integer', 'min:1'],
+            'link' => ['nullable', 'string', 'max:500'],
+            'product_name' => ['nullable', 'string', 'max:100'],
+            'keyword' => ['nullable', 'string', 'max:100'],
+            'keyword2' => ['nullable', 'string', 'max:100'],
+            'keyword3' => ['nullable', 'string', 'max:100'],
+            'pid' => ['nullable', 'string', 'max:20'],
+            'search_keywords' => ['nullable', 'string', 'max:2000'],
+            'day_quantity' => ['nullable', 'integer', 'min:1'],
+            'fr_date' => ['nullable', 'date_format:Y-m-d'],
+            'to_date' => ['nullable', 'date_format:Y-m-d'],
+            'smartcall_url' => ['nullable', 'string', 'max:500'],
+            'place_tel' => ['nullable', 'string', 'max:40'],
+            'image_url' => ['nullable', 'string', 'max:500'],
+            'keyword_ranks' => ['nullable', 'string', 'max:4000'],   // 추천 결과(키워드=>순위) JSON
+        ]);
+
+        $ranks = json_decode((string) ($data['keyword_ranks'] ?? ''), true);
+        unset($data['keyword_ranks']);
+        $data['keyword_ranks'] = is_array($ranks) ? $ranks : ($order->boosting_draft['keyword_ranks'] ?? []);
+        $data['saved_at'] = now()->toDateTimeString();
+
+        $order->update(['boosting_draft' => $data]);
+
+        return $request->expectsJson()
+            ? response()->json(['ok' => true, 'saved_at' => $data['saved_at']])
+            : back()->with('status', '부스팅샵 전송값을 저장했습니다.');
     }
 
     /**

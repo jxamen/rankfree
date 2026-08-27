@@ -149,6 +149,30 @@ class BoostingShopOrderTest extends TestCase
         $this->assertContains('풍동헬스', $res->json('missed'));
     }
 
+    public function test_draft_can_be_saved_and_restored(): void
+    {
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)->postJson(route('admin.orders.boosting-shop.save', $order), [
+            'product_no' => 54,
+            'product_name' => '손질한 상호명',
+            'search_keywords' => "키워드1
+키워드2",
+            'keyword_ranks' => json_encode(['키워드1' => 3, '키워드2' => 7], JSON_UNESCAPED_UNICODE),
+        ])->assertOk()->assertJson(['ok' => true]);
+
+        $draft = $order->fresh()->boosting_draft;
+        $this->assertSame(54, $draft['product_no']);
+        $this->assertSame(['키워드1' => 3, '키워드2' => 7], $draft['keyword_ranks']);
+
+        // 다시 열면 저장값이 자동 수집값보다 우선하고, 순위 배지도 복원된다
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('손질한 상호명', false)
+            ->assertSee('value="54" selected', false)
+            ->assertSee('3위');
+    }
+
     public function test_keyword_suggestion_rejects_url_without_place_id(): void
     {
         $order = $this->makeOrder();

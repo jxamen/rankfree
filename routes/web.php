@@ -414,6 +414,7 @@ $__admin->group(function () {
     Route::get('/orders/{order}/boosting-shop', [MarketingOrderController::class, 'boostingShopForm'])->name('orders.boosting-shop');
     Route::post('/orders/{order}/boosting-shop', [MarketingOrderController::class, 'boostingShopOrder'])->middleware('throttle:30,1')->name('orders.boosting-shop.place');
     Route::post('/orders/{order}/boosting-shop/keywords', [MarketingOrderController::class, 'boostingShopKeywords'])->middleware('throttle:20,1')->name('orders.boosting-shop.keywords');
+    Route::post('/orders/{order}/boosting-shop/save', [MarketingOrderController::class, 'boostingShopSave'])->name('orders.boosting-shop.save');
     // 주문 정보 수정(2026-07-25) — 잘못 들어온 주문을 관리자가 바로잡는다(수량·기간·고객 입력값). 금액은 단가×수량×기간으로 재계산
     Route::put('/orders/{order}/info', [MarketingOrderController::class, 'updateInfo'])->name('orders.info');
     Route::put('/orders/{order}/internal-fields', [MarketingOrderController::class, 'updateInternalFields'])->name('orders.internal-fields');
