@@ -97,7 +97,9 @@
             <input type="hidden" name="keyword_ranks" id="kw-ranks" value="{{ json_encode($draft['keyword_ranks'] ?? [], JSON_UNESCAPED_UNICODE) }}">
             <div id="kw-list" class="flex flex-wrap gap-1.5" style="{{ $savedRanks ? '' : 'display:none;' }}">
                 @foreach ($savedRanks as $kw => $rk)
-                    <span class="badge border border-hairline" style="font-size:var(--fs-xs);padding:3px 10px;">{{ $kw }} <b class="font-mono" style="color:var(--color-success);">{{ $rk }}위</b></span>
+                    {{-- 클릭하면 그 키워드로 네이버 통합검색을 새 창에 열어 바로 눈으로 확인(2026-08-27) --}}
+                    <a href="https://m.search.naver.com/search.naver?sm=mtp_hty.top&where=m&query={{ urlencode($kw) }}" target="_blank" rel="noopener nofollow"
+                       class="badge border border-hairline hover:underline" style="font-size:var(--fs-xs);padding:3px 10px;" title="네이버에서 이 키워드로 검색해 확인">{{ $kw }} <b class="font-mono" style="color:var(--color-success);">{{ $rk }}위</b> ↗</a>
                 @endforeach
             </div>
             <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>실제 검색 화면의 플레이스 영역에 뜨는 키워드만</b>(더보기 포함 · 상위 20위) 노출 순위와 함께 골라 채웁니다.</span>
@@ -256,10 +258,14 @@ function renderRanks(exposed) {
     list.innerHTML = '';
     exposed.forEach(function (x) {
         map[x.keyword] = x.rank;
-        const el = document.createElement('span');
-        el.className = 'badge border border-hairline';
+        const el = document.createElement('a');
+        el.className = 'badge border border-hairline hover:underline';
         el.style.cssText = 'font-size:var(--fs-xs);padding:3px 10px;';
-        el.innerHTML = x.keyword + ' <b class="font-mono" style="color:var(--color-success);">' + x.rank + '위</b>';
+        el.href = 'https://m.search.naver.com/search.naver?sm=mtp_hty.top&where=m&query=' + encodeURIComponent(x.keyword);
+        el.target = '_blank';
+        el.rel = 'noopener nofollow';
+        el.title = '네이버에서 이 키워드로 검색해 확인';
+        el.innerHTML = x.keyword + ' <b class="font-mono" style="color:var(--color-success);">' + x.rank + '위</b> ↗';
         list.appendChild(el);
     });
     list.style.display = exposed.length ? '' : 'none';
