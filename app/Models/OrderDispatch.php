@@ -15,6 +15,9 @@ class OrderDispatch extends Model
         'canceled' => '취소',   // 발주 취소 — 시트에 적힌 행은 지우지 않는다(수동 정리). 전부 취소되면 재발주 가능
     ];
 
+    /** 부스팅샵 직접 연동 발주의 업체명(2026-08-27) — vendors 에 없는 연동이라 이름으로 식별한다. */
+    public const BOOSTING_VENDOR = '부스팅샵';
+
     protected $fillable = [
         'order_id', 'vendor_id', 'vendor_name', 'channel', 'quantity',
         'payload', 'status', 'response', 'sent_at',

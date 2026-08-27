@@ -81,6 +81,23 @@
 - **발주 도래일 = [MarketingOrderItem::dispatchDueDate()](../app/Models/MarketingOrderItem.php)** — 배정 업체가 `weekend_batch_dispatch`면 회차 요일이 토→금(−1)·일→금(−2)·월→금(−3), 그 외(화~금)는 당일. 일반 업체는 항상 work_date.
 - **적용 지점(사용자 확정: 승인·발주 + 자동 스케줄러 공통)** — 승인·발주(`dispatchDueItems`)와 `orders:dispatch-due` 모두 `dispatchDueDate() <= today` 로 도래 판정. 스케줄러는 몰아 발주가 최대 3일 선발주라 후보를 `work_date <= today+3` 으로 넓혀 온 뒤 도래일로 거른다. 회차별 [발주] 버튼은 종전대로 명시적 즉시 발주. 검증 [OrderWeekendBatchDispatchTest](../tests/Feature/OrderWeekendBatchDispatchTest.php)·[VendorWeekendSettingTest](../tests/Feature/VendorWeekendSettingTest.php).
 
+## 부스팅샵 직접 주문 (2026-08-27)
+
+> 플레이스 주문을 **업체 배분(vendors)을 거치지 않고 부스팅샵 API 로 바로 접수**한다. 문서: https://boostings.shop/api/docs/place
+
+- **진입점**: `/admin/orders` 목록의 플레이스 주문 행 **[부스팅샵 주문]**(접수·진행중 상태만 · `placeSource()` 로 플레이스 주문 판정). 쇼핑 유입 주문의 [주문넣기]와 같은 열을 쓴다(둘은 배타적).
+- **흐름**: 목록 버튼 → `GET admin/orders/{order}/boosting-shop`(전송값 확인 화면, 주문 입력값에서 자동 채움) → `POST` 같은 경로 → 부스팅샵 `POST /api/order/place` → 결과를 `order_dispatches`(**vendor_id=null, vendor_name=`부스팅샵`**)에 기록.
+- **API 특성** — 일반 벤더 API 채널로는 못 태우는 이유:
+  - form 전송이고 유입 키워드가 **`search_keywords[]` 배열(1~30개)**
+  - **HTTP 는 항상 200**, 성공 여부는 body 의 `result`(success|fail)로 판정 — `$res->successful()` 로는 실패를 못 잡는다
+  - 인증이 헤더가 아니라 **폼 파라미터 `key`**(시크릿)
+- **시크릿**: `.env BOOSTINGSHOP_API_KEY`(config `rankfree.boosting_shop`, 운영 배포 시 `config:cache` 필수). 키는 [BoostingShopClient](../app/Domain/Order/BoostingShopClient.php)가 호출 시점에 붙이므로 **발주 payload 에 남지 않는다**.
+- **부스팅샵 상품번호**(47~50 유입 · 52~56 저장 · 프리미엄 50은 `smartcall_url` 필수)는 rankfree 주문에 없는 값이라 확인 화면에서 입력받고, 성공 시 `marketing_products.boosting_product_no` 에 기억해 **다음 주문부터 자동으로 채운다**.
+- **자동 채움**(`boostingShopDraft`): link(`place_url`)·pid(URL 에서 추출)·keyword·유입 키워드(라벨/키에 '유입' 이 든 필드 전부)·day_quantity(`daily_qty`)·fr_date(`start_date`)·to_date(`end_date`). 상호명·전화·스마트콜은 표준 키가 없어 **필드 라벨로 탐색**하고, 못 찾으면 운영자가 확인 화면에서 채운다(상호명은 필수).
+- **중복 접수 차단**: 전송 성공(sent) 기록이 있으면 재접수 불가 — 주문 상세 [외부 발주 현황]에서 취소해야 다시 넣는다(기존 발주와 같은 규칙). **실패 건은 [재전송] 대신 [다시 주문]** — vendors 설정이 없어 `retry()`(sendApi)로는 보낼 수 없기 때문.
+- 성공하면 주문이 접수 → **진행중**으로 넘어간다(진행중 전환 시 순위추적 자동 등록도 기존대로 동작).
+- **검증**: [BoostingShopOrderTest](../tests/Feature/BoostingShopOrderTest.php) 8건(성공·result:fail·중복 차단·키워드 30개 초과·API 키 미설정·검증) + Playwright 실동작(목록 버튼 → 확인 화면 자동 채움 → **실제 API 왕복**). 실 왕복은 과거 시작일로 보내 부스팅샵이 `fr_date 는 오늘 이후로 설정해 주세요` 로 거부하게 해 **주문 접수·적립금 차감 없이** 인증·파라미터 수용을 확인했다.
+
 ## 주의
 
 - 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송. 세부주문 주문의 승인은 "도래 회차 전송+예약 활성화"로 동작.

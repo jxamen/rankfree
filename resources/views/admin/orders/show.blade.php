@@ -533,7 +533,10 @@
                                         <div style="font-size:var(--fs-xs);">{{ $d->sent_at?->format('m.d H:i') }}</div>
                                     </td>
                                     <td class="py-2 pl-3 text-center" style="white-space:nowrap;">
-                                        @if (in_array($d->status, ['failed', 'pending'], true))
+                                        @if ($d->vendor_name === \App\Models\OrderDispatch::BOOSTING_VENDOR && $d->status === 'failed')
+                                            {{-- 부스팅샵은 업체 설정(vendors)이 없는 직접 연동 — 재전송 대신 전송값 확인 화면에서 다시 넣는다(2026-08-27) --}}
+                                            <a href="{{ route('admin.orders.boosting-shop', $order) }}" class="btn btn-secondary btn-sm">다시 주문</a>
+                                        @elseif (in_array($d->status, ['failed', 'pending'], true))
                                             <form method="POST" action="{{ route('admin.orders.dispatch.retry', $d) }}" class="inline">@csrf
                                                 <button type="submit" class="btn btn-secondary btn-sm">재전송</button>
                                             </form>

@@ -16,7 +16,11 @@ class MarketingOrderController extends Controller
             // 유입키워드 연결 + 수집 정보(상점명·가격·상품ID) 표시용
             ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,product_url,mall_name,product_price,exposed_count,status')
             // 발주 취소 버튼 노출용 — 활성(미취소) 발주 수
-            ->withCount(['dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled')])
+            ->withCount([
+                'dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled'),
+                // 부스팅샵 접수 여부(2026-08-27) — 접수된 주문은 목록에서 버튼 대신 '부스팅샵 접수됨' 으로 표기
+                'dispatches as boosting_sent_count' => fn ($q) => $q->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent'),
+            ])
             ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {
@@ -550,6 +554,179 @@ class MarketingOrderController extends Controller
 
         return back()->with('status', "주문 {$order->order_no} 발주 {$active->count()}건을 취소하고 접수 상태로 되돌렸습니다."
             .' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요. 이제 다시 발주할 수 있습니다.');
+    }
+
+    /**
+     * 부스팅샵 플레이스 주문 — 전송 확인 화면(2026-08-27).
+     * 부스팅샵 API 는 rankfree 주문에 없는 값(부스팅샵 상품번호·상호명)을 필수로 요구하므로,
+     * 주문 입력값에서 뽑을 수 있는 항목은 미리 채워 두고 운영자가 확인·보완한 뒤 전송한다.
+     */
+    public function boostingShopForm(MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
+    {
+        $order->load('product.fields');
+
+        return view('admin.orders.boosting-shop', [
+            'order' => $order,
+            'draft' => $this->boostingShopDraft($order),
+            'configured' => $client->configured(),
+            'sentDispatch' => $order->dispatches()
+                ->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->latest('id')->first(),
+        ]);
+    }
+
+    /**
+     * 부스팅샵 플레이스 주문 접수 — POST /api/order/place 로 전송하고 결과를 발주 기록에 남긴다.
+     * 성공하면 상품번호를 상품에 기억(다음 주문 자동 채움)하고 주문을 진행중으로 넘긴다.
+     */
+    public function boostingShopOrder(Request $request, MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
+    {
+        $data = $request->validate([
+            'product_no' => ['required', 'integer', 'min:1'],
+            'link' => ['required', 'url', 'max:500'],
+            'product_name' => ['required', 'string', 'max:100'],
+            'keyword' => ['required', 'string', 'max:100'],
+            'search_keywords' => ['required', 'string'],
+            'day_quantity' => ['required', 'integer', 'min:1'],
+            'fr_date' => ['required', 'date_format:Y-m-d'],
+            'to_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:fr_date'],
+            'smartcall_url' => ['nullable', 'url', 'max:500'],
+            'pid' => ['nullable', 'integer'],
+            'place_tel' => ['nullable', 'string', 'max:40'],
+            'image_url' => ['nullable', 'url', 'max:500'],
+            'keyword2' => ['nullable', 'string', 'max:100'],
+            'keyword3' => ['nullable', 'string', 'max:100'],
+        ], [], [
+            'product_no' => '부스팅샵 상품번호', 'link' => '플레이스 주소', 'product_name' => '상호명',
+            'keyword' => '순위체크 키워드', 'search_keywords' => '유입 키워드', 'day_quantity' => '1일 수량',
+            'fr_date' => '시작일', 'to_date' => '종료일', 'smartcall_url' => '스마트콜 URL',
+        ]);
+
+        // 유입 키워드 — 줄바꿈·쉼표 구분 입력을 배열로(부스팅샵은 search_keywords[] 로 받고 1~30개 제한)
+        $keywords = collect(preg_split('/[\r\n,]+/', $data['search_keywords']))
+            ->map(fn ($k) => trim((string) $k))->filter()->unique()->values();
+        if ($keywords->isEmpty() || $keywords->count() > 30) {
+            return back()->withInput()->withErrors(['search_keywords' => '유입 키워드는 1~30개여야 합니다(현재 '.$keywords->count().'개).']);
+        }
+
+        // 중복 접수 방지 — 이미 전송된 부스팅샵 발주가 있으면 취소 후 다시 넣는다(기존 발주 흐름과 동일한 규칙)
+        if ($order->dispatches()->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->exists()) {
+            return back()->withErrors(['boosting' => "주문 {$order->order_no}: 이미 부스팅샵으로 접수된 주문입니다. 다시 넣으려면 주문 상세의 외부 발주 현황에서 취소하세요."]);
+        }
+
+        $params = array_filter([
+            'product_no' => (int) $data['product_no'],
+            'link' => $data['link'],
+            'product_name' => $data['product_name'],
+            'keyword' => $data['keyword'],
+            'day_quantity' => (int) $data['day_quantity'],
+            'fr_date' => $data['fr_date'],
+            'to_date' => $data['to_date'],
+            'smartcall_url' => $data['smartcall_url'] ?? null,
+            'pid' => ($data['pid'] ?? '') !== '' ? (int) $data['pid'] : null,   // 빈값이면 아예 보내지 않는다(부스팅샵이 link 에서 추출)
+            'place_tel' => $data['place_tel'] ?? null,
+            'image_url' => $data['image_url'] ?? null,
+            'keyword2' => $data['keyword2'] ?? null,
+            'keyword3' => $data['keyword3'] ?? null,
+        ], fn ($v) => $v !== null && $v !== '');
+        $params['search_keywords'] = $keywords->all();
+
+        $result = $client->place($params);
+        $body = is_array($result['body']) ? $result['body'] : [];
+
+        // 발주 기록 — API 키는 클라이언트가 붙이므로 payload 에 남지 않는다
+        $days = (int) \Illuminate\Support\Carbon::parse($data['fr_date'])->diffInDays(\Illuminate\Support\Carbon::parse($data['to_date'])) + 1;
+        $dispatch = \App\Models\OrderDispatch::create([
+            'order_id' => $order->id,
+            'vendor_id' => null,
+            'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
+            'channel' => 'api',
+            'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
+            'payload' => $params,
+            'status' => $result['ok'] ? 'sent' : 'failed',
+            'response' => mb_substr($result['ok']
+                ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
+                : '실패 — '.$result['error'], 0, 1900),
+            'sent_at' => now(),
+        ]);
+
+        if (! $result['ok']) {
+            return back()->withInput()->withErrors(['boosting' => "부스팅샵 접수 실패 — {$result['error']}"]);
+        }
+
+        $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
+        if ($order->status === 'pending') {
+            $order->update(['status' => 'processing']);
+        }
+
+        return redirect()->route('admin.orders')->with('status',
+            "주문 {$order->order_no} 을(를) 부스팅샵으로 접수했습니다 — 부스팅샵 주문번호 {$result['order_no']}"
+            .(isset($body['total_quantity']) ? " · 총 {$body['total_quantity']}건" : '')
+            .' (발주 기록 #'.$dispatch->id.')');
+    }
+
+    /**
+     * 부스팅샵 전송값 초안 — 주문 입력값(field_values)에서 뽑을 수 있는 항목을 미리 채운다.
+     * 플레이스 상품은 keyword·place_url·daily_qty·start_date·end_date 가 표준 키라 그것을 먼저 보고,
+     * 상호명·전화·스마트콜처럼 표준 키가 없는 값은 필드 라벨로 찾는다.
+     *
+     * @return array<string, mixed>
+     */
+    private function boostingShopDraft(MarketingOrder $order): array
+    {
+        $fv = (array) $order->field_values;
+        $fields = $order->product?->fields ?? collect();
+
+        /** 라벨·키에 주어진 낱말이 든 첫 필드의 값. */
+        $byLabel = function (array $needles) use ($fv, $fields) {
+            foreach ($fields as $f) {
+                $hay = ($f->label ?? '').' '.$f->field_key;
+                foreach ($needles as $n) {
+                    if (str_contains($hay, $n) && trim((string) ($fv[$f->field_key] ?? '')) !== '') {
+                        return trim((string) $fv[$f->field_key]);
+                    }
+                }
+            }
+
+            return '';
+        };
+
+        $link = trim((string) ($fv['place_url'] ?? ''));
+        if ($link === '') {
+            $link = (string) ($order->placeSource()['url'] ?? '');
+        }
+        $pid = preg_match('#/(\d{6,})#', $link, $m) ? $m[1] : '';
+
+        // 유입 키워드 — '유입' 이 붙은 필드들(플레이스 퀴즈 상품의 '유입키워드 1' 등)을 모은다
+        $inflow = collect();
+        foreach ($fields as $f) {
+            if (! str_contains(($f->label ?? '').' '.$f->field_key, '유입')) {
+                continue;
+            }
+            $v = $fv[$f->field_key] ?? null;
+            $inflow = $inflow->merge(is_array($v) ? $v : preg_split('/[\r\n,]+/', (string) $v));
+        }
+        $keyword = (string) ($order->keywordFromFields() ?? '');
+        $inflow = $inflow->map(fn ($k) => trim((string) $k))->filter()->unique()->values();
+        if ($inflow->isEmpty() && $keyword !== '') {
+            $inflow = collect([$keyword]);          // 유입 키워드 필드가 없는 상품은 순위체크 키워드로 시작
+        }
+
+        return [
+            'product_no' => $order->product?->boosting_product_no,
+            'link' => $link,
+            'pid' => $pid,
+            'product_name' => $byLabel(['상호', '업체명', '업체', 'place_name', 'shop_name', 'store_name']),
+            'keyword' => $keyword,
+            'search_keywords' => $inflow->implode("\n"),
+            'day_quantity' => (int) ($fv['daily_qty'] ?? 0) ?: $order->quantity,
+            'fr_date' => trim((string) ($fv['start_date'] ?? '')),
+            'to_date' => trim((string) ($fv['end_date'] ?? '')),
+            'smartcall_url' => $byLabel(['스마트콜', 'smartcall']),
+            'place_tel' => $byLabel(['전화', '연락처', 'tel', 'phone']),
+            'image_url' => '',
+            'keyword2' => '',
+            'keyword3' => '',
+        ];
     }
 
     public function updateStatus(Request $request, MarketingOrder $order)

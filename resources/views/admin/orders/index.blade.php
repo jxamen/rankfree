@@ -55,7 +55,7 @@
                     <th class="text-left px-3 py-3 font-semibold" style="width:140px;">기간</th>
                     <th class="text-right px-3 py-3 font-semibold" style="width:130px;">수량 · 금액</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:100px;">상태</th>
-                    <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:140px;">유입키워드 · 발주</th>
                     <th class="text-right px-5 py-3 font-semibold" style="width:130px;">주문일시</th>
                 </tr>
             </thead>
@@ -149,6 +149,13 @@
                                     @csrf
                                     <button type="submit" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">수집요청</button>
                                 </form>
+                            @elseif ($o->placeSource() && in_array($o->status, ['pending', 'processing']))
+                                {{-- 플레이스 주문 — 부스팅샵 API 로 바로 접수(2026-08-27). 전송값은 다음 화면에서 확인 --}}
+                                @if ($o->boosting_sent_count)
+                                    <span class="text-success font-semibold" title="부스팅샵에 접수된 주문입니다">부스팅샵 접수됨</span>
+                                @else
+                                    <a href="{{ route('admin.orders.boosting-shop', $o) }}" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">부스팅샵 주문</a>
+                                @endif
                             @else
                                 <span class="text-muted-soft">—</span>
                             @endif

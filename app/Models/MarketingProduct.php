@@ -17,6 +17,7 @@ class MarketingProduct extends Model
         'quantity_mode', 'min_daily_quantity', 'field_render_mode', 'default_fulfillment',
         'daily_cutoff_hour', 'process_weekends', 'process_holidays', 'processing_lag_days',
         'order_token', 'is_active', 'sort_order', 'created_by',
+        'boosting_product_no',   // 부스팅샵 플레이스 주문 상품번호(마지막 전송값 기억, 2026-08-27)
     ];
 
     protected $casts = [
@@ -27,7 +28,7 @@ class MarketingProduct extends Model
         'fixed_quantity' => 'integer', 'fixed_days' => 'integer',
         'min_daily_quantity' => 'integer', 'daily_cutoff_hour' => 'integer', 'processing_lag_days' => 'integer',
         'process_weekends' => 'boolean', 'process_holidays' => 'boolean', 'is_active' => 'boolean',
-        'sort_order' => 'integer',
+        'sort_order' => 'integer', 'boosting_product_no' => 'integer',
     ];
 
     protected static function booted(): void

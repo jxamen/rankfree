@@ -352,4 +352,17 @@ return [
     'place_coords' => [
         'schedule_enabled' => (bool) env('PLACE_COORDS_SCHEDULE_ENABLED', true),
     ],
+    /*
+    |--------------------------------------------------------------------------
+    | 부스팅샵 플레이스 주문 API (2026-08-27)
+    |--------------------------------------------------------------------------
+    | 관리자 주문 관리에서 플레이스 주문을 부스팅샵으로 바로 접수한다.
+    | 문서: https://boostings.shop/api/docs/place — form 전송, HTTP 는 항상 200이고
+    | 성공 여부는 응답 body 의 result(success|fail) 로 판정한다.
+    | API 키는 시크릿 — .env BOOSTINGSHOP_API_KEY (마이페이지 > API 키관리에서 발급).
+    */
+    'boosting_shop' => [
+        'base_url' => rtrim(env('BOOSTINGSHOP_BASE_URL', 'https://boostings.shop'), '/'),
+        'api_key' => env('BOOSTINGSHOP_API_KEY', ''),
+    ],
 ];
