@@ -565,6 +565,7 @@ class MarketingOrderController extends Controller
             'order' => $order,
             'draft' => $this->boostingShopDraft($order),
             'configured' => $client->configured(),
+            'products' => \App\Domain\Order\BoostingShopClient::PLACE_PRODUCTS,   // 상품번호 셀렉트(유입/저장 × 등급)
             'sentDispatch' => $order->dispatches()
                 ->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->latest('id')->first(),
         ]);
@@ -661,6 +662,47 @@ class MarketingOrderController extends Controller
     }
 
     /**
+     * 유입 키워드 자동 추천(2026-08-27) — 플레이스명 · 주소의 지역명 · 업종을 섞어 후보를 만들고
+     * **네이버 통합검색에 이 플레이스가 실제로 노출되는 키워드만** 골라 돌려준다.
+     * 화면의 [키워드 자동 추천] 버튼이 호출한다(후보 수만큼 검색을 도느라 십수 초 걸릴 수 있다).
+     */
+    public function boostingShopKeywords(
+        Request $request,
+        MarketingOrder $order,
+        \App\Domain\Place\PlaceProfileFetcher $fetcher,
+        \App\Domain\Place\PlaceKeywordSuggester $suggester,
+    ) {
+        $link = trim((string) $request->input('link', '')) ?: trim((string) ($order->field_values['place_url'] ?? ''));
+        $pid = \App\Domain\Place\PlaceProfileFetcher::placeIdFromUrl($link);
+        if ($pid === '') {
+            return response()->json(['ok' => false, 'message' => '플레이스 주소에서 고유번호를 찾지 못했습니다 — 주소를 확인해 주세요.'], 422);
+        }
+
+        @set_time_limit(180);   // 후보 수만큼 통합검색을 도느라 기본 실행시간을 넘길 수 있다
+
+        $profile = $fetcher->fetch($pid);
+        // 지금 화면에 들어 있는 키워드도 함께 검사한다 — 주문에 적힌 키워드가 실제로는 노출되지 않는 경우가 많다
+        $extra = collect(preg_split('/[\r\n,]+/', (string) $request->input('current', '')))
+            ->map(fn ($k) => trim((string) $k))->filter()->unique()->take(6)->values()->all();
+
+        $result = $suggester->suggest($profile, $extra);
+
+        return response()->json([
+            'ok' => true,
+            'profile' => ['name' => $profile['name'], 'category' => $profile['category'], 'address' => $profile['address']],
+        ] + $result);
+    }
+
+    /** 주문 상품이 '저장' 계열이면 저장 베이직, 아니면 유입 베이직 — 등급은 확인 화면에서 고른다. */
+    private function defaultBoostingProductNo(MarketingOrder $order): int
+    {
+        $title = (string) ($order->product?->title ?? '');
+        $key = str_contains($title, '저장') ? 'save' : 'traffic';
+
+        return (int) array_key_first(\App\Domain\Order\BoostingShopClient::PLACE_PRODUCTS[$key]['grades']);
+    }
+
+    /**
      * 부스팅샵 전송값 초안 — 주문 입력값(field_values)에서 뽑을 수 있는 항목을 미리 채운다.
      * 플레이스 상품은 keyword·place_url·daily_qty·start_date·end_date 가 표준 키라 그것을 먼저 보고,
      * 상호명·전화·스마트콜처럼 표준 키가 없는 값은 필드 라벨로 찾는다.
@@ -707,18 +749,22 @@ class MarketingOrderController extends Controller
             $inflow = collect([$keyword]);          // 유입 키워드 필드가 없는 상품은 순위체크 키워드로 시작
         }
 
+        // 상호명·전화는 rankfree 주문 폼에 없는 값 — 플레이스에서 자동으로 수집해 채운다(2026-08-27)
+        $profile = $pid !== '' ? app(\App\Domain\Place\PlaceProfileFetcher::class)->fetch($pid) : [];
+
         return [
-            'product_no' => $order->product?->boosting_product_no,
+            'product_no' => $order->product?->boosting_product_no ?: $this->defaultBoostingProductNo($order),
             'link' => $link,
             'pid' => $pid,
-            'product_name' => $byLabel(['상호', '업체명', '업체', 'place_name', 'shop_name', 'store_name']),
+            'product_name' => $byLabel(['상호', '업체명', '업체', 'place_name', 'shop_name', 'store_name']) ?: (string) ($profile['name'] ?? ''),
             'keyword' => $keyword,
             'search_keywords' => $inflow->implode("\n"),
             'day_quantity' => (int) ($fv['daily_qty'] ?? 0) ?: $order->quantity,
             'fr_date' => trim((string) ($fv['start_date'] ?? '')),
             'to_date' => trim((string) ($fv['end_date'] ?? '')),
             'smartcall_url' => $byLabel(['스마트콜', 'smartcall']),
-            'place_tel' => $byLabel(['전화', '연락처', 'tel', 'phone']),
+            'place_tel' => $byLabel(['전화', '연락처', 'tel', 'phone']) ?: (string) ($profile['phone'] ?? ''),
+            'profile' => $profile,                                   // 화면 표기용(업종·주소) · 키워드 추천 근거
             'image_url' => '',
             'keyword2' => '',
             'keyword3' => '',

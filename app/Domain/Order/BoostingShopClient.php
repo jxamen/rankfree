@@ -14,6 +14,20 @@ use Illuminate\Support\Facades\Http;
  */
 class BoostingShopClient
 {
+    /**
+     * 부스팅샵 플레이스 상품(문서 /api/docs/place) — **product_no 하나로 유입/저장과 등급이 모두 결정**된다.
+     * 별도 서비스 구분값을 보내지 않으므로, 주문 상품이 유입인지 저장인지에 따라 이 표에서 고른다.
+     *
+     * @var array<string, array{label: string, grades: array<int, string>}>
+     */
+    public const PLACE_PRODUCTS = [
+        'traffic' => ['label' => '플레이스 유입', 'grades' => [47 => '베이직', 48 => '프로', 49 => '엘리트', 50 => '프리미엄']],
+        'save' => ['label' => '플레이스 저장', 'grades' => [52 => '베이직', 53 => '프로', 54 => '엘리트', 56 => '프리미엄2']],
+    ];
+
+    /** 프리미엄(50)은 smartcall_url 필수 — 화면 안내·검증에서 참조. */
+    public const SMARTCALL_REQUIRED = [50];
+
     /** API 키가 설정돼 있는지 — 미설정이면 버튼을 눌러도 전송하지 않는다. */
     public function configured(): bool
     {

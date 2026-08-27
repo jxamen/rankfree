@@ -8,6 +8,7 @@ use App\Models\OrderDispatch;
 use App\Models\ProductField;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -40,6 +41,12 @@ class BoostingShopOrderTest extends TestCase
             ProductField::create(['product_id' => $this->product->id, 'field_key' => $key, 'field_type' => 'TEXT',
                 'label' => $label, 'is_required' => true, 'sort_order' => $i, 'is_active' => true]);
         }
+
+        // 플레이스 자동 수집(PlaceProfileFetcher)이 실제 네이버를 조회하지 않도록 캐시를 미리 채운다
+        Cache::put('place:profile:1011101134', [
+            'place_id' => '1011101134', 'name' => '테디케이짐 헬스 PT 풍동점', 'category' => '헬스장',
+            'address' => '경기 고양시 일산동구 풍동 1234', 'road_address' => '', 'phone' => '0507-1483-6336',
+        ], now()->addDay());
     }
 
     private function makeOrder(array $overrides = [], string $status = 'pending'): MarketingOrder
@@ -81,6 +88,72 @@ class BoostingShopOrderTest extends TestCase
             'result' => 'success', 'order_no' => 54890, 'status' => 'waiting',
             'day_quantity' => 20, 'total_quantity' => 60, 'ads_period' => 3, 'balance' => 4100000,
         ], 200)]);
+    }
+
+    public function test_form_autofills_shop_name_phone_and_product_no(): void
+    {
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('테디케이짐 헬스 PT 풍동점', false)      // 플레이스에서 자동 수집한 상호명
+            ->assertSee('0507-1483-6336', false)                // 전화도 자동 수집
+            ->assertSee('헬스장')                                // 수집 정보(업종) 표기 — 키워드 추천 재료
+            ->assertSee('value="47" selected', false);          // 유입 상품 기본 선택(베이직)
+    }
+
+    public function test_save_product_defaults_to_save_product_no(): void
+    {
+        $this->product->update(['title' => '네이버 플레이스 저장']);
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('value="52" selected', false);          // 저장 계열 베이직
+    }
+
+    public function test_remembered_product_no_wins_over_default(): void
+    {
+        $this->product->update(['boosting_product_no' => 49]);
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('value="49" selected', false);          // 지난 주문에서 고른 등급(엘리트)을 기억
+    }
+
+    public function test_keyword_suggestion_returns_only_exposed_keywords(): void
+    {
+        $order = $this->makeOrder();
+        $profile = app(\App\Domain\Place\PlaceProfileFetcher::class)->fetch('1011101134');
+        $candidates = app(\App\Domain\Place\PlaceKeywordSuggester::class)->candidates($profile);
+        $this->assertNotEmpty($candidates);
+
+        // 통합검색 판정 캐시를 미리 채워 네트워크 없이 결과를 통제한다(앞 2개만 노출)
+        foreach ($candidates as $i => $kw) {
+            Cache::put('place:serp:1011101134:'.md5($kw), $i < 2, now()->addHour());
+        }
+        Cache::put('place:serp:1011101134:'.md5('풍동헬스'), false, now()->addHour());
+
+        $res = $this->actingAs($this->admin)->postJson(route('admin.orders.boosting-shop.keywords', $order), [
+            'link' => 'https://m.place.naver.com/place/1011101134/home',
+            'current' => '풍동헬스',
+        ]);
+
+        $res->assertOk()->assertJson(['ok' => true]);
+        $this->assertSame(array_slice($candidates, 0, 2), $res->json('exposed'));
+        // 주문에 적힌 키워드가 실제로는 노출되지 않는다는 사실도 함께 알려준다
+        $this->assertContains('풍동헬스', $res->json('missed'));
+    }
+
+    public function test_keyword_suggestion_rejects_url_without_place_id(): void
+    {
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)
+            ->postJson(route('admin.orders.boosting-shop.keywords', $order), ['link' => 'https://example.com/none'])
+            ->assertStatus(422)
+            ->assertJson(['ok' => false]);
     }
 
     public function test_detail_page_shows_boosting_button_and_list_does_not(): void

@@ -5,6 +5,7 @@
 @php
     // 전송값 초안 — 다시 그릴 때(검증 실패)는 방금 입력한 값을 우선한다
     $v = fn ($k) => old($k, $draft[$k] ?? '');
+    $profile = $draft['profile'] ?? [];
 @endphp
 <x-console.page-head title="부스팅샵 주문"
     desc="주문 {{ $order->order_no }} 을(를) 부스팅샵 플레이스 주문으로 접수합니다 · 전송값을 확인·보완한 뒤 보내세요" />
@@ -37,13 +38,23 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="flex flex-col gap-1">
-                <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">부스팅샵 상품번호 <span style="color:var(--color-error);">*</span></span>
-                <input name="product_no" value="{{ $v('product_no') }}" required inputmode="numeric" class="input font-mono" style="font-size:var(--fs-xs);">
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">47~50 유입 · 52~56 저장 (프리미엄 50은 스마트콜 URL 필수)</span>
+                <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">부스팅샵 상품 <span style="color:var(--color-error);">*</span></span>
+                {{-- product_no 하나로 유입/저장과 등급이 모두 결정된다(부스팅샵 문서) — 주문 상품에 맞춰 자동 선택 --}}
+                <select name="product_no" required class="input" style="font-size:var(--fs-xs);">
+                    @foreach ($products as $svc)
+                        <optgroup label="{{ $svc['label'] }}">
+                            @foreach ($svc['grades'] as $no => $grade)
+                                <option value="{{ $no }}" {{ (string) $v('product_no') === (string) $no ? 'selected' : '' }}>{{ $svc['label'] }} · {{ $grade }} ({{ $no }})</option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">주문 상품에 맞춰 자동 선택 — 등급이 다르면 바꾸세요 (프리미엄은 스마트콜 URL 필수)</span>
             </label>
             <label class="flex flex-col gap-1">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">상호명 <span style="color:var(--color-error);">*</span></span>
                 <input name="product_name" value="{{ $v('product_name') }}" required class="input" style="font-size:var(--fs-xs);" placeholder="플레이스에 등록된 업체명">
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ ($profile['name'] ?? '') !== '' ? '플레이스에서 자동 수집됨' : '플레이스에서 자동 수집하지 못했습니다 — 직접 입력하세요' }}</span>
             </label>
         </div>
 
@@ -71,11 +82,16 @@
             </label>
         </div>
 
-        <label class="flex flex-col gap-1">
-            <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">유입 키워드 <span style="color:var(--color-error);">*</span></span>
+        <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">유입 키워드 <span style="color:var(--color-error);">*</span></span>
+                {{-- 플레이스명·지역·업종 조합 중 통합검색에 실제로 노출되는 키워드만 골라 채운다(2026-08-27) --}}
+                <button type="button" id="kw-suggest" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">키워드 자동 추천</button>
+            </div>
             <textarea name="search_keywords" rows="5" required class="input" style="font-size:var(--fs-xs);line-height:1.6;">{{ $v('search_keywords') }}</textarea>
-            <span class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다</span>
-        </label>
+            <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>네이버 통합검색에 이 업체가 실제로 나오는 키워드만</b> 골라 채웁니다.</span>
+            <div id="kw-missed" class="text-muted-soft" style="font-size:var(--fs-xs);display:none;"></div>
+        </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="flex flex-col gap-1">
@@ -95,7 +111,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label class="flex flex-col gap-1">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">스마트콜 URL</span>
-                <input name="smartcall_url" value="{{ $v('smartcall_url') }}" type="url" class="input" style="font-size:var(--fs-xs);" placeholder="프리미엄(50) 상품 필수">
+                <input name="smartcall_url" value="{{ $v('smartcall_url') }}" type="url" class="input" style="font-size:var(--fs-xs);" placeholder="프리미엄 상품 필수">
             </label>
             <label class="flex flex-col gap-1">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">업체 전화번호</span>
@@ -113,7 +129,7 @@
         </div>
     </form>
 
-    {{-- 주문 원본 — 전송값이 주문과 맞는지 눈으로 대조 --}}
+    {{-- 주문 원본 + 플레이스 수집 정보 — 전송값이 실제 업체와 맞는지 눈으로 대조 --}}
     <div class="card p-6 flex flex-col gap-3" style="height:fit-content;">
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">주문 정보</div>
         <div class="flex flex-col gap-2" style="font-size:var(--fs-xs);">
@@ -125,6 +141,23 @@
                 <span class="text-ink font-mono">{{ number_format($order->quantity) }}@if ($order->days) × {{ $order->days }}일 @endif</span></div>
             <div class="flex justify-between gap-2"><span class="text-muted">상태</span><span class="text-ink">{{ \App\Models\MarketingOrder::STATUSES[$order->status] ?? $order->status }}</span></div>
         </div>
+
+        @if (($profile['name'] ?? '') !== '')
+            <div class="text-muted font-semibold mt-2" style="font-size:var(--fs-xs);border-top:1px solid var(--color-hairline-soft);padding-top:10px;">플레이스 수집 정보</div>
+            <div class="flex flex-col gap-2" style="font-size:var(--fs-xs);">
+                <div class="flex justify-between gap-3"><span class="text-muted">상호명</span><span class="text-ink text-right">{{ $profile['name'] }}</span></div>
+                @if (($profile['category'] ?? '') !== '')
+                    <div class="flex justify-between gap-3"><span class="text-muted">업종</span><span class="text-ink text-right">{{ $profile['category'] }}</span></div>
+                @endif
+                @if (($profile['address'] ?? '') !== '')
+                    <div class="flex justify-between gap-3"><span class="text-muted">주소</span><span class="text-ink text-right" style="word-break:break-all;">{{ $profile['address'] }}</span></div>
+                @endif
+                @if (($profile['phone'] ?? '') !== '')
+                    <div class="flex justify-between gap-3"><span class="text-muted">전화</span><span class="text-ink text-right font-mono">{{ $profile['phone'] }}</span></div>
+                @endif
+            </div>
+            <p class="text-muted-soft" style="font-size:var(--fs-xs);">상호명·전화는 플레이스에서 자동으로 가져왔습니다. 업종·주소는 <b class="text-muted">유입 키워드 추천</b>의 재료입니다.</p>
+        @endif
 
         @if ($order->product?->fields->isNotEmpty())
             <div class="text-muted font-semibold mt-2" style="font-size:var(--fs-xs);border-top:1px solid var(--color-hairline-soft);padding-top:10px;">주문 입력값</div>
@@ -146,3 +179,53 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.getElementById('kw-suggest')?.addEventListener('click', async function () {
+    const btn = this;
+    const ta = document.querySelector('[name="search_keywords"]');
+    const status = document.getElementById('kw-status');
+    const missed = document.getElementById('kw-missed');
+    const label = btn.textContent;
+
+    btn.disabled = true;
+    btn.textContent = '검색 확인 중…';
+    status.textContent = '네이버 통합검색에서 노출 여부를 확인하는 중입니다 — 후보가 많으면 십수 초 걸립니다.';
+    missed.style.display = 'none';
+
+    try {
+        const res = await fetch(@json(route('admin.orders.boosting-shop.keywords', $order)), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
+            },
+            body: JSON.stringify({
+                link: document.querySelector('[name="link"]').value,
+                current: ta.value,
+            }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.ok) throw new Error(d.message || '추천에 실패했습니다.');
+
+        if (d.exposed.length) {
+            ta.value = d.exposed.join('\n');
+            status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 통합검색에 노출됩니다 — 노출되는 키워드만 채웠습니다.';
+        } else {
+            status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 통합검색에 노출되는 키워드가 없었습니다 — 직접 입력하세요.';
+        }
+        if (d.missed.length) {
+            missed.textContent = '노출 안 됨(제외): ' + d.missed.join(', ');
+            missed.style.display = '';
+        }
+    } catch (e) {
+        status.textContent = '오류: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
+});
+</script>
+@endpush

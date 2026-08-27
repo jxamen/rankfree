@@ -92,11 +92,15 @@
   - **HTTP 는 항상 200**, 성공 여부는 body 의 `result`(success|fail)로 판정 — `$res->successful()` 로는 실패를 못 잡는다
   - 인증이 헤더가 아니라 **폼 파라미터 `key`**(시크릿)
 - **시크릿**: `.env BOOSTINGSHOP_API_KEY`(config `rankfree.boosting_shop`, 운영 배포 시 `config:cache` 필수). 키는 [BoostingShopClient](../app/Domain/Order/BoostingShopClient.php)가 호출 시점에 붙이므로 **발주 payload 에 남지 않는다**.
-- **부스팅샵 상품번호**(47~50 유입 · 52~56 저장 · 프리미엄 50은 `smartcall_url` 필수)는 rankfree 주문에 없는 값이라 확인 화면에서 입력받고, 성공 시 `marketing_products.boosting_product_no` 에 기억해 **다음 주문부터 자동으로 채운다**.
-- **자동 채움**(`boostingShopDraft`): link(`place_url`)·pid(URL 에서 추출)·keyword·유입 키워드(라벨/키에 '유입' 이 든 필드 전부)·day_quantity(`daily_qty`)·fr_date(`start_date`)·to_date(`end_date`). 상호명·전화·스마트콜은 표준 키가 없어 **필드 라벨로 탐색**하고, 못 찾으면 운영자가 확인 화면에서 채운다(상호명은 필수).
+- **상품번호 자동 선택(2026-08-27)** — `product_no` **하나로 유입/저장과 등급이 모두 결정**된다(부스팅샵 문서). 표는 [BoostingShopClient::PLACE_PRODUCTS](../app/Domain/Order/BoostingShopClient.php): 유입 47 베이직·48 프로·49 엘리트·50 프리미엄 / 저장 52 베이직·53 프로·54 엘리트·56 프리미엄2. 확인 화면은 **셀렉트**로 보여주고, 기본값은 `상품에 기억된 값 → 주문 상품명에 '저장'이 있으면 52, 아니면 47` 순으로 정한다. 고른 값은 `marketing_products.boosting_product_no` 에 저장돼 다음 주문에 쓰인다.
+- **상호명·전화 자동 수집(2026-08-27)** — rankfree 주문 폼에 없는 값이라 [PlaceProfileFetcher](../app/Domain/Place/PlaceProfileFetcher.php) 가 플레이스 URL 의 pid 로 **m.place SSR HTML 1회 조회**(nCaptcha 불필요, 하루 캐시)해 상호명·업종·주소·전화를 가져온다. 상호명·전화는 입력값에 자동으로 채우고, **업종·주소는 유입 키워드 추천의 재료**로 화면에 함께 표기한다. 수집 실패 시엔 안내 문구를 띄우고 수동 입력.
+- **유입 키워드 자동 추천(2026-08-27)** — [PlaceKeywordSuggester](../app/Domain/Place/PlaceKeywordSuggester.php). 상호명·지역(시/구/동, 동은 '초량동→초량' 로 접미 제거)·업종을 섞어 후보를 만들고(`{지역}{업종}`·`{지역}{업종}추천`·`{상호}`·`{지역}{상호}` 등, 상한 16개), **모바일 통합검색 HTML 에 그 placeId 가 나오는 키워드만** 채택한다(6시간 캐시 · 요청 간 0.3초). 화면 [키워드 자동 추천] 버튼(`POST admin/orders/{order}/boosting-shop/keywords`)이 호출하고, 지금 입력돼 있는 키워드도 함께 검사해 **미노출 목록으로 알려준다**.
+  - 판정에 상호명이 아니라 **placeId** 를 쓰는 이유: 동명 업체가 있어 상호명만으로는 다른 업체의 노출을 우리 것으로 오인한다.
+  - 실제 사례(단장헤어·부산 동구 초량동): 주문에 적혀 있던 `초량미용실` 은 **통합검색에 노출되지 않았고**, `부산동구미용실`·`초량미용실추천`·`단장헤어` 등 6개만 노출됐다. 검색에 안 나오는 키워드로 유입 미션을 걸면 참여자가 업체를 찾을 수 없어, 이 확인이 주문 품질을 좌우한다.
+- **자동 채움**(`boostingShopDraft`): link(`place_url`)·pid(URL 에서 추출)·keyword·유입 키워드(라벨/키에 '유입' 이 든 필드 전부)·day_quantity(`daily_qty`)·fr_date(`start_date`)·to_date(`end_date`). 스마트콜은 표준 키가 없어 **필드 라벨로 탐색**한다. 상호명·전화는 라벨 탐색 후 비면 **플레이스에서 자동 수집**(아래).
 - **중복 접수 차단**: 전송 성공(sent) 기록이 있으면 재접수 불가 — 주문 상세 [외부 발주 현황]에서 취소해야 다시 넣는다(기존 발주와 같은 규칙). **실패 건은 [재전송] 대신 [다시 주문]** — vendors 설정이 없어 `retry()`(sendApi)로는 보낼 수 없기 때문.
 - 성공하면 주문이 접수 → **진행중**으로 넘어간다(진행중 전환 시 순위추적 자동 등록도 기존대로 동작).
-- **검증**: [BoostingShopOrderTest](../tests/Feature/BoostingShopOrderTest.php) 8건(성공·result:fail·중복 차단·키워드 30개 초과·API 키 미설정·검증) + Playwright 실동작(목록 버튼 → 확인 화면 자동 채움 → **실제 API 왕복**). 실 왕복은 과거 시작일로 보내 부스팅샵이 `fr_date 는 오늘 이후로 설정해 주세요` 로 거부하게 해 **주문 접수·적립금 차감 없이** 인증·파라미터 수용을 확인했다.
+- **검증**: [BoostingShopOrderTest](../tests/Feature/BoostingShopOrderTest.php) 14건(성공·result:fail·중복 차단·키워드 30개 초과·API 키 미설정·검증 + 상호명/전화/상품번호 자동 채움·저장 상품 기본값·기억값 우선·키워드 추천) + Playwright 실동작(상세 버튼 → 확인 화면 자동 채움 → 키워드 자동 추천(실제 통합검색) → **실제 API 왕복**). 실 왕복은 과거 시작일로 보내 부스팅샵이 `fr_date 는 오늘 이후로 설정해 주세요` 로 거부하게 해 **주문 접수·적립금 차감 없이** 인증·파라미터 수용을 확인했다.
 
 ## 주의
 
