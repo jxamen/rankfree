@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * 부스팅샵 플레이스 주문(2026-08-27) — 주문 목록 [부스팅샵 주문] → 전송값 확인 → /api/order/place 접수.
+ * 부스팅샵 플레이스 주문(2026-08-27) — 주문 상세 [부스팅샵 주문] → 전송값 확인 → /api/order/place 접수.
  * HTTP 는 항상 200이고 성공 여부는 body 의 result 로 판정한다는 점이 이 연동의 핵심.
  */
 class BoostingShopOrderTest extends TestCase
@@ -83,14 +83,31 @@ class BoostingShopOrderTest extends TestCase
         ], 200)]);
     }
 
-    public function test_place_order_button_shows_for_place_orders(): void
+    public function test_detail_page_shows_boosting_button_and_list_does_not(): void
     {
         $order = $this->makeOrder();
 
-        $this->actingAs($this->admin)->get(route('admin.orders'))
+        // 버튼은 주문 상세에만(2026-08-27 사용자 확정 — 목록에서 상세로 옮김)
+        $this->actingAs($this->admin)->get(route('admin.orders.show', $order))
             ->assertOk()
             ->assertSee('부스팅샵 주문')
             ->assertSee(route('admin.orders.boosting-shop', $order), false);
+
+        $this->actingAs($this->admin)->get(route('admin.orders'))
+            ->assertOk()
+            ->assertDontSee('부스팅샵 주문');
+    }
+
+    public function test_detail_shows_received_badge_after_success(): void
+    {
+        $this->fakeSuccess();
+        $order = $this->makeOrder();
+        $this->actingAs($this->admin)->post(route('admin.orders.boosting-shop.place', $order), $this->payload());
+
+        $this->actingAs($this->admin)->get(route('admin.orders.show', $order))
+            ->assertOk()
+            ->assertSee('부스팅샵 접수됨')
+            ->assertDontSee(route('admin.orders.boosting-shop', $order), false);
     }
 
     public function test_form_prefills_values_from_order(): void
@@ -114,7 +131,7 @@ class BoostingShopOrderTest extends TestCase
 
         $res = $this->actingAs($this->admin)->post(route('admin.orders.boosting-shop.place', $order), $this->payload());
 
-        $res->assertRedirect(route('admin.orders'));
+        $res->assertRedirect(route('admin.orders.show', $order));
         $this->assertStringContainsString('54890', session('status'));
 
         // 전송 파라미터 — 유입 키워드는 배열, 인증 키는 요청에만 붙는다
@@ -172,7 +189,7 @@ class BoostingShopOrderTest extends TestCase
         // 발주를 취소하면 다시 넣을 수 있다(기존 발주 흐름과 동일한 규칙)
         OrderDispatch::where('order_id', $order->id)->update(['status' => 'canceled']);
         $this->actingAs($this->admin)->post(route('admin.orders.boosting-shop.place', $order), $this->payload())
-            ->assertRedirect(route('admin.orders'));
+            ->assertRedirect(route('admin.orders.show', $order));
         $this->assertSame(2, OrderDispatch::where('order_id', $order->id)->count());
     }
 

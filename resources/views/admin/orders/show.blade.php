@@ -2,6 +2,14 @@
 @section('page-title', '주문 상세')
 
 @section('page-actions')
+    {{-- 부스팅샵 주문(2026-08-27) — 플레이스 주문을 부스팅샵 API 로 바로 접수. 전송값은 확인 화면에서 --}}
+    @if ($order->placeSource() && in_array($order->status, ['pending', 'processing'], true))
+        @if ($order->dispatches->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->isNotEmpty())
+            <span class="badge" style="font-size:var(--fs-xs);padding:3px 12px;color:var(--color-success);" title="부스팅샵에 접수된 주문입니다 — 다시 넣으려면 아래 외부 발주 현황에서 취소하세요">부스팅샵 접수됨</span>
+        @else
+            <a href="{{ route('admin.orders.boosting-shop', $order) }}" class="btn btn-secondary btn-sm">부스팅샵 주문</a>
+        @endif
+    @endif
     <a href="{{ route('admin.orders') }}" class="btn btn-secondary btn-sm">← 목록</a>
 @endsection
 

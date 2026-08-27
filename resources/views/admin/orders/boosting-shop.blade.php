@@ -108,7 +108,7 @@
         </div>
 
         <div class="flex items-center gap-2 justify-end" style="border-top:1px solid var(--color-hairline-soft);padding-top:14px;">
-            <a href="{{ route('admin.orders') }}" class="btn btn-ghost btn-sm">취소</a>
+            <a href="{{ route('admin.orders.show', $order) }}" class="btn btn-ghost btn-sm">취소</a>
             <button type="submit" class="btn btn-primary btn-sm" @disabled(! $configured)>부스팅샵으로 주문</button>
         </div>
     </form>

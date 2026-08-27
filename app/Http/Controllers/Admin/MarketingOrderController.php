@@ -16,11 +16,7 @@ class MarketingOrderController extends Controller
             // 유입키워드 연결 + 수집 정보(상점명·가격·상품ID) 표시용
             ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,product_url,mall_name,product_price,exposed_count,status')
             // 발주 취소 버튼 노출용 — 활성(미취소) 발주 수
-            ->withCount([
-                'dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled'),
-                // 부스팅샵 접수 여부(2026-08-27) — 접수된 주문은 목록에서 버튼 대신 '부스팅샵 접수됨' 으로 표기
-                'dispatches as boosting_sent_count' => fn ($q) => $q->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent'),
-            ])
+            ->withCount(['dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled')])
             ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {
@@ -658,7 +654,7 @@ class MarketingOrderController extends Controller
             $order->update(['status' => 'processing']);
         }
 
-        return redirect()->route('admin.orders')->with('status',
+        return redirect()->route('admin.orders.show', $order)->with('status',
             "주문 {$order->order_no} 을(를) 부스팅샵으로 접수했습니다 — 부스팅샵 주문번호 {$result['order_no']}"
             .(isset($body['total_quantity']) ? " · 총 {$body['total_quantity']}건" : '')
             .' (발주 기록 #'.$dispatch->id.')');
@@ -749,6 +745,6 @@ class MarketingOrderController extends Controller
         $order->restoreCoupon();   // 삭제 주문에 묶인 쿠폰은 되돌려준다
         $order->delete();
 
-        return redirect()->route('admin.orders')->with('status', "주문 {$no} 을(를) 삭제했습니다.");
+        return redirect()->route('admin.orders.show', $order)->with('status', "주문 {$no} 을(를) 삭제했습니다.");
     }
 }

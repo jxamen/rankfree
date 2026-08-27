@@ -85,8 +85,8 @@
 
 > 플레이스 주문을 **업체 배분(vendors)을 거치지 않고 부스팅샵 API 로 바로 접수**한다. 문서: https://boostings.shop/api/docs/place
 
-- **진입점**: `/admin/orders` 목록의 플레이스 주문 행 **[부스팅샵 주문]**(접수·진행중 상태만 · `placeSource()` 로 플레이스 주문 판정). 쇼핑 유입 주문의 [주문넣기]와 같은 열을 쓴다(둘은 배타적).
-- **흐름**: 목록 버튼 → `GET admin/orders/{order}/boosting-shop`(전송값 확인 화면, 주문 입력값에서 자동 채움) → `POST` 같은 경로 → 부스팅샵 `POST /api/order/place` → 결과를 `order_dispatches`(**vendor_id=null, vendor_name=`부스팅샵`**)에 기록.
+- **진입점**: **주문 상세**(`/admin/orders/{id}`) 우측 상단 **[부스팅샵 주문]** — 접수·진행중인 플레이스 주문만(`placeSource()` 로 판정). 접수되면 같은 자리가 `부스팅샵 접수됨` 배지로 바뀐다. (2026-08-27 사용자 확정 — 처음엔 목록에 뒀다가 **상세로 옮김**. 목록에는 버튼을 두지 않는다)
+- **흐름**: 상세 버튼 → `GET admin/orders/{order}/boosting-shop`(전송값 확인 화면, 주문 입력값에서 자동 채움) → `POST` 같은 경로 → 부스팅샵 `POST /api/order/place` → 결과를 `order_dispatches`(**vendor_id=null, vendor_name=`부스팅샵`**)에 기록하고 **주문 상세로 복귀**.
 - **API 특성** — 일반 벤더 API 채널로는 못 태우는 이유:
   - form 전송이고 유입 키워드가 **`search_keywords[]` 배열(1~30개)**
   - **HTTP 는 항상 200**, 성공 여부는 body 의 `result`(success|fail)로 판정 — `$res->successful()` 로는 실패를 못 잡는다
