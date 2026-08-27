@@ -92,7 +92,7 @@
                 <button type="button" id="kw-suggest" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">키워드 자동 추천</button>
             </div>
             <textarea name="search_keywords" required class="input" style="font-size:var(--fs-xs);line-height:1.6;height:150px;">{{ $v('search_keywords') }}</textarea>
-            <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>플레이스 순위에 실제로 잡히는 키워드만</b>(상위 50위 이내) 순위와 함께 골라 채웁니다.</span>
+            <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>실제 검색 화면의 플레이스 영역에 뜨는 키워드만</b>(더보기 포함 · 상위 20위) 노출 순위와 함께 골라 채웁니다.</span>
             <div id="kw-missed" class="text-muted-soft" style="font-size:var(--fs-xs);display:none;"></div>
         </div>
 
@@ -194,7 +194,7 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
 
     btn.disabled = true;
     btn.textContent = '순위 확인 중…';
-    status.textContent = '키워드마다 플레이스 순위를 조회하는 중입니다 — 후보가 많으면 30초 안팎 걸립니다.';
+    status.textContent = '실제 검색 화면에서 플레이스 노출 순위를 확인하는 중입니다 — 1~2분 걸릴 수 있습니다.';
     missed.style.display = 'none';
 
     try {
@@ -213,20 +213,20 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
         const d = await res.json();
         if (!res.ok || !d.ok) throw new Error(d.message || '추천에 실패했습니다.');
 
-        if (d.blocked) {
-            status.textContent = '순위 조회가 차단되었습니다(nCaptcha 토큰 만료·IP 차단) — 잠시 뒤 다시 시도하세요. 확인된 것까지만 채웠습니다.';
+        if (d.failed) {
+            status.textContent = '순위 확인에 실패했습니다(수집 브라우저가 이미 사용 중이거나 오류) — 잠시 뒤 다시 시도하세요. 확인된 것까지만 채웠습니다.';
         }
         if (d.exposed.length) {
             ta.value = d.exposed.map(function (x) { return x.keyword; }).join('\n');
-            if (!d.blocked) {
+            if (!d.failed) {
                 const ranks = d.exposed.map(function (x) { return x.keyword + ' ' + x.rank + '위'; }).join(' · ');
-                status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 플레이스 순위에 잡혔습니다 — ' + ranks;
+                status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 플레이스 영역에 노출됩니다 — ' + ranks;
             }
-        } else if (!d.blocked) {
-            status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 상위 50위 안에 잡히는 키워드가 없었습니다 — 직접 입력하세요.';
+        } else if (!d.failed) {
+            status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 플레이스 영역에 뜨는 키워드가 없었습니다 — 직접 입력하세요.';
         }
         if (d.missed.length) {
-            missed.textContent = '순위에 없음(제외): ' + d.missed.join(', ');
+            missed.textContent = '플레이스 영역에 없음(제외): ' + d.missed.join(', ');
             missed.style.display = '';
         }
     } catch (e) {

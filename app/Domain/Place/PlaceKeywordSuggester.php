@@ -3,101 +3,182 @@
 namespace App\Domain\Place;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
+use Throwable;
 
 /**
  * 유입 키워드 추천(2026-08-27) — 플레이스명·주소(지역)·업종을 섞어 후보를 만들고,
- * **그 키워드로 플레이스 순위에 실제로 잡히는 키워드만** 골라낸다.
+ * **네이버 통합검색 플레이스 영역에 그 업체가 실제로 뜨는 키워드만** 순위와 함께 골라낸다.
  *
- * 부스팅샵 유입 미션은 참여자가 검색창에 키워드를 넣고 그 업체를 찾아 들어가는 방식이라,
+ * 부스팅샵 유입 미션은 참여자가 검색창에 키워드를 넣고 화면에서 업체를 찾아 들어가는 방식이라,
  * 검색해도 안 나오는 키워드를 넣으면 미션이 성립하지 않는다.
+ * 판정 기준(사용자 확정): **더보기를 눌러서 나오는 것까지 인정**, 상위 [RANK_LIMIT] 위까지 채택.
  *
- * ⚠️ 판정 방식(2026-08-27 개정) — 처음에는 통합검색 HTML 에 placeId 가 있는지로 판정했으나
- * **거짓 양성이었다**: 네이버 SERP 의 블로그 썸네일 데이터에 `"gdid":"blog_…","sid":"<placeId>"`
- * 형태로 같은 숫자가 실려 있어, 플레이스가 안 보이는 키워드도 노출로 잡혔다(사용자 수동 확인으로 발견).
- * 지금은 [PlaceRankChecker](PlaceRankChecker.php) 로 **실제 순위를 조회**해 잡히는 키워드만 채택하고
- * 순위를 함께 돌려준다(플레이스 순위추적과 같은 엔진 · nCaptcha 토큰 사용).
+ * ⚠️ 판정 방식 변천 — 앞의 둘은 틀려서 버렸다(같은 날 실측):
+ *  1. 통합검색 HTML 에 placeId 문자열이 있는지 → **거짓 양성**. 블로그 썸네일 데이터가
+ *     `"gdid":"blog_…","sid":"<placeId>"` 로 같은 숫자를 실어, 화면에 안 보이는 키워드도 노출로 잡혔다.
+ *  2. [PlaceRankChecker](PlaceRankChecker.php) 의 pcmap 순위 → **화면과 다르다**. 좌표를 업체 위치로 바꿔도
+ *     같은 값이 나왔고(서울/부산 모두 8위), 정작 화면에선 6번째였다. pcmap 8~18위여도 화면엔 아예 없는 키워드가 많다.
+ *  3. (현재) **브라우저로 실제 화면을 렌더링**해 플레이스 카드 순서를 센다 — HTML(curl)에는 첫 5개만 있고
+ *     "펼쳐서 더보기" 로 나오는 나머지는 JS 로 그려지므로 브라우저가 필요하다. [scripts/place-serp-rank.cjs](../../../scripts/place-serp-rank.cjs)
  */
 class PlaceKeywordSuggester
 {
-    /** 후보 검사 상한 — 키워드마다 순위조회를 돌리므로 무한정 늘리지 않는다. */
-    private const MAX_CANDIDATES = 14;
+    /** 후보 검사 상한 — 키워드마다 브라우저로 검색하므로 무한정 늘리지 않는다. */
+    private const MAX_CANDIDATES = 12;
 
-    /** 추천 채택 기준 순위 — 이보다 뒤면 참여자가 찾지 못해 유입 미션에 쓸 수 없다. */
-    private const RANK_LIMIT = 50;
-
-    public function __construct(private PlaceRankChecker $checker) {}
+    /** 채택 기준 순위(사용자 확정 2026-08-27) — 더보기까지 인정하되 이보다 뒤는 참여자가 못 찾는다. */
+    private const RANK_LIMIT = 20;
 
     /**
-     * 프로필 → 후보 생성 → 순위 확인.
+     * 프로필 → 후보 생성 → 통합검색 플레이스 영역 노출 순위 확인.
      *
      * @param  array{place_id:string, name:string, category:string, address:string, ...}  $profile
      * @param  list<string>  $extra  기존 주문 키워드 등 함께 확인할 키워드
-     * @return array{checked:int, blocked:bool, exposed:list<array{keyword:string,rank:int}>, missed:list<string>}
+     * @return array{checked:int, failed:bool, exposed:list<array{keyword:string,rank:int}>, missed:list<string>}
      */
     public function suggest(array $profile, array $extra = []): array
     {
-        $pid = (string) ($profile['place_id'] ?? '');
+        $pid = preg_replace('/\D/', '', (string) ($profile['place_id'] ?? ''));
         $candidates = array_slice(
             $this->dedupe(array_merge($extra, $this->candidates($profile))),
             0,
             self::MAX_CANDIDATES,
         );
         if ($pid === '' || ! $candidates) {
-            return ['checked' => 0, 'blocked' => false, 'exposed' => [], 'missed' => []];
+            return ['checked' => 0, 'failed' => false, 'exposed' => [], 'missed' => []];
         }
 
-        // 추천은 "이 키워드로 찾을 수 있나"만 보면 되므로 1페이지(50위)까지만 — 순위추적 기본값(6페이지)은 너무 느리다
-        config(['rankfree.place.max_pages' => 1, 'rankfree.place.page_delay' => 0]);
+        // 캐시에 있는 건 재사용하고, 남은 것만 브라우저로 한 번에 수집한다(브라우저 기동 1회)
+        $ranks = [];
+        $todo = [];
+        foreach ($candidates as $kw) {
+            $hit = Cache::get($this->cacheKey($pid, $kw));
+            if ($hit === null) {
+                $todo[] = $kw;
+            } else {
+                $ranks[$kw] = (int) $hit;
+            }
+        }
+
+        $failed = false;
+        if ($todo) {
+            $collected = $this->collect($pid, $todo);
+            if ($collected === null) {
+                $failed = true;
+            } else {
+                foreach ($collected as $kw => $rank) {
+                    $ranks[$kw] = $rank;
+                    Cache::put($this->cacheKey($pid, $kw), $rank, now()->addHours(6));
+                }
+            }
+        }
 
         $exposed = $missed = [];
-        $blocked = false;
         foreach ($candidates as $kw) {
-            $r = $this->rank($kw, $pid, (string) ($profile['name'] ?? ''));
-            if ($r['blocked']) {
-                $blocked = true;      // 토큰 만료·IP 차단 — 남은 후보도 못 믿으므로 표시하고 중단
-                break;
-            }
-            if ($r['rank'] > 0 && $r['rank'] <= self::RANK_LIMIT) {
-                $exposed[] = ['keyword' => $kw, 'rank' => $r['rank']];
-            } else {
+            $rank = $ranks[$kw] ?? 0;
+            if ($rank > 0 && $rank <= self::RANK_LIMIT) {
+                $exposed[] = ['keyword' => $kw, 'rank' => $rank];
+            } elseif (isset($ranks[$kw])) {
                 $missed[] = $kw;
             }
         }
-        usort($exposed, fn ($a, $b) => $a['rank'] <=> $b['rank']);   // 잘 잡히는 키워드부터
+        usort($exposed, fn ($a, $b) => $a['rank'] <=> $b['rank']);   // 위에 뜨는 키워드부터
 
         return [
             'checked' => count($exposed) + count($missed),
-            'blocked' => $blocked,
+            'failed' => $failed,
             'exposed' => $exposed,
             'missed' => $missed,
         ];
     }
 
     /**
-     * 키워드 1개의 플레이스 순위(6시간 캐시).
+     * 브라우저로 키워드들의 플레이스 영역 노출 순위를 한 번에 수집. 실패하면 null.
      *
-     * @return array{rank:int, blocked:bool}
+     * @param  list<string>  $keywords
+     * @return array<string, int>|null  키워드 => 순위(0=안 나옴)
      */
-    public function rank(string $keyword, string $placeId, string $placeName = ''): array
+    public function collect(string $placeId, array $keywords): ?array
     {
-        $kw = trim($keyword);
-        $pid = preg_replace('/\D/', '', $placeId);
-        if ($kw === '' || $pid === '') {
-            return ['rank' => 0, 'blocked' => false];
+        // 공용 서버라 브라우저는 동시 1개만 — 쇼핑 수집기와 같은 원칙
+        $lock = Cache::lock('place:serp:browser', 300);
+        if (! $lock->get()) {
+            Log::warning('플레이스 노출순위 수집: 브라우저 사용 중(락 획득 실패)');
+
+            return null;
         }
 
-        $key = 'place:kwrank:'.$pid.':'.md5($kw);
-        if (is_array($hit = Cache::get($key))) {
-            return $hit;
-        }
+        try {
+            $cfg = (array) config('rankfree.shopping.server_collect', []);
+            $cmd = [
+                (string) ($cfg['node'] ?? 'node'),
+                base_path('scripts/place-serp-rank.cjs'),
+                '--pid='.$placeId,
+                '--keywords='.implode('|', $keywords),
+                '--expand=4',
+            ];
+            // 배열로 넘겨 OS 별 이스케이프는 Symfony Process 에 맡긴다(윈도우에서 escapeshellarg 로 만든 문자열은 실행 실패)
+            // 임시 디렉터리·홈 경로를 넘겨야 한다 — 없으면 Playwright 가 프로필 폴더를 못 만들고 죽는다
+            $t0 = microtime(true);
+            $tmp = sys_get_temp_dir();
+            $res = Process::path(base_path())
+                ->env(array_filter([
+                    'TEMP' => $tmp, 'TMP' => $tmp, 'TMPDIR' => $tmp,
+                    'PATH' => (string) (getenv('PATH') ?: getenv('Path') ?: ''),
+                    'HOME' => (string) (getenv('HOME') ?: ''),
+                    // 윈도우는 SystemRoot 가 없으면 크롬이 **DNS 를 못 푼다**(ERR_NAME_NOT_RESOLVED)
+                    'USERPROFILE' => (string) (getenv('USERPROFILE') ?: ''),
+                    'SystemRoot' => (string) (getenv('SystemRoot') ?: ''),
+                    'SystemDrive' => (string) (getenv('SystemDrive') ?: ''),
+                    'windir' => (string) (getenv('windir') ?: ''),
+                ], fn ($v) => $v !== ''))
+                ->timeout(20 + 15 * count($keywords))->run($cmd);
+            foreach (array_reverse(explode("\n", trim($res->output()))) as $l) {
+                $l = trim($l);
+                if (! str_starts_with($l, '{') || ! str_contains($l, '"ok"')) {
+                    continue;
+                }
+                $json = json_decode($l, true);
+                if (! is_array($json) || ! ($json['ok'] ?? false)) {
+                    Log::warning('플레이스 노출순위 수집 실패', ['out' => mb_substr($l, 0, 300)]);
 
-        $r = $this->checker->check($kw, $pid, $placeName !== '' ? $placeName : null);
-        $out = ['rank' => (int) ($r['rank'] ?? 0), 'blocked' => (bool) ($r['blocked'] ?? false)];
-        if (! $out['blocked']) {
-            Cache::put($key, $out, now()->addHours(6));   // 차단된 결과는 캐시하지 않는다(토큰 복구 후 재조회)
-        }
+                    return null;
+                }
 
-        return $out;
+                $out = [];
+                $errors = [];
+                foreach ((array) ($json['results'] ?? []) as $r) {
+                    // 오류가 난 키워드는 '순위 없음' 이 아니다 — 캐시에 넣지 않고 다음 기회에 다시 본다
+                    if (! empty($r['error'])) {
+                        $errors[(string) ($r['keyword'] ?? '')] = (string) $r['error'];
+
+                        continue;
+                    }
+                    $out[(string) ($r['keyword'] ?? '')] = (int) ($r['rank'] ?? 0);
+                }
+                if ($errors) {
+                    Log::warning('플레이스 노출순위 수집: 일부 키워드 오류', ['errors' => array_slice($errors, 0, 3, true)]);
+                }
+                if (! $out) {
+                    return null;   // 전부 실패면 수집 실패로 본다
+                }
+                Log::info('플레이스 노출순위 수집 완료', ['n' => count($out), 'ranks' => $out, 'sec' => round(microtime(true) - $t0, 1)]);
+
+                return $out;
+            }
+
+            Log::warning('플레이스 노출순위 수집: JSON 출력 없음', ['exit' => $res->exitCode(), 'out' => mb_substr(trim($res->output()), 0, 200), 'err' => mb_substr(trim($res->errorOutput()), 0, 300)]);
+
+            return null;
+        } catch (Throwable $e) {
+            Log::warning('플레이스 노출순위 수집 오류', ['e' => $e->getMessage()]);
+
+            return null;
+        } finally {
+            $lock->release();
+        }
     }
 
     /**
@@ -121,6 +202,12 @@ class PlaceKeywordSuggester
             }
         };
 
+        // 상호명 기반 — 플레이스 영역에 뜰 확률이 가장 높다(브랜드 검색)
+        if ($name !== '') {
+            $add($name);
+            $add($dongShort, $name);
+            $add($si, $name);
+        }
         // 업종 기반 — 지역을 좁은 곳부터 넓은 곳까지
         if ($cat !== '') {
             $add($dongShort, $cat);
@@ -129,18 +216,8 @@ class PlaceKeywordSuggester
             $add($si, $gu, $cat);
             $add($si, $cat);
             $add($dongShort, $cat, '추천');
-            $add($gu, $cat, '추천');
-            $add($dongShort, '유명', $cat);
             $add($dongShort, $cat, '잘하는곳');
-        }
-        // 상호명 기반 — 상호 단독은 거의 확실히 잡힌다(브랜드 검색)
-        if ($name !== '') {
-            $add($name);
-            $add($dongShort, $name);
-            $add($si, $name);
-            if ($cat !== '') {
-                $add($name, $cat);
-            }
+            $add($gu, $cat, '추천');
         }
 
         return $this->dedupe($out);
@@ -168,6 +245,11 @@ class PlaceKeywordSuggester
         }
 
         return [$si, $gu, $dong];
+    }
+
+    private function cacheKey(string $placeId, string $keyword): string
+    {
+        return 'place:serprank:v2:'.$placeId.':'.md5($keyword);
     }
 
     /** @param list<string> $suffixes */

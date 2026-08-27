@@ -12,6 +12,21 @@ namespace App\Domain\Place;
 class PlaceCoordinates
 {
     /**
+     * 조회 기준 좌표 강제(기본 null = 서울 고정).
+     * 순위추적은 종전대로 서울을 쓰고, **부스팅샵 유입 키워드 추천**처럼
+     * '그 동네에서 검색했을 때 보이는 순위' 를 재현해야 하는 곳에서만 업체 좌표를 넣는다(2026-08-27).
+     *
+     * @var array{x: float, y: float}|null
+     */
+    private static ?array $origin = null;
+
+    /** 좌표 강제 설정 — 인자를 비우면 서울 고정으로 되돌린다. */
+    public static function useOrigin(?float $x = null, ?float $y = null): void
+    {
+        self::$origin = ($x === null || $y === null) ? null : ['x' => $x, 'y' => $y];
+    }
+
+    /**
      * 서울 기준 좌표 + 랜덤 오프셋(봇탐지 완화). reverseGeocodingInput 은 임의 지역.
      *
      * @return array{x:string,y:string,bounds:string,reverseGeocodingInput:array{x:string,y:string},ts:string}
@@ -19,7 +34,14 @@ class PlaceCoordinates
     public static function resolve(string $query = ''): array
     {
         $all = self::all();
-        $seoul = $all['서울'];
+        // 좌표 강제가 걸려 있으면 그 지점을 중심으로(bounds 는 서울 항목과 같은 ±0.01 박스), 아니면 종전대로 서울
+        $seoul = self::$origin
+            ? [
+                'x' => (string) self::$origin['x'],
+                'y' => (string) self::$origin['y'],
+                'bounds' => sprintf('%.7f;%.7f;%.7f;%.7f', self::$origin['x'] - 0.01, self::$origin['y'] - 0.01, self::$origin['x'] + 0.01, self::$origin['y'] + 0.01),
+            ]
+            : $all['서울'];
         $off = mt_rand(-10000, 10000) / 10000000;
 
         $x = number_format((float) $seoul['x'] + $off, 14, '.', '');

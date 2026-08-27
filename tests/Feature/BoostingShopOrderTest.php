@@ -129,11 +129,13 @@ class BoostingShopOrderTest extends TestCase
         $candidates = app(\App\Domain\Place\PlaceKeywordSuggester::class)->candidates($profile);
         $this->assertNotEmpty($candidates);
 
-        // 순위 조회 캐시를 미리 채워 네트워크 없이 결과를 통제한다(앞 2개만 순위에 잡힘)
+        // 브라우저는 절대 뜨면 안 된다 — 락을 선점해 수집 경로를 막고, 결과는 캐시로 통제한다(앞 2개만 노출)
+        Cache::lock('place:serp:browser', 60)->get();
+        // 노출 순위 캐시를 미리 채워 브라우저를 띄우지 않고 결과를 통제한다(앞 2개만 플레이스 영역에 노출)
         foreach ($candidates as $i => $kw) {
-            Cache::put('place:kwrank:1011101134:'.md5($kw), ['rank' => $i < 2 ? $i + 3 : 0, 'blocked' => false], now()->addHour());
+            Cache::put('place:serprank:v2:1011101134:'.md5($kw), $i < 2 ? $i + 3 : 0, now()->addHour());
         }
-        Cache::put('place:kwrank:1011101134:'.md5('풍동헬스'), ['rank' => 0, 'blocked' => false], now()->addHour());
+        Cache::put('place:serprank:v2:1011101134:'.md5('풍동헬스'), 0, now()->addHour());
 
         $res = $this->actingAs($this->admin)->postJson(route('admin.orders.boosting-shop.keywords', $order), [
             'link' => 'https://m.place.naver.com/place/1011101134/home',

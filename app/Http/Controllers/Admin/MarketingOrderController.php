@@ -678,7 +678,7 @@ class MarketingOrderController extends Controller
             return response()->json(['ok' => false, 'message' => '플레이스 주소에서 고유번호를 찾지 못했습니다 — 주소를 확인해 주세요.'], 422);
         }
 
-        @set_time_limit(180);   // 후보 수만큼 통합검색을 도느라 기본 실행시간을 넘길 수 있다
+        @set_time_limit(400);   // 후보마다 브라우저로 검색을 돌아 오래 걸린다(scripts/place-serp-rank.cjs)
 
         $profile = $fetcher->fetch($pid);
         // 지금 화면에 들어 있는 키워드도 함께 검사한다 — 주문에 적힌 키워드가 실제로는 노출되지 않는 경우가 많다
