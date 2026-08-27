@@ -6,27 +6,33 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * 유입 키워드 추천(2026-08-27) — 플레이스명·주소(지역)·업종을 섞어 후보를 만들고,
- * **네이버 통합검색에 그 플레이스가 실제로 노출되는 키워드만** 골라낸다.
+ * **그 키워드로 플레이스 순위에 실제로 잡히는 키워드만** 골라낸다.
  *
  * 부스팅샵 유입 미션은 참여자가 검색창에 키워드를 넣고 그 업체를 찾아 들어가는 방식이라,
- * 검색해도 안 나오는 키워드를 넣으면 미션이 성립하지 않는다(주문에 적힌 키워드가 실제론
- * 노출되지 않는 경우가 있어 자동 확인이 필요하다).
+ * 검색해도 안 나오는 키워드를 넣으면 미션이 성립하지 않는다.
  *
- * 판정: 모바일 통합검색 HTML 에 해당 placeId 가 등장하면 노출. 상호명은 동명업체가 있어 쓰지 않는다.
+ * ⚠️ 판정 방식(2026-08-27 개정) — 처음에는 통합검색 HTML 에 placeId 가 있는지로 판정했으나
+ * **거짓 양성이었다**: 네이버 SERP 의 블로그 썸네일 데이터에 `"gdid":"blog_…","sid":"<placeId>"`
+ * 형태로 같은 숫자가 실려 있어, 플레이스가 안 보이는 키워드도 노출로 잡혔다(사용자 수동 확인으로 발견).
+ * 지금은 [PlaceRankChecker](PlaceRankChecker.php) 로 **실제 순위를 조회**해 잡히는 키워드만 채택하고
+ * 순위를 함께 돌려준다(플레이스 순위추적과 같은 엔진 · nCaptcha 토큰 사용).
  */
 class PlaceKeywordSuggester
 {
-    private const MO_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+    /** 후보 검사 상한 — 키워드마다 순위조회를 돌리므로 무한정 늘리지 않는다. */
+    private const MAX_CANDIDATES = 14;
 
-    /** 후보 검사 상한 — 통합검색 HTML 이 건당 1MB 안팎이라 무한정 늘리지 않는다. */
-    private const MAX_CANDIDATES = 16;
+    /** 추천 채택 기준 순위 — 이보다 뒤면 참여자가 찾지 못해 유입 미션에 쓸 수 없다. */
+    private const RANK_LIMIT = 50;
+
+    public function __construct(private PlaceRankChecker $checker) {}
 
     /**
-     * 프로필 → 후보 생성 → 노출 확인.
+     * 프로필 → 후보 생성 → 순위 확인.
      *
      * @param  array{place_id:string, name:string, category:string, address:string, ...}  $profile
      * @param  list<string>  $extra  기존 주문 키워드 등 함께 확인할 키워드
-     * @return array{checked:int, exposed:list<string>, missed:list<string>}
+     * @return array{checked:int, blocked:bool, exposed:list<array{keyword:string,rank:int}>, missed:list<string>}
      */
     public function suggest(array $profile, array $extra = []): array
     {
@@ -37,19 +43,61 @@ class PlaceKeywordSuggester
             self::MAX_CANDIDATES,
         );
         if ($pid === '' || ! $candidates) {
-            return ['checked' => 0, 'exposed' => [], 'missed' => []];
+            return ['checked' => 0, 'blocked' => false, 'exposed' => [], 'missed' => []];
         }
 
+        // 추천은 "이 키워드로 찾을 수 있나"만 보면 되므로 1페이지(50위)까지만 — 순위추적 기본값(6페이지)은 너무 느리다
+        config(['rankfree.place.max_pages' => 1, 'rankfree.place.page_delay' => 0]);
+
         $exposed = $missed = [];
+        $blocked = false;
         foreach ($candidates as $kw) {
-            if ($this->isExposed($kw, $pid)) {
-                $exposed[] = $kw;
+            $r = $this->rank($kw, $pid, (string) ($profile['name'] ?? ''));
+            if ($r['blocked']) {
+                $blocked = true;      // 토큰 만료·IP 차단 — 남은 후보도 못 믿으므로 표시하고 중단
+                break;
+            }
+            if ($r['rank'] > 0 && $r['rank'] <= self::RANK_LIMIT) {
+                $exposed[] = ['keyword' => $kw, 'rank' => $r['rank']];
             } else {
                 $missed[] = $kw;
             }
         }
+        usort($exposed, fn ($a, $b) => $a['rank'] <=> $b['rank']);   // 잘 잡히는 키워드부터
 
-        return ['checked' => count($candidates), 'exposed' => $exposed, 'missed' => $missed];
+        return [
+            'checked' => count($exposed) + count($missed),
+            'blocked' => $blocked,
+            'exposed' => $exposed,
+            'missed' => $missed,
+        ];
+    }
+
+    /**
+     * 키워드 1개의 플레이스 순위(6시간 캐시).
+     *
+     * @return array{rank:int, blocked:bool}
+     */
+    public function rank(string $keyword, string $placeId, string $placeName = ''): array
+    {
+        $kw = trim($keyword);
+        $pid = preg_replace('/\D/', '', $placeId);
+        if ($kw === '' || $pid === '') {
+            return ['rank' => 0, 'blocked' => false];
+        }
+
+        $key = 'place:kwrank:'.$pid.':'.md5($kw);
+        if (is_array($hit = Cache::get($key))) {
+            return $hit;
+        }
+
+        $r = $this->checker->check($kw, $pid, $placeName !== '' ? $placeName : null);
+        $out = ['rank' => (int) ($r['rank'] ?? 0), 'blocked' => (bool) ($r['blocked'] ?? false)];
+        if (! $out['blocked']) {
+            Cache::put($key, $out, now()->addHours(6));   // 차단된 결과는 캐시하지 않는다(토큰 복구 후 재조회)
+        }
+
+        return $out;
     }
 
     /**
@@ -82,10 +130,10 @@ class PlaceKeywordSuggester
             $add($si, $cat);
             $add($dongShort, $cat, '추천');
             $add($gu, $cat, '추천');
-            $add($si, $cat, '추천');
             $add($dongShort, '유명', $cat);
+            $add($dongShort, $cat, '잘하는곳');
         }
-        // 상호명 기반 — 상호 단독은 거의 확실히 노출된다(브랜드 검색)
+        // 상호명 기반 — 상호 단독은 거의 확실히 잡힌다(브랜드 검색)
         if ($name !== '') {
             $add($name);
             $add($dongShort, $name);
@@ -96,39 +144,6 @@ class PlaceKeywordSuggester
         }
 
         return $this->dedupe($out);
-    }
-
-    /** 키워드로 모바일 통합검색을 조회해 placeId 노출 여부 판정(6시간 캐시). */
-    public function isExposed(string $keyword, string $placeId): bool
-    {
-        $kw = trim($keyword);
-        $pid = preg_replace('/\D/', '', $placeId);
-        if ($kw === '' || $pid === '') {
-            return false;
-        }
-
-        return (bool) Cache::remember('place:serp:'.$pid.':'.md5($kw), now()->addHours(6), function () use ($kw, $pid) {
-            usleep(300000);   // 연속 조회 간격 — 네이버 차단 회피(캐시가 있으면 여기까지 오지 않는다)
-            $ch = curl_init('https://m.search.naver.com/search.naver?query='.rawurlencode($kw));
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => 1,
-                CURLOPT_FOLLOWLOCATION => 1,
-                CURLOPT_MAXREDIRS => 3,
-                CURLOPT_ENCODING => '',
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_TIMEOUT => (int) config('rankfree.place.timeout', 20),
-                CURLOPT_HTTPHEADER => [
-                    'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'accept-language: ko-KR,ko;q=0.9',
-                    'user-agent: '.self::MO_UA,
-                ],
-            ]);
-            $html = (string) curl_exec($ch);
-            curl_close($ch);
-
-            return $html !== '' && str_contains($html, $pid);
-        });
     }
 
     /**

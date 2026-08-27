@@ -122,18 +122,18 @@ class BoostingShopOrderTest extends TestCase
             ->assertSee('value="49" selected', false);          // 지난 주문에서 고른 등급(엘리트)을 기억
     }
 
-    public function test_keyword_suggestion_returns_only_exposed_keywords(): void
+    public function test_keyword_suggestion_returns_only_ranked_keywords_with_rank(): void
     {
         $order = $this->makeOrder();
         $profile = app(\App\Domain\Place\PlaceProfileFetcher::class)->fetch('1011101134');
         $candidates = app(\App\Domain\Place\PlaceKeywordSuggester::class)->candidates($profile);
         $this->assertNotEmpty($candidates);
 
-        // 통합검색 판정 캐시를 미리 채워 네트워크 없이 결과를 통제한다(앞 2개만 노출)
+        // 순위 조회 캐시를 미리 채워 네트워크 없이 결과를 통제한다(앞 2개만 순위에 잡힘)
         foreach ($candidates as $i => $kw) {
-            Cache::put('place:serp:1011101134:'.md5($kw), $i < 2, now()->addHour());
+            Cache::put('place:kwrank:1011101134:'.md5($kw), ['rank' => $i < 2 ? $i + 3 : 0, 'blocked' => false], now()->addHour());
         }
-        Cache::put('place:serp:1011101134:'.md5('풍동헬스'), false, now()->addHour());
+        Cache::put('place:kwrank:1011101134:'.md5('풍동헬스'), ['rank' => 0, 'blocked' => false], now()->addHour());
 
         $res = $this->actingAs($this->admin)->postJson(route('admin.orders.boosting-shop.keywords', $order), [
             'link' => 'https://m.place.naver.com/place/1011101134/home',
@@ -141,7 +141,8 @@ class BoostingShopOrderTest extends TestCase
         ]);
 
         $res->assertOk()->assertJson(['ok' => true]);
-        $this->assertSame(array_slice($candidates, 0, 2), $res->json('exposed'));
+        $this->assertSame(array_slice($candidates, 0, 2), array_column($res->json('exposed'), 'keyword'));
+        $this->assertSame([3, 4], array_column($res->json('exposed'), 'rank'));   // 순위도 함께 돌려준다(좋은 순)
         // 주문에 적힌 키워드가 실제로는 노출되지 않는다는 사실도 함께 알려준다
         $this->assertContains('풍동헬스', $res->json('missed'));
     }

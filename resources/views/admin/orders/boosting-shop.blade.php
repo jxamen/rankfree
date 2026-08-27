@@ -51,17 +51,20 @@
                 </select>
                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">주문 상품에 맞춰 자동 선택 — 등급이 다르면 바꾸세요 (프리미엄은 스마트콜 URL 필수)</span>
             </label>
+        </div>
+
+        {{-- 플레이스 주소 + 상호명 한 줄(2026-08-27 사용자 요청) --}}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="flex flex-col gap-1 sm:col-span-2">
+                <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">플레이스 주소 <span style="color:var(--color-error);">*</span></span>
+                <input name="link" value="{{ $v('link') }}" required type="url" class="input" style="font-size:var(--fs-xs);" placeholder="https://m.place.naver.com/place/1011101134/home">
+            </label>
             <label class="flex flex-col gap-1">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">상호명 <span style="color:var(--color-error);">*</span></span>
                 <input name="product_name" value="{{ $v('product_name') }}" required class="input" style="font-size:var(--fs-xs);" placeholder="플레이스에 등록된 업체명">
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ ($profile['name'] ?? '') !== '' ? '플레이스에서 자동 수집됨' : '플레이스에서 자동 수집하지 못했습니다 — 직접 입력하세요' }}</span>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">{{ ($profile['name'] ?? '') !== '' ? '플레이스에서 자동 수집됨' : '자동 수집 실패 — 직접 입력' }}</span>
             </label>
         </div>
-
-        <label class="flex flex-col gap-1">
-            <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">플레이스 주소 <span style="color:var(--color-error);">*</span></span>
-            <input name="link" value="{{ $v('link') }}" required type="url" class="input" style="font-size:var(--fs-xs);" placeholder="https://m.place.naver.com/place/1011101134/home">
-        </label>
 
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label class="flex flex-col gap-1">
@@ -88,8 +91,8 @@
                 {{-- 플레이스명·지역·업종 조합 중 통합검색에 실제로 노출되는 키워드만 골라 채운다(2026-08-27) --}}
                 <button type="button" id="kw-suggest" class="btn btn-secondary btn-sm" style="height:26px;padding:0 10px;font-size:var(--fs-xs);">키워드 자동 추천</button>
             </div>
-            <textarea name="search_keywords" rows="5" required class="input" style="font-size:var(--fs-xs);line-height:1.6;">{{ $v('search_keywords') }}</textarea>
-            <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>네이버 통합검색에 이 업체가 실제로 나오는 키워드만</b> 골라 채웁니다.</span>
+            <textarea name="search_keywords" required class="input" style="font-size:var(--fs-xs);line-height:1.6;height:150px;">{{ $v('search_keywords') }}</textarea>
+            <span id="kw-status" class="text-muted-soft" style="font-size:var(--fs-xs);">한 줄에 하나씩(쉼표도 가능) · 1~30개 — 미션 참여자가 검색할 키워드입니다. [키워드 자동 추천]은 <b>플레이스 순위에 실제로 잡히는 키워드만</b>(상위 50위 이내) 순위와 함께 골라 채웁니다.</span>
             <div id="kw-missed" class="text-muted-soft" style="font-size:var(--fs-xs);display:none;"></div>
         </div>
 
@@ -190,8 +193,8 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
     const label = btn.textContent;
 
     btn.disabled = true;
-    btn.textContent = '검색 확인 중…';
-    status.textContent = '네이버 통합검색에서 노출 여부를 확인하는 중입니다 — 후보가 많으면 십수 초 걸립니다.';
+    btn.textContent = '순위 확인 중…';
+    status.textContent = '키워드마다 플레이스 순위를 조회하는 중입니다 — 후보가 많으면 30초 안팎 걸립니다.';
     missed.style.display = 'none';
 
     try {
@@ -210,14 +213,20 @@ document.getElementById('kw-suggest')?.addEventListener('click', async function 
         const d = await res.json();
         if (!res.ok || !d.ok) throw new Error(d.message || '추천에 실패했습니다.');
 
+        if (d.blocked) {
+            status.textContent = '순위 조회가 차단되었습니다(nCaptcha 토큰 만료·IP 차단) — 잠시 뒤 다시 시도하세요. 확인된 것까지만 채웠습니다.';
+        }
         if (d.exposed.length) {
-            ta.value = d.exposed.join('\n');
-            status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 통합검색에 노출됩니다 — 노출되는 키워드만 채웠습니다.';
-        } else {
-            status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 통합검색에 노출되는 키워드가 없었습니다 — 직접 입력하세요.';
+            ta.value = d.exposed.map(function (x) { return x.keyword; }).join('\n');
+            if (!d.blocked) {
+                const ranks = d.exposed.map(function (x) { return x.keyword + ' ' + x.rank + '위'; }).join(' · ');
+                status.innerHTML = '후보 <b>' + d.checked + '개</b> 중 <b>' + d.exposed.length + '개</b>가 플레이스 순위에 잡혔습니다 — ' + ranks;
+            }
+        } else if (!d.blocked) {
+            status.innerHTML = '후보 <b>' + d.checked + '개</b>를 확인했지만 상위 50위 안에 잡히는 키워드가 없었습니다 — 직접 입력하세요.';
         }
         if (d.missed.length) {
-            missed.textContent = '노출 안 됨(제외): ' + d.missed.join(', ');
+            missed.textContent = '순위에 없음(제외): ' + d.missed.join(', ');
             missed.style.display = '';
         }
     } catch (e) {
