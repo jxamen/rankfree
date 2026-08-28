@@ -45,7 +45,8 @@ class RewardMediaController extends Controller
                 ->where('media_id', $medium->id)->orderBy('kind')->get(),
             'missions' => RewardMission::query()->whereIn('status', ['active', 'draft', 'paused'])
                 ->orderByDesc('id')->limit(50)->get(['id', 'title', 'daily_quota']),
-            'kinds' => RewardMission::query()->select('kind')->distinct()->pluck('kind')->filter()->values(),
+            // 유형 정본은 RewardMission::KINDS(2026-08-28) — 미션에 아직 없는 유형(플레이스 저장·쇼핑 찜)도 단가를 미리 설정할 수 있다
+            'kinds' => collect(RewardMission::KINDS),
         ]);
     }
 
@@ -56,7 +57,7 @@ class RewardMediaController extends Controller
             'allocations' => collect(),
             'payouts' => collect(),
             'missions' => collect(),
-            'kinds' => collect(),
+            'kinds' => collect(RewardMission::KINDS),
         ]);
     }
 

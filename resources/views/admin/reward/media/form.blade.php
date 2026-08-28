@@ -135,7 +135,7 @@
             <button type="button" class="btn btn-secondary btn-sm mt-3" id="alloc-add">규칙 추가</button>
 
             <p class="text-muted mt-3" style="font-size:var(--fs-xs);">
-                미션 유형 코드: {{ $kinds->isEmpty() ? '(아직 없음)' : $kinds->implode(' · ') }} ·
+                미션 유형 코드: {{ $kinds->map(fn ($label, $key) => $key.'('.$label.')')->implode(' · ') }} ·
                 비율과 상한을 <b>둘 다 비우면</b> 저장 시 그 규칙은 삭제됩니다(= 제한 없음).
             </p>
         </div>
@@ -166,7 +166,7 @@
             <button type="button" class="btn btn-secondary btn-sm mt-3" id="payout-add">유형 추가</button>
 
             <p class="text-muted mt-3" style="font-size:var(--fs-xs);">
-                미션 유형 코드: {{ $kinds->isEmpty() ? '(아직 없음)' : $kinds->implode(' · ') }} ·
+                미션 유형 코드: {{ $kinds->map(fn ($label, $key) => $key.'('.$label.')')->implode(' · ') }} ·
                 유형 코드나 단가를 <b>비우면</b> 저장 시 그 유형은 삭제됩니다(= 기본 단가 적용).
             </p>
         </div>

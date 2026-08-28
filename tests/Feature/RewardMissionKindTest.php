@@ -77,7 +77,7 @@ class RewardMissionKindTest extends TestCase
 
         $kinds = collect($res->json('missions'))->pluck('kind')->sort()->values()->all();
         $this->assertSame(['place', 'shopping'], $kinds);          // 유형이 응답에 실린다
-        $this->assertSame(['shopping', 'place', 'mall', 'web'], $res->json('meta.kinds'));
+        $this->assertSame(['shopping', 'place', 'save', 'zzim'], $res->json('meta.kinds'));
     }
 
     public function test_목록을_유형으로_거를_수_있다(): void
@@ -91,7 +91,7 @@ class RewardMissionKindTest extends TestCase
         // 콤마로 여러 유형을 한 번에
         $this->assertCount(2, $this->apiGet('/api/v1/missions?kind=place,shopping')->assertOk()->json('missions'));
         // 해당 유형이 없으면 빈 목록(오류가 아니다)
-        $this->assertCount(0, $this->apiGet('/api/v1/missions?kind=web')->assertOk()->json('missions'));
+        $this->assertCount(0, $this->apiGet('/api/v1/missions?kind=zzim')->assertOk()->json('missions'));
     }
 
     public function test_유형_축_이관_전_레거시값은_쇼핑으로_취급한다(): void
@@ -113,7 +113,7 @@ class RewardMissionKindTest extends TestCase
         $res = $this->apiGet('/api/v1/missions?kind=pleace')->assertStatus(422);
 
         $this->assertStringContainsString('pleace', $res->json('message'));
-        $this->assertSame(['shopping', 'place', 'mall', 'web'], $res->json('kinds'));
+        $this->assertSame(['shopping', 'place', 'save', 'zzim'], $res->json('kinds'));
     }
 
     public function test_단건_할당도_유형을_지정할_수_있다(): void
@@ -126,7 +126,7 @@ class RewardMissionKindTest extends TestCase
 
     public function test_지정한_유형에_줄_미션이_없으면_204(): void
     {
-        $this->apiPost('/api/v1/missions/assign', ['participant_hash' => 'u_kind2', 'kind' => 'web'])
+        $this->apiPost('/api/v1/missions/assign', ['participant_hash' => 'u_kind2', 'kind' => 'zzim'])
             ->assertStatus(204);
     }
 }

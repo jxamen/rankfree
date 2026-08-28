@@ -93,7 +93,7 @@
         <tbody>
             <tr>
                 <td><code class="doc-code">kind</code><br><span class="text-muted" style="font-size:var(--fs-xs);">미션 유형</span></td>
-                <td>미션은 <b class="text-ink">쇼핑(<code class="doc-code">shopping</code>) · 플레이스(<code class="doc-code">place</code>) · 몰(<code class="doc-code">mall</code>) · 웹(<code class="doc-code">web</code>)</b> 으로 나뉩니다. 목록·단건 할당 모두 <code class="doc-code">kind</code> 로 <b class="text-ink">원하는 유형만</b> 받을 수 있고(쉼표로 여러 개), 응답의 <code class="doc-code">mission.kind</code> 로 유형을 확인합니다. 지금 쓸 수 있는 유형 키는 목록 응답의 <code class="doc-code">meta.kinds</code> 에 함께 옵니다</td>
+                <td>미션은 <b class="text-ink">쇼핑 유입(<code class="doc-code">shopping</code>) · 플레이스 유입(<code class="doc-code">place</code>) · 플레이스 저장(<code class="doc-code">save</code>) · 쇼핑 찜(<code class="doc-code">zzim</code>)</b> 으로 나뉩니다. 목록·단건 할당 모두 <code class="doc-code">kind</code> 로 <b class="text-ink">원하는 유형만</b> 받을 수 있고(쉼표로 여러 개), 응답의 <code class="doc-code">mission.kind</code> 로 유형을 확인합니다. 지금 쓸 수 있는 유형 키는 목록 응답의 <code class="doc-code">meta.kinds</code> 에 함께 옵니다</td>
             </tr>
             <tr>
                 <td><code class="doc-code">participant_hash</code></td>
@@ -143,7 +143,7 @@
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
                 <tbody>
                     <tr><td><code class="doc-code">participant_hash</code></td><td>필수</td><td>참여자 식별 해시 (최대 128자)</td></tr>
-                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑) · <code class="doc-code">place</code>(플레이스) · <code class="doc-code">mall</code>(몰) · <code class="doc-code">web</code>(웹). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
+                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑 유입) · <code class="doc-code">place</code>(플레이스 유입) · <code class="doc-code">save</code>(플레이스 저장) · <code class="doc-code">zzim</code>(쇼핑 찜). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
@@ -209,7 +209,7 @@ Retry-After: 5931</pre></div>
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
                 <tbody>
                     <tr><td><code class="doc-code">participant_hash</code></td><td>선택</td><td>참여자 식별 해시. 주면 그 사용자 기준으로 걸러진 목록을 반환</td></tr>
-                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑) · <code class="doc-code">place</code>(플레이스) · <code class="doc-code">mall</code>(몰) · <code class="doc-code">web</code>(웹). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
+                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑 유입) · <code class="doc-code">place</code>(플레이스 유입) · <code class="doc-code">save</code>(플레이스 저장) · <code class="doc-code">zzim</code>(쇼핑 찜). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
