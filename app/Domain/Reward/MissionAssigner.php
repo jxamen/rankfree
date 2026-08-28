@@ -30,7 +30,7 @@ class MissionAssigner
 
         // 매체가 유형을 지정했으면 그 유형만 — 없으면 '줄 미션 없음' 으로 끝난다(204)
         if ($kinds) {
-            $rows = $rows->filter(fn (array $m) => in_array((string) ($m['kind'] ?? ''), $kinds, true));
+            $rows = $rows->filter(fn (array $m) => in_array(\App\Models\RewardMission::normalizeKind($m['kind'] ?? null), $kinds, true));
         }
 
         if ($rows->isEmpty()) {

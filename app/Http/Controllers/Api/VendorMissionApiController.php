@@ -56,7 +56,7 @@ class VendorMissionApiController extends Controller
 
         // 매체가 원하는 유형만 요청할 수 있다(2026-08-28) — ?kind=place 또는 ?kind=place,shopping
         if ($kinds = $this->kindsFromRequest($request)) {
-            $rows = $rows->filter(fn (array $m) => in_array((string) ($m['kind'] ?? ''), $kinds, true));
+            $rows = $rows->filter(fn (array $m) => in_array(\App\Models\RewardMission::normalizeKind($m['kind'] ?? null), $kinds, true));
         }
 
         // 사용자별 피드(§8) — 소프트 차단이면 빈 목록(오류가 아니라 "없음"), 상한 채운 미션 제외.
@@ -265,7 +265,7 @@ class VendorMissionApiController extends Controller
     {
         return [
             'id' => (string) $m['id'],
-            'kind' => (string) ($m['kind'] ?? 'shopping'),   // 미션 유형(2026-08-28) — 매체가 유형별로 다루도록
+            'kind' => \App\Models\RewardMission::normalizeKind($m['kind'] ?? null),   // 미션 유형(2026-08-28) — 매체가 유형별로 다루도록
             'title' => $m['title'],
             'description' => $m['description'],
             'keyword' => $m['keyword'],
@@ -315,7 +315,7 @@ class VendorMissionApiController extends Controller
     {
         return [
             'id' => (string) $m->id,
-            'kind' => (string) ($m->kind ?: 'shopping'),   // 미션 유형(2026-08-28) — 목록·할당·상세 모두 동일 키
+            'kind' => RewardMission::normalizeKind($m->kind),   // 미션 유형(2026-08-28) — 목록·할당·상세 모두 동일 키
             'title' => $m->title,
             'description' => $m->description,
             'keyword' => $m->keyword,

@@ -14,6 +14,17 @@ class RewardMission extends Model
      * 미션 유형(대분류) — design-05 §2. 매체는 이 키로 원하는 유형만 골라 받는다(2026-08-28).
      * 세부 로직(저장·찜 등)은 variant 축이며 아직 미구현이다.
      */
+    /**
+     * 유형 값 정규화(2026-08-28) — 유형 축 승격(design-05 §2) **이전 데이터는 `external`** 이라
+     * 그대로 두면 유형 필터에 아무것도 걸리지 않는다. 모르는 값은 쇼핑으로 본다(동기화되는 미션이 전부 쇼핑).
+     */
+    public static function normalizeKind(?string $kind): string
+    {
+        $k = trim((string) $kind);
+
+        return isset(self::KINDS[$k]) ? $k : 'shopping';
+    }
+
     public const KINDS = [
         'shopping' => '쇼핑',
         'place' => '플레이스',

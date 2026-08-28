@@ -94,6 +94,20 @@ class RewardMissionKindTest extends TestCase
         $this->assertCount(0, $this->apiGet('/api/v1/missions?kind=web')->assertOk()->json('missions'));
     }
 
+    public function test_유형_축_이관_전_레거시값은_쇼핑으로_취급한다(): void
+    {
+        // 운영에는 아직 kind=external(확인 경로 축 시절 값)인 미션이 남아 있다 — 그대로 두면 어떤 유형으로도 안 잡힌다
+        $this->makeMission(920003, 'external', '레거시 미션');
+
+        $titles = collect($this->apiGet('/api/v1/missions?kind=shopping')->assertOk()->json('missions'))
+            ->pluck('title')->all();
+        $this->assertContains('레거시 미션', $titles);
+        $this->assertContains('쇼핑 미션', $titles);
+
+        $kinds = collect($this->apiGet('/api/v1/missions')->assertOk()->json('missions'))->pluck('kind')->unique()->sort()->values()->all();
+        $this->assertSame(['place', 'shopping'], $kinds);   // 응답에도 external 이 그대로 새어 나가지 않는다
+    }
+
     public function test_모르는_유형은_조용히_무시하지_않고_알려준다(): void
     {
         $res = $this->apiGet('/api/v1/missions?kind=pleace')->assertStatus(422);
