@@ -42,6 +42,8 @@ return [
      *   price = 상품 판매가 (tolerance_percent 만큼 오차 허용)
      *   text  = 운영자가 입력한 고정 정답(문자)
      *   number= 운영자가 입력한 고정 정답(숫자, tolerance_percent 적용)
+     *   contains = 제출값이 정답을 **포함**하면 통과 — 플레이스 유입처럼 URL·고유번호를 확인할 때(2026-08-28)
+     *   image = 스크린샷 증빙(템플릿 매칭) — 저장·찜처럼 '눌렀는지' 를 텍스트로 물을 수 없을 때(2026-08-28)
      */
     'answer_source' => 'tag',
     'answer_sources' => [
@@ -49,6 +51,24 @@ return [
         'price' => '상품 판매가',
         'text' => '고정 정답 (문자)',
         'number' => '고정 정답 (숫자)',
+        'contains' => '정답 포함 (URL·고유번호)',
+        'image' => '스크린샷 증빙 (표식 확인)',
+    ],
+
+    /*
+     * 스크린샷 증빙 검증(2026-08-28) — 플레이스 저장·쇼핑 찜은 참여자가 실제로 눌렀는지를
+     * 텍스트 정답으로 물을 수 없어, 누른 뒤 화면을 올리게 하고 **표식(별표·하트)** 이 있는지 본다.
+     * boosting_shop quiz/check_template_*.py 이식 — 판정은 OpenCV 템플릿 매칭(scripts/check-template.py).
+     */
+    'image_proof' => [
+        'python' => env('RANKFREE_PYTHON', 'python3'),
+        'threshold' => (float) env('REWARD_IMAGE_THRESHOLD', 0.8),   // 원본과 동일 기준
+        'max_bytes' => 8 * 1024 * 1024,
+        // 유형별 표식 템플릿(resources/reward-templates/…). 여러 장이면 가장 잘 맞는 것으로 판정한다
+        'templates' => [
+            'save' => ['save/save.png'],
+            'zzim' => ['zzim/zzim.png', 'zzim/zzim2.png'],
+        ],
     ],
 
     /*

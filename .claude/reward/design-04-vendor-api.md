@@ -154,6 +154,23 @@ Schema::create('reward_media', function (Blueprint $t) {
 - 구현: [VendorMissionApiController::kindsFromRequest()](../../app/Http/Controllers/Api/VendorMissionApiController.php) · [MissionAssigner::pick($kinds)](../../app/Domain/Reward/MissionAssigner.php) · 유형 상수 [RewardMission::KINDS](../../app/Models/RewardMission.php). 검증 [RewardMissionKindTest](../../tests/Feature/RewardMissionKindTest.php) 5건. 공개 문서 `/developers/reward` 반영 완료.
 - **유형 4종**: `shopping`(쇼핑 유입) · `place`(플레이스 유입) · `save`(플레이스 저장) · `zzim`(쇼핑 찜). 정본은 [RewardMission::KINDS](../../app/Models/RewardMission.php) 이고 **지급 단가·배분도 같은 키**를 쓴다(운영 `reward_media_payouts` 에 이미 place·save 단가가 들어 있다). 어드민 매체 단가 화면도 이 목록을 쓴다 — 미션이 아직 없는 유형도 단가를 미리 설정할 수 있다.
 
+### 3-0-2. 유형별 정답 확인 방식 (2026-08-28 준비)
+
+boosting_shop `quiz/ajax.action.php` 의 판정을 이식했다. 유형마다 '무엇으로 맞았다고 볼지' 가 다르다.
+
+| 유형 | 확인 방식 | 구현 |
+|---|---|---|
+| `shopping` 쇼핑 유입 | 해시태그(참여자별 N번째)·판매가·고정 정답 | 기존 [MissionGrader](../../app/Domain/Reward/MissionGrader.php) |
+| `place` 플레이스 유입 | 참여자가 붙여넣은 **URL 에 정답이 포함**되는지 — `answer_type=contains` | MissionGrader `contains`(신규) |
+| `save` 플레이스 저장 | 저장 뒤 화면 스크린샷에 **별표 표식**이 있는지 | [ImageProofVerifier](../../app/Domain/Reward/ImageProofVerifier.php) |
+| `zzim` 쇼핑 찜 | 찜 뒤 화면에 **하트 표식**이 있는지(아이콘 2종) | 〃 |
+
+- **왜 contains 인가** — 원본은 완전일치였지만 참여자가 보내는 주소에는 `?entry=pll` 같은 꼬리가 붙는다. 고유번호·주소 조각이 **들어 있으면** 통과시키는 게 실사용에 맞다(원본도 `strstr` 로 포함 판정하는 분기가 있다).
+- **이미지 판정** — [scripts/check-template.py](../../scripts/check-template.py)(OpenCV 템플릿 매칭, 여러 배율 중 최고값). 임계값 **0.8**(원본과 동일), 표식은 `resources/reward-templates/{save,zzim}/*.png`. 원본은 유형마다 스크립트를 복제했지만(`check_template_save/zzim/wish/find_road.py`) 여기서는 **템플릿을 인자로 받아 한 벌**로 쓴다.
+- **운영 주의**: 판정 서버에 `opencv-python` 이 필요하다(없으면 `{"ok":false,"reason":"opencv_missing"}`). 원본 이미지는 **판정 후 남기지 않고**, 같은 스크린샷 재사용을 막도록 `sha256` 해시를 돌려준다(호출부가 중복 판정).
+- 설정: `config/reward.php` → `answer_sources`(contains·image 추가) · `image_proof`(python 경로·임계값·유형별 템플릿). 검증 [RewardProofMethodTest](../../tests/Feature/RewardProofMethodTest.php).
+- ⚠️ **아직 제출 API 에 연결하지 않았다** — save·zzim 미션이 생기면 제출 경로에서 `ImageProofVerifier` 를 태우면 된다(업로드 필드·중복 해시 저장은 그때 함께).
+
 ### 3-0. 미션 제공 2방식 (2026-07-31 지시)
 
 | 방식 | 흐름 | 대표 매체 |

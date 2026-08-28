@@ -8,7 +8,8 @@ use App\Models\RewardUser;
 /**
  * 미션 채점 — 정답은 서버에만 있다(server-api-spec §2).
  * 해시태그형(tags 보유): 사용자별 tagIndex(결정적)의 태그와 정규화 비교.
- * 고정 정답형: number(숫자만 비교 + 오차 허용) / text(정규화 비교).
+ * 고정 정답형: number(숫자만 비교 + 오차 허용) / text(정규화 비교) / contains(제출값에 정답이 들어 있으면 통과).
+ * 스크린샷 증빙(저장·찜)은 텍스트로 물을 수 없어 [ImageProofVerifier](ImageProofVerifier.php) 가 따로 판정한다.
  */
 final class MissionGrader
 {
@@ -64,6 +65,19 @@ final class MissionGrader
 
         if ($source === 'number') {
             return self::gradeNumber($answer, (string) $mission->answer, $mission->tolerance_percent);
+        }
+
+        // 포함형 — 제출값 안에 정답이 들어 있으면 통과(2026-08-28).
+        // 플레이스 유입처럼 '그 업체 화면에서 온 URL' 을 확인할 때 쓴다: 참여자가 붙여넣는 주소에는
+        // 정답(고유번호·주소 조각) 외에 쿼리스트링이 붙어 있어 완전일치로는 잡을 수 없다.
+        if ($source === 'contains') {
+            $norm = self::normalize($answer);
+            $expect = self::normalize((string) $mission->answer);
+
+            return [
+                'correct' => $norm !== '' && $expect !== '' && str_contains($norm, $expect),
+                'norm' => mb_substr($norm, 0, 64),
+            ];
         }
 
         $norm = self::normalize($answer);
