@@ -71,16 +71,21 @@ def main():
         out({'ok': False, 'reason': 'image_unreadable', 'message': '제출 이미지를 읽지 못했습니다'})
 
     top = None
+    loaded = 0
     for path in templates:
         template = cv2.imread(path, cv2.IMREAD_COLOR)
         if template is None:
             continue   # 템플릿 하나가 없어도 나머지로 판정한다
+        loaded += 1
         found = best_match(image, template, threshold)
         if found and (top is None or found[0] > top[0][0]):
             top = (found, os.path.basename(path))
 
     if top is None:
-        out({'ok': False, 'reason': 'template_unreadable', 'message': '템플릿 이미지를 읽지 못했습니다'})
+        # 템플릿을 못 읽은 것과, 읽었지만 제출 이미지가 표식보다 작아 댈 수 없는 것은 다른 상황이다
+        if loaded == 0:
+            out({'ok': False, 'reason': 'template_unreadable', 'message': '템플릿 이미지를 읽지 못했습니다'})
+        out({'ok': False, 'probability': 0.0, 'reason': 'image_too_small', 'message': '제출 이미지가 표식보다 작습니다'})
 
     (prob, loc, scale, w, h), name = top
     if prob < threshold:
