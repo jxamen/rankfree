@@ -54,6 +54,11 @@ class VendorMissionApiController extends Controller
             })
             ->filter(fn (array $m) => $m['slot_remaining'] > 0);   // 슬롯 소진 미션은 숨긴다(소진과 구분 불가)
 
+        // 매체가 원하는 유형만 요청할 수 있다(2026-08-28) — ?kind=place 또는 ?kind=place,shopping
+        if ($kinds = $this->kindsFromRequest($request)) {
+            $rows = $rows->filter(fn (array $m) => in_array((string) ($m['kind'] ?? ''), $kinds, true));
+        }
+
         // 사용자별 피드(§8) — 소프트 차단이면 빈 목록(오류가 아니라 "없음"), 상한 채운 미션 제외.
         // 읽기 경로에서는 참여자 행을 만들지 않는다(폴링만으로 reward_users 를 무한히 늘릴 수 있다).
         $hash = mb_substr(trim((string) $request->query('participant_hash')), 0, 128);
@@ -74,7 +79,8 @@ class VendorMissionApiController extends Controller
 
         $body = [
             'missions' => $rows->values()->map(fn (array $m) => $this->rowPayload($m) + ['remaining' => $m['slot_remaining']]),
-            'meta' => ['slot' => $slotNo, 'closed' => false, 'verifyMode' => $media->verify_mode],
+            'meta' => ['slot' => $slotNo, 'closed' => false, 'verifyMode' => $media->verify_mode,
+                'kinds' => array_keys(\App\Models\RewardMission::KINDS)],   // 요청에 쓸 수 있는 유형 키
         ];
 
         // ETag + 짧은 캐시(§3) — 벤더 폴링 부하를 304 로 흡수한다. 개인화 피드는 입력에 hash 를 섞는다
@@ -96,6 +102,7 @@ class VendorMissionApiController extends Controller
         $media = $this->media($request);
 
         $data = $request->validate(['participant_hash' => 'required|string|max:128']);
+        $kinds = $this->kindsFromRequest($request);   // 원하는 유형만 받기(2026-08-28)
         $day = RewardDay::current();
         $slotNo = SlotCap::slotNo();
 
@@ -108,7 +115,7 @@ class VendorMissionApiController extends Controller
             return $this->noContent();   // 소프트 차단 — 정상 소진과 구분되지 않게(§8)
         }
 
-        $picked = app(MissionAssigner::class)->pick($user->id, $user->user_key_hash, $day, $slotNo);
+        $picked = app(MissionAssigner::class)->pick($user->id, $user->user_key_hash, $day, $slotNo, null, $kinds);
         if (! $picked) {
             return $this->noContent(SlotCap::secondsToNextSlot());
         }
@@ -229,10 +236,36 @@ class VendorMissionApiController extends Controller
     }
 
     /** 스냅샷 행(배열) → 벤더 목록 필드 — 정답 계열은 스냅샷에 아예 실리지 않는다 */
+    /**
+     * 요청의 미션 유형 파라미터 → 유효한 유형 목록(2026-08-28). `kind=place` · `kind=place,shopping` 둘 다 받는다.
+     * 지정이 없으면 null(전 유형). 모르는 값은 **조용히 무시하지 않고** 422 로 알린다 — 오타를 '미션 없음' 으로 착각하지 않게.
+     *
+     * @return list<string>|null
+     */
+    private function kindsFromRequest(Request $request): ?array
+    {
+        $raw = trim((string) $request->input('kind', ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        $kinds = collect(explode(',', $raw))->map(fn ($k) => trim((string) $k))->filter()->unique()->values()->all();
+        $known = array_keys(\App\Models\RewardMission::KINDS);
+        if ($bad = array_values(array_diff($kinds, $known))) {
+            abort(response()->json([
+                'message' => '알 수 없는 미션 유형: '.implode(', ', $bad),
+                'kinds' => $known,
+            ], 422));
+        }
+
+        return $kinds;
+    }
+
     private function rowPayload(array $m): array
     {
         return [
             'id' => (string) $m['id'],
+            'kind' => (string) ($m['kind'] ?? 'shopping'),   // 미션 유형(2026-08-28) — 매체가 유형별로 다루도록
             'title' => $m['title'],
             'description' => $m['description'],
             'keyword' => $m['keyword'],
@@ -282,6 +315,7 @@ class VendorMissionApiController extends Controller
     {
         return [
             'id' => (string) $m->id,
+            'kind' => (string) ($m->kind ?: 'shopping'),   // 미션 유형(2026-08-28) — 목록·할당·상세 모두 동일 키
             'title' => $m->title,
             'description' => $m->description,
             'keyword' => $m->keyword,

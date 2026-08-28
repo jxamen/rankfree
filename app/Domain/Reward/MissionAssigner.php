@@ -19,11 +19,19 @@ class MissionAssigner
      *
      * @return array<string, mixed>|null 스냅샷 행(MissionSnapshot::liveRows 형태)
      */
-    public function pick(int $rewardUserId, string $userKeyHash, string $day, int $slotNo, ?int $mediaId = null): ?array
+    /**
+     * @param  list<string>|null  $kinds  받고 싶은 미션 유형(shopping|place|mall|web). 비우면 전 유형(2026-08-28)
+     */
+    public function pick(int $rewardUserId, string $userKeyHash, string $day, int $slotNo, ?int $mediaId = null, ?array $kinds = null): ?array
     {
         $rows = collect(app(MissionSnapshot::class)->cachedList($day, $slotNo))
             ->filter(fn (array $m) => (int) $m['used']
                 < min(SlotCap::at((int) $m['daily_quota'], $slotNo), (int) $m['daily_quota']));
+
+        // 매체가 유형을 지정했으면 그 유형만 — 없으면 '줄 미션 없음' 으로 끝난다(204)
+        if ($kinds) {
+            $rows = $rows->filter(fn (array $m) => in_array((string) ($m['kind'] ?? ''), $kinds, true));
+        }
 
         if ($rows->isEmpty()) {
             return null;

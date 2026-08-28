@@ -142,6 +142,18 @@ Schema::create('reward_media', function (Blueprint $t) {
 
 ## 3. 제휴 매체 API 계약 v1 (인증: 매체 전용 키 `rkm_…` — §2 '제휴 매체 전용 키')
 
+### 3-0-1. 미션 유형별 수신 (2026-08-28 구현)
+
+매체가 **원하는 유형만** 골라 받는다. 종전에는 요청으로 고를 수도, 응답에서 유형을 알 수도 없어
+매체가 전 미션을 쇼핑으로 취급했다(design-05 §2 대분류 `shopping|place|mall|web`).
+
+- **요청**: `GET /api/v1/missions?kind=place` · `POST /api/v1/missions/assign {"kind":"place"}`. **쉼표로 여러 유형**(`kind=place,shopping`), 비우면 전 유형.
+- **모르는 값은 조용히 무시하지 않고 `422`** + `kinds`(가능한 키 목록)를 함께 준다 — 오타를 '미션 없음' 으로 착각하면 매체가 원인을 못 찾는다.
+- **응답**: `mission.kind` 를 목록·할당·상세 모두에 싣는다. 목록 `meta.kinds` 로 지금 쓸 수 있는 유형 키를 알려준다.
+- 지정한 유형에 줄 미션이 없으면 목록은 **빈 배열**, 단건 할당은 **204**(종전 소진 규약과 동일 — 사유 비공개 §8).
+- 구현: [VendorMissionApiController::kindsFromRequest()](../../app/Http/Controllers/Api/VendorMissionApiController.php) · [MissionAssigner::pick($kinds)](../../app/Domain/Reward/MissionAssigner.php) · 유형 상수 [RewardMission::KINDS](../../app/Models/RewardMission.php). 검증 [RewardMissionKindTest](../../tests/Feature/RewardMissionKindTest.php) 5건. 공개 문서 `/developers/reward` 반영 완료.
+- ⚠️ **저장·찜 같은 세부 로직은 아직 못 고른다** — 그건 `variant` 축(design-05 §2)이고 미구현이다. 지금은 대분류 4종까지만.
+
 ### 3-0. 미션 제공 2방식 (2026-07-31 지시)
 
 | 방식 | 흐름 | 대표 매체 |

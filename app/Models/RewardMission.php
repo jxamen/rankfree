@@ -10,6 +10,17 @@ use Illuminate\Database\Eloquent\Model;
  */
 class RewardMission extends Model
 {
+    /**
+     * 미션 유형(대분류) — design-05 §2. 매체는 이 키로 원하는 유형만 골라 받는다(2026-08-28).
+     * 세부 로직(저장·찜 등)은 variant 축이며 아직 미구현이다.
+     */
+    public const KINDS = [
+        'shopping' => '쇼핑',
+        'place' => '플레이스',
+        'mall' => '몰',
+        'web' => '웹',
+    ];
+
     public const STATUSES = ['draft', 'active', 'paused', 'ended', 'canceled'];
 
     protected $guarded = [];

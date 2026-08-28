@@ -92,6 +92,10 @@
         <thead><tr><th style="width:190px;">항목</th><th>규칙</th></tr></thead>
         <tbody>
             <tr>
+                <td><code class="doc-code">kind</code><br><span class="text-muted" style="font-size:var(--fs-xs);">미션 유형</span></td>
+                <td>미션은 <b class="text-ink">쇼핑(<code class="doc-code">shopping</code>) · 플레이스(<code class="doc-code">place</code>) · 몰(<code class="doc-code">mall</code>) · 웹(<code class="doc-code">web</code>)</b> 으로 나뉩니다. 목록·단건 할당 모두 <code class="doc-code">kind</code> 로 <b class="text-ink">원하는 유형만</b> 받을 수 있고(쉼표로 여러 개), 응답의 <code class="doc-code">mission.kind</code> 로 유형을 확인합니다. 지금 쓸 수 있는 유형 키는 목록 응답의 <code class="doc-code">meta.kinds</code> 에 함께 옵니다</td>
+            </tr>
+            <tr>
                 <td><code class="doc-code">participant_hash</code></td>
                 <td>여러분 서비스의 사용자 식별자를 <b class="text-ink">해시 등 비식별 문자열</b>로 보낸 값(최대 128자). 개인정보를 그대로 보내지 마세요. 참여 한도·중복 판정의 기준이며, <b class="text-ink">같은 값 = 같은 사용자</b>입니다</td>
             </tr>
@@ -139,18 +143,20 @@
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
                 <tbody>
                     <tr><td><code class="doc-code">participant_hash</code></td><td>필수</td><td>참여자 식별 해시 (최대 128자)</td></tr>
+                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑) · <code class="doc-code">place</code>(플레이스) · <code class="doc-code">mall</code>(몰) · <code class="doc-code">web</code>(웹). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -X POST {{ url('/api/v1') }}/missions/assign \
   -H "Authorization: Bearer rkm_..." \
   -H "Content-Type: application/json" \
-  -d '{"participant_hash":"u_9f2c1a"}'</pre></div>
+  -d '{"participant_hash":"u_9f2c1a","kind":"place"}'</pre></div>
             <div class="ep-l">응답 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
   "status": "ok",
   "mission": {
     "id": "2",
+    "kind": "shopping",
     "title": "예시몰 무선 이어폰 최저가 찾기",
     "description": "무선이어폰 검색 결과에서 예시몰 상품 가격을 확인하고 오면 물 1개를 받아요.",
     "keyword": "무선이어폰",
@@ -203,10 +209,11 @@ Retry-After: 5931</pre></div>
                 <thead><tr><th style="width:190px;">이름</th><th style="width:80px;">필수</th><th>설명</th></tr></thead>
                 <tbody>
                     <tr><td><code class="doc-code">participant_hash</code></td><td>선택</td><td>참여자 식별 해시. 주면 그 사용자 기준으로 걸러진 목록을 반환</td></tr>
+                    <tr><td><code class="doc-code">kind</code></td><td>선택</td><td>받고 싶은 <b class="text-ink">미션 유형</b> — <code class="doc-code">shopping</code>(쇼핑) · <code class="doc-code">place</code>(플레이스) · <code class="doc-code">mall</code>(몰) · <code class="doc-code">web</code>(웹). 쉼표로 여러 개(<code class="doc-code">place,shopping</code>). 비우면 전 유형. 모르는 값은 <code class="doc-code">422</code></td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
-            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl "{{ url('/api/v1') }}/missions?participant_hash=u_9f2c1a" \
+            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl "{{ url('/api/v1') }}/missions?participant_hash=u_9f2c1a&kind=place" \
   -H "Authorization: Bearer rkm_..." \
   -H "If-None-Match: \"e3b0c44298fc1c149afbf4c8996fb924\""</pre></div>
             <div class="ep-l">응답 예시</div>
@@ -214,6 +221,8 @@ Retry-After: 5931</pre></div>
   "missions": [
     {
       "id": "2",
+      "kind": "shopping",
+    "kind": "shopping",
       "title": "예시몰 무선 이어폰 최저가 찾기",
       "description": "무선이어폰 검색 결과에서 예시몰 상품 가격을 확인하고 오면 물 1개를 받아요.",
       "keyword": "무선이어폰",
@@ -267,6 +276,7 @@ Retry-After: 5931</pre></div>
   "status": "ok",
   "mission": {
     "id": "2",
+    "kind": "shopping",
     "title": "예시몰 무선 이어폰 최저가 찾기",
     "landingUrl": "https://link.example.com/a1b2c3",
     "remaining": 20,
