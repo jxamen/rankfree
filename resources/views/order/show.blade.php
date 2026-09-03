@@ -29,7 +29,13 @@
     @endif
 
     @if (session('order_done'))
-        @php $bankConfigured = ! empty($bankInfo['bank']) && ! empty($bankInfo['account']); @endphp
+        @php
+            $bankConfigured = ! empty($bankInfo['bank']) && ! empty($bankInfo['account']);
+            // 주문 금액(total_price)은 공급가액 — 실제 입금액은 부가세 10% 포함
+            $doneSupply = (float) session('order_amount', 0);
+            $doneVat = \App\Support\Vat::of($doneSupply);
+            $donePay = \App\Support\Vat::total($doneSupply);
+        @endphp
         <div class="card p-6 text-center mb-6" style="border:1px solid var(--color-success);">
             <div style="font-size:var(--fs-2xl);">✅</div>
             <p class="text-ink font-semibold mt-2" style="font-size:var(--fs-base);">주문이 접수되었습니다</p>
@@ -40,8 +46,16 @@
                 <div class="mt-4 mx-auto text-left" style="max-width:420px;border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:18px 20px;background:var(--color-surface-soft);">
                     <div class="text-muted font-semibold mb-3 text-center" style="font-size:var(--fs-xs);">아래 계좌로 입금해 주세요</div>
                     <div class="flex items-center justify-between py-1">
-                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">입금 금액</span>
-                        <span class="text-ink font-bold font-mono" style="font-size:var(--fs-base);color:var(--color-primary);">{{ number_format((float) session('order_amount', 0)) }}원</span>
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">입금 금액 <span class="text-muted">(부가세 포함)</span></span>
+                        <span class="text-ink font-bold font-mono" style="font-size:var(--fs-xl);color:var(--color-primary);">{{ number_format($donePay) }}원</span>
+                    </div>
+                    <div class="flex items-center justify-between py-1" style="border-top:1px solid var(--color-hairline-soft);margin-top:6px;padding-top:10px;">
+                        <span class="text-muted-soft" style="font-size:var(--fs-xs);">공급가액</span>
+                        <span class="text-ink font-medium font-mono" style="font-size:var(--fs-sm);">{{ number_format($doneSupply) }}원</span>
+                    </div>
+                    <div class="flex items-center justify-between py-1" style="margin-bottom:4px;">
+                        <span class="font-semibold" style="font-size:var(--fs-sm);color:var(--color-primary);">부가세 (10%)</span>
+                        <span class="font-bold font-mono" style="font-size:var(--fs-lg);color:var(--color-primary);">{{ number_format($doneVat) }}원</span>
                     </div>
                     <div class="flex items-center justify-between py-1" style="border-top:1px solid var(--color-hairline-soft);margin-top:6px;padding-top:10px;">
                         <span class="text-muted-soft" style="font-size:var(--fs-xs);">은행</span>
@@ -60,7 +74,9 @@
                 </div>
                 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">입금이 확인되면 담당자가 확인 후 진행합니다.</p>
             @else
-                <p class="text-muted-soft mt-1" style="font-size:var(--fs-xs);">담당자가 확인 후 진행합니다.</p>
+                <p class="text-ink font-bold font-mono mt-3" style="font-size:var(--fs-xl);color:var(--color-primary);">{{ number_format($donePay) }}원</p>
+                <p class="text-muted mt-1" style="font-size:var(--fs-xs);">공급가액 {{ number_format($doneSupply) }}원 + <b style="color:var(--color-primary);">부가세 {{ number_format($doneVat) }}원</b></p>
+                <p class="text-muted-soft mt-2" style="font-size:var(--fs-xs);">담당자가 확인 후 진행합니다.</p>
             @endif
         </div>
     @endif
@@ -87,7 +103,8 @@
     <form method="POST" action="{{ route('order.store', $product->order_token) }}" enctype="multipart/form-data" id="order-form"
           data-step-mode="{{ $stepMode ? '1' : '0' }}" data-mode="{{ $product->quantity_mode }}"
           data-unit="{{ $product->min_price }}" data-qty="{{ $qtyName }}" data-start="{{ $startName }}" data-end="{{ $endName }}" data-days="{{ $daysName }}"
-          data-fixed-days="{{ $product->quantity_mode === 'daily' ? ($product->fixed_days ?? '') : '' }}">
+          data-fixed-days="{{ $product->quantity_mode === 'daily' ? ($product->fixed_days ?? '') : '' }}"
+          data-vat="{{ \App\Support\Vat::RATE }}">
         @csrf
 
         {{-- 스텝 1: 상품 정보 + 수량 · 기간 (같은 카드) --}}
@@ -99,7 +116,7 @@
                 @if ($product->description)
                     <p class="text-muted mt-2" style="font-size:var(--fs-sm);line-height:1.7;white-space:pre-line;">{{ $product->description }}</p>
                 @endif
-                <div class="text-ink font-display mt-3" style="font-size:var(--fs-lg);">{{ number_format($product->min_price) }}<span class="text-muted-soft" style="font-size:var(--fs-xs);">원 / 단가</span></div>
+                <div class="text-ink font-display mt-3" style="font-size:var(--fs-lg);">{{ number_format($product->min_price) }}<span class="text-muted-soft" style="font-size:var(--fs-xs);">원 / 단가 <span style="font-weight:400;">(부가세 별도)</span></span></div>
             </div>
             @php
                 // 고정 수량·기간 상품 — 고객은 그 값 그대로 주문(입력 잠금, 서버도 강제)
@@ -169,11 +186,7 @@
                     </div>
                     @include('order._coupon')
                     <div class="flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
-                            <div id="o-discount-row" style="font-size:var(--fs-xs);color:var(--color-success);display:none;">쿠폰 할인 -<span id="o-discount">0</span>원</div>
-                            <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
-                        </div>
+                        @include('order._amount')
                         <button type="submit" class="btn btn-primary" style="height:46px;padding:0 30px;">주문하기</button>
                     </div>
                 </div>
@@ -206,11 +219,7 @@
             <div class="card p-5">
                 @include('order._coupon')
                 <div class="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                        <span class="text-muted" style="font-size:var(--fs-xs);">예상 금액</span>
-                        <div id="o-discount-row" style="font-size:var(--fs-xs);color:var(--color-success);display:none;">쿠폰 할인 -<span id="o-discount">0</span>원</div>
-                        <div class="text-ink font-display" style="font-size:var(--fs-xl);"><span id="o-total">0</span>원</div>
-                    </div>
+                    @include('order._amount')
                     <div class="flex items-center gap-2">
                         <span id="o-stepind" class="text-muted-soft" style="font-size:var(--fs-xs);margin-right:4px;"></span>
                         <button type="button" id="o-prev" class="btn btn-secondary" style="display:none;">이전</button>
@@ -244,7 +253,7 @@
                             <th class="text-center px-3 py-3 font-semibold" style="width:56px;">No</th>
                             <th class="text-left px-5 py-3 font-semibold" style="width:170px;">주문번호</th>
                             <th class="text-right px-3 py-3 font-semibold" style="width:120px;">수량 · 기간</th>
-                            <th class="text-right px-3 py-3 font-semibold" style="width:120px;">금액</th>
+                            <th class="text-right px-3 py-3 font-semibold" style="width:120px;">결제 금액<br><span style="font-weight:400;">(부가세 포함)</span></th>
                             <th class="text-center px-3 py-3 font-semibold" style="width:90px;">상태</th>
                             <th class="text-center px-3 py-3 font-semibold" style="width:110px;">순위</th>
                             <th class="text-right px-5 py-3 font-semibold" style="width:140px;">주문일시</th>
@@ -263,7 +272,7 @@
                                 <td class="px-3 py-3 text-right text-muted" style="font-size:var(--fs-xs);">
                                     {{ number_format($o->quantity) }}@if ($o->days) <span class="text-muted-soft">× {{ $o->days }}일</span>@endif
                                 </td>
-                                <td class="px-3 py-3 text-right text-ink font-medium" style="font-size:var(--fs-xs);">{{ number_format($o->total_price) }}원</td>
+                                <td class="px-3 py-3 text-right text-ink font-medium" style="font-size:var(--fs-xs);">{{ number_format(\App\Support\Vat::total((float) $o->total_price)) }}원</td>
                                 <td class="px-3 py-3 text-center">
                                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 9px;color:{{ $orderStatusColor[$o->status] ?? 'var(--color-muted)' }};">{{ $orderStatuses[$o->status] ?? $o->status }}</span>
                                 </td>
@@ -290,7 +299,9 @@
                                             $o->days ? ['총 수량', number_format($o->quantity * $o->days)] : null,
                                             (float) $o->discount_amount > 0 ? ['주문 금액', number_format((float) $o->total_price + (float) $o->discount_amount).'원'] : null,
                                             (float) $o->discount_amount > 0 ? ['쿠폰 할인', '-'.number_format($o->discount_amount).'원'] : null,
-                                            ['합계', number_format($o->total_price).'원'],
+                                            ['공급가액', number_format($o->total_price).'원'],
+                                            ['부가세 (10%)', number_format(\App\Support\Vat::of((float) $o->total_price)).'원'],
+                                            ['결제 금액', number_format(\App\Support\Vat::total((float) $o->total_price)).'원'],
                                         ]) as [$lab, $val])
                                             <div>
                                                 <div class="text-muted-soft" style="font-size:var(--fs-xs);">{{ $lab }}</div>
@@ -374,6 +385,9 @@ document.querySelectorAll('.rf-od-toggle').forEach(function (b) {
     var endEl = form.dataset.end ? form.querySelector('[name="' + form.dataset.end + '"]') : null;
     var daysEl = form.dataset.days ? form.querySelector('[name="' + form.dataset.days + '"]') : null;
     var out = document.getElementById('o-total');
+    var supplyOut = document.getElementById('o-supply');
+    var vatOut = document.getElementById('o-vat');
+    var vatRate = parseFloat(form.dataset.vat) || 0;   // 상품가는 부가세 별도 — 결제 금액은 공급가액 + 부가세
     var couponEl = document.getElementById('o-coupon');
     var dcRow = document.getElementById('o-discount-row');
     var dcOut = document.getElementById('o-discount');
@@ -428,7 +442,11 @@ document.querySelectorAll('.rf-od-toggle').forEach(function (b) {
         if (dcRow) dcRow.style.display = d > 0 ? '' : 'none';
         if (dcOut) dcOut.textContent = d.toLocaleString('ko-KR');
         if (dcNote) dcNote.style.display = short ? '' : 'none';
-        out.textContent = (gross - d).toLocaleString('ko-KR');
+        var supply = gross - d;
+        var vat = Math.floor(supply * vatRate);   // 원 단위 절사 — 서버 Vat::of 와 동일
+        if (supplyOut) supplyOut.textContent = supply.toLocaleString('ko-KR');
+        if (vatOut) vatOut.textContent = vat.toLocaleString('ko-KR');
+        out.textContent = (supply + vat).toLocaleString('ko-KR');
     }
     [qtyEl, startEl, endEl, daysEl, couponEl].forEach(function (el) { if (el) el.addEventListener('input', calc); });
     if (couponEl) couponEl.addEventListener('change', calc);

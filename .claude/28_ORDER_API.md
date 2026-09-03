@@ -9,6 +9,9 @@
 - 검증·금액 계산은 **[OrderPlacer](../app/Domain/Order/OrderPlacer.php) 한 곳** — 웹([OrderController](../app/Http/Controllers/OrderController.php))과 API([Api\OrderApiController](../app/Http/Controllers/Api/OrderApiController.php))가 공유한다. **주문 규칙을 고칠 땐 OrderPlacer 만 고친다**(컨트롤러에 규칙 넣지 말 것).
   - 동적 필드(필수·DATE 최소 시작일·contains·플레이스 URL 정규화) → 수량/기간(27번 고정값 강제 포함) → 쿠폰(26번, 잠금 재확인) → 트랜잭션 생성까지 전부.
   - 입력 오류는 [OrderInputException](../app/Domain/Order/OrderInputException.php)(field, message) — field 규약: 동적 필드 `f_{field_key}` · `quantity` · `days` · `user_coupon_id`. 웹은 폼 에러 키로, API 는 422 응답의 `field` 로 그대로 노출.
+- **금액은 부가세 별도** — 상품 단가(`min_price`)와 주문 `total_price` 는 **공급가액**이다. 부가세는 저장하지 않고 [Vat](../app/Support/Vat.php)(`RATE` 10%, 원 단위 절사)로 **표시할 때만** 더한다.
+  - 고객이 보는 결제·입금 금액 = 공급가액 + 부가세 — 주문 폼([order/_amount](../resources/views/order/_amount.blade.php) + show 의 calc()), 주문 완료 입금 안내, 접수 내역이 모두 부가세 포함으로 표기. 쿠폰 할인은 공급가액에서 먼저 빼고 그 위에 부가세를 붙인다.
+  - 검증: [OrderVatDisplayTest](../tests/Feature/OrderVatDisplayTest.php) 4건. GTM 구매 전환 `value` 는 공급가액 유지.
 - **파일(FILE/IMAGE) 필드는 웹 전용** — 업로드 저장은 웹 컨트롤러가 하고 경로만 서비스에 전달. 필수 파일 필드가 있는 상품은 API 에서 `orderable: false` + 주문 시 422.
 
 ## 회원별 기능 권한 (2026-07-26) — 다 열어주지 않는다
