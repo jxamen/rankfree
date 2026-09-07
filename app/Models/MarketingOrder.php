@@ -154,6 +154,19 @@ class MarketingOrder extends Model
         return ($keyword !== '' && $url !== '') ? ['keyword' => $keyword, 'url' => $url] : null;
     }
 
+    /**
+     * 부스팅샵 직접 접수 대상 판정(2026-09-07) — 플레이스면 place, 쇼핑이면 shopping API 로 보낸다.
+     * 주문 상세 상단 [부스팅샵 주문] 버튼 노출과 확인 화면 분기가 이 값을 쓴다.
+     */
+    public function boostingService(): ?string
+    {
+        if ($this->placeSource()) {
+            return 'place';
+        }
+
+        return $this->shopKeywordSource() ? 'shopping' : null;
+    }
+
     /** 주문 입력값에서 키워드만 추출(표기용) — 표준 키 keyword, 없으면 키 이름 휴리스틱(keyword·키워드 포함). */
     public function keywordFromFields(): ?string
     {

@@ -561,6 +561,10 @@ class MarketingOrderController extends Controller
     {
         $order->load('product.fields');
 
+        if ($order->boostingService() === 'shopping') {
+            return $this->boostingShoppingForm($order, $client);
+        }
+
         $draft = $this->boostingShopDraft($order);
         // 저장해 둔 전송값이 있으면 그쪽이 우선 — 운영자가 다듬어 저장한 내용을 자동 수집값이 덮지 않게(2026-08-27)
         foreach ((array) $order->boosting_draft as $k => $v) {
@@ -585,6 +589,10 @@ class MarketingOrderController extends Controller
      */
     public function boostingShopOrder(Request $request, MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
     {
+        if ($order->boostingService() === 'shopping') {
+            return $this->boostingShoppingOrder($request, $order, $client);
+        }
+
         $data = $request->validate([
             'product_no' => ['required', 'integer', 'min:1'],
             'link' => ['required', 'url', 'max:500'],
@@ -692,6 +700,13 @@ class MarketingOrderController extends Controller
             'place_tel' => ['nullable', 'string', 'max:40'],
             'image_url' => ['nullable', 'string', 'max:500'],
             'keyword_ranks' => ['nullable', 'string', 'max:4000'],   // 추천 결과(키워드=>순위) JSON
+            // 쇼핑 주문 전송값(2026-09-07) — 랜딩 URL 목록은 최대 100개라 넉넉히 잡는다
+            'product_url' => ['nullable', 'string', 'max:500'],
+            'mall_name' => ['nullable', 'string', 'max:100'],
+            'amount' => ['nullable', 'string', 'max:20'],
+            'mid' => ['nullable', 'string', 'max:20'],
+            'tags' => ['nullable', 'string', 'max:4000'],
+            'landing_urls' => ['nullable', 'string', 'max:12000'],
         ]);
 
         $ranks = json_decode((string) ($data['keyword_ranks'] ?? ''), true);
@@ -736,6 +751,206 @@ class MarketingOrderController extends Controller
             'ok' => true,
             'profile' => ['name' => $profile['name'], 'category' => $profile['category'], 'address' => $profile['address']],
         ] + $result);
+    }
+
+    /**
+     * 부스팅샵 쇼핑 주문 — 전송 확인 화면(2026-09-07).
+     * 플레이스와 같은 [부스팅샵 주문] 버튼에서 들어오고, 주문이 쇼핑이면 이쪽으로 갈라진다.
+     * 랜딩 URL 은 주문에 연결된 유입키워드 분석의 Short URL 을 **전부** 싣는다 — 부스팅샵이 하루에 하나씩 돌려 쓴다.
+     */
+    private function boostingShoppingForm(MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
+    {
+        $draft = $this->boostingShoppingDraft($order);
+        // 저장해 둔 전송값이 있으면 그쪽이 우선(운영자가 다듬은 값 보존) — 자동 수집분은 collected 로 따로 넘겨 [다시 불러오기]에 쓴다
+        foreach ((array) $order->boosting_draft as $k => $v) {
+            if ($k !== 'collected' && $k !== 'keyword_ranks' && $v !== null && $v !== '') {
+                $draft[$k] = $v;
+            }
+        }
+
+        return view('admin.orders.boosting-shop-shopping', [
+            'order' => $order,
+            'draft' => $draft,
+            'configured' => $client->configured(),
+            'sentDispatch' => $order->dispatches()
+                ->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->latest('id')->first(),
+        ]);
+    }
+
+    /**
+     * 부스팅샵 쇼핑 주문 접수 — POST /api/order/shopping.
+     * 랜딩 URL(landing_urls[])·정답 태그(tags[])는 목록 입력을 배열로 바꿔 한 번에 보낸다.
+     */
+    private function boostingShoppingOrder(Request $request, MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
+    {
+        // 판매가는 화면에서 콤마가 섞여 들어온다 — 숫자만 남기고 검증한다
+        $request->merge(['amount' => preg_replace('/[^\d]/', '', (string) $request->input('amount'))]);
+
+        $data = $request->validate([
+            'product_no' => ['required', 'integer', 'min:1'],
+            'keyword' => ['required', 'string', 'max:100'],
+            'product_url' => ['required', 'url', 'max:500'],
+            'mid' => ['nullable', 'regex:/^\d{5,20}$/'],
+            'landing_urls' => ['required', 'string'],
+            'tags' => ['required', 'string'],
+            'product_name' => ['required', 'string', 'max:200'],
+            'mall_name' => ['required', 'string', 'max:100'],
+            'amount' => ['required', 'integer', 'min:0'],
+            'image_url' => ['required', 'url', 'max:500'],
+            'day_quantity' => ['required', 'integer', 'min:1'],
+            'fr_date' => ['required', 'date_format:Y-m-d'],
+            'to_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:fr_date'],
+        ], [], [
+            'product_no' => '부스팅샵 상품번호', 'keyword' => '검색 키워드', 'product_url' => '상품 URL',
+            'mid' => '네이버 쇼핑 MID', 'landing_urls' => '랜딩 URL', 'tags' => '정답 태그',
+            'product_name' => '상품명', 'mall_name' => '상점명', 'amount' => '판매가', 'image_url' => '상품 사진 URL',
+            'day_quantity' => '1일 수량', 'fr_date' => '시작일', 'to_date' => '종료일',
+        ]);
+
+        // 랜딩 URL — 줄바꿈·쉼표·공백 구분 입력을 배열로. 부스팅샵이 시작일부터 하루에 하나씩 순서대로 돌려 쓴다
+        $urls = collect(preg_split('/[\r\n,\s]+/', $data['landing_urls']))
+            ->map(fn ($u) => trim((string) $u))->filter()->unique()->values();
+        $max = \App\Domain\Order\BoostingShopClient::SHOPPING_MAX_LANDING_URLS;
+        if ($urls->isEmpty() || $urls->count() > $max) {
+            return back()->withInput()->withErrors(['landing_urls' => "랜딩 URL 은 1~{$max}개여야 합니다(현재 ".$urls->count().'개).']);
+        }
+        if ($bad = $urls->first(fn ($u) => ! preg_match('#^https?://#i', $u))) {
+            return back()->withInput()->withErrors(['landing_urls' => "랜딩 URL 형식이 아닙니다 — {$bad}"]);
+        }
+
+        // 정답 태그 — 태그 안에 공백이 들어갈 수 있으므로 줄바꿈·쉼표로만 나눈다. 보낸 순서가 곧 태그 번호
+        $tags = collect(preg_split('/[\r\n,]+/', $data['tags']))
+            ->map(fn ($t) => trim((string) $t))->filter()->unique()->values();
+        $maxTags = \App\Domain\Order\BoostingShopClient::SHOPPING_MAX_TAGS;
+        if ($tags->isEmpty() || $tags->count() > $maxTags) {
+            return back()->withInput()->withErrors(['tags' => "정답 태그는 1~{$maxTags}개여야 합니다(현재 ".$tags->count().'개).']);
+        }
+
+        // 중복 접수 방지 — 플레이스와 같은 규칙(취소해야 다시 넣을 수 있다)
+        if ($order->dispatches()->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent')->exists()) {
+            return back()->withErrors(['boosting' => "주문 {$order->order_no}: 이미 부스팅샵으로 접수된 주문입니다. 다시 넣으려면 주문 상세의 외부 발주 현황에서 취소하세요."]);
+        }
+
+        $params = array_filter([
+            'product_no' => (int) $data['product_no'],
+            'keyword' => $data['keyword'],
+            'product_url' => $data['product_url'],
+            'mid' => $data['mid'] ?? null,          // 스마트스토어는 필수(없으면 부스팅샵이 URL 숫자를 MID 로 쓴다)
+            'product_name' => $data['product_name'],
+            'mall_name' => $data['mall_name'],
+            'amount' => (int) $data['amount'],
+            'image_url' => $data['image_url'],
+            'day_quantity' => (int) $data['day_quantity'],
+            'fr_date' => $data['fr_date'],
+            'to_date' => $data['to_date'],
+        ], fn ($v) => $v !== null && $v !== '');
+        $params['landing_urls'] = $urls->all();
+        $params['tags'] = $tags->all();
+
+        $result = $client->shopping($params);
+        $body = is_array($result['body']) ? $result['body'] : [];
+
+        $days = (int) \Illuminate\Support\Carbon::parse($data['fr_date'])->diffInDays(\Illuminate\Support\Carbon::parse($data['to_date'])) + 1;
+        $dispatch = \App\Models\OrderDispatch::create([
+            'order_id' => $order->id,
+            'vendor_id' => null,
+            'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
+            'channel' => 'api',
+            'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
+            'payload' => $params,
+            'status' => $result['ok'] ? 'sent' : 'failed',
+            'response' => mb_substr($result['ok']
+                ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
+                : '실패 — '.$result['error'], 0, 1900),
+            'sent_at' => now(),
+        ]);
+
+        if (! $result['ok']) {
+            return back()->withInput()->withErrors(['boosting' => "부스팅샵 접수 실패 — {$result['error']}"]);
+        }
+
+        $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
+        if ($order->status === 'pending') {
+            $order->update(['status' => 'processing']);
+        }
+
+        return redirect()->route('admin.orders.show', $order)->with('status',
+            "주문 {$order->order_no} 을(를) 부스팅샵 쇼핑 주문으로 접수했습니다 — 부스팅샵 주문번호 {$result['order_no']}"
+            .' · 랜딩 URL '.$urls->count().'개(하루에 하나씩 순환)'
+            .(isset($body['total_quantity']) ? " · 총 {$body['total_quantity']}건" : '')
+            .' (발주 기록 #'.$dispatch->id.')');
+    }
+
+    /**
+     * 부스팅샵 쇼핑 전송값 초안 — 주문 입력값과 유입키워드 분석 수집값(상품명·상점명·가격·썸네일·정답 태그)에서 채운다.
+     * 랜딩 URL 은 분석에 생성된 Short URL 전부(그룹 순).
+     *
+     * @return array<string, mixed>
+     */
+    private function boostingShoppingDraft(MarketingOrder $order): array
+    {
+        $fv = (array) $order->field_values;
+        $fields = $order->product?->fields ?? collect();
+
+        /** autofill_source 로 지정된 내부 필드에 이미 채워진 값(확장 수집분)이 있으면 그것을 쓴다. */
+        $byAutofill = function (string $src) use ($fv, $fields) {
+            foreach ($fields as $f) {
+                if ((string) $f->autofill_source === $src && trim((string) ($fv[$f->field_key] ?? '')) !== '') {
+                    return trim((string) $fv[$f->field_key]);
+                }
+            }
+
+            return '';
+        };
+
+        $analysis = $order->shopKeywordAnalyses()->latest('id')->first();
+        $info = $analysis && (string) $analysis->product_id !== ''
+            ? \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+                ->where('channel_product_id', $analysis->product_id)->first()
+            : null;
+
+        $src = $order->shopKeywordSource() ?? [];
+        $url = $byAutofill('product_url') ?: ((string) ($src['url'] ?? '') ?: (string) ($analysis?->product_url ?? ''));
+
+        // 스마트스토어·브랜드스토어 URL 의 숫자는 스토어 내부 상품번호라 네이버 쇼핑 MID 와 다르다(부스팅샵 문서).
+        // 가격비교(catalog)·자사몰은 URL 의 숫자가 곧 MID 라 자동으로 채운다.
+        $isStore = (bool) preg_match('#(smartstore|brand)\.naver\.com#i', $url);
+        $target = app(\App\Domain\Shopping\NaverShoppingRankService::class)->resolveTarget($url);
+
+        $tags = $byAutofill('seller_tags');
+        if ($tags === '' && $info) {
+            $tags = implode(', ', array_filter(array_map('strval', (array) $info->seller_tags)));
+        }
+
+        $links = $this->boostingShoppingLandingUrls($order);
+        $price = $byAutofill('product_price') ?: (string) ($analysis?->product_price ?? $info?->price ?? '');
+
+        return [
+            'product_no' => $order->product?->boosting_product_no ?: '',
+            'keyword' => $byAutofill('core_keyword') ?: (string) ($src['keyword'] ?? $order->keywordFromFields() ?? ''),
+            'product_url' => $url,
+            'mid' => $isStore ? '' : (string) $target['product_id'],
+            'product_name' => $byAutofill('product_title') ?: (string) ($analysis?->product_title ?: ($info?->title ?? '')),
+            'mall_name' => $byAutofill('mall_name') ?: (string) ($analysis?->mall_name ?: ($info?->mall_name ?? '')),
+            'amount' => $price,
+            'image_url' => $byAutofill('thumbnail_url') ?: (string) ($info?->thumbnail_url ?? ''),
+            'tags' => $tags,
+            'landing_urls' => $links->implode("\n"),
+            'day_quantity' => (int) ($fv['daily_qty'] ?? 0) ?: $order->quantity,
+            'fr_date' => trim((string) ($fv['start_date'] ?? '')),
+            'to_date' => trim((string) ($fv['end_date'] ?? '')),
+            // 화면 표기·[Short URL 다시 불러오기]용 — 저장분에 덮이지 않게 별도 키로 둔다
+            'collected' => ['landing_urls' => $links->all(), 'is_store' => $isStore],
+        ];
+    }
+
+    /** 주문에 연결된 유입키워드 분석의 Short URL 전부(그룹 순·중복 제거) — 부스팅샵이 하루에 하나씩 돌려 쓴다. */
+    private function boostingShoppingLandingUrls(MarketingOrder $order): \Illuminate\Support\Collection
+    {
+        return $order->shopKeywordAnalyses()
+            ->with(['shortLinks' => fn ($q) => $q->orderBy('group_no')])->orderBy('id')->get()
+            ->flatMap(fn ($a) => $a->shortLinks->map(fn ($l) => $l->url()))
+            ->filter()->unique()->values();
     }
 
     /** 주문 상품이 '저장' 계열이면 저장 베이직, 아니면 유입 베이직 — 등급은 확인 화면에서 고른다. */

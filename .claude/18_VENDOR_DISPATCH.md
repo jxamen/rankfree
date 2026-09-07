@@ -108,6 +108,21 @@
 - 성공하면 주문이 접수 → **진행중**으로 넘어간다(진행중 전환 시 순위추적 자동 등록도 기존대로 동작).
 - **검증**: [BoostingShopOrderTest](../tests/Feature/BoostingShopOrderTest.php) 14건(성공·result:fail·중복 차단·키워드 30개 초과·API 키 미설정·검증 + 상호명/전화/상품번호 자동 채움·저장 상품 기본값·기억값 우선·키워드 추천) + Playwright 실동작(상세 버튼 → 확인 화면 자동 채움 → 키워드 자동 추천(실제 브라우저 수집) → **실제 API 왕복**). 테스트는 `place:serp:browser` 락을 선점하고 순위 캐시를 심어 **브라우저가 뜨지 않게** 한다. 실 왕복은 과거 시작일로 보내 부스팅샵이 `fr_date 는 오늘 이후로 설정해 주세요` 로 거부하게 해 **주문 접수·적립금 차감 없이** 인증·파라미터 수용을 확인했다.
 
+## 부스팅샵 쇼핑 주문 — 랜딩 URL 여러 개 (2026-09-07)
+
+> 쇼핑 주문도 **같은 [부스팅샵 주문] 버튼**(주문 상세 상단)에서 부스팅샵 API 로 바로 접수한다. 문서: https://boostings.shop/api/docs/shopping
+
+- **분기**: 버튼 노출·확인 화면·접수 모두 [MarketingOrder::boostingService()](../app/Models/MarketingOrder.php) 로 갈린다 — `placeSource()` 가 있으면 `place`, 없고 `shopKeywordSource()` 가 있으면 `shopping`. 라우트(`admin/orders/{order}/boosting-shop`)와 저장 엔드포인트는 플레이스와 **공유**하고, 컨트롤러가 안에서 갈라 [boosting-shop-shopping.blade.php](../resources/views/admin/orders/boosting-shop-shopping.blade.php) 를 그린다.
+- **핵심 — 랜딩 URL 을 여러 개 한 번에**: `landing_urls[]`(1~100개). 부스팅샵이 **시작일부터 하루에 하나씩 순서대로 쓰고, 목록 끝에 닿으면 처음으로 돌아간다**(회차별 1개씩 나눠 발주하던 세부주문 흐름과 달리, 쇼핑은 주문 한 건에 목록을 통째로 넘긴다). 레거시 `landing_url`(1개)은 `landing_urls[]` 를 보내면 무시된다.
+  - 초안은 **주문에 연결된 유입키워드 분석의 Short URL 전부**(그룹 순·중복 제거, [ShopKeywordShortLink::url()](../app/Models/ShopKeywordShortLink.php)). 링크를 나중에 더 만들었으면 확인 화면 [Short URL 다시 불러오기]로 갱신.
+  - 화면에 **순환 미리보기**(10/1 1번 · 10/2 2번 …)를 띄워 며칠에 어떤 주소가 열리는지 눈으로 확인한다.
+- **정답 태그 `tags[]`**(1~100개) — **보낸 순서가 그대로 태그 번호**이고 미션이 "N번째 태그"를 묻는다. 초안은 확장 수집값(`ShopProductInfo.seller_tags`).
+- **자동 채움**: 상품URL·상품명·상점명·가격·썸네일은 상품 필드의 `autofill_source` 값 → 유입키워드 분석 → `ShopProductInfo` 순으로 찾는다. 판매가는 콤마가 섞여 들어와도 숫자만 남겨 보낸다.
+- **MID 함정** — 스마트스토어/브랜드스토어 URL 의 숫자는 **스토어 내부 상품번호라 네이버 쇼핑 MID 와 다르다**. rankfree 는 MID 를 수집하지 않으므로 자동으로 채우지 않고 화면에서 **"스마트스토어는 MID 필수"** 로 경고한다(비우면 부스팅샵이 URL 숫자를 MID 로 써 실적이 안 잡힐 수 있음). 가격비교(catalog)·자사몰은 URL 숫자가 곧 MID 라 자동으로 채운다.
+- 상품번호(`product_no`)는 쇼핑 등급표가 공개돼 있지 않아 **숫자 입력**(부스팅샵 주문 화면 주소 `/ads/new/shopping/13/57` 의 마지막 숫자). 성공하면 플레이스와 같은 `marketing_products.boosting_product_no` 에 기억된다.
+- 그 밖(중복 접수 차단 · 발주 기록 `vendor_name=부스팅샵` · 실패는 [다시 주문] · 성공 시 접수→진행중)은 **플레이스와 같은 규칙**.
+- **검증**: [BoostingShoppingOrderTest](../tests/Feature/BoostingShoppingOrderTest.php) 10건(Short URL 전부 자동 채움·배열 전송·쉼표/중복 정리·1~100개 한도·태그 필수·result:fail 기록·중복 차단·저장분 우선·플레이스 주문이 쇼핑 분기에 안 걸리는지) + Playwright 실동작(주문 상세 버튼 → 확인 화면 자동 채움 4개 → 순환 미리보기 → **실제 API 왕복**). 실왕복은 과거 시작일로 보내 `fr_date 는 오늘 이후로 설정해 주세요` 로 거부시켜 **주문 접수·적립금 차감 없이** 확인했고, `landing_urls` 를 빼면 `landing_urls 값은 필수입니다` 가 돌아와 배열이 실제로 수용됨을 확인했다.
+
 ## 주의
 
 - 승인은 **활성 발주가 없을 때만**(취소 후 재발주 허용) — 실패 건은 개별 재전송. 세부주문 주문의 승인은 "도래 회차 전송+예약 활성화"로 동작.
