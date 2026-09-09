@@ -196,15 +196,15 @@
 {{-- Short URL — 상위 노출 키워드를 그룹으로 나눠 순차 출력 --}}
 <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1 flex-wrap" style="gap:10px;">
+        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
         <div class="flex items-center gap-2">
-            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
+            <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
+                @csrf
+                <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
+                <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty() || $shortLinksLocked)>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
+            </form>
             <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사</button>
         </div>
-        <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
-            @csrf
-            <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
-            <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty() || $shortLinksLocked)>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
-        </form>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
         상위 {{ $th }}위 노출 키워드를 Short URL마다 하나씩 돌아가며 배정합니다. 링크를 열면 자기 그룹 안에서 순서대로 <code>query=노출키워드&amp;acq=참고키워드</code>를 싣고 이동합니다.
