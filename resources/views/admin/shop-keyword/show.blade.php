@@ -19,6 +19,7 @@
         'attr' => '브랜드+속성(구)', 'suffix' => '핵심+어미(구)', 'etc' => '기타(이전 조합)'];
     $th = $analysis->threshold;
     $shopUrl = fn ($kw) => 'https://m.search.naver.com/search.naver?where=m&query='.urlencode($kw);
+    $shortUrlOf = fn ($link) => $link->domain ? 'https://'.$link->domain.'/s/'.$link->token : route('shop-keyword.short', $link->token);
     $rankCell = function ($rank) use ($th) {
         if ($rank === null) return ['미확인', 'text-muted-soft'];
         if ($rank <= 0) return ['미노출', 'text-muted-soft'];   // 가격비교 오가닉에 없음
@@ -195,7 +196,10 @@
 {{-- Short URL — 상위 노출 키워드를 그룹으로 나눠 순차 출력 --}}
 <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1 flex-wrap" style="gap:10px;">
-        <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
+        <div class="flex items-center gap-2">
+            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
+            <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사</button>
+        </div>
         <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
             @csrf
             <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
@@ -228,9 +232,7 @@
                 <tbody>
                 @foreach ($shortLinks as $link)
                     @php
-                        $shortUrl = $link->domain
-                            ? 'https://'.$link->domain.'/s/'.$link->token
-                            : route('shop-keyword.short', $link->token);
+                        $shortUrl = $shortUrlOf($link);
                         $assigned = collect((array) $link->keywords)->filter()->values();
                     @endphp
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
@@ -399,7 +401,7 @@
 </style>
 
 {{-- 전체 복사 데이터(노출/광고 키워드) + 화면단 체크 설정 --}}
-<script type="application/json" id="sk-copy-data">{!! json_encode(['exposed' => $exposed->pluck('keyword')->values(), 'ad' => $adKeywords->pluck('keyword')->values()], JSON_UNESCAPED_UNICODE) !!}</script>
+<script type="application/json" id="sk-copy-data">{!! json_encode(['exposed' => $exposed->pluck('keyword')->values(), 'ad' => $adKeywords->pluck('keyword')->values(), 'short' => $shortLinks->map($shortUrlOf)->values()], JSON_UNESCAPED_UNICODE) !!}</script>
 @php
     // 함께많이찾는·경쟁브랜드가 빈약하면(서버 fetch 부분 실패) 확장으로 보충 수집한다
     $needSupplement = ($tokens['together'] ?? collect())->count() < 8
