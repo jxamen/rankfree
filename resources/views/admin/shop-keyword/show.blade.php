@@ -157,7 +157,7 @@
                     <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>Short URL 재배정</button>
                 </form>
             @endif
-            <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $exposed->isEmpty() ? 'hidden' : '' }}" data-copy="exposed">전체 복사</button>
+            <button type="button" class="btn btn-primary btn-sm sk-copy {{ $exposed->isEmpty() ? 'hidden' : '' }}" data-copy="exposed">전체 복사 ↵</button>
         </div>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">이 검색어들에서 내 상품이 강합니다 — 순위 확인 중 발견되면 실시간으로 추가됩니다.</div>
@@ -203,7 +203,7 @@
                 <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
                 <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty() || $shortLinksLocked)>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
             </form>
-            <button type="button" class="btn btn-primary btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사</button>
+            <button type="button" class="btn btn-primary btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사 ↵</button>
         </div>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">
@@ -267,7 +267,7 @@
 <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1">
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">광고 노출 키워드 <span class="text-muted-soft font-normal" id="sk-ad-count">({{ $adKeywords->count() }})</span></div>
-        <button type="button" class="btn btn-ghost btn-sm sk-copy {{ $adKeywords->isEmpty() ? 'hidden' : '' }}" data-copy="ad">전체 복사</button>
+        <button type="button" class="btn btn-primary btn-sm sk-copy {{ $adKeywords->isEmpty() ? 'hidden' : '' }}" data-copy="ad">전체 복사 ↵</button>
     </div>
     <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">이 검색어들에서 내 상품이 <b>광고(쇼핑검색광고·슈퍼적립)로 노출 중</b>입니다. 순위 숫자는 광고를 제외한 오가닉 위치 — 확인 중 발견되면 실시간으로 추가됩니다.</div>
     <div class="flex flex-wrap gap-2" id="sk-ad-list">
@@ -469,8 +469,9 @@ window.__SK = {
             document.execCommand('copy');
             ta.remove();
         };
+        const label = btn.textContent;
         (navigator.clipboard ? navigator.clipboard.writeText(text).catch(fallback) : Promise.resolve(fallback()))
-            .then(() => { btn.textContent = '복사됨 ✓'; setTimeout(() => { btn.textContent = '전체 복사'; }, 1500); });
+            .then(() => { btn.textContent = '복사됨 ✓'; setTimeout(() => { btn.textContent = label; }, 1500); });
     });
 
     document.addEventListener('click', function (e) {
