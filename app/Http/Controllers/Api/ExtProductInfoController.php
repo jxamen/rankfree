@@ -21,6 +21,7 @@ class ExtProductInfoController extends Controller
             'brand' => 'nullable|string|max:120',
             'mall_name' => 'nullable|string|max:150',
             'price' => 'nullable|integer|min:0|max:2000000000',
+            'delivery_fee' => 'nullable|integer|min:0|max:10000000',   // 배송비 — 0=무료, 미전송(null)=미수집
             'seller_tags' => 'nullable|array|max:60',
             'seller_tags.*' => 'nullable|string|max:80',
             'category' => 'nullable|string|max:191',
@@ -44,6 +45,11 @@ class ExtProductInfoController extends Controller
         // 태그를 못 뽑는데(2026-08-10 실제 발생), 그대로 덮으면 모아둔 태그가 날아간다.
         if ($tags !== []) {
             $attrs['seller_tags'] = $tags;
+        }
+        // 배송비도 같은 이유로 못 뽑았으면 덮지 않는다 — 구버전 확장은 키 자체가 없고,
+        // 신버전도 상태 JSON 에 배송 노드가 없으면 null 을 보낸다. 둘 다 기존 값을 지우면 안 된다.
+        if (($data['delivery_fee'] ?? null) !== null) {
+            $attrs['delivery_fee'] = (int) $data['delivery_fee'];
         }
 
         $row = ShopProductInfo::updateOrCreate(

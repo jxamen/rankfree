@@ -164,6 +164,7 @@ class ShopKeywordExposureController extends Controller
             'info.brand' => 'nullable|string|max:120',
             'info.mall_name' => 'nullable|string|max:150',
             'info.price' => 'nullable|integer|min:0|max:2000000000',
+            'info.delivery_fee' => 'nullable|integer|min:0|max:10000000',   // 배송비 — 0=무료
             'info.seller_tags' => 'nullable|array|max:60',
             'info.seller_tags.*' => 'nullable|string|max:80',
             'info.category' => 'nullable|string|max:191',
@@ -187,7 +188,8 @@ class ShopKeywordExposureController extends Controller
                     'category' => $info['category'] ?? null,
                     'thumbnail_url' => $info['thumbnail_url'] ?? null,
                     'collected_at' => now(),
-                ],
+                    // 배송비는 못 뽑았을 때 기존 값을 지우지 않는다(0=무료 / null=미수집)
+                ] + (($info['delivery_fee'] ?? null) !== null ? ['delivery_fee' => (int) $info['delivery_fee']] : []),
             );
         }
 

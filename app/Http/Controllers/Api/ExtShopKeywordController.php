@@ -91,6 +91,7 @@ class ExtShopKeywordController extends Controller
             'info.brand' => 'nullable|string|max:120',
             'info.mall_name' => 'nullable|string|max:150',
             'info.price' => 'nullable|integer|min:0|max:2000000000',
+            'info.delivery_fee' => 'nullable|integer|min:0|max:10000000',   // 배송비 — 0=무료
             'info.seller_tags' => 'nullable|array|max:60',
             'info.seller_tags.*' => 'nullable|string|max:80',
             'info.category' => 'nullable|string|max:191',
@@ -121,6 +122,10 @@ class ExtShopKeywordController extends Controller
         // 확장이 제목만 뽑고 태그는 빈 채로 보내는데, 그걸 그대로 덮으면 잘 모아둔 태그가 통째로 날아간다.
         if ($tags !== []) {
             $attrs['seller_tags'] = $tags;
+        }
+        // 배송비를 못 뽑았으면(구버전 확장 = 키 없음 / 신버전 = null) 기존 값을 지우지 않는다
+        if (($info['delivery_fee'] ?? null) !== null) {
+            $attrs['delivery_fee'] = (int) $info['delivery_fee'];
         }
 
         ShopProductInfo::updateOrCreate(

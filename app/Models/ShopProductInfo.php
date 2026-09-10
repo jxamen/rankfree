@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ShopProductInfo extends Model
 {
     protected $fillable = [
-        'user_id', 'channel_product_id', 'title', 'brand', 'mall_name', 'price', 'seller_tags', 'category', 'thumbnail_url', 'collected_at',
+        'user_id', 'channel_product_id', 'title', 'brand', 'mall_name', 'price', 'delivery_fee', 'seller_tags', 'category', 'thumbnail_url', 'collected_at',
     ];
 
     protected $casts = [
         'price' => 'integer',
+        'delivery_fee' => 'integer',
         'seller_tags' => 'array',
         'collected_at' => 'datetime',
     ];

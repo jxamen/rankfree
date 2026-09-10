@@ -1930,6 +1930,11 @@
         || ((document.querySelector('img[src*="shop-phinf.pstatic.net"]') || {}).src || '')
       ).slice(0, 500);
       const nss = A.naverShoppingSearchInfo || {};
+      // 배송비(2026-09-10) — 셀러력 스코어러와 같은 경로(productDeliveryInfo).
+      // FREE=0, 조건부무료·유료=baseFee(1개 살 때 실제 부담액). 노드가 없으면 null 로 두어 기존 값을 덮지 않는다.
+      const dv = A.productDeliveryInfo || null;
+      const deliveryFee = !dv ? null
+        : (String(dv.deliveryFeeType || '') === 'FREE' ? 0 : num(dv.baseFee != null ? dv.baseFee : dv.deliveryFee));
       const payload = {
         channel_product_id: String(cpid),
         title: String(A.name || A.dispName || getProductName() || '').slice(0, 300),
@@ -1937,6 +1942,7 @@
         mall_name: String(channel.channelName || getStoreName() || '').slice(0, 150),
         // 즉시할인가 우선(benefitsView.discountedSalePrice) → 없으면 정가(salePrice) → 폴백. 셀러력 스코어러와 동일 필드(2026-07-24)
         price: num((A.benefitsView && A.benefitsView.discountedSalePrice) || A.salePrice || getProductPrice() || 0) || null,
+        delivery_fee: (deliveryFee === null || deliveryFee === undefined || isNaN(deliveryFee)) ? null : deliveryFee,
         seller_tags: tags.slice(0, 60),
         category: String((A.category && A.category.wholeCategoryName) || '').slice(0, 191),
         thumbnail_url: thumb || null,

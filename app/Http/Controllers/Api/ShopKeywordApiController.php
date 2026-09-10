@@ -170,6 +170,7 @@ class ShopKeywordApiController extends Controller
             'brand' => (string) ($pi->brand ?? $analysis->brand),
             'mall_name' => (string) ($pi->mall_name ?? $analysis->mall_name),
             'price' => (int) ($pi->price ?? $analysis->product_price),
+            'delivery_fee' => $pi?->delivery_fee,   // 0=무료배송, null=아직 수집 전
             'category' => (string) ($pi->category ?? ''),
             'thumbnail_url' => (string) ($pi->thumbnail_url ?? ''),
             'seller_tags' => array_values((array) ($pi->seller_tags ?? [])),
