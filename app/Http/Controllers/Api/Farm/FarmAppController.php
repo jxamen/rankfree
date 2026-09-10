@@ -11,6 +11,7 @@ use App\Domain\Reward\TagIndex;
 use App\Http\Controllers\Controller;
 use App\Models\FarmCrop;
 use App\Models\FarmPlanting;
+use App\Models\RewardMission;
 use App\Support\RewardDay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -189,7 +190,7 @@ class FarmAppController extends Controller
 
         return [
             'id' => (string) $m['id'],
-            'kind' => $m['kind'],
+            'kind' => RewardMission::normalizeKind($m['kind'] ?? null),   // 유형 축(shopping|place|save|zzim) — 승격 이전 external 이 그대로 나가던 것 수정
             'title' => $m['title'],
             'description' => $m['description'],
             'reward' => ['item' => $m['reward_item'], 'count' => (int) $m['reward_count']],

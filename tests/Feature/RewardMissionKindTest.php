@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\RewardMedia;
 use App\Models\RewardMission;
+use Database\Seeders\FarmCropSeeder;
+use Database\Seeders\RewardMediaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +108,21 @@ class RewardMissionKindTest extends TestCase
 
         $kinds = collect($this->apiGet('/api/v1/missions')->assertOk()->json('missions'))->pluck('kind')->unique()->sort()->values()->all();
         $this->assertSame(['place', 'shopping'], $kinds);   // 응답에도 external 이 그대로 새어 나가지 않는다
+    }
+
+    public function test_미니앱_목록도_레거시값을_그대로_내보내지_않는다(): void
+    {
+        // 미니앱(/api/farm)은 벤더 API 와 달리 정규화 없이 원시 kind 를 실어 external 이 그대로 나갔다
+        $this->seed([RewardMediaSeeder::class, FarmCropSeeder::class]);
+        $this->makeMission(920004, 'external', '레거시 미니앱 미션');
+
+        $missions = $this->getJson('/api/farm/missions', ['x-user-key' => 'farm-kind-u'])
+            ->assertOk()->json('missions');
+
+        $kinds = collect($missions)->pluck('kind')->unique()->values()->all();
+        $this->assertNotEmpty($kinds);
+        $this->assertNotContains('external', $kinds);
+        $this->assertSame([], array_diff($kinds, array_keys(RewardMission::KINDS)));   // 우리 유형 코드만 나간다
     }
 
     public function test_모르는_유형은_조용히_무시하지_않고_알려준다(): void
