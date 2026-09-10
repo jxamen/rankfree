@@ -28,6 +28,13 @@ class BoostingShopClient
     /** 프리미엄(50)은 smartcall_url 필수 — 화면 안내·검증에서 참조. */
     public const SMARTCALL_REQUIRED = [50];
 
+    /**
+     * 쇼핑 기본 상품번호 — 쇼핑은 플레이스와 달리 등급표가 공개돼 있지 않아 표를 만들 수 없다.
+     * 운영에서 스마트스토어·가격비교 모두 이 번호를 쓰고 있어 기본값으로 고정한다(2026-09-10).
+     * 상품에 기억된 값(marketing_products.boosting_product_no)이 있으면 그쪽이 우선이다.
+     */
+    public const SHOPPING_DEFAULT_PRODUCT_NO = 57;
+
     /** 쇼핑 랜딩 URL(landing_urls[]) · 정답 태그(tags[]) 개수 상한 — 부스팅샵 쇼핑 문서 기준. */
     public const SHOPPING_MAX_LANDING_URLS = 100;
 

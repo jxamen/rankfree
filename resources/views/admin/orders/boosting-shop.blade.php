@@ -32,7 +32,8 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     {{-- 전송값 --}}
     <form method="POST" action="{{ route('admin.orders.boosting-shop.place', $order) }}" class="card p-6 lg:col-span-2 flex flex-col gap-4"
-          data-confirm="부스팅샵으로 주문할까요?" data-confirm-text="접수되면 부스팅샵 적립금이 차감됩니다. 전송값을 다시 한 번 확인하세요." data-confirm-ok="주문">
+          data-confirm="부스팅샵으로 주문할까요?" data-confirm-text="접수되면 부스팅샵 적립금이 차감됩니다. 전송값을 다시 한 번 확인하세요." data-confirm-ok="주문"
+          data-loading="부스팅샵으로 접수하는 중…" data-loading-text="부스팅샵 응답까지 몇 초 걸립니다 — 창을 닫거나 새로고침하지 마세요.">
         @csrf
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">부스팅샵 전송값</div>
 

@@ -33,7 +33,8 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     {{-- 전송값 --}}
     <form method="POST" action="{{ route('admin.orders.boosting-shop.place', $order) }}" class="card p-6 lg:col-span-2 flex flex-col gap-4"
-          data-confirm="부스팅샵으로 주문할까요?" data-confirm-text="접수되면 부스팅샵 적립금이 차감됩니다. 전송값을 다시 한 번 확인하세요." data-confirm-ok="주문">
+          data-confirm="부스팅샵으로 주문할까요?" data-confirm-text="접수되면 부스팅샵 적립금이 차감됩니다. 전송값을 다시 한 번 확인하세요." data-confirm-ok="주문"
+          data-loading="부스팅샵으로 접수하는 중…" data-loading-text="부스팅샵 응답까지 몇 초 걸립니다 — 창을 닫거나 새로고침하지 마세요.">
         @csrf
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">부스팅샵 전송값</div>
 
@@ -42,7 +43,7 @@
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">부스팅샵 상품번호 <span style="color:var(--color-error);">*</span></span>
                 {{-- 쇼핑은 등급표가 공개돼 있지 않다 — 주문 화면 주소의 마지막 숫자를 넣고, 성공하면 상품에 기억된다 --}}
                 <input name="product_no" value="{{ $v('product_no') }}" required inputmode="numeric" class="input font-mono" style="font-size:var(--fs-xs);" placeholder="57">
-                <span class="text-muted-soft" style="font-size:var(--fs-xs);">부스팅샵 주문 화면 주소 <b class="font-mono">/ads/new/shopping/13/<b class="text-muted">57</b></b> 의 마지막 숫자</span>
+                <span class="text-muted-soft" style="font-size:var(--fs-xs);">기본값 <b class="font-mono">{{ \App\Domain\Order\BoostingShopClient::SHOPPING_DEFAULT_PRODUCT_NO }}</b> 로 채워집니다 — 바꿔야 할 때만 수정하세요(부스팅샵 주문 화면 주소 <b class="font-mono">/ads/new/shopping/13/57</b> 의 마지막 숫자)</span>
             </label>
             <label class="flex flex-col gap-1">
                 <span class="text-muted" style="font-size:var(--fs-xs);font-weight:600;">검색 키워드 <span style="color:var(--color-error);">*</span></span>
@@ -54,7 +55,7 @@
                 <input name="mid" value="{{ $v('mid') }}" inputmode="numeric" class="input font-mono" style="font-size:var(--fs-xs);">
                 <span class="text-muted-soft" style="font-size:var(--fs-xs);">
                     @if ($collected['is_store'] ?? false)
-                        <b style="color:var(--color-error);">스마트스토어는 MID 필수</b> — URL 의 숫자는 스토어 내부 상품번호라 다릅니다(비우면 실적이 안 잡힐 수 있음)
+                        비워도 주문됩니다 — 스마트스토어 URL 의 숫자는 스토어 내부 상품번호라 MID 와 다릅니다(넣어 두면 실적 매칭이 정확해집니다)
                     @else
                         가격비교·자사몰은 URL 숫자가 곧 MID — 자동으로 채웠습니다
                     @endif

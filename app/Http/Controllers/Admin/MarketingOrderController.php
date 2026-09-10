@@ -926,7 +926,7 @@ class MarketingOrderController extends Controller
         $price = $byAutofill('product_price') ?: (string) ($analysis?->product_price ?? $info?->price ?? '');
 
         return [
-            'product_no' => $order->product?->boosting_product_no ?: '',
+            'product_no' => $order->product?->boosting_product_no ?: \App\Domain\Order\BoostingShopClient::SHOPPING_DEFAULT_PRODUCT_NO,
             'keyword' => $byAutofill('core_keyword') ?: (string) ($src['keyword'] ?? $order->keywordFromFields() ?? ''),
             'product_url' => $url,
             'mid' => $isStore ? '' : (string) $target['product_id'],

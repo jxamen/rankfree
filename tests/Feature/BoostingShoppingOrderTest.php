@@ -137,8 +137,40 @@ class BoostingShoppingOrderTest extends TestCase
             ->assertOk()
             ->assertSee('비타민, 고함량, 2개월분', false)
             ->assertSee('https://shop-phinf.pstatic.net/sample.jpg', false)
-            // 스마트스토어 URL 의 숫자는 MID 가 아니므로 자동으로 채우지 않고 경고한다
-            ->assertSee('스마트스토어는 MID 필수');
+            // 스마트스토어 URL 의 숫자는 MID 가 아니므로 자동으로 채우지 않는다 — 다만 MID 는 없어도 주문된다
+            ->assertSee('비워도 주문됩니다');
+    }
+
+    /** 쇼핑은 등급표가 없어 매번 손으로 넣어야 했다 — 기본값을 고정해 그냥 열면 채워져 있게 한다. */
+    public function test_form_prefills_fixed_shopping_product_no(): void
+    {
+        $order = $this->makeOrder();
+        $this->product->update(['boosting_product_no' => null]);   // 아직 한 번도 주문 안 한 상품
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('value="'.\App\Domain\Order\BoostingShopClient::SHOPPING_DEFAULT_PRODUCT_NO.'"', false);
+    }
+
+    /** 상품에 기억된 번호가 있으면 고정 기본값보다 그쪽이 우선한다. */
+    public function test_remembered_product_no_wins_over_default(): void
+    {
+        $order = $this->makeOrder();
+        $this->product->update(['boosting_product_no' => 61]);
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('value="61"', false);
+    }
+
+    /** 확인을 눌러도 아무 반응이 없어 다시 누르는 사고를 막는다 — 전체화면 로딩 표식. */
+    public function test_form_asks_for_fullscreen_loading_after_confirm(): void
+    {
+        $order = $this->makeOrder();
+
+        $this->actingAs($this->admin)->get(route('admin.orders.boosting-shop', $order))
+            ->assertOk()
+            ->assertSee('data-loading="부스팅샵으로 접수하는 중…"', false);
     }
 
     public function test_order_sends_all_landing_urls_as_array(): void
