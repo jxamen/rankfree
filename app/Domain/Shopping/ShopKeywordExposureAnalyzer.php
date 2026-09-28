@@ -163,6 +163,7 @@ class ShopKeywordExposureAnalyzer
             $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
             $t0 = microtime(true);
             $stopped = false;
+            $slotDead = false;
             $batchResults = [];   // 이번 배치 건별 결과 — 화면이 노출 테이블·배지를 리로드 없이 갱신(요약 숫자와 불일치 방지)
 
             foreach ($pending as $item) {
@@ -171,7 +172,8 @@ class ShopKeywordExposureAnalyzer
                     break;
                 }
                 try {
-                    if ($useApi) {
+                    $res = null;
+                    if ($useApi && ! $slotDead) {
                         // ns-portal slot API 1콜 — 상위 20위까지, 광고(SUPER_POINT) 구분 포함(2026-08-04).
                         // 종전 shop.json 방식은 네이버가 2026-07-31 API 를 종료해 더 이상 동작하지 않는다(공지 32564).
                         // ⚠️ 이 API 는 20위까지만 준다 — threshold 가 20 을 넘으면 그 밖의 상품은 미노출로 기록된다.
@@ -180,7 +182,13 @@ class ShopKeywordExposureAnalyzer
                             $target,
                             max(2, min($httpTimeout, (int) ceil($budget - $elapsed)))
                         );
-                    } else {
+                        // slot API 가 빈 {} 만 주면(2026-09-28 네이버 차단) 이번 배치는 m.search 로 전환
+                        if (($res['error'] ?? '') === 'parse_failed') {
+                            $slotDead = true;
+                            $res = null;
+                        }
+                    }
+                    if ($res === null) {
                         // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
                         $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
                     }
@@ -200,7 +208,7 @@ class ShopKeywordExposureAnalyzer
                 $batchResults[] = ['id' => $item->id, 'keyword' => $item->keyword, 'rank' => (int) $item->rank,
                     'ad' => (bool) $item->ad_exposed, 'combo_tag' => $item->combo_tag];
                 // search: m.search 연속 호출 IP rate-limit 완화 간격. api: 키 로테이션이 있어 짧게만.
-                $gap = $useApi ? min(120, $delayMs) : $delayMs;
+                $gap = ($useApi && ! $slotDead) ? min(120, $delayMs) : $delayMs;
                 if ($gap > 0) {
                     usleep($gap * 1000);
                 }
