@@ -812,6 +812,8 @@ window.__SK = {
         renderProgress(d);
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
+            // 서버(slot API)가 막히면 확장이 있을 때 브라우저 m.search 경로로 이어서 확인(2026-09-28 — slot API 가 빈 {} 응답)
+            if (extMode) { runExtLoop(); return; }
             halt(`서버 확인이 잠시 제한됨(${d.checked}/${d.total}) — 랭크프리 확장을 설치하면 브라우저에서 끝까지 확인됩니다. "이어서 확인"으로 재시도`, true);
             return;
         }
