@@ -92,7 +92,8 @@ class ShopKeywordExposureController extends Controller
     public function check(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
-        if ($busy = $this->runBusy($request, $analysis)) {
+        // 서버가 직접 네이버를 부른다 — 서버 IP 하나로 잠근다
+        if ($busy = $this->runBusy($request, $analysis, 'server')) {
             return $busy;
         }
 
@@ -100,15 +101,16 @@ class ShopKeywordExposureController extends Controller
     }
 
     /**
-     * 전역 수집 잠금(2026-09-29) — 다른 곳이 수집 중이면 423 + 안내(화면이 줄 서서 재시도). 획득·갱신되면 null.
-     * 주인 = 페이지가 보낸 runner(페이지 로드마다 새로). 없으면(반영 전에 열어 둔 옛 탭) 사용자 단위.
+     * IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 423 + 안내(화면이 줄 서서 재시도). 획득·갱신되면 null.
+     * scope 기본 = 요청 IP(브라우저가 네이버를 부른다). 주인 = 페이지가 보낸 runner(페이지 로드마다 새로),
+     * 없으면(반영 전에 열어 둔 옛 탭) 사용자 단위.
      */
-    private function runBusy(Request $request, ShopKeywordAnalysis $analysis): ?\Illuminate\Http\JsonResponse
+    private function runBusy(Request $request, ShopKeywordAnalysis $analysis, ?string $scope = null): ?\Illuminate\Http\JsonResponse
     {
         $runner = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->input('runner', ''));
         $owner = $runner !== '' ? 'page:'.substr($runner, 0, 40) : 'user:'.$request->user()->id;
         $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
-        $r = $lock->acquire($owner, (int) $analysis->id, (string) $analysis->core_keyword);
+        $r = $lock->acquire($scope ?? 'ip:'.$request->ip(), $owner, (int) $analysis->id, (string) $analysis->core_keyword);
         if ($r['ok']) {
             return null;
         }
@@ -129,7 +131,7 @@ class ShopKeywordExposureController extends Controller
             ->get(['id', 'keyword'])
             ->map(fn ($i) => ['id' => $i->id, 'keyword' => $i->keyword])->values();
         if ($items->isEmpty()) {
-            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release(null, (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
+            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
         }
 
         return response()->json(['data' => ['items' => $items] + $this->analyzer->progress($analysis)]);
@@ -255,7 +257,9 @@ class ShopKeywordExposureController extends Controller
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
 
         if ($paused) {
-            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release(null, (int) $analysis->id);   // 중단 — 다른 수집에 바로 양보
+            $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);   // 중단 — 다른 수집에 바로 양보
+            $lock->release('ip:'.$request->ip(), (int) $analysis->id);
+            $lock->release('server', (int) $analysis->id);
         }
         if ($paused && $hasRemaining) {
             $analysis->update(['status' => 'paused']);

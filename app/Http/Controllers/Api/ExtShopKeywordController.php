@@ -184,9 +184,9 @@ class ExtShopKeywordController extends Controller
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
         }
-        // 전역 수집 잠금(2026-09-29) — 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
+        // IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
         $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
-        $r = $lock->acquire($this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
+        $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
             return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'])]]);
         }
@@ -213,9 +213,9 @@ class ExtShopKeywordController extends Controller
             'html' => ['nullable', 'string', 'max:4000000'],
         ]);
 
-        // 전역 수집 잠금 — 다른 곳이 수집 중이면 403(현 확장은 403 에서 그 루프를 즉시 멈춘다)
+        // IP별 수집 잠금 — 같은 IP 에서 다른 곳이 수집 중이면 403(현 확장은 403 에서 그 루프를 즉시 멈춘다)
         $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
-        $r = $lock->acquire($this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
+        $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
             return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'])], 403);
         }

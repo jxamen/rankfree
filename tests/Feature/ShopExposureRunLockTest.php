@@ -9,7 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-/** 쇼핑 노출 순위 수집 전역 잠금 — 어디서 시작하든 전체에서 하나만 돈다(2026-09-29). */
+/** 쇼핑 노출 순위 수집 IP별 잠금 — 같은 IP 에서는 하나만, 다른 IP 끼리는 동시에(2026-09-29). */
 class ShopExposureRunLockTest extends TestCase
 {
     use RefreshDatabase;
@@ -36,7 +36,10 @@ class ShopExposureRunLockTest extends TestCase
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $b).'?runner=pageB')
             ->assertStatus(423)->assertJson(['busy' => true, 'analysis_id' => $a->id]);
         $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $b), ['item_id' => 1, 'html' => '', 'runner' => 'pageB'])->assertStatus(423);
-        $this->actingAs($u)->postJson(route('admin.shop-keyword.check', $b), ['runner' => 'pageB'])->assertStatus(423);
+        // 다른 IP(다른 사무실·다른 계정)는 동시에 돌아도 된다 — 네이버 차단이 IP 단위
+        $this->actingAs($u)->withServerVariables(['REMOTE_ADDR' => '10.9.9.9'])
+            ->getJson(route('admin.shop-keyword.pending', $b).'?runner=pageC')->assertOk();
+        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1']);
         // 같은 주인은 계속 돈다(갱신)
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $a).'?runner=pageA')->assertOk();
 
