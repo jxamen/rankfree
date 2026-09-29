@@ -31,6 +31,12 @@ class ExtShopKeywordController extends Controller
         abort_unless($request->user()?->canUseApiScope('shop_keyword'), 403, '쇼핑 유입키워드 권한이 없습니다.');
     }
 
+    /** 전역 수집 잠금 주인 — 확장(브라우저)마다 다른 토큰의 해시(토큰 값은 저장하지 않는다). */
+    private function extRunner(Request $request): string
+    {
+        return 'ext:'.substr(hash('sha256', (string) $request->bearerToken()), 0, 16);
+    }
+
     /**
      * 상품정보(제목)가 비어 조합을 못 만든 내 분석 목록 — 확장이 순서대로 수집한다.
      * 확장은 product_url 을 백그라운드 탭으로 열어 수집한 뒤 productInfo 로 돌려준다.
@@ -178,6 +184,12 @@ class ExtShopKeywordController extends Controller
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
         }
+        // 전역 수집 잠금(2026-09-29) — 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $r = $lock->acquire($this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
+        if (! $r['ok']) {
+            return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'])]]);
+        }
 
         $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get(['id', 'keyword']);
 
@@ -200,6 +212,13 @@ class ExtShopKeywordController extends Controller
             'item_id' => ['required', 'integer'],
             'html' => ['nullable', 'string', 'max:4000000'],
         ]);
+
+        // 전역 수집 잠금 — 다른 곳이 수집 중이면 403(현 확장은 403 에서 그 루프를 즉시 멈춘다)
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $r = $lock->acquire($this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
+        if (! $r['ok']) {
+            return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'])], 403);
+        }
 
         $item = $analysis->combos()->whereKey((int) $data['item_id'])->first();
         if (! $item) {

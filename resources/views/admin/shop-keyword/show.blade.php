@@ -531,6 +531,14 @@ window.__SK = {
     let extMode = false;
     let lastD = null;          // 마지막 진행상황(중단 라벨용)
     let sessionChecked = 0;    // 이 세션에서 확인한 수 — 많아지면 간격을 늘려 보안문자 유발 완화
+    // 전역 수집 잠금의 주인 ID — 페이지 로드마다 새로. 다른 곳이 수집 중이면 서버가 423 → 15초마다 줄 서서 재시도
+    const RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    async function waitBusy(res) {
+        let msg = '다른 수집이 진행 중이에요 — 끝나면 자동으로 이어서 시작합니다';
+        try { msg = (await res.json()).message || msg; } catch (e) {}
+        if (label) label.textContent = msg;
+        await sleep(15000);
+    }
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -738,7 +746,8 @@ window.__SK = {
         while (!stopped) {
             let d;
             try {
-                const r = await fetch(cfg.urls.pending, { headers: { Accept: 'application/json' } });
+                const r = await fetch(cfg.urls.pending + (cfg.urls.pending.includes('?') ? '&' : '?') + 'runner=' + RUNNER, { headers: { Accept: 'application/json' } });
+                if (r.status === 423) { await waitBusy(r); continue; }
                 if (r.status === 401 || r.status === 403 || r.status === 404 || r.status === 419) { halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false); return; }
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 d = (await r.json()).data;
@@ -771,7 +780,8 @@ window.__SK = {
                     return;
                 }
                 try {
-                    const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '' });
+                    const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '', runner: RUNNER });
+                    if (cr.status === 423) { await waitBusy(cr); break; }   // 잠금을 잃음(다른 곳이 시작) — pending 에서 줄 선다
                     if (cr.status === 401 || cr.status === 403 || cr.status === 419) { halt('세션이 만료됐습니다 — 새로고침 해주세요', false); return; }
                     if (cr.ok) {
                         const p = await cr.json();
@@ -803,8 +813,9 @@ window.__SK = {
         if (stopped) return;
         let r;
         try {
-            r = await fetch(cfg.urls.check, { method: 'POST', headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json' } });
+            r = await fetch(cfg.urls.check, { method: 'POST', headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ runner: RUNNER }) });
         } catch (e) { retry(); return; }
+        if (r.status === 423) { await waitBusy(r); if (!stopped) poll(); return; }
         if (r.status === 419 || r.status === 401 || r.status === 403 || r.status === 404) {
             halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false);
             return;

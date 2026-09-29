@@ -92,18 +92,45 @@ class ShopKeywordExposureController extends Controller
     public function check(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        if ($busy = $this->runBusy($request, $analysis)) {
+            return $busy;
+        }
 
         return response()->json($this->analyzer->checkBatch($analysis));
+    }
+
+    /**
+     * 전역 수집 잠금(2026-09-29) — 다른 곳이 수집 중이면 423 + 안내(화면이 줄 서서 재시도). 획득·갱신되면 null.
+     * 주인 = 페이지가 보낸 runner(페이지 로드마다 새로). 없으면(반영 전에 열어 둔 옛 탭) 사용자 단위.
+     */
+    private function runBusy(Request $request, ShopKeywordAnalysis $analysis): ?\Illuminate\Http\JsonResponse
+    {
+        $runner = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->input('runner', ''));
+        $owner = $runner !== '' ? 'page:'.substr($runner, 0, 40) : 'user:'.$request->user()->id;
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $r = $lock->acquire($owner, (int) $analysis->id, (string) $analysis->core_keyword);
+        if ($r['ok']) {
+            return null;
+        }
+
+        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder']),
+            'analysis_id' => (int) ($r['holder']['analysis_id'] ?? 0)] + $this->analyzer->progress($analysis), 423);
     }
 
     /** 미확인 조합 배치(확장 화면단 체크용) — 브라우저가 이 목록을 받아 한 건씩 m.search 를 가져온다. */
     public function pending(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        if ($busy = $this->runBusy($request, $analysis)) {
+            return $busy;
+        }
 
         $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit(40)
             ->get(['id', 'keyword'])
             ->map(fn ($i) => ['id' => $i->id, 'keyword' => $i->keyword])->values();
+        if ($items->isEmpty()) {
+            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release(null, (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
+        }
 
         return response()->json(['data' => ['items' => $items] + $this->analyzer->progress($analysis)]);
     }
@@ -117,6 +144,9 @@ class ShopKeywordExposureController extends Controller
             'item_id' => 'required|integer',
             'html' => 'nullable|string|max:4000000',   // _INITIAL_STATE script 조각(수백 KB). 빈 값=가격비교 미노출
         ]);
+        if ($busy = $this->runBusy($request, $analysis)) {
+            return $busy;
+        }
 
         $item = $analysis->combos()->whereKey((int) $data['item_id'])->first();
         if (! $item) {
@@ -224,6 +254,9 @@ class ShopKeywordExposureController extends Controller
         $paused = $request->boolean('paused', true);
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
 
+        if ($paused) {
+            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release(null, (int) $analysis->id);   // 중단 — 다른 수집에 바로 양보
+        }
         if ($paused && $hasRemaining) {
             $analysis->update(['status' => 'paused']);
         } elseif (! $paused && $analysis->status === 'paused') {
