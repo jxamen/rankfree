@@ -201,7 +201,7 @@
             <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
                 @csrf
                 <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
-                <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty() || $shortLinksLocked)>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
+                <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
             </form>
             <button type="button" class="btn btn-primary btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사 ↵</button>
         </div>
@@ -216,7 +216,7 @@
         <div class="text-error mb-3" style="font-size:var(--fs-xs);">{{ $message }}</div>
     @enderror
     @if ($shortLinksLocked)
-        <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">호출된 Short URL은 다시 생성하지 않고, 기존 URL을 유지한 채 재배정합니다.</div>
+        <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">호출된 Short URL은 주소를 그대로 두고, 다시 생성하면 모자란 개수만 새로 만들어 키워드를 다시 나눕니다.</div>
     @endif
 
     @if ($shortLinks->isNotEmpty())

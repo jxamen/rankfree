@@ -18,9 +18,9 @@ class ShopKeywordShortLinkService
     public const REFERENCE_SOURCES = ['autocomplete', 'searchad', 'shopping_related', 'keyword_rec', 'together', 'competitor_brand'];
 
     /**
-     * 노출 키워드를 그룹 수만큼 나눠 Short URL 을 새로 만든다(기존 링크는 교체).
+     * 노출 키워드를 그룹 수만큼 나눠 Short URL 을 새로 만든다(호출 안 된 링크는 교체, 호출된 링크는 주소 유지).
      *
-     * @throws DomainException 노출 키워드 없음 · 그룹 수 초과 · 이미 호출된 링크 존재
+     * @throws DomainException 노출 키워드 없음 · 그룹 수 초과 · 그룹 수 < 호출된 링크 수
      */
     public function generate(ShopKeywordAnalysis $analysis, int $groupCount): \Illuminate\Support\Collection
     {
@@ -31,19 +31,31 @@ class ShopKeywordShortLinkService
         if ($groupCount > count($keywords)) {
             throw new DomainException('Short URL 개수는 상위 노출 키워드 수보다 많을 수 없습니다.');
         }
-        // 이미 트래픽이 돈 링크는 주소를 바꾸면 안 된다(배포된 URL 이 죽는다)
-        if ($analysis->shortLinks()->where('hit_count', '>', 0)->exists()) {
-            throw new DomainException('이미 호출된 Short URL이 있어 다시 생성할 수 없습니다.');
+        // 이미 트래픽이 돈 링크는 주소를 바꾸면 안 된다(배포된 URL 이 죽는다) —
+        // 호출된 링크는 토큰·도메인을 그대로 두고 앞 그룹으로 재사용, 모자란 개수만 새로 만든다(2026-09-29)
+        $called = $analysis->shortLinks()->where('hit_count', '>', 0)->orderBy('group_no')->orderBy('id')->get();
+        if ($groupCount < $called->count()) {
+            throw new DomainException('호출된 Short URL이 '.$called->count().'개라 그보다 적게 만들 수 없습니다.');
         }
 
         $references = $this->referenceKeywords($analysis);
         $domains = $this->secondaryDomains();
         $groups = $this->keywordGroups($keywords, $groupCount);
 
-        DB::transaction(function () use ($analysis, $references, $groupCount, $domains, $groups): void {
-            $analysis->shortLinks()->delete();
+        DB::transaction(function () use ($analysis, $called, $references, $groupCount, $domains, $groups): void {
+            $analysis->shortLinks()->whereNotIn('id', $called->pluck('id'))->delete();
 
-            for ($groupNo = 1; $groupNo <= $groupCount; $groupNo++) {
+            foreach ($called->values() as $idx => $link) {
+                $link->update([
+                    'group_no' => $idx + 1,
+                    'group_count' => $groupCount,
+                    'keywords' => $groups[$idx],
+                    'reference_keywords' => $references,
+                    'cursor' => 0,
+                ]);
+            }
+
+            for ($groupNo = $called->count() + 1; $groupNo <= $groupCount; $groupNo++) {
                 ShopKeywordShortLink::create([
                     'analysis_id' => $analysis->id,
                     'token' => $this->newToken(),
@@ -64,7 +76,7 @@ class ShopKeywordShortLinkService
 
     /**
      * 재배정 — 이미 배포한 URL(토큰·도메인)은 그대로 두고 키워드만 다시 나눈다.
-     * 순위 확인이 더 진행돼 노출 키워드가 늘었을 때 쓴다(generate 는 호출된 링크가 있으면 막힌다).
+     * 순위 확인이 더 진행돼 노출 키워드가 늘었을 때 쓴다(링크 수를 늘리려면 generate — 호출된 링크는 주소를 유지한다).
      *
      * @throws DomainException 링크 없음 · 노출 키워드 없음 · 링크 수 > 키워드 수
      */

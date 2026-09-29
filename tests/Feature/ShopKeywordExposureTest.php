@@ -623,6 +623,10 @@ class ShopKeywordExposureTest extends TestCase
             'rank' => 1,
             'checked_at' => now(),
         ]);
+        ShopKeywordAnalysisItem::create([
+            'analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo',
+            'keyword' => '비타민c 1000', 'rank' => 2, 'checked_at' => now(),
+        ]);
         ShopKeywordShortLink::create([
             'analysis_id' => $a->id,
             'token' => 'called00001',
@@ -632,18 +636,17 @@ class ShopKeywordExposureTest extends TestCase
             'hit_count' => 1,
         ]);
 
+        // 호출된 링크가 있어도 다시 생성 — 호출된 주소는 1번 그룹으로 유지, 모자란 개수만 새로 만든다
         $this->actingAs($u)
             ->from(route('admin.shop-keyword.show', $a))
-            ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 1])
+            ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 2])
             ->assertRedirect(route('admin.shop-keyword.show', $a))
-            ->assertSessionHasErrors('short_links');
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(1, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
-        $this->assertDatabaseHas('shop_keyword_short_links', [
-            'analysis_id' => $a->id,
-            'token' => 'called00001',
-            'hit_count' => 1,
-        ]);
+        $this->assertSame(2, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
+        $kept = ShopKeywordShortLink::where('token', 'called00001')->firstOrFail();
+        $this->assertSame([1, 2, 1], [(int) $kept->group_no, (int) $kept->group_count, (int) $kept->hit_count]);
+        $this->assertSame(['비타민c 고함량'], $kept->keywords);
     }
 
     public function test_short_link_reassign_preserves_urls_and_call_counts(): void
