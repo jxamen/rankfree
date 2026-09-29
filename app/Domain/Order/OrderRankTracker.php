@@ -66,11 +66,15 @@ class OrderRankTracker
         // 연결 저장 — saveQuietly 로 updated 이벤트 재귀 방지
         $order->forceFill(['shop_rank_slot_id' => $slot->id])->saveQuietly();
 
-        // 첫 순위 1회(베스트 에포트) — 실패해도 정기 수집이 채운다
-        try {
-            $this->slots->run($slot);
-        } catch (\Throwable) {
-        }
+        // 첫 순위 1회(베스트 에포트) — 실패해도 정기 수집이 채운다.
+        // 응답 뒤에 돈다: 네이버 조회가 길어지면 fpm 15초 제한에 걸려 주문넣기가 503 이 됐다(2026-09-29)
+        $slots = $this->slots;
+        dispatch(function () use ($slots, $slot) {
+            try {
+                $slots->run($slot);
+            } catch (\Throwable) {
+            }
+        })->afterResponse();
 
         return $slot;
     }
@@ -108,11 +112,14 @@ class OrderRankTracker
 
         $order->forceFill(['place_rank_slot_id' => $slot->id])->saveQuietly();
 
-        // 첫 순위 1회(베스트 에포트) — nCaptcha 토큰 없으면 정기 수집(11:30·16:30)이 채운다
-        try {
-            $this->placeSlots->run($slot);
-        } catch (\Throwable) {
-        }
+        // 첫 순위 1회(베스트 에포트) — nCaptcha 토큰 없으면 정기 수집(11:30·16:30)이 채운다. 응답 뒤에 돈다(위와 같은 이유)
+        $placeSlots = $this->placeSlots;
+        dispatch(function () use ($placeSlots, $slot) {
+            try {
+                $placeSlots->run($slot);
+            } catch (\Throwable) {
+            }
+        })->afterResponse();
 
         return $slot;
     }
