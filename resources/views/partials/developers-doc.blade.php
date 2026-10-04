@@ -480,7 +480,7 @@
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -G "{{ url('/api/v1') }}/rank/place" \
   -H "Authorization: Bearer rk_..." \
-  --data-urlencode "place=123456" \
+  --data-urlencode "place=https://map.naver.com/p/entry/place/123456" \
   --data-urlencode "review_limit=10"</pre></div>
             <div class="ep-l">응답 예시(설명용)</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
