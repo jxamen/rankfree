@@ -456,6 +456,10 @@
             </table>
         </div>
     </div>
+    <div class="ep">
+        <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/search</code><span class="ep-s">키워드별 플레이스 목록 · 최대 300개</span></div>
+        <div class="ep-b"><p class="ep-t"><code class="doc-code">keyword</code>에 지역과 검색어를 전달합니다(예: 서울 마포구 망원동 소금빵). rank 권한, 분당 20회 제한. 응답은 total(전체 결과 수), count(수집 수), items(place_id/name/address/road_address/category/x/y), capped(300개 초과), partial, blocked입니다. 실제 검색 결과가 5개면 5개, 100개면 100개를 반환합니다. 차단 시 429와 이미 수집한 결과를 함께 반환할 수 있습니다.</p></div>
+    </div>
     {{-- 플레이스 상세 조회: 순위 탭에 함께 표시 --}}
     <div class="ep">
         <div class="ep-h">
@@ -505,6 +509,7 @@
                     <tr><td><code class="doc-code">place</code></td><td>object</td><td>업체 ID·정규 URL·상호·한글 업종·전화·소개·영업시간·편의시설·결제정보·방문자/블로그 리뷰 수. 원문에 없는 값은 null 또는 빈 배열. business_hours·conveniences·payment_info는 참조를 해제한 네이버 원문 구조</td></tr>
                     <tr><td><code class="doc-code">place.location</code></td><td>object</td><td>지번/도로명 주소·찾아오는 길·latitude(위도)·longitude(경도). 좌표는 업체의 실제 좌표이며 누락 시 null</td></tr>
                     <tr><td><code class="doc-code">place.menus[]</code></td><td>array</td><td>메뉴 ID·이름·표시 가격 문자열·설명·이미지. 가격은 "변동" 등 문자가 포함될 수 있음. 메뉴 페이지 실패 시 홈에 포함된 메뉴만 반환할 수 있음</td></tr>
+                    <tr><td><code class="doc-code">place.links[] / images[]</code></td><td>array</td><td>공식 홈페이지·SNS 링크(type/url), 업체 이미지(url/width/height). 이미지 원본 URL은 별도 축소·캐싱하여 사용할 수 있습니다.</td></tr>
                     <tr><td><code class="doc-code">place.recent_reviews[]</code></td><td>array</td><td>최신 방문자 후기: id, body(내용), created_at(작성일 원문), visited_at(방문일 원문), rating(평점), author(공개 닉네임), media(공개 type/url/thumbnail). 작성일 내림차순, 최대 review_limit개</td></tr>
                     <tr><td><code class="doc-code">status</code></td><td>object</td><td>business·menus·recent_reviews별 수집 상태. ok=페이지 데이터 파싱 성공(목록이 없을 수 있음), blocked=네이버 차단, unavailable=통신/파싱 실패 또는 대상 업체 정보 없음</td></tr>
                     <tr><td><code class="doc-code">partial</code></td><td>bool</td><td>하나 이상의 페이지 조회 실패. 메뉴/리뷰만 실패하면 HTTP 200으로 확인된 정보를 반환하며, 빈 배열만으로 데이터가 없다고 단정하지 말고 status를 확인</td></tr>

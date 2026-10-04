@@ -1,5 +1,8 @@
 # 플레이스 상세 조회 API
 
+- `GET /api/v1/rank/search?keyword=지역+디저트`: 실제 결과 수만큼 최대 300개 반환. total/count/items/capped/partial/blocked. 0/5/10/100/300/430개 페이지네이션 및 오류 테스트 완료.
+- 상세 응답 `place.links`: 공식 홈페이지와 SNS(type/url). `place.images`: 업체 대표 사진만 최대 10개(url/width/height); 방문자 후기 사진은 제외. 디저트나우 소비자가 320/640px WebP로 최대 3장 캐싱한다.
+
 - `GET /api/v1/rank/place`, 기존 `rank` scope 및 API 키 일일 한도 적용. 분당 20회 제한.
 - `place`: 네이버 플레이스 URL/숫자 ID. 업체명 입력은 미지원(422). `review_limit`: 1~50, 기본 10.
 - `PlaceInfoFetcher`: 기존 순위/SEO 수집에서 사용하는 m.place SSR Apollo 데이터를 홈·메뉴·최신 방문자 리뷰 페이지에서 조회. 인증 쿠키나 nCaptcha 토큰을 요구하지 않는다.

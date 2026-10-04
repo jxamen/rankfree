@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Place\PlaceRankChecker;
 use App\Models\ApiKey;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -82,6 +83,8 @@ class PlaceInfoApiTest extends TestCase
         $home = $this->home();
         $home['ROOT_QUERY']['placeDetail({"input":{"id":"123456","deviceType":"pc"}})'] = [
             'description' => '실제 홈 구조의 소개', 'newBusinessHours' => [['name' => '매일', 'businessHours' => '10:00~20:00']],
+            'homepages' => ['repr' => ['url' => 'https://www.instagram.com/example_shop/'], 'etc' => [['url' => 'https://blog.naver.com/example_shop']]],
+            'images' => ['images' => [['origin' => 'https://ldb-phinf.pstatic.net/store.jpg', 'width' => 1000, 'height' => 500]]],
         ];
         $this->fake($home, [
             'PlaceMenuItem:m1' => ['id' => 'm1', 'name' => '음료', 'price' => ['displayText' => '5,100~6,700원']],
@@ -99,6 +102,8 @@ class PlaceInfoApiTest extends TestCase
             ->assertJsonPath('place.description', '실제 홈 구조의 소개')
             ->assertJsonPath('place.business_hours.0.name', '매일')
             ->assertJsonPath('place.menus.0.price', '5,100~6,700원')
+            ->assertJsonPath('place.links.0.type', 'instagram')
+            ->assertJsonPath('place.images.0.width', 1000)
             ->assertJsonPath('place.recent_reviews.0.body', '최근')
             ->assertJsonCount(2, 'place.recent_reviews');
     }
@@ -161,5 +166,23 @@ class PlaceInfoApiTest extends TestCase
     public function test_developer_documentation_contains_place_endpoint(): void
     {
         $this->withoutVite()->get('/developers')->assertOk()->assertSee('/rank/place')->assertSee('recent_reviews');
+    }
+
+    public function test_search_returns_all_available_results_and_preserves_partial_failure(): void
+    {
+        $items = array_map(fn ($i) => ['place_id' => (string) (123450 + $i), 'name' => '매장'.$i], range(1, 5));
+        $mock = $this->mock(PlaceRankChecker::class);
+        $mock->shouldReceive('serpFetch')->once()->with('서울 디저트', 'place', null, 300)
+            ->andReturn(['total' => 5, 'items' => $items, 'blocked' => false]);
+        $this->getJson('/api/v1/rank/search?'.http_build_query(['keyword' => '서울 디저트']), $this->headers())
+            ->assertOk()->assertJsonCount(5, 'items')->assertJsonPath('partial', false)->assertJsonPath('capped', false);
+    }
+
+    public function test_search_blocked_result_is_not_treated_as_complete(): void
+    {
+        $this->mock(PlaceRankChecker::class)->shouldReceive('serpFetch')->once()
+            ->andReturn(['total' => 100, 'items' => [['place_id' => '123456']], 'blocked' => true]);
+        $this->getJson('/api/v1/rank/search?keyword=test', $this->headers())->assertStatus(429)
+            ->assertJsonPath('partial', true)->assertJsonCount(1, 'items');
     }
 }

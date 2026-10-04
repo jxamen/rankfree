@@ -109,6 +109,8 @@ class PlaceInfoFetcher
                 'business_hours' => $detail['newBusinessHours'] ?? $detail['businessHours'] ?? $base['openingHours'] ?? $base['businessHours'] ?? null,
                 'conveniences' => $base['conveniences'] ?? [],
                 'payment_info' => $base['paymentInfo'] ?? [],
+                'links' => $this->links($detail['homepages'] ?? [], $base['naverBlog'] ?? null),
+                'images' => $this->images($detail),
                 'location' => [
                     'address' => $base['address'] ?? null, 'road_address' => $base['roadAddress'] ?? null,
                     'directions' => $base['road'] ?? null,
@@ -124,6 +126,62 @@ class PlaceInfoFetcher
             'partial' => in_array('unavailable', $status, true) || in_array('blocked', $status, true),
             'fetched_at' => now()->toIso8601String(),
         ];
+    }
+
+    private function images(array $detail): array
+    {
+        $out = [];
+        foreach ($detail['images']['images'] ?? [] as $image) {
+            $url = $image['origin'] ?? $image['url'] ?? null;
+            if (is_string($url) && filter_var($url, FILTER_VALIDATE_URL)) {
+                $out[$url] = ['url' => $url, 'width' => $image['width'] ?? null, 'height' => $image['height'] ?? null];
+            }
+        }
+        // 업체 대표 사진만 사용하고 방문자 리뷰 사진·영상은 제외한다.
+        foreach ($detail['topPhotos']['items'] ?? [] as $image) {
+            if (($image['mediaFormat'] ?? '') !== 'image' || ! str_contains((string) ($image['id'] ?? ''), '_business_')) {
+                continue;
+            }
+            $url = $image['originalUrl'] ?? $image['thumbnailUrl'] ?? null;
+            if (is_string($url) && filter_var($url, FILTER_VALIDATE_URL)) {
+                $out[$url] = ['url' => $url, 'width' => $image['width'] ?? null, 'height' => $image['height'] ?? null];
+            }
+        }
+
+        return array_slice(array_values($out), 0, 10);
+    }
+
+    private function links(array $homepages, mixed $blog): array
+    {
+        $links = [];
+        $walk = function (mixed $value) use (&$walk, &$links): void {
+            if (! is_array($value)) {
+                return;
+            }
+            $url = $value['url'] ?? $value['landingUrl'] ?? null;
+            if (is_string($url) && empty($value['isDeadUrl']) && filter_var($url, FILTER_VALIDATE_URL)
+                && in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+                $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+                $type = match (true) {
+                    $host === 'instagram.com', str_ends_with($host, '.instagram.com') => 'instagram',
+                    $host === 'blog.naver.com', $host === 'm.blog.naver.com', str_ends_with($host, '.tistory.com') => 'blog',
+                    $host === 'youtube.com', str_ends_with($host, '.youtube.com'), $host === 'youtu.be' => 'youtube',
+                    $host === 'facebook.com', str_ends_with($host, '.facebook.com') => 'facebook',
+                    $host === 'pf.kakao.com' => 'kakao',
+                    default => 'homepage',
+                };
+                $links[$url] = ['type' => $type, 'url' => $url];
+            }
+            foreach ($value as $child) {
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+        };
+        $walk($homepages);
+        $walk(is_string($blog) ? ['url' => $blog] : $blog);
+
+        return array_values($links);
     }
 
     private function rootField(array $state, string $field, string $placeId, bool $recent = false): array

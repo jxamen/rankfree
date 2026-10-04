@@ -24,11 +24,11 @@ class PlaceRankChecker
     /**
      * 순위 조회.
      *
-     * @param  string       $keyword    검색 키워드
-     * @param  string|null  $placeId    대상 플레이스 ID(숫자). null 이면 $targetName 매칭
-     * @param  string|null  $targetName 업체명(부분일치). $placeId 없을 때 사용
-     * @param  string       $cat        카테고리 강제(payload 키). '' 이면 자동 판별
-     * @param  string       $cookie     네이버 세션 쿠키(선택, 봇판정 완화)
+     * @param  string  $keyword  검색 키워드
+     * @param  string|null  $placeId  대상 플레이스 ID(숫자). null 이면 $targetName 매칭
+     * @param  string|null  $targetName  업체명(부분일치). $placeId 없을 때 사용
+     * @param  string  $cat  카테고리 강제(payload 키). '' 이면 자동 판별
+     * @param  string  $cookie  네이버 세션 쿠키(선택, 봇판정 완화)
      * @return array{blocked:bool,found:bool,rank:int,list_total:int,category:string,place_id:string,place_name:string,review_count:?int,blog_review_count:?int,save_count:?int,review_score:?float,tags:array}
      */
     public function check(string $keyword, ?string $placeId, ?string $targetName = null, string $cat = '', string $cookie = ''): array
@@ -177,7 +177,7 @@ class PlaceRankChecker
     }
 
     /** pcmap-api graphql POST → ['data'=>decoded, 'code'=>http]. 헤더 위장 + nCaptcha 토큰. */
-    private function pcmapPost(string $jsonData, string $keyword, string $type, string $x, string $y, string $ts, string $cookie = ''): array
+    protected function pcmapPost(string $jsonData, string $keyword, string $type, string $x, string $y, string $ts, string $cookie = ''): array
     {
         $uparts = explode('Chrome/', $this->ua);
         $chrome = isset($uparts[1]) ? explode('.', $uparts[1])[0] : '134';
@@ -185,18 +185,18 @@ class PlaceRankChecker
         $headers = [
             'Accept: */*', 'Accept-Language: ko', 'Content-Type: application/json',
             'Origin: https://pcmap.place.naver.com',
-            'Referer: https://pcmap.place.naver.com/place/list?query=' . urlencode($keyword) . "&x={$x}&y={$y}&clientX={$x}&clientY={$y}&fromNxList=true&noredirect=1&entry=pll&ts={$ts}&mapUrl=https%3A%2F%2Fmap.naver.com%2Fp%2Fsearch%2F" . urlencode($keyword),
+            'Referer: https://pcmap.place.naver.com/place/list?query='.urlencode($keyword)."&x={$x}&y={$y}&clientX={$x}&clientY={$y}&fromNxList=true&noredirect=1&entry=pll&ts={$ts}&mapUrl=https%3A%2F%2Fmap.naver.com%2Fp%2Fsearch%2F".urlencode($keyword),
             "Sec-Ch-Ua: \"Not A(Brand\";v=\"8\", \"Google Chrome\";v=\"{$chrome}\", \"Chromium\";v=\"{$chrome}\"",
             'Sec-Ch-Ua-Mobile: ?0', 'Sec-Ch-Ua-Platform: "Windows"',
             'Sec-Fetch-Dest: empty', 'Sec-Fetch-Mode: cors', 'Sec-Fetch-Site: same-site',
-            'User-Agent: ' . $this->ua,
-            'X-Wtm-Graphql: ' . base64_encode(json_encode(['arg' => $keyword, 'type' => $type, 'source' => 'place'], JSON_UNESCAPED_UNICODE)),
+            'User-Agent: '.$this->ua,
+            'X-Wtm-Graphql: '.base64_encode(json_encode(['arg' => $keyword, 'type' => $type, 'source' => 'place'], JSON_UNESCAPED_UNICODE)),
         ];
 
         $ncap = NcaptchaTokenStore::get();
-        $headers[] = ($ncap !== '') ? ('x-wtm-ncaptcha-token: ' . $ncap) : 'x-ncaptcha-violation: false';
+        $headers[] = ($ncap !== '') ? ('x-wtm-ncaptcha-token: '.$ncap) : 'x-ncaptcha-violation: false';
         if (trim($cookie) !== '') {
-            $headers[] = 'Cookie: ' . $cookie;
+            $headers[] = 'Cookie: '.$cookie;
         }
 
         $ch = curl_init('https://pcmap-api.place.naver.com/graphql');
@@ -224,7 +224,7 @@ class PlaceRankChecker
             return 'place';
         }
 
-        $ch = curl_init('https://m.place.naver.com/place/' . $pid . '/home');
+        $ch = curl_init('https://m.place.naver.com/place/'.$pid.'/home');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -234,12 +234,12 @@ class PlaceRankChecker
         curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
         $h = [
             'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua,
+            'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua,
             'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none',
             'upgrade-insecure-requests: 1',
         ];
         if (trim($cookie) !== '') {
-            $h[] = 'cookie: ' . $cookie;
+            $h[] = 'cookie: '.$cookie;
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $h);
         curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -258,7 +258,7 @@ class PlaceRankChecker
             return self::categoryKorToPath($m[1]);
         }
         foreach (['hairshop', 'restaurant', 'hospital', 'nailshop', 'accommodation'] as $c) {
-            if (strpos($html, '/' . $c . '/' . $pid) !== false) {
+            if (strpos($html, '/'.$c.'/'.$pid) !== false) {
                 return $c;
             }
         }
@@ -276,7 +276,7 @@ class PlaceRankChecker
         }
         $path = in_array($cat, ['hairshop', 'nailshop', 'hospital', 'restaurant', 'accommodation'], true) ? $cat : 'place';
 
-        $ch = curl_init('https://m.place.naver.com/' . $path . '/' . $placeId . '/home');
+        $ch = curl_init('https://m.place.naver.com/'.$path.'/'.$placeId.'/home');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -284,9 +284,9 @@ class PlaceRankChecker
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
         curl_setopt($ch, CURLOPT_ENCODING, '');
         curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
-        $h = ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua, 'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none', 'upgrade-insecure-requests: 1'];
+        $h = ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua, 'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none', 'upgrade-insecure-requests: 1'];
         if (trim($cookie) !== '') {
-            $h[] = 'cookie: ' . $cookie;
+            $h[] = 'cookie: '.$cookie;
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $h);
         curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -296,10 +296,10 @@ class PlaceRankChecker
             return $out;
         }
 
-        if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"name"\s*:\s*"([^"]*)"/s', $html, $m)) {
+        if (preg_match('/"PlaceDetailBase:'.$placeId.'".*?"name"\s*:\s*"([^"]*)"/s', $html, $m)) {
             $out['name'] = $m[1];
         }
-        if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"category"\s*:\s*"([^"]*)"/s', $html, $m)) {
+        if (preg_match('/"PlaceDetailBase:'.$placeId.'".*?"category"\s*:\s*"([^"]*)"/s', $html, $m)) {
             $out['category'] = $m[1];
         }
         if (preg_match('/"visitorReviewsTotal"\s*:\s*(\d+)/', $html, $m)) {
@@ -327,9 +327,9 @@ class PlaceRankChecker
         $relay = (string) config('rankfree.place.relay_url');
         $pid = preg_replace('/\D/', '', $pid);
         $url = $relay
-            . (str_contains($relay, '?') ? '&' : '?')
-            . 'action=get_place_rank&max_rank_page=6&keyword=' . urlencode($keyword) . '&keyword2='
-            . '&url=https://m.place.naver.com/place/' . $pid;
+            .(str_contains($relay, '?') ? '&' : '?')
+            .'action=get_place_rank&max_rank_page=6&keyword='.urlencode($keyword).'&keyword2='
+            .'&url=https://m.place.naver.com/place/'.$pid;
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
@@ -425,7 +425,7 @@ class PlaceRankChecker
      * 네이버 플레이스 URL 경로에서 업종·placeId 추출(네트워크 없음).
      * 스마트스토어·가격비교 등 그 외 URL 은 null(오변환 방지).
      *
-     * @return array{id:string, category:string}|null  category 는 URL 이 명시한 업종 또는 'place'(제네릭)
+     * @return array{id:string, category:string}|null category 는 URL 이 명시한 업종 또는 'place'(제네릭)
      */
     public static function parsePlaceRef(string $input): ?array
     {
@@ -445,7 +445,7 @@ class PlaceRankChecker
     {
         $category = in_array($category, self::PLACE_CATEGORIES, true) ? $category : 'place';
 
-        return 'https://m.place.naver.com/' . $category . '/' . preg_replace('/\D/', '', $id);
+        return 'https://m.place.naver.com/'.$category.'/'.preg_replace('/\D/', '', $id);
     }
 
     /**
@@ -457,7 +457,7 @@ class PlaceRankChecker
     {
         $id = preg_replace('/\D/', '', (string) $id);
 
-        return $id !== '' ? 'https://m.place.naver.com/place/' . $id . '/home' : $fallback;
+        return $id !== '' ? 'https://m.place.naver.com/place/'.$id.'/home' : $fallback;
     }
 
     /**
@@ -527,7 +527,7 @@ class PlaceRankChecker
         curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua,
+            'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua,
         ]);
         curl_setopt($ch, CURLOPT_HEADER, 0);
         $body = (string) curl_exec($ch);
@@ -535,7 +535,7 @@ class PlaceRankChecker
         curl_close($ch);
 
         if (self::extractPlaceId($final) === null && $body !== '' && preg_match('#place[/:"](\d{5,})#', $body, $m)) {
-            return 'https://m.place.naver.com/place/' . $m[1] . '/home';
+            return 'https://m.place.naver.com/place/'.$m[1].'/home';
         }
 
         return $final !== '' ? $final : null;
@@ -555,7 +555,7 @@ class PlaceRankChecker
             return $out;
         }
 
-        $ch = curl_init('https://m.place.naver.com/place/' . $placeId . '/home');
+        $ch = curl_init('https://m.place.naver.com/place/'.$placeId.'/home');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -565,12 +565,12 @@ class PlaceRankChecker
         curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
         $h = [
             'accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua,
+            'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua,
             'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none',
             'upgrade-insecure-requests: 1',
         ];
         if (trim($cookie) !== '') {
-            $h[] = 'cookie: ' . $cookie;
+            $h[] = 'cookie: '.$cookie;
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $h);
         curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -581,7 +581,7 @@ class PlaceRankChecker
         // 카테고리: 최종 URL 경로 → apollo category(한글)
         $cat = $this->categoryFromString($finalUrl);
         if ($cat === 'place') {
-            if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"category"\s*:\s*"([^"]+)"/s', $html, $m)) {
+            if (preg_match('/"PlaceDetailBase:'.$placeId.'".*?"category"\s*:\s*"([^"]+)"/s', $html, $m)) {
                 $cat = self::categoryKorToPath($m[1]);
             } elseif (preg_match('/"category"\s*:\s*"([^"]{1,20})"/', $html, $m)) {
                 $cat = self::categoryKorToPath($m[1]);
@@ -590,7 +590,7 @@ class PlaceRankChecker
         $out['category'] = $cat;
 
         // 업체명: PlaceDetailBase name → og:title → <title>
-        if (preg_match('/"PlaceDetailBase:' . $placeId . '".*?"name"\s*:\s*"([^"]*)"/s', $html, $m) && $m[1] !== '') {
+        if (preg_match('/"PlaceDetailBase:'.$placeId.'".*?"name"\s*:\s*"([^"]*)"/s', $html, $m) && $m[1] !== '') {
             $out['name'] = $m[1];
         } elseif (preg_match('#<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)#i', $html, $m)) {
             $out['name'] = $m[1];
@@ -646,6 +646,10 @@ class PlaceRankChecker
             $bnode = $isRest
                 ? ($data[0]['data']['restaurants']['businesses'] ?? [])
                 : ($data[0]['data']['businesses'] ?? []);
+            // 통신/GraphQL 실패를 검색 결과 0건으로 기록하지 않는다.
+            if ($resp['code'] !== 200 || ! isset($bnode['items']) || ! is_array($bnode['items'])) {
+                return ['blocked' => false, 'failed' => true, 'my_rank' => 300, 'total' => $total, 'items' => $items];
+            }
             if (isset($bnode['total'])) {
                 $total = (int) $bnode['total'];
             }
@@ -673,6 +677,9 @@ class PlaceRankChecker
             if ($found && $rank >= $topN) {
                 break;
             }
+            if (($total > 0 && $rank >= $total) || ($total === 0 && count($list) < 50)) {
+                break;
+            }
             if ($p < $maxPages) {
                 sleep($delay);
             }
@@ -693,6 +700,8 @@ class PlaceRankChecker
 
         return [
             'rnk' => $rnk, 'place_id' => (string) $g('id'), 'name' => (string) $g('name'),
+            'category' => (string) ($g('category') ?? ''),
+            'road_address' => (string) ($g('roadAddress') ?? ''),
             'visitor_cnt' => $num($g('visitorReviewCount')), 'blog_cnt' => $num($g('blogCafeReviewCount')),
             'booking_cnt' => $num($g('bookingReviewCount')),
             'save_cnt' => (($sv = $g('saveCount')) === null || $sv === '') ? null : (int) preg_replace('/[^0-9]/', '', (string) $sv), // "~100" 등 근사 표기 → 숫자
@@ -725,7 +734,7 @@ class PlaceRankChecker
         }
         $path = in_array($cat, ['hairshop', 'nailshop', 'hospital', 'restaurant', 'accommodation'], true) ? $cat : 'place';
 
-        $ch = curl_init('https://m.place.naver.com/' . $path . '/' . $pid . '/home');
+        $ch = curl_init('https://m.place.naver.com/'.$path.'/'.$pid.'/home');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -733,9 +742,9 @@ class PlaceRankChecker
         curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
         curl_setopt($ch, CURLOPT_ENCODING, '');
         curl_setopt($ch, CURLOPT_TIMEOUT, (int) config('rankfree.place.timeout', 20));
-        $h = ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua, 'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none', 'upgrade-insecure-requests: 1'];
+        $h = ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua, 'sec-fetch-dest: document', 'sec-fetch-mode: navigate', 'sec-fetch-site: none', 'upgrade-insecure-requests: 1'];
         if (trim($cookie) !== '') {
-            $h[] = 'cookie: ' . $cookie;
+            $h[] = 'cookie: '.$cookie;
         }
         curl_setopt($ch, CURLOPT_HTTPHEADER, $h);
         curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -765,7 +774,7 @@ class PlaceRankChecker
             $state = json_decode($m[1], true);
         }
         if (is_array($state)) {
-            $base = $state['PlaceDetailBase:' . $pid] ?? null;
+            $base = $state['PlaceDetailBase:'.$pid] ?? null;
             if (! $base) {
                 foreach ($state as $k => $v) {
                     if (strpos($k, 'DetailBase:') !== false) {
@@ -891,7 +900,7 @@ class PlaceRankChecker
      * m.place 리뷰탭 3종(방문자 최신·추천, 블로그 최신) 병렬 수집(로그인 불필요).
      *
      * @return array{v:int[], b:int[], v8:int, b8:int, quality:?array}
-     *   v/b: 4주 누적(v[3]=최근4주), quality.authority(infl/hi_infl/power/avg_fol/top), quality.ctx(방문맥락), quality.bloggers
+     *                                                                 v/b: 4주 누적(v[3]=최근4주), quality.authority(infl/hi_infl/power/avg_fol/top), quality.ctx(방문맥락), quality.bloggers
      */
     public function reviewWeekly(string $placeId, string $cat = 'place', ?string $refYmd = null): array
     {
@@ -1017,7 +1026,7 @@ class PlaceRankChecker
                     CURLOPT_RETURNTRANSFER => 1, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false,
                     CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_ENCODING => '',
                     CURLOPT_TIMEOUT => (int) config('rankfree.place.timeout', 20),
-                    CURLOPT_HTTPHEADER => ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: ' . $this->ua],
+                    CURLOPT_HTTPHEADER => ['accept: text/html', 'accept-language: ko-KR,ko;q=0.9', 'user-agent: '.$this->ua],
                 ]);
                 $chs[$k] = $ch;
                 curl_multi_add_handle($mh, $ch);

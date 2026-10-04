@@ -72,6 +72,20 @@ class RankController extends Controller
         return response()->json(['place' => $service->resolvePlace($data['place'])]);
     }
 
+    /** 검색 결과 전체(실제 결과 수, 최대 300개). */
+    public function search(Request $request, PlaceRankChecker $checker)
+    {
+        $data = $request->validate(['keyword' => ['required', 'string', 'max:100']]);
+        $result = $checker->serpFetch($data['keyword'], 'place', null, 300);
+
+        return response()->json([
+            'keyword' => $data['keyword'], 'total' => $result['total'],
+            'count' => count($result['items']), 'items' => $result['items'],
+            'blocked' => $result['blocked'], 'partial' => $result['blocked'] || ! empty($result['failed']),
+            'capped' => $result['total'] > 300,
+        ], $result['blocked'] ? 429 : (! empty($result['failed']) ? 503 : 200));
+    }
+
     /** 업체 상세·메뉴·최근 방문자 후기·위치 조회(슬롯/키워드 불필요). */
     public function place(Request $request, PlaceRankChecker $checker, PlaceInfoFetcher $fetcher)
     {
