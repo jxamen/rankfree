@@ -21,6 +21,19 @@ class PlaceInfoApiTest extends TestCase
         return ['Authorization' => 'Bearer '.$key];
     }
 
+    public function test_public_place_endpoints_have_no_twenty_per_minute_cap(): void
+    {
+        Http::preventStrayRequests();
+        $headers = $this->headers();
+        foreach (['place', 'search', 'candidates', 'analysis'] as $endpoint) {
+            for ($i = 0; $i < 21; $i++) {
+                // Missing inputs are rejected locally, without contacting Naver.
+                $this->getJson('/api/v1/rank/'.$endpoint, $headers)->assertStatus(422);
+            }
+        }
+        Http::assertNothingSent();
+    }
+
     private function html(array $state): string
     {
         return '<script>window.__APOLLO_STATE__ = '.json_encode($state, JSON_UNESCAPED_UNICODE).';</script>';

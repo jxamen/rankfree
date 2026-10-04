@@ -458,12 +458,12 @@
     </div>
     <div class="ep">
         <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/search</code><span class="ep-s">키워드별 플레이스 목록 · 최대 300개</span></div>
-        <div class="ep-b"><p class="ep-t"><code class="doc-code">keyword</code>에 지역과 검색어를 전달합니다(예: 서울 마포구 망원동 소금빵). rank 권한, 분당 20회 제한. 응답은 total(전체 결과 수), count(수집 수), items(place_id/name/address/road_address/category/x/y), capped(300개 초과), partial, blocked입니다. 실제 검색 결과가 5개면 5개, 100개면 100개를 반환합니다. 차단 시 429와 이미 수집한 결과를 함께 반환할 수 있습니다.</p></div>
+        <div class="ep-b"><p class="ep-t"><code class="doc-code">keyword</code>에 지역과 검색어를 전달합니다(예: 서울 마포구 망원동 소금빵). rank 권한이 필요하며 고정 분당 호출 제한은 없습니다. 응답은 total(전체 결과 수), count(수집 수), items(place_id/name/address/road_address/category/x/y), capped(300개 초과), partial, blocked입니다. 실제 검색 결과가 5개면 5개, 100개면 100개를 반환합니다. 차단 시 429와 이미 수집한 결과를 함께 반환할 수 있습니다.</p></div>
     </div>
     <div class="ep">
         <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/candidates</code><span class="ep-s">플레이스 URL 찾기 · 지역 + 업체명 후보 검색</span></div>
         <div class="ep-b">
-            <p class="ep-t">플레이스 URL을 모를 때 신규개업 업체 찾기와 같은 상호 검색 경로로 후보를 조회합니다. <code class="doc-code">keyword</code>에 조합 검색어를 넣거나, <code class="doc-code">name</code>과 선택값 <code class="doc-code">region</code>을 전달하세요. keyword와 name은 함께 사용할 수 없습니다. rank 권한, 분당 20회 제한.</p>
+            <p class="ep-t">플레이스 URL을 모를 때 신규개업 업체 찾기와 같은 상호 검색 경로로 후보를 조회합니다. <code class="doc-code">keyword</code>에 조합 검색어를 넣거나, <code class="doc-code">name</code>과 선택값 <code class="doc-code">region</code>을 전달하세요. keyword와 name은 함께 사용할 수 없습니다. rank 권한이 필요하며 고정 분당 호출 제한은 없습니다.</p>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -G "{{ url('/api/v1') }}/rank/candidates" \
   -H "Authorization: Bearer rk_..." \
   --data-urlencode "region=제주 애월" \
@@ -554,7 +554,7 @@
                     <tr><td><code class="doc-code">fetched_at</code></td><td>string</td><td>수집 완료 시각(ISO 8601)</td></tr>
                 </tbody>
             </table>
-            <p class="ep-t">업체 홈 차단은 HTTP 429, 홈 조회/파싱 실패는 503입니다. 잘못된 입력은 422, 인증/권한 오류는 401/403입니다. 기존 키별 일일 한도 외에 분당 20회 제한이 적용됩니다. 슬롯 생성·순위 기록 저장은 하지 않습니다.</p>
+            <p class="ep-t">업체 홈 차단은 HTTP 429, 홈 조회/파싱 실패는 503입니다. 잘못된 입력은 422, 인증/권한 오류는 401/403입니다. 고정 분당 호출 제한은 없습니다. 키별 일일 한도 설정과 원본 사이트의 차단 응답은 별도로 적용됩니다. 슬롯 생성·순위 기록 저장은 하지 않습니다.</p>
         </div>
     </div>
 </div>
