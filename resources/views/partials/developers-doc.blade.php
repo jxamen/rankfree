@@ -456,6 +456,64 @@
             </table>
         </div>
     </div>
+    {{-- 플레이스 상세 조회: 순위 탭에 함께 표시 --}}
+    <div class="ep">
+        <div class="ep-h">
+            <span class="doc-method m-get">GET</span>
+            <code class="ep-p">/rank/place</code>
+            <span class="ep-s">업체정보 · 메뉴 · 최근 후기 · 위치/좌표</span>
+        </div>
+        <div class="ep-b">
+            <p class="ep-t">플레이스 상세 정보를 한 번에 조회합니다. 기존 <code class="doc-code">rank</code> 권한으로 사용하며 키워드나 추적 슬롯은 필요하지 않습니다. 순위는 <code class="doc-code">POST /rank/check</code>로 조회하세요. 홈·메뉴·최신 방문자 리뷰 페이지의 공개 데이터를 수집하며, 전체 메뉴/리뷰 이력 수집이나 페이지네이션은 제공하지 않습니다. 요청당 최대 3페이지를 조회하므로 클라이언트 타임아웃은 90초 이상을 권장합니다.</p>
+            <div class="ep-l first">요청 파라미터</div>
+            <table class="doc-table">
+                <thead><tr><th>파라미터</th><th>필수</th><th>타입</th><th>설명</th></tr></thead>
+                <tbody>
+                    <tr><td><code class="doc-code">place</code></td><td>필수</td><td>string</td><td>숫자 ID 또는 네이버 플레이스 URL(최대 1000자). m.place.naver.com·pcmap.place.naver.com·map.naver.com·naver.me 지원. 업체명만 입력하면 422</td></tr>
+                    <tr><td><code class="doc-code">review_limit</code></td><td>선택</td><td>int</td><td>최근 방문자 후기 최대 개수, 1~50(기본 10). 공개 페이지에서 수집된 수만큼만 반환</td></tr>
+                </tbody>
+            </table>
+            <div class="ep-l">요청 예시</div>
+            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -G "{{ url('/api/v1') }}/rank/place" \
+  -H "Authorization: Bearer rk_..." \
+  --data-urlencode "place=123456" \
+  --data-urlencode "review_limit=10"</pre></div>
+            <div class="ep-l">응답 예시(설명용)</div>
+            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
+  "place": {
+    "place_id": "123456",
+    "place_url": "https://m.place.naver.com/place/123456/home",
+    "name": "예시 식당", "category": "한식", "phone": "02-123-4567",
+    "description": "매장 소개", "business_hours": null,
+    "conveniences": [], "payment_info": [],
+    "location": {
+      "address": "서울 강남구 역삼동", "road_address": "서울 강남구 테헤란로 1",
+      "directions": "1번 출구", "latitude": 37.5, "longitude": 127.01
+    },
+    "review_count": 20, "blog_review_count": 5,
+    "menus": [{"id": "1", "name": "정식", "price": "12,000", "description": "대표메뉴", "images": []}],
+    "recent_reviews": [{"id": "r1", "body": "맛있어요", "created_at": "2026-08-02", "visited_at": null, "rating": null, "author": "방문자", "media": []}]
+  },
+  "status": {"business": "ok", "menus": "ok", "recent_reviews": "ok"},
+  "partial": false,
+  "fetched_at": "2026-08-02T12:00:00+09:00"
+}</pre></div>
+            <div class="ep-l">응답 필드</div>
+            <table class="doc-table">
+                <thead><tr><th>필드</th><th>타입</th><th>설명</th></tr></thead>
+                <tbody>
+                    <tr><td><code class="doc-code">place</code></td><td>object</td><td>업체 ID·정규 URL·상호·한글 업종·전화·소개·영업시간·편의시설·결제정보·방문자/블로그 리뷰 수. 원문에 없는 값은 null 또는 빈 배열. business_hours·conveniences·payment_info는 참조를 해제한 네이버 원문 구조</td></tr>
+                    <tr><td><code class="doc-code">place.location</code></td><td>object</td><td>지번/도로명 주소·찾아오는 길·latitude(위도)·longitude(경도). 좌표는 업체의 실제 좌표이며 누락 시 null</td></tr>
+                    <tr><td><code class="doc-code">place.menus[]</code></td><td>array</td><td>메뉴 ID·이름·표시 가격 문자열·설명·이미지. 가격은 "변동" 등 문자가 포함될 수 있음. 메뉴 페이지 실패 시 홈에 포함된 메뉴만 반환할 수 있음</td></tr>
+                    <tr><td><code class="doc-code">place.recent_reviews[]</code></td><td>array</td><td>최신 방문자 후기: id, body(내용), created_at(작성일 원문), visited_at(방문일 원문), rating(평점), author(공개 닉네임), media(공개 type/url/thumbnail). 작성일 내림차순, 최대 review_limit개</td></tr>
+                    <tr><td><code class="doc-code">status</code></td><td>object</td><td>business·menus·recent_reviews별 수집 상태. ok=페이지 데이터 파싱 성공(목록이 없을 수 있음), blocked=네이버 차단, unavailable=통신/파싱 실패 또는 대상 업체 정보 없음</td></tr>
+                    <tr><td><code class="doc-code">partial</code></td><td>bool</td><td>하나 이상의 페이지 조회 실패. 메뉴/리뷰만 실패하면 HTTP 200으로 확인된 정보를 반환하며, 빈 배열만으로 데이터가 없다고 단정하지 말고 status를 확인</td></tr>
+                    <tr><td><code class="doc-code">fetched_at</code></td><td>string</td><td>수집 완료 시각(ISO 8601)</td></tr>
+                </tbody>
+            </table>
+            <p class="ep-t">업체 홈 차단은 HTTP 429, 홈 조회/파싱 실패는 503입니다. 잘못된 입력은 422, 인증/권한 오류는 401/403입니다. 기존 키별 일일 한도 외에 분당 20회 제한이 적용됩니다. 슬롯 생성·순위 기록 저장은 하지 않습니다.</p>
+        </div>
+    </div>
 </div>
 
 {{-- ============ 경쟁분석 ============ --}}

@@ -121,6 +121,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/slots', [RankController::class, 'slots']);
         Route::post('/slots', [RankController::class, 'store']);
         Route::get('/resolve', [RankController::class, 'resolve']);
+        Route::get('/place', [RankController::class, 'place'])->middleware('throttle:20,1');
         Route::post('/slots/{slot}/run', [RankController::class, 'run']);
         Route::delete('/slots/{slot}', [RankController::class, 'destroy']);
         Route::post('/check', [RankController::class, 'check']);

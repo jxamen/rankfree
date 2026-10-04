@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Place\PlaceInfoFetcher;
 use App\Domain\Place\PlaceRankChecker;
 use App\Domain\Place\PlaceScorer;
 use App\Domain\Place\PlaceSeoAnalyzer;
@@ -69,6 +70,35 @@ class RankController extends Controller
         ]);
 
         return response()->json(['place' => $service->resolvePlace($data['place'])]);
+    }
+
+    /** 업체 상세·메뉴·최근 방문자 후기·위치 조회(슬롯/키워드 불필요). */
+    public function place(Request $request, PlaceRankChecker $checker, PlaceInfoFetcher $fetcher)
+    {
+        $data = $request->validate([
+            'place' => ['required', 'string', 'max:1000'],
+            'review_limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+        $input = trim($data['place']);
+        $host = strtolower((string) parse_url($input, PHP_URL_HOST));
+        if (! preg_match('/^\d{5,30}$/', $input)
+            && (! in_array($host, ['m.place.naver.com', 'pcmap.place.naver.com', 'map.naver.com', 'naver.me'], true)
+                || ! in_array(parse_url($input, PHP_URL_SCHEME), ['http', 'https'], true))) {
+            return response()->json(['message' => '네이버 플레이스 URL 또는 숫자 ID를 입력하세요.'], 422);
+        }
+        $pid = $checker->resolvePlaceId($input);
+        if (! $pid) {
+            return response()->json(['message' => '플레이스 ID를 확인할 수 없습니다.'], 422);
+        }
+        $category = PlaceRankChecker::parsePlaceRef($input)['category'] ?? 'place';
+        $result = $fetcher->fetch($pid, $category, $data['review_limit'] ?? 10);
+        $status = $result['status']['business'] === 'ok' ? 200
+            : ($result['status']['business'] === 'blocked' ? 429 : 503);
+        if ($status !== 200) {
+            $result['message'] = '플레이스 정보를 조회하지 못했습니다. 잠시 후 다시 시도하세요.';
+        }
+
+        return response()->json($result, $status);
     }
 
     /** 즉시 순위 갱신. */
