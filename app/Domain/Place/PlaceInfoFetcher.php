@@ -47,7 +47,14 @@ class PlaceInfoFetcher
         }
         $base = $this->expand($base, $state);
         $detail = $this->rootField($state, 'placeDetail', $placeId);
+        $transportation = [
+            'directions' => $base['road'] ?? null,
+            'route_url' => $base['routeUrl'] ?? null,
+            'subway_stations' => $this->expand($detail['subwayStations'] ?? [], $state, 0, 16),
+            'bus_stations' => $this->expand($detail['busStations'] ?? [], $state, 0, 16),
+        ];
         $detail = $this->expand($detail, $state);
+        $transportation['parking'] = $detail['informationTab']['parkingInfo'] ?? null;
         $menus = [];
         // /menu 가 없는 업종은 /home 에 포함된 메뉴도 활용한다.
         $menuState = array_replace($state, $states['menus']);
@@ -109,6 +116,14 @@ class PlaceInfoFetcher
                 'business_hours' => $detail['newBusinessHours'] ?? $detail['businessHours'] ?? $base['openingHours'] ?? $base['businessHours'] ?? null,
                 'conveniences' => $base['conveniences'] ?? [],
                 'payment_info' => $base['paymentInfo'] ?? [],
+                'transportation' => $transportation,
+                // 해당 업체 자체의 공개 정보만. 주변 업체/추천/광고/운영 도구는 포함하지 않는다.
+                'additional_info' => array_intersect_key($detail, array_flip([
+                    'restaurantInfoTabDetails', 'michelinGuide', 'bookingAwards', 'mfds', 'naverBooking',
+                    'naverOrder', 'cesco', 'broadcastInfos', 'newOpening', 'themes', 'menuImages',
+                    'goodPrice', 'isRelaxRestaurant', 'is100YearCertified', 'is100YearSmallManufacturer',
+                    'isNFASafetyCertified', 'isAntiqueStore', 'acceptsCultureDeductionCoupon',
+                ])) + ['facilities' => array_intersect_key($detail['informationTab'] ?? [], array_flip(['facilities', 'pet', 'noKidsZone', 'keywordList']))],
                 'links' => $this->links($detail['homepages'] ?? [], $base['naverBlog'] ?? null),
                 'images' => $this->images($detail),
                 'location' => [
@@ -237,20 +252,20 @@ class PlaceInfoFetcher
     }
 
     /** Apollo 참조 해제. 순환 참조·내부 메타데이터는 응답에서 제외한다. */
-    private function expand(array $value, array $state, int $depth = 0): array
+    private function expand(array $value, array $state, int $depth = 0, int $maxDepth = 8): array
     {
-        if ($depth >= 8) {
+        if ($depth >= $maxDepth) {
             return [];
         }
         if (isset($value['__ref'])) {
-            return $this->expand($state[$value['__ref']] ?? [], $state, $depth + 1);
+            return $this->expand($state[$value['__ref']] ?? [], $state, $depth + 1, $maxDepth);
         }
         $out = [];
         foreach ($value as $key => $item) {
             if ($key === '__typename') {
                 continue;
             }
-            $out[$key] = is_array($item) ? $this->expand($item, $state, $depth + 1) : $item;
+            $out[$key] = is_array($item) ? $this->expand($item, $state, $depth + 1, $maxDepth) : $item;
         }
 
         return $out;

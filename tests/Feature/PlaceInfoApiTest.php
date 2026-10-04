@@ -168,6 +168,27 @@ class PlaceInfoApiTest extends TestCase
         $this->withoutVite()->get('/developers')->assertOk()->assertSee('/rank/place')->assertSee('recent_reviews');
     }
 
+    public function test_transportation_and_business_facilities_exclude_nearby_places(): void
+    {
+        $home = $this->home();
+        $home['ROOT_QUERY']['placeDetail({"input":{"id":"123456"}})'] = [
+            'busStations' => [['__ref' => 'BusStation:1']],
+            'subwayStations' => [['name' => '망원역', 'walkTime' => 5]],
+            'informationTab' => ['parkingInfo' => ['description' => '1시간 무료'], 'pet' => ['allowed' => true], 'nearbyParking' => [['name' => '다른 주차장']]],
+            'relatedPlaces' => [['name' => '다른 매장']], 'hasAroundItems' => true,
+            'themes' => ['디저트'],
+        ];
+        $home['BusStation:1'] = ['name' => '한담동', 'walkingDistance' => 135, 'innerRoutes' => ['routeType' => [['innerRoute' => [['__ref' => 'BusRoute:1']]]]]];
+        $home['BusRoute:1'] = ['name' => '202', 'id' => '1'];
+        $this->fake($home);
+        $this->getJson('/api/v1/rank/place?place=123456', $this->headers())->assertOk()
+            ->assertJsonPath('place.transportation.directions', '1번 출구')
+            ->assertJsonPath('place.transportation.parking.description', '1시간 무료')
+            ->assertJsonPath('place.transportation.bus_stations.0.innerRoutes.routeType.0.innerRoute.0.name', '202')
+            ->assertJsonPath('place.additional_info.facilities.pet.allowed', true)
+            ->assertDontSee('다른 매장')->assertDontSee('nearbyParking')->assertDontSee('hasAroundItems');
+    }
+
     public function test_search_returns_all_available_results_and_preserves_partial_failure(): void
     {
         $items = array_map(fn ($i) => ['place_id' => (string) (123450 + $i), 'name' => '매장'.$i], range(1, 5));

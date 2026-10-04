@@ -527,6 +527,8 @@
                     <tr><td><code class="doc-code">place.location</code></td><td>object</td><td>지번/도로명 주소·찾아오는 길·latitude(위도)·longitude(경도). 좌표는 업체의 실제 좌표이며 누락 시 null</td></tr>
                     <tr><td><code class="doc-code">place.menus[]</code></td><td>array</td><td>메뉴 ID·이름·표시 가격 문자열·설명·이미지. 가격은 "변동" 등 문자가 포함될 수 있음. 메뉴 페이지 실패 시 홈에 포함된 메뉴만 반환할 수 있음</td></tr>
                     <tr><td><code class="doc-code">place.links[] / images[]</code></td><td>array</td><td>공식 홈페이지·SNS 링크(type/url), 업체 이미지(url/width/height). 이미지 원본 URL은 별도 축소·캐싱하여 사용할 수 있습니다.</td></tr>
+                    <tr><td><code class="doc-code">place.transportation</code></td><td>object</td><td>directions(찾아가는 길), route_url, subway_stations(지하철역), bus_stations(정류장·노선·도보 거리/시간), parking(주차·발레·요금 안내). 원본에 공개된 범위만 반환합니다.</td></tr>
+                    <tr><td><code class="doc-code">place.additional_info</code></td><td>object</td><td>시설·반려동물·노키즈존·업체 키워드·예약/주문·인증·방송 등 해당 업체의 공개 부가정보. 주변매장·추천업체·광고는 제외합니다.</td></tr>
                     <tr><td><code class="doc-code">place.recent_reviews[]</code></td><td>array</td><td>최신 방문자 후기: id, body(내용), created_at(작성일 원문), visited_at(방문일 원문), rating(평점), author(공개 닉네임), media(공개 type/url/thumbnail). 작성일 내림차순, 최대 review_limit개</td></tr>
                     <tr><td><code class="doc-code">status</code></td><td>object</td><td>business·menus·recent_reviews별 수집 상태. ok=페이지 데이터 파싱 성공(목록이 없을 수 있음), blocked=네이버 차단, unavailable=통신/파싱 실패 또는 대상 업체 정보 없음</td></tr>
                     <tr><td><code class="doc-code">partial</code></td><td>bool</td><td>하나 이상의 페이지 조회 실패. 메뉴/리뷰만 실패하면 HTTP 200으로 확인된 정보를 반환하며, 빈 배열만으로 데이터가 없다고 단정하지 말고 status를 확인</td></tr>
