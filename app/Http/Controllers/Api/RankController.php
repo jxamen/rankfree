@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Place\PlaceCandidateFinder;
 use App\Domain\Place\PlaceInfoFetcher;
 use App\Domain\Place\PlaceRankChecker;
 use App\Domain\Place\PlaceScorer;
@@ -70,6 +71,27 @@ class RankController extends Controller
         ]);
 
         return response()->json(['place' => $service->resolvePlace($data['place'])]);
+    }
+
+    /** 상호/지역 검색 후보 — 일반 순위 검색과 다른 검색 페이지 경로. */
+    public function candidates(Request $request, PlaceCandidateFinder $finder)
+    {
+        $data = $request->validate([
+            'keyword' => ['required_without:name', 'prohibits:name', 'string', 'max:100'],
+            'name' => ['required_without:keyword', 'prohibits:keyword', 'string', 'max:100'],
+            'region' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+        $query = trim(preg_replace('/\s+/u', ' ', ($data['region'] ?? '').' '.($data['keyword'] ?? $data['name'])));
+        $result = $finder->search($query, (int) ($data['limit'] ?? 20));
+        $status = match ($result['status']) {
+            'blocked' => 429, 'unavailable' => 503, default => 200
+        };
+        if ($status !== 200) {
+            $result['message'] = '후보 검색을 완료하지 못했습니다. 잠시 후 다시 시도하세요.';
+        }
+
+        return response()->json($result, $status);
     }
 
     /** 검색 결과 전체(실제 결과 수, 최대 300개). */

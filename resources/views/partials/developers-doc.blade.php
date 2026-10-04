@@ -460,6 +460,23 @@
         <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/search</code><span class="ep-s">키워드별 플레이스 목록 · 최대 300개</span></div>
         <div class="ep-b"><p class="ep-t"><code class="doc-code">keyword</code>에 지역과 검색어를 전달합니다(예: 서울 마포구 망원동 소금빵). rank 권한, 분당 20회 제한. 응답은 total(전체 결과 수), count(수집 수), items(place_id/name/address/road_address/category/x/y), capped(300개 초과), partial, blocked입니다. 실제 검색 결과가 5개면 5개, 100개면 100개를 반환합니다. 차단 시 429와 이미 수집한 결과를 함께 반환할 수 있습니다.</p></div>
     </div>
+    <div class="ep">
+        <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/candidates</code><span class="ep-s">플레이스 URL 찾기 · 지역 + 업체명 후보 검색</span></div>
+        <div class="ep-b">
+            <p class="ep-t">플레이스 URL을 모를 때 신규개업 업체 찾기와 같은 상호 검색 경로로 후보를 조회합니다. <code class="doc-code">keyword</code>에 조합 검색어를 넣거나, <code class="doc-code">name</code>과 선택값 <code class="doc-code">region</code>을 전달하세요. keyword와 name은 함께 사용할 수 없습니다. rank 권한, 분당 20회 제한.</p>
+            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -G "{{ url('/api/v1') }}/rank/candidates" \
+  -H "Authorization: Bearer rk_..." \
+  --data-urlencode "region=제주 애월" \
+  --data-urlencode "name=랜디스도넛" \
+  --data-urlencode "limit=20"</pre></div>
+            <p class="ep-t">또는 <code class="doc-code">keyword=제주 애월 랜디스도넛</code>. limit은 1~50(기본 20), 검색 첫 페이지의 공개 후보만 반환하며 페이지네이션은 지원하지 않습니다.</p>
+            <table class="doc-table"><thead><tr><th>필드</th><th>설명</th></tr></thead><tbody>
+                <tr><td>query / status / total / count / has_more</td><td>실제 검색어, 상태(ok/partial/blocked/unavailable), 전체 검색 건수, 반환 건수, 더 많은 결과 존재 여부. 실패 시 total은 null이며 검색 결과 0건과 구별합니다.</td></tr>
+                <tr><td>candidates[]</td><td>place_id, place_url, name, category, address, road_address, common_address, phone, latitude, longitude. 원본에 없는 값은 null. road_address는 축약 주소일 수 있어 common_address와 함께 확인하세요.</td></tr>
+            </tbody></table>
+            <p class="ep-t">후보를 자동 확정하지 않습니다. 업체명과 주소로 원하는 지점을 고른 뒤 <code class="doc-code">GET /rank/place?place=선택한_place_id</code>로 상세정보·메뉴·후기·SNS·이미지를 조회하세요. 검색 결과가 없으면 HTTP 200과 빈 배열, 원본 차단은 429, 통신·파싱 실패는 503입니다.</p>
+        </div>
+    </div>
     {{-- 플레이스 상세 조회: 순위 탭에 함께 표시 --}}
     <div class="ep">
         <div class="ep-h">
