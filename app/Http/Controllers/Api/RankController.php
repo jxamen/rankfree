@@ -12,6 +12,8 @@ use App\Http\Controllers\Controller;
 use App\Models\PlaceRankSlot;
 use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rule;
 
 /**
  * 순위 추적 API (auth.ext Bearer 토큰). 크롬 확장·외부에서 사용.
@@ -71,6 +73,64 @@ class RankController extends Controller
         ]);
 
         return response()->json(['place' => $service->resolvePlace($data['place'])]);
+    }
+
+    /** 개별 매장 분석 화면과 동일한 계산. 공개 수집 자료만 6시간 캐시한다. */
+    public function analysis(Request $request, PlaceRankChecker $checker, PlaceSeoAnalyzer $analyzer)
+    {
+        $data = $request->validate([
+            'place' => ['required', 'string', 'max:1000'],
+            'keyword' => ['required', 'string', 'max:100'],
+            'category' => ['sometimes', 'string', Rule::in(PlaceRankChecker::PLACE_CATEGORIES)],
+        ]);
+        $input = trim($data['place']);
+        $host = strtolower((string) parse_url($input, PHP_URL_HOST));
+        if (! preg_match('/^\d{5,30}$/', $input) && (! in_array($host, ['m.place.naver.com', 'pcmap.place.naver.com', 'map.naver.com', 'naver.me'], true)
+            || ! in_array(parse_url($input, PHP_URL_SCHEME), ['http', 'https'], true))) {
+            return response()->json(['message' => '네이버 플레이스 URL 또는 숫자 ID를 입력하세요.'], 422);
+        }
+        $pid = $checker->resolvePlaceId($input);
+        if (! $pid) {
+            return response()->json(['message' => '플레이스 ID를 확인할 수 없습니다.'], 422);
+        }
+        $category = $data['category'] ?? PlaceRankChecker::parsePlaceRef($input)['category'] ?? 'place';
+        $keyword = trim($data['keyword']);
+        $key = 'place-analysis-api:v1:'.hash('sha256', $pid.'|'.$category.'|'.$keyword);
+        if ($cached = Cache::get($key)) {
+            return response()->json(['cached' => true] + $cached);
+        }
+        $lock = Cache::lock($key.':lock', 360);
+        if (! $lock->get()) {
+            return response()->json(['message' => '같은 매장과 키워드를 분석 중입니다. 잠시 후 재요청하세요.'], 409)->header('Retry-After', '15');
+        }
+        try {
+            @set_time_limit(300);
+            $score = $analyzer->analyzeOne($keyword, $category, $pid);
+            if (! $score) {
+                return response()->json(['message' => '분석 수집에 실패했습니다. 잠시 후 재요청하세요.'], 503);
+            }
+            $dimensions = [];
+            foreach (range(1, 10) as $i) {
+                $dimensions['d'.$i] = $score['d'.$i] ?? null;
+            }
+            $result = [
+                'analysis' => ['place_id' => $pid, 'place_url' => PlaceRankChecker::buildMPlaceUrl($pid, $category),
+                    'keyword' => $keyword, 'name' => $score['name'] ?? '', 'category' => $score['category'] ?? '',
+                    'rank' => $score['rnk'] ?? null, 'n1' => $score['n1'] ?? null, 'n2' => $score['n2'] ?? null,
+                    'n3' => $score['n3'] ?? null, 'tier' => $score['tier'] ?? null, 'd' => $dimensions,
+                    'visitor_cnt' => $score['visitor_cnt'] ?? null, 'blog_cnt' => $score['blog_cnt'] ?? null, 'save_cnt' => $score['save_cnt'] ?? null,
+                    'kc' => $score['kc'] ?? null, 'seo' => $score['seo'] ?? [], 'benchmark' => $score['benchmark'] ?? null,
+                    'rep_keywords' => $score['rep_keywords'] ?? [], 'review_kw' => $score['review_kw'] ?? null,
+                    'review_quality' => $score['review_quality'] ?? null, 'review_weekly' => $score['review_weekly'] ?? null],
+                'analyzed_at' => now()->toIso8601String(), 'cache_seconds' => 21600,
+                'method' => 'rankfree_estimate', 'review_sentiment_status' => 'not_analyzed',
+            ];
+            Cache::put($key, $result, now()->addHours(6));
+
+            return response()->json(['cached' => false] + $result);
+        } finally {
+            $lock->release();
+        }
     }
 
     /** 상호/지역 검색 후보 — 일반 순위 검색과 다른 검색 페이지 경로. */

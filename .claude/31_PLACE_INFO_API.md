@@ -1,5 +1,7 @@
 # 플레이스 상세 조회 API
 
+- `GET /api/v1/rank/analysis?place=URL/ID&keyword=검색어`: 콘솔 개별 분석과 동일한 PlaceSeoAnalyzer::analyzeOne. N1/N2/N3·D1~D10·seo·kc·리뷰 키워드/품질/주별 집계, 상위 평균 benchmark를 제공하되 개별 경쟁업체 제외. 6시간 성공 캐시, 중복 실행409, 실패503. 자체 추정치이며 긍정/부정 감성 분석 및 디저트나우 점수는 별도. 분석 실패를 0점으로 생성하지 않는다.
+
 - `GET /api/v1/rank/candidates?region=제주 애월&name=랜디스도넛` 또는 `keyword=지역 상호`: 신규개업 `PlacePhoneFetcher`와 동일한 pcmap 검색 페이지 SSR 경로. 순위 GraphQL은 상호 검색 0건 문제가 있어 여기서 사용하지 않는다. ROOT_QUERY의 해당 query의 placeList.businesses.items 순서만 읽고 ID 중복 제거(광고/다른 캐시 노드 제외). 후보 ID/URL/주소/전화/좌표 반환 후 호출자가 선택하여 상세 API 호출. limit 기본20 최대50, 첫 페이지만, 페이지네이션 없음. 원본 오류와 검색0건 구별.
 
 - `GET /api/v1/rank/search?keyword=지역+디저트`: 실제 결과 수만큼 최대 300개 반환. total/count/items/capped/partial/blocked. 0/5/10/100/300/430개 페이지네이션 및 오류 테스트 완료.

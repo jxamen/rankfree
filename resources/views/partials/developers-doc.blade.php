@@ -477,6 +477,25 @@
             <p class="ep-t">후보를 자동 확정하지 않습니다. 업체명과 주소로 원하는 지점을 고른 뒤 <code class="doc-code">GET /rank/place?place=선택한_place_id</code>로 상세정보·메뉴·후기·SNS·이미지를 조회하세요. 검색 결과가 없으면 HTTP 200과 빈 배열, 원본 차단은 429, 통신·파싱 실패는 503입니다.</p>
         </div>
     </div>
+    <div class="ep">
+        <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/rank/analysis</code><span class="ep-s">플레이스 개별 분석 · N1/N2/N3 · 정보 충실도 · 리뷰 신호</span></div>
+        <div class="ep-b">
+            <p class="ep-t">콘솔의 플레이스 개별 분석과 같은 계산기를 사용합니다. 필수값 place(URL 또는 ID), keyword(분석 기준 검색어), 선택값 category(restaurant/place 등). rank 권한으로 사용하며 추적 슬롯을 만들지 않습니다.</p>
+            <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl -G "{{ url('/api/v1') }}/rank/analysis" \
+  -H "Authorization: Bearer rk_..." \
+  --data-urlencode "place=https://m.place.naver.com/restaurant/1000671392/home" \
+  --data-urlencode "keyword=애월 도넛"</pre></div>
+            <table class="doc-table"><thead><tr><th>필드</th><th>설명</th></tr></thead><tbody>
+                <tr><td>analysis.n1 / n2 / n3 / tier / rank</td><td>유사도·관련성·랭킹 추정 점수, 등급, 검색 순위. 네이버 공식 점수가 아닌 랭크프리 자체 추정치입니다. rank=300은 기존 분석기의 300위 이상/미확인 표시입니다.</td></tr>
+                <tr><td>analysis.d</td><td>d1 방문자 리뷰, d2 블로그 리뷰, d3 예약 리뷰, d4 평점, d5 저장수, d6 사진수, d7 정보 충실도, d8 키워드 일치, d9 최근 활동, d10 리뷰 영향력.</td></tr>
+                <tr><td>analysis.seo / kc / rep_keywords</td><td>정보 충실도 체크리스트, 키워드 일치 근거, 대표 키워드.</td></tr>
+                <tr><td>analysis.review_kw / review_quality / review_weekly</td><td>리뷰 키워드·작성자 영향력/방문 맥락·최근 주별 표본 집계. 긍정·부정 감성 분석은 포함하지 않으며 review_sentiment_status=not_analyzed로 표시합니다.</td></tr>
+                <tr><td>analysis.benchmark</td><td>분석 검색어의 상위 업체 평균 집계. 개별 경쟁업체·주변매장 목록은 반환하지 않습니다.</td></tr>
+                <tr><td>cached / analyzed_at / cache_seconds</td><td>동일 플레이스·키워드·업종 결과는 6시간 캐싱합니다. 분석 시각을 확인하세요.</td></tr>
+            </tbody></table>
+            <p class="ep-t">첫 분석은 수십 초 이상 걸릴 수 있어 클라이언트 타임아웃 300초를 권장합니다. 동일 분석 진행 중 409(Retry-After), 수집 실패 503. 다른 키워드의 점수는 비교 모집단이 달라 직접적인 지역 순위로 해석하지 마세요. 디저트나우 추천·후기 점수는 이 API에 포함되지 않습니다.</p>
+        </div>
+    </div>
     {{-- 플레이스 상세 조회: 순위 탭에 함께 표시 --}}
     <div class="ep">
         <div class="ep-h">

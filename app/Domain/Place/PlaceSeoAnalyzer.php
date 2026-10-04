@@ -121,7 +121,7 @@ class PlaceSeoAnalyzer
         $ymd = now()->toDateString();
 
         $serp = $this->checker->serpFetch($keyword, $cat, $pid, 30);
-        if ($serp['blocked']) {
+        if ($serp['blocked'] || ! empty($serp['failed'])) {
             return null;
         }
         $items = $serp['items'];
@@ -151,6 +151,9 @@ class PlaceSeoAnalyzer
         }
 
         $detail = $this->checker->placeDetailFull($pid, $cat);
+        if (empty($detail['ok'])) {
+            return null;
+        }
         $recArr = [];
         $authArr = [];
         $bvArr = [];
@@ -200,6 +203,7 @@ class PlaceSeoAnalyzer
             'seo' => $seo,
             'review_kw' => $detail['review_kw'] ?? null,
             'review_quality' => $detail['review_quality'] ?? null,
+            'review_weekly' => $detail['review_weekly'] ?? null,
         ];
     }
 
