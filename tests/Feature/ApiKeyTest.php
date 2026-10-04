@@ -50,6 +50,54 @@ class ApiKeyTest extends TestCase
         $this->assertNotSame($plain, ApiKey::first()->key_hash);
     }
 
+    public function test_limit_changes_apply_without_resetting_usage_or_rotating_key(): void
+    {
+        $user = $this->makeUser();
+        [$key, $plain] = ApiKey::issue($user, 'Limit test', ['rank'], null, 1, null);
+        $headers = ['Authorization' => 'Bearer '.$plain];
+        $this->getJson('/api/v1/rank/slots', $headers)->assertOk();
+
+        $this->actingAs($user)->from('/console/api-keys')
+            ->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => 2, 'scopes' => ['order']])
+            ->assertRedirect('/console/api-keys')->assertSessionHas('status');
+        $this->assertSame(1, $key->usedToday());
+        $this->assertSame($plain, $key->fresh()->plainKey());
+        $this->assertSame(['rank'], $key->fresh()->scopes);
+        $this->getJson('/api/v1/rank/slots', $headers)->assertOk()->assertHeader('X-RateLimit-Limit', '2');
+        $this->getJson('/api/v1/rank/slots', $headers)->assertStatus(429);
+
+        $this->actingAs($user)->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => 1])->assertRedirect();
+        $this->getJson('/api/v1/rank/slots', $headers)->assertStatus(429);
+        $this->actingAs($user)->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => ''])->assertRedirect();
+        $this->assertNull($key->fresh()->daily_limit);
+        $this->getJson('/api/v1/rank/slots', $headers)->assertOk();
+        $this->assertSame(3, $key->usedToday());
+    }
+
+    public function test_limit_update_rejects_invalid_values_and_missing_field(): void
+    {
+        $user = $this->makeUser();
+        [$key] = ApiKey::issue($user, 'Limit test', ['rank'], null, 100, null);
+        foreach ([0, -1, 1000001, '1.5', 'invalid', []] as $value) {
+            $this->actingAs($user)->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => $value])
+                ->assertSessionHasErrors('daily_limit', null, 'limit_'.$key->id);
+            $this->assertSame(100, $key->fresh()->daily_limit);
+        }
+        $this->patch(route('console.api-keys.update-limit', $key), [])
+            ->assertSessionHasErrors('daily_limit', null, 'limit_'.$key->id);
+        $this->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => 1000000])->assertRedirect();
+        $this->assertSame(1000000, $key->fresh()->daily_limit);
+    }
+
+    public function test_limit_update_requires_owner(): void
+    {
+        [$key] = ApiKey::issue($this->makeUser(), 'Private key', ['rank'], null, 100, null);
+        $this->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => 200])->assertRedirect('/login');
+        $this->actingAs($this->makeUser('other@example.test'))
+            ->patch(route('console.api-keys.update-limit', $key), ['daily_limit' => 200])->assertForbidden();
+        $this->assertSame(100, $key->fresh()->daily_limit);
+    }
+
     public function test_rank_scope_allows_rank_endpoint(): void
     {
         $user = $this->makeUser();

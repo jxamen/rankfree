@@ -27,6 +27,8 @@
 
 ## 인증·엔드포인트
 
+- API 키 목록에서 기존 키의 일일 호출 한도를 수정할 수 있다(2026-10-04). `PATCH /console/api-keys/{key}/limit`, 소유자만 허용. `daily_limit`은 필수 필드이며 빈 값은 무제한, 숫자는 1~1,000,000 정수. 한도만 변경하며 키 원문·scope·오늘 사용량은 유지한다. 저장 후 다음 API 호출부터 기존 인증 미들웨어가 새 한도를 적용한다. 검증 오류는 키별 error bag으로 표시한다.
+
 기존 외부 API 키 체계([AuthenticateApiKey](../app/Http/Middleware/AuthenticateApiKey.php) — Bearer `rk_…`, 활성/만료/허용 IP/일일 한도) 그대로, **scope `order`** 추가([ApiKey::SCOPES](../app/Models/ApiKey.php) — 콘솔 API 키 발급 화면에 자동 노출). 라우트는 [routes/api.php](../routes/api.php) v1 그룹.
 
 | 메서드 | 경로 | 설명 |

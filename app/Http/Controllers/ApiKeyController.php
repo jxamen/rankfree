@@ -49,6 +49,20 @@ class ApiKeyController extends Controller
             ->with('status', "API 키 '{$key->name}' 발급 완료. 아래 키는 지금 한 번만 표시되니 안전한 곳에 보관하세요.");
     }
 
+    public function updateLimit(Request $request, ApiKey $key)
+    {
+        abort_unless($key->user_id === $request->user()->id, 403);
+
+        $data = $request->validateWithBag('limit_'.$key->id, [
+            'daily_limit' => ['present', 'nullable', 'integer', 'min:1', 'max:1000000'],
+        ]);
+        $key->update(['daily_limit' => $data['daily_limit']]);
+
+        $limit = $key->daily_limit === null ? '무제한' : number_format($key->daily_limit).'회';
+
+        return back()->with('status', "'{$key->name}' 키의 일일 호출 한도를 {$limit}(으)로 변경했습니다.");
+    }
+
     public function toggle(Request $request, ApiKey $key)
     {
         abort_unless($key->user_id === $request->user()->id, 403);

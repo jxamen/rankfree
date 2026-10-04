@@ -323,6 +323,7 @@ Route::middleware(['auth', 'menu.gate', 'usage.gate'])->prefix('console')->name(
     // API 키 관리 (발급·허용기간·일일 한도·허용 IP) — 개발자 문서는 공개 /developers 하나만(콘솔 문서 제거 2026-07-29)
     Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys');
     Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
+    Route::patch('/api-keys/{key}/limit', [ApiKeyController::class, 'updateLimit'])->name('api-keys.update-limit');
     Route::post('/api-keys/{key}/toggle', [ApiKeyController::class, 'toggle'])->name('api-keys.toggle');
     Route::post('/api-keys/{key}/regenerate', [ApiKeyController::class, 'regenerate'])->name('api-keys.regenerate');
     Route::delete('/api-keys/{key}', [ApiKeyController::class, 'destroy'])->name('api-keys.destroy');

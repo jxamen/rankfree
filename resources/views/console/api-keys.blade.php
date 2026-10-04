@@ -36,7 +36,7 @@
                     <th class="text-left px-5 py-3 font-semibold">이름 / 키</th>
                     <th class="text-left px-3 py-3 font-semibold">권한</th>
                     <th class="text-left px-3 py-3 font-semibold">허용 IP</th>
-                    <th class="text-right px-3 py-3 font-semibold">오늘 사용</th>
+                    <th class="text-right px-3 py-3 font-semibold">오늘 사용 / 일일 한도</th>
                     <th class="text-left px-3 py-3 font-semibold">만료</th>
                     <th class="text-left px-3 py-3 font-semibold">최근 사용</th>
                     <th class="text-right px-5 py-3 font-semibold">상태 / 삭제</th>
@@ -62,6 +62,20 @@
                         <td class="px-3 py-3 text-right" style="font-size:var(--fs-xs);">
                             <b class="text-ink">{{ number_format($key->usedToday()) }}</b>
                             <span class="text-muted-soft">/ {{ $key->daily_limit !== null ? number_format($key->daily_limit) : '무제한' }}</span>
+                            <form method="POST" action="{{ route('console.api-keys.update-limit', $key) }}" class="mt-2">
+                                @csrf
+                                @method('PATCH')
+                                <label for="daily-limit-{{ $key->id }}" class="block text-muted mb-1">일일 호출 한도</label>
+                                <div class="flex items-center justify-end gap-2">
+                                    <input id="daily-limit-{{ $key->id }}" type="number" name="daily_limit" class="input" style="width:120px;" min="1" max="1000000" step="1"
+                                           value="{{ $errors->getBag('limit_'.$key->id)->any() ? old('daily_limit') : $key->daily_limit }}" placeholder="무제한" aria-describedby="daily-limit-help-{{ $key->id }}">
+                                    <button type="submit" class="btn btn-secondary btn-sm">저장</button>
+                                </div>
+                                <div id="daily-limit-help-{{ $key->id }}" class="text-muted-soft mt-1">1~1,000,000회 · 비우면 무제한</div>
+                                @error('daily_limit', 'limit_'.$key->id)
+                                    <div role="alert" class="mt-1" style="color:var(--color-error);">{{ $message }}</div>
+                                @enderror
+                            </form>
                         </td>
                         <td class="px-3 py-3 text-muted" style="font-size:var(--fs-xs);">
                             @if ($key->expires_at === null)
@@ -95,6 +109,7 @@
     </div>
 </div>
 <p class="text-muted-soft mt-3" style="font-size:var(--fs-xs);">
+    일일 한도는 저장 즉시 적용되며 오늘 사용 횟수는 유지됩니다. 사용량은 매일 한국 시간 0시 기준으로 집계됩니다.<br>
     인증: <code style="font-family:var(--font-mono);">Authorization: Bearer rk_…</code> 헤더 (또는 <code style="font-family:var(--font-mono);">X-API-KEY</code>) ·
     Base URL: <code style="font-family:var(--font-mono);">{{ url('/api/v1') }}</code> ·
     자세한 사용법은 <a href="{{ route('developers') }}" class="text-accent">API 문서</a> 참조.
