@@ -17,6 +17,9 @@ class MarketingOrderController extends Controller
             ->with('shopKeywordAnalyses:id,marketing_order_id,user_id,product_id,product_url,mall_name,product_price,exposed_count,status')
             // 발주 취소 버튼 노출용 — 활성(미취소) 발주 수
             ->withCount(['dispatches as active_dispatch_count' => fn ($q) => $q->where('status', '!=', 'canceled')])
+            // 부스팅샵 전송 여부 표시용(2026-10-06) — 취소 제외 부스팅샵 발주 기록
+            ->with(['dispatches' => fn ($q) => $q->where('vendor_name', \App\Models\OrderDispatch::BOOSTING_VENDOR)
+                ->where('status', '!=', 'canceled')->latest('id')])
             ->latest();
 
         if (($status = $request->query('status')) && isset(MarketingOrder::STATUSES[$status])) {

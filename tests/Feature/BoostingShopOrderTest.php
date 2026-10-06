@@ -198,6 +198,27 @@ class BoostingShopOrderTest extends TestCase
             ->assertDontSee('부스팅샵 주문');
     }
 
+    public function test_list_shows_boosting_sent_status(): void
+    {
+        $order = $this->makeOrder();
+
+        // 전송 전 — 미전송
+        $this->actingAs($this->admin)->get(route('admin.orders'))
+            ->assertOk()
+            ->assertSee('미전송')
+            ->assertDontSee('전송됨');
+
+        $this->fakeSuccess();
+        $this->actingAs($this->admin)->post(route('admin.orders.boosting-shop.place', $order), $this->payload());
+
+        // 전송 후 — 전송됨 + 부스팅샵 주문번호(2026-10-06)
+        $this->actingAs($this->admin)->get(route('admin.orders'))
+            ->assertOk()
+            ->assertSee('전송됨')
+            ->assertSee('#54890')
+            ->assertDontSee('미전송');
+    }
+
     public function test_detail_shows_received_badge_after_success(): void
     {
         $this->fakeSuccess();

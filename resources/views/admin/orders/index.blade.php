@@ -46,7 +46,7 @@
 
 <div class="card overflow-hidden">
     <div style="overflow-x:auto;">
-        <table class="w-full" style="min-width:900px;">
+        <table class="w-full" style="min-width:1010px;">
             <thead>
                 <tr class="text-muted" style="font-size:var(--fs-xs);border-bottom:1px solid var(--color-hairline-soft);">
                     <th class="text-left px-5 py-3 font-semibold" style="width:56px;">No</th>
@@ -56,6 +56,7 @@
                     <th class="text-right px-3 py-3 font-semibold" style="width:130px;">수량 · 금액</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:100px;">상태</th>
                     <th class="text-center px-3 py-3 font-semibold" style="width:120px;">유입키워드</th>
+                    <th class="text-center px-3 py-3 font-semibold" style="width:110px;">부스팅샵</th>
                     <th class="text-right px-5 py-3 font-semibold" style="width:130px;">주문일시</th>
                 </tr>
             </thead>
@@ -153,10 +154,27 @@
                                 <span class="text-muted-soft">—</span>
                             @endif
                         </td>
+                        {{-- 부스팅샵 전송 여부(2026-10-06) — 전송 성공 기록 우선, 없으면 최근 실패 --}}
+                        @php
+                            $bd = $o->dispatches->firstWhere('status', 'sent') ?? $o->dispatches->first();
+                            $bdNo = $bd && preg_match('/부스팅샵 주문번호 (\S+)/u', (string) $bd->response, $m) ? $m[1] : null;
+                        @endphp
+                        <td class="px-3 py-3 text-center" style="font-size:var(--fs-xs);white-space:nowrap;">
+                            @if ($bd && $bd->status === 'sent')
+                                <div class="font-semibold" style="color:var(--color-success);">전송됨</div>
+                                @if ($bdNo)<div class="text-muted font-mono">#{{ $bdNo }}</div>@endif
+                                <div class="text-muted-soft">{{ $bd->sent_at?->format('y.m.d H:i') }}</div>
+                            @elseif ($bd)
+                                <div class="font-semibold" style="color:var(--color-error);" title="{{ $bd->response }}">{{ \App\Models\OrderDispatch::STATUSES[$bd->status] ?? $bd->status }}</div>
+                                <div class="text-muted-soft">{{ $bd->sent_at?->format('y.m.d H:i') }}</div>
+                            @else
+                                <span class="text-muted-soft">미전송</span>
+                            @endif
+                        </td>
                         <td class="px-5 py-3 text-right text-muted-soft" style="font-size:var(--fs-xs);">{{ $o->created_at?->format('y.m.d H:i') }}</td>
                     </tr>
                 @empty
-                    <tr><td colspan="8" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
+                    <tr><td colspan="9" class="text-center" style="padding:40px;color:var(--color-muted);font-size:var(--fs-xs);">주문이 없습니다.</td></tr>
                 @endforelse
             </tbody>
         </table>
