@@ -42,19 +42,22 @@ class OrdersBoostingReminderTest extends TestCase
         $wantShop = $this->order('processing', $shop, '쇼핑 유입');
         $sent = $this->order('processing', $place);
         OrderDispatch::create(['order_id' => $sent->id, 'vendor_name' => OrderDispatch::BOOSTING_VENDOR, 'channel' => 'api', 'quantity' => 20, 'status' => 'sent']);
+        // 부스팅샵 연동 전 구글시트 업체로 이미 보낸 옛 주문 — 처리된 것으로 본다
+        $sheet = $this->order('processing', $shop, '쇼핑 유입');
+        OrderDispatch::create(['order_id' => $sheet->id, 'vendor_name' => 'MDL-토스 쇼핑 (1일차)', 'channel' => 'gsheet', 'quantity' => 20, 'status' => 'sent']);
         $done = $this->order('completed', $place);
         $notBoosting = $this->order('pending', ['keyword' => '블로그 체험단']);
 
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertSentCount(1);
-        Http::assertSent(function (Request $r) use ($wantPlace, $wantShop, $sent, $done, $notBoosting) {
+        Http::assertSent(function (Request $r) use ($wantPlace, $wantShop, $sent, $sheet, $done, $notBoosting) {
             $t = $r['text'] ?? '';
 
             return str_contains($t, '*부스팅샵 미주문 2건* (플레이스 1건 · 쇼핑 1건)')
                 && str_contains($t, '/admin/orders/'.$wantPlace->id.'|'.$wantPlace->order_no.'>')
                 && str_contains($t, $wantShop->order_no) && str_contains($t, '유입키워드 분석 전')
-                && ! str_contains($t, $sent->order_no) && ! str_contains($t, $done->order_no) && ! str_contains($t, $notBoosting->order_no)
+                && ! str_contains($t, $sent->order_no) && ! str_contains($t, $sheet->order_no) && ! str_contains($t, $done->order_no) && ! str_contains($t, $notBoosting->order_no)
                 // 고객 개인정보·키워드는 넣지 않는다
                 && ! str_contains($t, '홍길동') && ! str_contains($t, '010-1234') && ! str_contains($t, '풍동헬스');
         });

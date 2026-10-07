@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\MarketingOrder;
-use App\Models\OrderDispatch;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 
@@ -12,7 +11,8 @@ use Illuminate\Support\Facades\Http;
  * 랭크프리 주문을 세어 1건 이상이면 슬랙(SLACK_JCURVE_GROUP_WEBHOOK)으로 알린다.
  *
  * 미처리 = 접수·진행중 + 부스팅샵 대상(플레이스·저장 = 플레이스 주소, 쇼핑 = 상품 주소·키워드 — boostingService())
- *        + 부스팅샵 발주(OrderDispatch::BOOSTING_VENDOR) 전송됨이 없음.
+ *        + 전송된 발주가 하나도 없음(부스팅샵 · 그 밖의 업체 모두). 부스팅샵 연동 전에 구글시트 업체로
+ *          보낸 옛 주문이 매번 반복해 잡히지 않게 한다(운영 실측 11건 중 9건이 MDL 시트로 이미 전송, 2026-10-07).
  * 쇼핑은 유입키워드 분석 → Short URL → 부스팅샵 주문 순서라 어느 단계에 멈췄는지 함께 적는다.
  * 고객 이름·연락처·키워드는 알림에 넣지 않는다.
  */
@@ -28,7 +28,7 @@ class OrdersBoostingReminder extends Command
     {
         $orders = MarketingOrder::with('product')
             ->whereIn('status', ['pending', 'processing'])
-            ->whereDoesntHave('dispatches', fn ($q) => $q->where('vendor_name', OrderDispatch::BOOSTING_VENDOR)->where('status', 'sent'))
+            ->whereDoesntHave('dispatches', fn ($q) => $q->where('status', 'sent'))
             ->orderBy('created_at')
             ->get()
             ->filter(fn (MarketingOrder $o) => $o->boostingService() !== null)
