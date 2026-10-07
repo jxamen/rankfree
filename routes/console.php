@@ -56,6 +56,11 @@ if (config('rankfree.shopping.track_schedule_enabled', true)) {
 // 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
 Schedule::command('orders:dispatch-due')->timezone('Asia/Seoul')->dailyAt('09:00')->withoutOverlapping()->runInBackground();
 
+// 부스팅샵 미주문 알림(2026-10-07 대표님 지시) — 09·13·17시, 1건 이상이면 슬랙(SLACK_JCURVE_GROUP_WEBHOOK)
+foreach (['09:00', '13:00', '17:00'] as $__at) {
+    Schedule::command('orders:boosting-reminder')->timezone('Asia/Seoul')->dailyAt($__at)->withoutOverlapping()->runInBackground();
+}
+
 // 스마트플레이스 리포트 수집 + 세션 유지 — 매일 새벽 3시(KST). (crm cron/smartplace_collect.php 이식)
 Schedule::command('smartplace:collect')->timezone('Asia/Seoul')->dailyAt('03:00')->withoutOverlapping()->runInBackground();
 

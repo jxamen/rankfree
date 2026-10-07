@@ -33,6 +33,8 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+        // 「제이커브-단체」 채널 수신 웹훅 — 부스팅샵 미주문 알림(orders:boosting-reminder). 부스팅샵 서버와 같은 이름.
+        'jcurve_group_webhook' => env('SLACK_JCURVE_GROUP_WEBHOOK'),
     ],
 
     // Anthropic Claude API — 커뮤니티 페르소나 콘텐츠 생성용. 키 없으면 템플릿 폴백.
