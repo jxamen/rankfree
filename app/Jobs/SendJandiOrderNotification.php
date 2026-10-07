@@ -26,6 +26,9 @@ class SendJandiOrderNotification implements ShouldQueue
 
     public int $backoff = 60;
 
+    /** 새 주문 슬랙 알림 맨 앞 담당자 태그(2026-10-07 대표님 지시) */
+    private const SLACK_MENTION = '<@U0C4ZMY6RPV>';
+
     public function __construct(public MarketingOrder $order) {}
 
     public function handle(): void
@@ -77,13 +80,17 @@ class SendJandiOrderNotification implements ShouldQueue
         }
 
         if (str_starts_with($url, 'https://hooks.slack.com/')) {
-            // 슬랙 mrkdwn — 주문번호 클릭 → 관리자 주문 상세. 슬랙 제어문자(& < >)는 이스케이프
+            // 슬랙 — 대표님 형식(2026-10-07): 1줄 담당자 태그 · 주문 시간 / 2줄 [랭크프리] 상품 · 수량 · 금액 · 주문자 / 3줄 상세 링크
             $esc = fn ($v) => strtr((string) $v, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;']);
-            $text = '*<'.$orderUrl.'|새 주문 '.$esc($o->order_no).'>* 이(가) 접수되었습니다.';
-            foreach ($info as $row) {
-                $text .= "\n*".$esc($row['title']).'*  '.$esc($row['description']);
-            }
-            $text .= "\n<".$orderUrl.'|주문 상세 보기 ›>';
+            $summary = collect([
+                ($o->product?->title ?? '(삭제된 상품)').(($kw = $o->keywordFromFields()) ? ' · '.$kw : ''),
+                $qty,
+                number_format((float) $o->total_price).'원',
+                trim((string) $o->orderer_name),
+            ])->filter(fn ($v) => $v !== '')->implode(' · ');
+            $text = self::SLACK_MENTION.' '.($o->created_at ?? now())->format('m/d H:i')
+                ."\n[랭크프리] ".$esc($summary)
+                ."\n<".$orderUrl.'|주문 상세 보기 ›>';
             $res = Http::timeout(10)->post($url, ['text' => $text]);
         } else {
             $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])

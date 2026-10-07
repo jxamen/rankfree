@@ -42,15 +42,14 @@ class OrderSlackNotificationTest extends TestCase
         (new SendJandiOrderNotification($order))->handle();
 
         Http::assertSent(function (Request $r) use ($order) {
-            $text = $r['text'] ?? '';
+            $lines = explode("\n", $r['text'] ?? '');
 
             return str_starts_with($r->url(), 'https://hooks.slack.com/')
                 && ! isset($r['connectInfo'])
-                && str_contains($text, '|새 주문 '.$order->order_no.'>*')
-                && str_contains($text, "\n*상품*  네이버 플레이스 퀴즈")
-                && str_contains($text, '6,000원')
-                && str_contains($text, 'A&amp;B')
-                && str_contains($text, '/admin/orders/'.$order->id.'|주문 상세 보기 ›>');
+                && count($lines) === 3
+                && $lines[0] === '<@U0C4ZMY6RPV> '.$order->created_at->format('m/d H:i')
+                && $lines[1] === '[랭크프리] 네이버 플레이스 퀴즈 · 풍동헬스 · 전체 60 · 일 20 · 6,000원 · A&amp;B'
+                && str_ends_with($lines[2], '/admin/orders/'.$order->id.'|주문 상세 보기 ›>');
         });
     }
 
