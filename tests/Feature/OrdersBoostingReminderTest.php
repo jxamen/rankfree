@@ -54,7 +54,7 @@ class OrdersBoostingReminderTest extends TestCase
         Http::assertSent(function (Request $r) use ($wantPlace, $wantShop, $sent, $sheet, $done, $notBoosting) {
             $t = $r['text'] ?? '';
 
-            return str_contains($t, '*부스팅샵 미주문 2건* (플레이스 1건 · 쇼핑 1건)')
+            return str_contains($t, '*밀린 주문 — 랭크프리 쇼핑 1건 · 저장 1건*')
                 && str_contains($t, '/admin/orders/'.$wantPlace->id.'|'.$wantPlace->order_no.'>')
                 && str_contains($t, $wantShop->order_no) && str_contains($t, '유입키워드 분석 전')
                 && ! str_contains($t, $sent->order_no) && ! str_contains($t, $sheet->order_no) && ! str_contains($t, $done->order_no) && ! str_contains($t, $notBoosting->order_no)
@@ -73,7 +73,7 @@ class OrdersBoostingReminderTest extends TestCase
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/MISSED'
-            && str_starts_with($r['text'] ?? '', '<@U0C4ZMY6RPV> *부스팅샵 미주문 1건*'));
+            && str_starts_with($r['text'] ?? '', '<@U0C4ZMY6RPV> *밀린 주문 — 랭크프리 저장 1건*'));
     }
 
     public function test_never_uses_new_order_webhook(): void

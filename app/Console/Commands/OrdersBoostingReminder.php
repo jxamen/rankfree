@@ -43,17 +43,22 @@ class OrdersBoostingReminder extends Command
 
         $rows = $orders->map(fn (MarketingOrder $o) => [
             'order' => $o,
-            'type' => $o->boostingService() === 'shopping' ? '쇼핑' : '플레이스',
+            // 플레이스 저장은 따로 센다 — 부스팅샵도 유입/저장을 상품으로만 나눠, 상품명의 '저장'으로 구분한다
+            'type' => $o->boostingService() === 'shopping' ? '쇼핑'
+                : (str_contains((string) $o->product?->title, '저장') ? '저장' : '플레이스'),
             'stage' => $this->stage($o),
         ]);
-        $byType = $rows->countBy('type')->map(fn ($n, $t) => "{$t} {$n}건")->implode(' · ');
+        // 대표님 형식(2026-10-07 16:23): 「밀린 주문 — 랭크프리 쇼핑 N건 · 플레이스 N건 · 저장 N건」, 0건 종류는 뺀다
+        $counts = $rows->countBy('type');
+        $byType = collect(['쇼핑', '플레이스', '저장'])->filter(fn ($t) => ($counts[$t] ?? 0) > 0)
+            ->map(fn ($t) => "{$t} {$counts[$t]}건")->implode(' · ');
 
         $esc = fn ($v) => strtr((string) $v, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;']);
         // 담당자 태그(김채연2 — 2026-10-07 대표님 요청). 쉼표로 여러 명
         $mentions = collect(explode(',', (string) config('services.slack.order_reminder_mentions')))
             ->map(fn ($id) => trim($id))->filter(fn ($id) => preg_match('/^[UW][A-Z0-9]+$/', $id))
             ->map(fn ($id) => '<@'.$id.'> ')->implode('');
-        $text = $mentions.'*부스팅샵 미주문 '.$orders->count().'건* ('.$byType.') — '.now('Asia/Seoul')->format('m/d H:i').' 기준';
+        $text = $mentions.'*밀린 주문 — 랭크프리 '.$byType.'*';
         foreach ($rows->take(self::MAX_LINES) as $r) {
             $o = $r['order'];
             $text .= "\n• <".$this->orderUrl($o).'|'.$esc($o->order_no).'>  '.$r['type'].' · '.$esc($o->product?->title ?? '(삭제된 상품)')
