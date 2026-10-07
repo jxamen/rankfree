@@ -63,16 +63,30 @@ class OrdersBoostingReminderTest extends TestCase
         });
     }
 
-    public function test_falls_back_to_admin_order_webhook_when_env_empty(): void
+    public function test_falls_back_to_admin_missed_order_webhook_and_tags_owner(): void
     {
         Http::fake(['hooks.slack.com/*' => Http::response('ok', 200)]);
-        config(['services.slack.jcurve_group_webhook' => null]);
-        \App\Models\AppSetting::write('jandi.order_webhook_url', 'https://hooks.slack.com/services/T/B/ADMIN');
+        config(['services.slack.jcurve_group_webhook' => null, 'services.slack.order_reminder_mentions' => 'U0C4ZMY6RPV']);
+        \App\Models\AppSetting::write('slack.missed_order_webhook_url', 'https://hooks.slack.com/services/T/B/MISSED');
         $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
 
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
-        Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/ADMIN');
+        Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/MISSED'
+            && str_starts_with($r['text'] ?? '', '<@U0C4ZMY6RPV> *부스팅샵 미주문 1건*'));
+    }
+
+    public function test_never_uses_new_order_webhook(): void
+    {
+        Http::fake();
+        config(['services.slack.jcurve_group_webhook' => null]);
+        // 「주문 알림 웹훅」은 신규 주문 채널 — 요약이 그쪽으로 가면 안 된다
+        \App\Models\AppSetting::write('jandi.order_webhook_url', 'https://hooks.slack.com/services/T/B/NEWORDER');
+        $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
+
+        $this->artisan('orders:boosting-reminder')->assertSuccessful();
+
+        Http::assertNothingSent();
     }
 
     public function test_no_message_when_nothing_pending(): void

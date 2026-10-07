@@ -49,14 +49,18 @@ class OrdersBoostingReminder extends Command
         $byType = $rows->countBy('type')->map(fn ($n, $t) => "{$t} {$n}건")->implode(' · ');
 
         $esc = fn ($v) => strtr((string) $v, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;']);
-        $text = '*부스팅샵 미주문 '.$orders->count().'건* ('.$byType.') — '.now('Asia/Seoul')->format('m/d H:i').' 기준';
+        // 담당자 태그(김채연2 — 2026-10-07 대표님 요청). 쉼표로 여러 명
+        $mentions = collect(explode(',', (string) config('services.slack.order_reminder_mentions')))
+            ->map(fn ($id) => trim($id))->filter(fn ($id) => preg_match('/^[UW][A-Z0-9]+$/', $id))
+            ->map(fn ($id) => '<@'.$id.'> ')->implode('');
+        $text = $mentions.'*부스팅샵 미주문 '.$orders->count().'건* ('.$byType.') — '.now('Asia/Seoul')->format('m/d H:i').' 기준';
         foreach ($rows->take(self::MAX_LINES) as $r) {
             $o = $r['order'];
             $text .= "\n• <".$this->orderUrl($o).'|'.$esc($o->order_no).'>  '.$r['type'].' · '.$esc($o->product?->title ?? '(삭제된 상품)')
                 .' · 주문 '.$o->created_at?->timezone('Asia/Seoul')->format('m/d H:i').' · '.$r['stage'];
         }
         if ($orders->count() > self::MAX_LINES) {
-            $text .= "\n…외 ".($orders->count() - self::MAX_LINES).'건 — <'.$this->adminBase().'/admin/orders|주문 목록>';
+            $text .= "\n…외 ".($orders->count() - self::MAX_LINES).'건 — <'.$this->adminUrl('/admin/orders', route('admin.orders')).'|주문 목록>';
         }
 
         if ($this->option('dry-run')) {
@@ -65,11 +69,12 @@ class OrdersBoostingReminder extends Command
             return self::SUCCESS;
         }
 
-        // .env(SLACK_JCURVE_GROUP_WEBHOOK)가 비면 관리자 환경설정 「주문 알림 웹훅」 저장값 — 비밀 값은 대표님이 어드민 칸에 넣는다
+        // .env(SLACK_JCURVE_GROUP_WEBHOOK)가 비면 관리자 「놓친 주문 알림 슬랙 웹훅」(slack.missed_order_webhook_url) — 제이커브-단체.
+        // 「주문 알림 웹훅」(신규 주문 채널)은 읽지 않는다 — 비밀 값은 대표님이 어드민 칸에 넣는다
         $url = trim((string) config('services.slack.jcurve_group_webhook'))
-            ?: trim((string) AppSetting::read('jandi.order_webhook_url'));
+            ?: trim((string) AppSetting::read('slack.missed_order_webhook_url'));
         if (! str_starts_with($url, 'https://hooks.slack.com/')) {
-            $this->warn('「제이커브-단체」 웹훅(SLACK_JCURVE_GROUP_WEBHOOK)·관리자 「주문 알림 웹훅」이 모두 비어 보내지 않음');
+            $this->warn('「제이커브-단체」 웹훅(SLACK_JCURVE_GROUP_WEBHOOK)·관리자 「놓친 주문 알림 슬랙 웹훅」이 모두 비어 보내지 않음');
 
             return self::SUCCESS;
         }
@@ -101,15 +106,16 @@ class OrdersBoostingReminder extends Command
         return 'Short URL 준비됨 · 부스팅샵 주문 필요';
     }
 
-    private function adminBase(): string
+    /** 관리자 링크 — 어드민 비밀 호스트(ADMIN_HOST) 우선, 비면 라우트 URL. */
+    private function adminUrl(string $path, string $fallback): string
     {
         $ah = trim((string) config('rankfree.admin_host'));
 
-        return $ah !== '' ? 'https://'.$ah : 'https://rankfree.kr';
+        return $ah !== '' ? 'https://'.$ah.$path : $fallback;
     }
 
     private function orderUrl(MarketingOrder $o): string
     {
-        return $this->adminBase().'/admin/orders/'.$o->id;
+        return $this->adminUrl('/admin/orders/'.$o->id, route('admin.orders.show', $o->id));
     }
 }

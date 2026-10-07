@@ -35,6 +35,8 @@ return [
         ],
         // 「제이커브-단체」 채널 수신 웹훅 — 부스팅샵 미주문 알림(orders:boosting-reminder). 부스팅샵 서버와 같은 이름.
         'jcurve_group_webhook' => env('SLACK_JCURVE_GROUP_WEBHOOK'),
+        // 미주문 알림 맨 앞 태그 — 슬랙 사용자 ID 쉼표 구분(비밀 아님). 기본 김채연2(2026-10-07 대표님 요청)
+        'order_reminder_mentions' => env('SLACK_ORDER_REMINDER_MENTIONS', 'U0C4ZMY6RPV'),
     ],
 
     // Anthropic Claude API — 커뮤니티 페르소나 콘텐츠 생성용. 키 없으면 템플릿 폴백.
