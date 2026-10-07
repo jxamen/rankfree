@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AppSetting;
 use App\Models\MarketingOrder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
@@ -64,9 +65,11 @@ class OrdersBoostingReminder extends Command
             return self::SUCCESS;
         }
 
-        $url = trim((string) config('services.slack.jcurve_group_webhook'));
+        // .env(SLACK_JCURVE_GROUP_WEBHOOK)가 비면 관리자 환경설정 「주문 알림 웹훅」 저장값 — 비밀 값은 대표님이 어드민 칸에 넣는다
+        $url = trim((string) config('services.slack.jcurve_group_webhook'))
+            ?: trim((string) AppSetting::read('jandi.order_webhook_url'));
         if (! str_starts_with($url, 'https://hooks.slack.com/')) {
-            $this->warn('「제이커브-단체」 웹훅(SLACK_JCURVE_GROUP_WEBHOOK)이 없어 보내지 않음');
+            $this->warn('「제이커브-단체」 웹훅(SLACK_JCURVE_GROUP_WEBHOOK)·관리자 「주문 알림 웹훅」이 모두 비어 보내지 않음');
 
             return self::SUCCESS;
         }

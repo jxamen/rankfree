@@ -63,6 +63,18 @@ class OrdersBoostingReminderTest extends TestCase
         });
     }
 
+    public function test_falls_back_to_admin_order_webhook_when_env_empty(): void
+    {
+        Http::fake(['hooks.slack.com/*' => Http::response('ok', 200)]);
+        config(['services.slack.jcurve_group_webhook' => null]);
+        \App\Models\AppSetting::write('jandi.order_webhook_url', 'https://hooks.slack.com/services/T/B/ADMIN');
+        $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
+
+        $this->artisan('orders:boosting-reminder')->assertSuccessful();
+
+        Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/ADMIN');
+    }
+
     public function test_no_message_when_nothing_pending(): void
     {
         Http::fake();
