@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * 주문 접수 → 잔디(JANDI) 웹훅 알림 (2026-07-23).
  * 웹훅 URL 은 환경설정(광고·데이터 API 탭, jandi.order_webhook_url)에서 관리 — 비어 있으면 발송 안 함.
+ * 슬랙 웹훅 주소(https://hooks.slack.com/…)를 넣으면 같은 내용을 슬랙 형식으로 보낸다(2026-10-07 슬랙 채널로 전환).
  * 주문 생성(OrderPlacer)과 분리된 큐 잡 — 알림 실패가 주문 접수에 영향을 주지 않는다.
  */
 class SendJandiOrderNotification implements ShouldQueue
@@ -75,16 +76,26 @@ class SendJandiOrderNotification implements ShouldQueue
             }
         }
 
-        $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])
-            ->post($url, [
-                // 주문번호 클릭 → 관리자 주문 상세
-                'body' => '[[새 주문 '.$o->order_no.']]('.$orderUrl.') 이(가) 접수되었습니다.',
-                'connectColor' => '#0052ff',
-                'connectInfo' => $info,
-            ]);
+        if (str_starts_with($url, 'https://hooks.slack.com/')) {
+            // 슬랙 mrkdwn — 주문번호 클릭 → 관리자 주문 상세. 슬랙 제어문자(& < >)는 이스케이프
+            $esc = fn ($v) => strtr((string) $v, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;']);
+            $text = '*<'.$orderUrl.'|새 주문 '.$esc($o->order_no).'>* 이(가) 접수되었습니다.';
+            foreach ($info as $row) {
+                $text .= "\n*".$esc($row['title']).'*  '.$esc($row['description']);
+            }
+            $res = Http::timeout(10)->post($url, ['text' => $text]);
+        } else {
+            $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])
+                ->post($url, [
+                    // 주문번호 클릭 → 관리자 주문 상세
+                    'body' => '[[새 주문 '.$o->order_no.']]('.$orderUrl.') 이(가) 접수되었습니다.',
+                    'connectColor' => '#0052ff',
+                    'connectInfo' => $info,
+                ]);
+        }
 
         if (! $res->successful()) {
-            Log::warning('잔디 주문 알림 실패', ['order' => $o->order_no, 'status' => $res->status(), 'body' => mb_substr($res->body(), 0, 300)]);
+            Log::warning('주문 알림 실패', ['order' => $o->order_no, 'status' => $res->status(), 'body' => mb_substr($res->body(), 0, 300)]);
             $res->throw();   // 재시도(tries=3) 유도
         }
     }
