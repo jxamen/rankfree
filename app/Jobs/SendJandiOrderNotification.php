@@ -91,7 +91,8 @@ class SendJandiOrderNotification implements ShouldQueue
             $text = self::SLACK_MENTION.' '.($o->created_at ?? now())->format('m/d H:i')
                 ."\n[랭크프리] ".$esc($summary)
                 ."\n<".$orderUrl.'|주문 상세 보기 ›>';
-            $res = Http::timeout(10)->post($url, ['text' => $text]);
+            // 링크 미리보기 상자는 펼치지 않는다(2026-10-07 대표님 「링크 미리보기 불편」)
+            $res = Http::timeout(10)->post($url, ['text' => $text, 'unfurl_links' => false, 'unfurl_media' => false]);
         } else {
             $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])
                 ->post($url, [
