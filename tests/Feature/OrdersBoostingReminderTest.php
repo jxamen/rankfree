@@ -73,7 +73,8 @@ class OrdersBoostingReminderTest extends TestCase
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/MISSED'
-            && str_starts_with($r['text'] ?? '', '<@U0C4ZMY6RPV> *밀린 주문 — 랭크프리 저장 1건*'));
+            && str_starts_with($r['text'] ?? '', '<@U0C4ZMY6RPV> *밀린 주문 — 랭크프리 저장 1건*')
+            && $r['unfurl_links'] === false && $r['unfurl_media'] === false);   // 링크 미리보기 끔
     }
 
     public function test_never_uses_new_order_webhook(): void

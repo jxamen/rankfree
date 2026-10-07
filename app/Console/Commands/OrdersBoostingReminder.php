@@ -83,7 +83,8 @@ class OrdersBoostingReminder extends Command
 
             return self::SUCCESS;
         }
-        $res = Http::timeout(10)->post($url, ['text' => $text]);
+        // 링크 미리보기 끄기(대표님 16:42 「링크 미리보기 불편」) — 주문 상세 링크가 여러 개라 미리보기가 글을 덮는다
+        $res = Http::timeout(10)->post($url, ['text' => $text, 'unfurl_links' => false, 'unfurl_media' => false]);
         if (! $res->successful()) {
             $this->error('슬랙 전송 실패 HTTP '.$res->status());
 
