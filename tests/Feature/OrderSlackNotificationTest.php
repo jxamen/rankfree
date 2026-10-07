@@ -46,6 +46,7 @@ class OrderSlackNotificationTest extends TestCase
 
             return str_starts_with($r->url(), 'https://hooks.slack.com/')
                 && ! isset($r['connectInfo'])
+                && $r['unfurl_links'] === false && $r['unfurl_media'] === false
                 && count($lines) === 3
                 && $lines[0] === '<@U0C4ZMY6RPV> '.$order->created_at->format('m/d H:i')
                 && $lines[1] === '[랭크프리] 네이버 플레이스 퀴즈 · 풍동헬스 · 전체 60 · 일 20 · 6,000원 · A&amp;B'
