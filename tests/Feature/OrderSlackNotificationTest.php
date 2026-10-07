@@ -49,7 +49,8 @@ class OrderSlackNotificationTest extends TestCase
                 && str_contains($text, '|새 주문 '.$order->order_no.'>*')
                 && str_contains($text, "\n*상품*  네이버 플레이스 퀴즈")
                 && str_contains($text, '6,000원')
-                && str_contains($text, 'A&amp;B');
+                && str_contains($text, 'A&amp;B')
+                && str_contains($text, '/admin/orders/'.$order->id.'|주문 상세 보기 ›>');
         });
     }
 

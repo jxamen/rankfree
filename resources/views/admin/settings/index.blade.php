@@ -83,6 +83,8 @@
                 <b>주문이 접수될 때마다</b> 지정한 대화방으로 주문번호(클릭 시 주문 상세)·상품·수량·기간·금액·주문자·회원 누적 알림이 전송됩니다(웹·API 주문 공통, 큐 발송). 비우면 알림을 보내지 않습니다.
             </p>
             @include('admin.settings._simplefield', ['name' => 'jandi_order_webhook_url', 'label' => '웹훅 URL (주문 접수 알림)', 'value' => $jandiOrderWebhookUrl, 'secret' => true, 'placeholder' => 'https://hooks.slack.com/services/…'])
+            {{-- 놓친 주문 알림(2026-10-07) — 미주문 요약(09·13·17시)이 가는 슬랙 채널 --}}
+            @include('admin.settings._simplefield', ['name' => 'slack_missed_order_webhook_url', 'label' => '놓친 주문 알림 슬랙 웹훅 (미주문 요약 09·13·17시)', 'value' => $slackMissedOrderWebhookUrl, 'secret' => true, 'placeholder' => 'https://hooks.slack.com/services/…'])
         </div>
     </div>
 

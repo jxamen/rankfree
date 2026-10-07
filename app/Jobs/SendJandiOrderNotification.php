@@ -83,6 +83,7 @@ class SendJandiOrderNotification implements ShouldQueue
             foreach ($info as $row) {
                 $text .= "\n*".$esc($row['title']).'*  '.$esc($row['description']);
             }
+            $text .= "\n<".$orderUrl.'|주문 상세 보기 ›>';
             $res = Http::timeout(10)->post($url, ['text' => $text]);
         } else {
             $res = Http::timeout(10)->withHeaders(['Accept' => 'application/vnd.tosslab.jandi-v2+json'])
