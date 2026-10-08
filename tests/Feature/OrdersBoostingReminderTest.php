@@ -48,6 +48,7 @@ class OrdersBoostingReminderTest extends TestCase
         $done = $this->order('completed', $place);
         $notBoosting = $this->order('pending', ['keyword' => '블로그 체험단']);
 
+        $this->travel(4)->hours();   // 3시간 이상 지난 주문만 센다
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertSentCount(1);
@@ -70,6 +71,7 @@ class OrdersBoostingReminderTest extends TestCase
         \App\Models\AppSetting::write('slack.missed_order_webhook_url', 'https://hooks.slack.com/services/T/B/MISSED');
         $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
 
+        $this->travel(4)->hours();
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertSent(fn (Request $r) => $r->url() === 'https://hooks.slack.com/services/T/B/MISSED'
@@ -85,6 +87,19 @@ class OrdersBoostingReminderTest extends TestCase
         \App\Models\AppSetting::write('jandi.order_webhook_url', 'https://hooks.slack.com/services/T/B/NEWORDER');
         $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
 
+        $this->artisan('orders:boosting-reminder')->assertSuccessful();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_skips_orders_younger_than_three_hours(): void
+    {
+        Http::fake();
+        config(['services.slack.jcurve_group_webhook' => 'https://hooks.slack.com/services/T/B/X']);
+        // 방금 들어온 주문은 새 주문 알림 몫 — 밀린 주문 요약이 먼저 가면 안 된다(2026-10-08 대표님)
+        $this->order('pending', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
+
+        $this->travel(179)->minutes();
         $this->artisan('orders:boosting-reminder')->assertSuccessful();
 
         Http::assertNothingSent();
