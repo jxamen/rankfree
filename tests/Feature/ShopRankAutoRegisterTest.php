@@ -76,6 +76,8 @@ class ShopRankAutoRegisterTest extends TestCase
         $make('processing', $shop);
         $make('pending', ['keyword' => '고양이 사료', 'shop_url' => 'https://smartstore.naver.com/x/products/7654321']);
         $make('processing', ['keyword' => '풍동헬스', 'place_url' => 'https://m.place.naver.com/place/1234567']);
+        // 기간이 끝났는데 상태만 processing 으로 남은 주문은 뺀다
+        $make('processing', ['keyword' => '오리 사료', 'shop_url' => 'https://smartstore.naver.com/x/products/5555555', 'start_date' => '2026-07-28', 'end_date' => '2026-07-30']);
 
         $this->artisan('orders:shop-rank-sync')->assertSuccessful();
         $this->artisan('orders:shop-rank-sync')->assertSuccessful();   // 두 번 돌려도 하나
