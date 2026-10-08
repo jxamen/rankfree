@@ -164,6 +164,8 @@ Route::prefix('v1')->group(function (): void {
     // 쇼핑 유입키워드 (scope: shop_keyword) — 분석 생성(추출·조합) → 순위 확인 자동 완주 → Short URL 그룹 생성.
     // check_method=api(기본)는 서버가 shop.json 으로 확인해 확장 없이 완결된다(25·28 참조).
     Route::middleware('auth.apikey:shop_keyword')->group(function (): void {
+        // 쇼핑 순위체크 등록(2026-10-08) — 부스팅샵 진행 중 쇼핑 주문 자동 등록
+        Route::post('/shop-rank/slots', [\App\Http\Controllers\Api\ShopRankApiController::class, 'store'])->middleware('throttle:60,1');
         Route::get('/shop-keywords', [ShopKeywordApiController::class, 'index']);
         Route::post('/shop-keywords', [ShopKeywordApiController::class, 'store'])->middleware('throttle:30,1');
         Route::get('/shop-keywords/{analysis}', [ShopKeywordApiController::class, 'show'])->whereNumber('analysis');

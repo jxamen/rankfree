@@ -81,6 +81,42 @@ class ShopRankSlotService
         return ['target' => $target, 'created' => $created, 'skipped' => $skipped];
     }
 
+    /**
+     * 주문 자동 등록용(2026-10-08 담당 직원 「쇼핑 건이면 다 랭크프리에서 순위체크」) — 같은 상품 · 키워드 슬롯이 있으면
+     * 꺼져 있을 때만 다시 켜고, 없으면 만든다. 주문에서 오는 등록이라 슬롯 한도는 보지 않는다.
+     *
+     * @return array{status: string, slot: ShopRankSlot}  status = created | reactivated | exists
+     */
+    public function ensureTracked(User $user, string $targetInput, string $keyword, ?string $label = null): array
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            throw new DomainException('키워드가 비어 있습니다.');
+        }
+        $target = $this->engine->resolveTarget($targetInput);
+        if ($target['product_id'] === '' && $target['mall_name'] === '') {
+            throw new DomainException('상품 URL(스마트스토어/가격비교) 또는 업체명을 확인하세요.');
+        }
+
+        $slot = ShopRankSlot::where('user_id', $user->id)->where('keyword', $keyword)
+            ->where(fn ($q) => $target['product_id'] !== ''
+                ? $q->where('product_id', $target['product_id'])
+                : $q->where('mall_name', $target['mall_name']))
+            ->orderByDesc('id')->first();
+        if ($slot) {
+            if ($slot->is_active) {
+                return ['status' => 'exists', 'slot' => $slot];
+            }
+            $slot->update(['is_active' => true]);
+
+            return ['status' => 'reactivated', 'slot' => $slot];
+        }
+
+        $r = $this->addMany($user, $targetInput, [$keyword], $label, true);
+
+        return ['status' => 'created', 'slot' => $r['created'][0]];
+    }
+
     /** 단건 추가(API 호환). 중복이면 예외. */
     public function add(User $user, string $keyword, string $target, ?string $label = null): ShopRankSlot
     {
