@@ -25,11 +25,16 @@ class OrdersBoostingReminder extends Command
 
     private const MAX_LINES = 20;
 
+    /** 밀린 주문으로 세기까지 기다리는 시간 — 새 주문 알림보다 먼저 가지 않게 */
+    private const MIN_AGE_HOURS = 3;
+
     public function handle(): int
     {
         $orders = MarketingOrder::with('product')
             ->whereIn('status', ['pending', 'processing'])
             ->whereDoesntHave('dispatches', fn ($q) => $q->where('status', 'sent'))
+            // 들어온 지 3시간 이상 지난 것만 「밀린 주문」(2026-10-08 대표님 「밀린 주문은 최소 3시간 이상 지난것만 체크해줘」)
+            ->where('created_at', '<=', now()->subHours(self::MIN_AGE_HOURS))
             ->orderBy('created_at')
             ->get()
             ->filter(fn (MarketingOrder $o) => $o->boostingService() !== null)
