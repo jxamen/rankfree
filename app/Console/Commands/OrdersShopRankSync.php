@@ -28,8 +28,17 @@ class OrdersShopRankSync extends Command
         }
 
         $counts = ['created' => 0, 'reactivated' => 0, 'exists' => 0, 'skipped' => 0];
+        // 진행 중 = 상태 processing 이고 오늘이 시작일~종료일 안(날짜가 비어 있으면 포함) — 기간이 끝났는데 상태만 남은 주문은 뺀다
+        $today = now()->timezone('Asia/Seoul')->toDateString();
         $orders = MarketingOrder::where('status', 'processing')->orderBy('id')->get()
-            ->filter(fn (MarketingOrder $o) => $o->boostingService() === 'shopping');
+            ->filter(fn (MarketingOrder $o) => $o->boostingService() === 'shopping')
+            ->filter(function (MarketingOrder $o) use ($today) {
+                $fv = (array) $o->field_values;
+                $start = trim((string) ($fv['start_date'] ?? ''));
+                $end = trim((string) ($fv['end_date'] ?? ''));
+
+                return ($start === '' || $start <= $today) && ($end === '' || $end >= $today);
+            });
         foreach ($orders as $o) {
             $src = $o->shopKeywordSource();
             if (! $src || trim((string) $src['keyword']) === '' || trim((string) $src['url']) === '') {
