@@ -63,6 +63,8 @@ foreach (['09:00', '13:00', '17:00'] as $__at) {
 
 // 진행 중인 쇼핑 주문 → 쇼핑 순위체크 자동 등록(2026-10-08 담당 직원 「쇼핑 건이면 다 랭크프리에서 순위체크」) — 10분마다, 같은 건은 다시 안 만듦
 Schedule::command('orders:shop-rank-sync')->everyTenMinutes()->withoutOverlapping()->runInBackground();
+// 진행 중인 플레이스 주문 → 플레이스 순위체크 자동 등록(2026-10-11 담당 직원 「플레이스 주문이면 다 순위체크」)
+Schedule::command('orders:place-rank-sync')->everyTenMinutes()->withoutOverlapping()->runInBackground();
 
 // 스마트플레이스 리포트 수집 + 세션 유지 — 매일 새벽 3시(KST). (crm cron/smartplace_collect.php 이식)
 Schedule::command('smartplace:collect')->timezone('Asia/Seoul')->dailyAt('03:00')->withoutOverlapping()->runInBackground();

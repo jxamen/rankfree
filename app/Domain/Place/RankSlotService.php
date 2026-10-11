@@ -119,6 +119,47 @@ class RankSlotService
     }
 
     /**
+     * 주문 자동 등록용(2026-10-11 담당 직원 「플레이스 주문이면 다 순위체크」) — 같은 플레이스 · 키워드 슬롯이 있으면 그대로 두고,
+     * 없으면 만든다(한도 무시). 3일 연속 순위 밖으로 자동 중단된 슬롯은 하루에 한 번만 다시 켠다
+     * (그대로 두면 10분마다 켜고 → 바로 다시 꺼지는 것을 되풀이하며 조회가 계속 나간다).
+     *
+     * @return array{status: string, slot: PlaceRankSlot}  status = created | reactivated | exists
+     */
+    public function ensureTracked(User $user, string $placeInput, string $keyword, ?string $label = null): array
+    {
+        $keyword = trim($keyword);
+        if ($keyword === '') {
+            throw new DomainException('키워드가 비어 있습니다.');
+        }
+        $place = $this->resolvePlace($placeInput);
+        if (! $place['place_id'] && ! $place['place_name']) {
+            throw new DomainException('플레이스 주소(또는 업체명)를 확인하세요.');
+        }
+
+        $slot = $user->rankSlots()->where('keyword', $keyword)
+            ->when(
+                $place['place_id'],
+                fn ($q) => $q->where('place_id', $place['place_id']),
+                fn ($q) => $q->where('place_name', $place['place_name']),
+            )->orderByDesc('id')->first();
+        if ($slot) {
+            if ($slot->is_active) {
+                return ['status' => 'exists', 'slot' => $slot];
+            }
+            if ($slot->last_checked_at && $slot->last_checked_at->isToday()) {
+                return ['status' => 'exists', 'slot' => $slot];   // 오늘 이미 확인하고 멈춘 것 — 내일 다시
+            }
+            $slot->update(['is_active' => true]);
+
+            return ['status' => 'reactivated', 'slot' => $slot];
+        }
+
+        $r = $this->addMany($user, $placeInput, [$keyword], $label, true);
+
+        return ['status' => 'created', 'slot' => $r['created'][0]];
+    }
+
+    /**
      * 슬롯 1개 추가(키워드 1 × 플레이스 1). addMany 의 단건 래퍼 — API 단건 호출 호환용.
      *
      * @throws DomainException 한도 초과·중복 시
