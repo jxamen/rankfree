@@ -520,7 +520,7 @@
   -H "Authorization: Bearer rk_..." \
   --data-urlencode "place=https://map.naver.com/p/entry/place/123456" \
   --data-urlencode "review_limit=10"</pre></div>
-                        <p class="ep-t">기본 동작은 공통 저장본 우선입니다. K-Food Map·디저트나우에서 수집한 상세를 플레이스 ID 기준으로 재사용하며 저장본이 없을 때만 새로 수집합니다. 기존 앱 저장본은 약 1분 주기로 동기화합니다. 오래된 저장본도 자동 재수집하지 않으므로 cache.stale과 수집 시각을 확인하고 필요할 때 refresh=1을 요청하세요. 앱별 할랄·비건 검증, 공개 여부, 추천 점수는 공유하지 않습니다.</p>
+                        <p class="ep-t">기본 동작은 공통 저장본 우선입니다. K-Food Map·디저트나우에서 수집한 상세를 플레이스 ID 기준으로 재사용하며 저장본이 없거나 일부 섹션이 수집되지 않았을 때 새로 수집합니다. cache_only=1이면 불완전한 저장본도 상태 표시와 함께 그대로 반환합니다. 기존 앱 저장본은 약 1분 주기로 동기화합니다. 오래된 저장본도 자동 재수집하지 않으므로 cache.stale과 수집 시각을 확인하고 필요할 때 refresh=1을 요청하세요. 앱별 할랄·비건 검증, 공개 여부, 추천 점수는 공유하지 않습니다.</p>
             <p class="ep-t"><code class="doc-code">cache.hit</code>: 저장본 사용 여부, <code class="doc-code">cache.section_collected_at</code>: 업체·메뉴·후기별 정상 수집 시각(UTC), <code class="doc-code">cache.stale</code>: 정상 섹션 중 24시간 이상 지난 자료 포함 여부. <code class="doc-code">cached_images.photo_url/photos</code>: 저장된 320/640px WebP 캐시 URL(수집된 경우). 원본 사진은 place.images에 유지됩니다. 앱은 사진 캐시 URL을 재사용할 수 있습니다.</p>
             <p class="ep-t">재수집 없는 호출 예: <code class="doc-code">GET /api/v1/rank/place?place=123456&amp;cache_only=1&amp;review_limit=50</code>. 기존 Bearer API 키와 rank 권한이 동일하게 적용됩니다.</p>
             <div class="ep-l">응답 예시(설명용)</div>

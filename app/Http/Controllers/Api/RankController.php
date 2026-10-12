@@ -190,7 +190,7 @@ class RankController extends Controller
             return response()->json(['message' => '플레이스 ID를 확인할 수 없습니다.'], 422);
         }
         $archive = app(\App\Domain\Place\PlaceSharedArchive::class);
-        if (!$request->boolean('refresh') && ($cached = $archive->get($pid, $data['review_limit'] ?? 10))) return response()->json($cached);
+        if (!$request->boolean('refresh') && ($cached = $archive->get($pid, $data['review_limit'] ?? 10)) && ($request->boolean('cache_only') || !$cached['partial'])) return response()->json($cached);
         if ($request->boolean('cache_only')) return response()->json(['message'=>'No shared place archive found.','place_id'=>$pid,'cache'=>['hit'=>false]],404);
         $category = PlaceRankChecker::parsePlaceRef($input)['category'] ?? 'place';
         $result = $fetcher->fetch($pid, $category, 50);

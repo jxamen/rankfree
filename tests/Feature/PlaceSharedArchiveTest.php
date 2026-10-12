@@ -24,6 +24,14 @@ class PlaceSharedArchiveTest extends TestCase {
   $p=$this->data('Latest');$p['place']['menus']=[];$p['status']['menus']='blocked';$s->put($p,[],'2026-10-11T00:00:00Z',33);
   $r=$s->get('123456');$this->assertSame('Latest',$r['place']['name']);$this->assertSame('Bread',$r['place']['menus'][0]['name']);$this->assertFalse($r['partial']);$this->assertDatabaseCount('place_shared_archives',1);
  }
+ public function test_incomplete_cache_does_not_prevent_retry(): void {
+  $p=$this->data();$p['status']['menus']='unavailable';$p['place']['menus']=[];
+  app(PlaceSharedArchive::class)->put($p,[],'2020-01-01T00:00:00Z');
+  Http::preventStrayRequests();$h=$this->headers();
+  $this->getJson('/api/v1/rank/place?place=123456&cache_only=1',$h)->assertOk()->assertJsonPath('partial',true);Http::assertNothingSent();
+  Http::fake(['*'=>Http::response('<script>window.__APOLLO_STATE__={"PlaceDetailBase:123456":{"name":"Retried"}};</script>')]);
+  $this->getJson('/api/v1/rank/place?place=123456',$h)->assertOk()->assertJsonPath('cache.hit',false)->assertJsonPath('place.name','Retried');Http::assertSentCount(3);
+ }
  public function test_refresh_fetches_and_stores_new_data(): void {
   $s=app(PlaceSharedArchive::class);$s->put($this->data(),[],'2020-01-01T00:00:00Z');Http::preventStrayRequests();
   Http::fake(['*'=>Http::response('<script>window.__APOLLO_STATE__={"PlaceDetailBase:123456":{"name":"Fresh"}};</script>')]);
