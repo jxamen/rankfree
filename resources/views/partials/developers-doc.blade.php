@@ -511,6 +511,8 @@
                 <tbody>
                     <tr><td><code class="doc-code">place</code></td><td>필수</td><td>string</td><td>숫자 ID 또는 네이버 플레이스 URL(최대 1000자). m.place.naver.com·pcmap.place.naver.com·map.naver.com·naver.me 지원. 업체명만 입력하면 422</td></tr>
                     <tr><td><code class="doc-code">review_limit</code></td><td>선택</td><td>int</td><td>최근 방문자 후기 최대 개수, 1~50(기본 10). 공개 페이지에서 수집된 수만큼만 반환</td></tr>
+                    <tr><td><code class="doc-code">cache_only</code></td><td>선택</td><td>bool</td><td>1이면 앱 공통 저장본만 조회합니다. 네이버 재수집 없음. 없으면 404. 숫자 ID 또는 ID가 포함된 정규 URL 사용(단축 URL은 422).</td></tr>
+                    <tr><td><code class="doc-code">refresh</code></td><td>선택</td><td>bool</td><td>1이면 네이버에서 새로 수집하고 공통 저장본을 갱신합니다. cache_only=1과 함께 사용하면 422.</td></tr>
                 </tbody>
             </table>
             <div class="ep-l">요청 예시</div>
@@ -518,6 +520,9 @@
   -H "Authorization: Bearer rk_..." \
   --data-urlencode "place=https://map.naver.com/p/entry/place/123456" \
   --data-urlencode "review_limit=10"</pre></div>
+                        <p class="ep-t">기본 동작은 공통 저장본 우선입니다. K-Food Map·디저트나우에서 수집한 상세를 플레이스 ID 기준으로 재사용하며 저장본이 없을 때만 새로 수집합니다. 기존 앱 저장본은 약 1분 주기로 동기화합니다. 오래된 저장본도 자동 재수집하지 않으므로 cache.stale과 수집 시각을 확인하고 필요할 때 refresh=1을 요청하세요. 앱별 할랄·비건 검증, 공개 여부, 추천 점수는 공유하지 않습니다.</p>
+            <p class="ep-t"><code class="doc-code">cache.hit</code>: 저장본 사용 여부, <code class="doc-code">cache.section_collected_at</code>: 업체·메뉴·후기별 정상 수집 시각(UTC), <code class="doc-code">cache.stale</code>: 정상 섹션 중 24시간 이상 지난 자료 포함 여부. <code class="doc-code">cached_images.photo_url/photos</code>: 저장된 320/640px WebP 캐시 URL(수집된 경우). 원본 사진은 place.images에 유지됩니다. 앱은 사진 캐시 URL을 재사용할 수 있습니다.</p>
+            <p class="ep-t">재수집 없는 호출 예: <code class="doc-code">GET /api/v1/rank/place?place=123456&amp;cache_only=1&amp;review_limit=50</code>. 기존 Bearer API 키와 rank 권한이 동일하게 적용됩니다.</p>
             <div class="ep-l">응답 예시(설명용)</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">{
   "place": {

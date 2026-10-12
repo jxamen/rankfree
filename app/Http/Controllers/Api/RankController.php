@@ -174,7 +174,10 @@ class RankController extends Controller
         $data = $request->validate([
             'place' => ['required', 'string', 'max:1000'],
             'review_limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'cache_only' => ['sometimes', 'boolean'],
+            'refresh' => ['sometimes', 'boolean'],
         ]);
+        if ($request->boolean('cache_only') && $request->boolean('refresh')) return response()->json(['message'=>'cache_only and refresh are mutually exclusive.'],422);
         $input = trim($data['place']);
         $host = strtolower((string) parse_url($input, PHP_URL_HOST));
         if (! preg_match('/^\d{5,30}$/', $input)
@@ -182,18 +185,24 @@ class RankController extends Controller
                 || ! in_array(parse_url($input, PHP_URL_SCHEME), ['http', 'https'], true))) {
             return response()->json(['message' => '네이버 플레이스 URL 또는 숫자 ID를 입력하세요.'], 422);
         }
-        $pid = $checker->resolvePlaceId($input);
+        $pid = $request->boolean('cache_only') ? PlaceRankChecker::extractPlaceId($input) : $checker->resolvePlaceId($input);
         if (! $pid) {
             return response()->json(['message' => '플레이스 ID를 확인할 수 없습니다.'], 422);
         }
+        $archive = app(\App\Domain\Place\PlaceSharedArchive::class);
+        if (!$request->boolean('refresh') && ($cached = $archive->get($pid, $data['review_limit'] ?? 10))) return response()->json($cached);
+        if ($request->boolean('cache_only')) return response()->json(['message'=>'No shared place archive found.','place_id'=>$pid,'cache'=>['hit'=>false]],404);
         $category = PlaceRankChecker::parsePlaceRef($input)['category'] ?? 'place';
-        $result = $fetcher->fetch($pid, $category, $data['review_limit'] ?? 10);
+        $result = $fetcher->fetch($pid, $category, 50);
         $status = $result['status']['business'] === 'ok' ? 200
             : ($result['status']['business'] === 'blocked' ? 429 : 503);
         if ($status !== 200) {
             $result['message'] = '플레이스 정보를 조회하지 못했습니다. 잠시 후 다시 시도하세요.';
         }
 
+        if ($status === 200) $archive->put($result);
+        $result['place']['recent_reviews'] = array_slice($result['place']['recent_reviews'] ?? [],0,$data['review_limit'] ?? 10);
+        $result['cache'] = ['hit'=>false,'source'=>'live'];
         return response()->json($result, $status);
     }
 

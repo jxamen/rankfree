@@ -7,7 +7,7 @@
 - `GET /api/v1/rank/search?keyword=지역+디저트`: 실제 결과 수만큼 최대 300개 반환. total/count/items/capped/partial/blocked. 0/5/10/100/300/430개 페이지네이션 및 오류 테스트 완료.
 - 상세 응답 `place.links`: 공식 홈페이지와 SNS(type/url). `place.images`: 업체 대표 사진만 최대 10개(url/width/height); 방문자 후기 사진은 제외. 디저트나우 소비자가 320/640px WebP로 최대 3장 캐싱한다.
 
-- `GET /api/v1/rank/place`, 기존 `rank` scope 및 API 키 일일 한도 적용. 분당 20회 제한.
+- `GET /api/v1/rank/place`, 기존 `rank` scope 및 API 키 일일 한도 적용. 고정 분당 20회 제한 없음.
 - `place`: 네이버 플레이스 URL/숫자 ID. 업체명 입력은 미지원(422). `review_limit`: 1~50, 기본 10.
 - `PlaceInfoFetcher`: 기존 순위/SEO 수집에서 사용하는 m.place SSR Apollo 데이터를 홈·메뉴·최신 방문자 리뷰 페이지에서 조회. 인증 쿠키나 nCaptcha 토큰을 요구하지 않는다.
 - 반환: 업체명·업종·전화·소개·영업시간·편의시설·결제정보·주소·길안내·업체 좌표·리뷰 수·메뉴 목록·최근 방문자 리뷰. Apollo 참조를 해제하고 응답에 필요한 필드만 선택한다.
@@ -15,7 +15,7 @@
 - `status.business/menus/recent_reviews`: `ok`, `blocked`, `unavailable`. 목록 파싱 성공은 전체 데이터 수집을 보장하지 않는다. 누락 값은 null/빈 배열.
 - 업체 홈 실패는 429(차단) 또는 503(통신/파싱/대상 미확인). 메뉴·리뷰만 실패하면 HTTP 200 + `partial: true`.
 - 기존 rank/check·resolve·추적 스키마를 변경하지 않으며 슬롯 생성/순위 저장/DB 마이그레이션은 없다.
-- 성공/실패 모두 실시간 조회하며 현재 캐시는 없다. 최대 3회 조회, 각 요청 타임아웃은 `rankfree.place.timeout`(기본 20초). 클라이언트는 90초 이상 권장.
+- 성공 상세는 place_shared_archives에 앱 공통 보관한다. 기본은 저장본 우선, cache_only=1은 저장본 전용(없으면404), refresh=1은 강제 재수집이다. section_collected_at/stale과 cached_images를 제공한다. 앱별 태그/검증/노출은 공유하지 않는다. 최대 3회 조회, 각 요청 타임아웃은 `rankfree.place.timeout`(기본 20초). 클라이언트는 90초 이상 권장.
 - 개발자 문서: `/developers#rank`. 테스트: `tests/Feature/PlaceInfoApiTest.php`.
 
 ## 실응답 확인
@@ -26,3 +26,6 @@
 - 소개·영업시간은 `ROOT_QUERY.placeDetail(...).description/newBusinessHours`에 있다.
 - 최근 리뷰는 `ROOT_QUERY.visitorReviews(...)` 중 `sort=recent`, `includeContent=true`의 items 순서를 따른다. 날짜가 `10.4.일`처럼 표시되므로 문자열 날짜 정렬 금지. 같은 리뷰의 본문 없는 노드가 별도로 있어 전체 노드 스캔보다 원본 목록을 우선한다.
 - `coordinate.x/y`는 경도/위도 문자열. API는 유효한 숫자만 float으로 반환한다.
+
+## 공통 저장본 동기화 (2026-10-12)
+`/home/jcurve/scripts/place-shared/sync.py`가 K-Food Map(36)과 디저트나우(33)의 sm_place_details를 증분 동기화한다. 공통 테이블은 랭크프리 DB의 place_shared_archives이며 place_id가 기본키다. 정상 섹션별 수집 시각으로 병합하며 과거/실패 응답으로 정상 데이터를 지우지 않는다. 크론 1분 주기, flock으로 중복 방지, 실패 시 커서를 전진하지 않는다. 공유 이미지 URL은 기존 캐시를 그대로 사용한다. 앱별 기존 자료는 삭제하지 않는다.
