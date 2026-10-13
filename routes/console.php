@@ -39,9 +39,9 @@ if (config('rankfree.community.schedule_enabled', true)) {
 
 // 시각 지정 스케줄은 timezone('Asia/Seoul') 명시를 유지한다(앱 타임존 설정과 무관하게 KST 의도를 고정).
 
-// 플레이스 순위추적 — 매일 오전 11:30·오후 4:30(KST). 활성 슬롯 순위 조회·기록(nCaptcha 토큰 필요).
-Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:30')->withoutOverlapping()->runInBackground();
-Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:30')->withoutOverlapping()->runInBackground();
+// 플레이스 순위추적 — 매일 오전 11:00·오후 4:00(KST). 활성 슬롯 순위 조회·기록(nCaptcha 토큰 필요).
+Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:00')->withoutOverlapping()->runInBackground();
+Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:00')->withoutOverlapping()->runInBackground();
 
 // 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST). 활성 슬롯 순위 조회·기록.
 // 2026-08-03 shop.json 종료(공지 32564)로 중단했다가, 2026-08-04 서버 수집으로 되살렸다.

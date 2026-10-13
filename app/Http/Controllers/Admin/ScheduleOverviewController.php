@@ -51,7 +51,7 @@ class ScheduleOverviewController extends Controller
             $next = rescue(fn () => Carbon::instance($event->nextRunDate())->setTimezone('Asia/Seoul'), null, false);
 
             if (isset($jobs[$cmd])) {
-                // 같은 커맨드가 여러 시각에 걸린 경우(place:track-run 11:30·16:30) 한 줄로 합친다
+                // 같은 커맨드가 여러 시각에 걸린 경우(place:track-run 11:00·16:00) 한 줄로 합친다
                 $jobs[$cmd]['freq'] .= ' · '.$this->freqKo($event->expression);
                 if ($next && (! $jobs[$cmd]['next'] || $next->lt($jobs[$cmd]['next']))) {
                     $jobs[$cmd]['next'] = $next;
