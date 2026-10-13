@@ -53,4 +53,16 @@ class RankCheckSlackTest extends TestCase
 
         $this->assertTrue(true);
     }
+
+    public function test_전용_웹훅이_없으면_제이커브_단체_웹훅과_담당자_태그를_쓴다(): void
+    {
+        Http::fake(['hooks.slack.com/*' => Http::response('ok')]);
+        AppSetting::write('slack.rank_done_webhook_url', '');
+        config(['services.slack.order_reminder_mentions' => 'U0C4ZMY6RPV']);
+        AppSetting::write('slack.missed_order_webhook_url', 'https://hooks.slack.com/services/T0/B1/group');
+
+        RankCheckSlack::done('플레이스', 2, 2, 1, now());
+
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/B1/group') && str_contains($req['text'], '<@U0C4ZMY6RPV>'));
+    }
 }
