@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Support\RankCheckSlack;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class RankCheckSlackTest extends TestCase
@@ -44,14 +45,16 @@ class RankCheckSlackTest extends TestCase
         Http::assertSent(fn ($req) => str_contains($req['text'], '일부만 기록됨(3건 남음)') && str_contains($req['text'], '차단 감지'));
     }
 
-    public function test_슬랙이_실패해도_예외를_내지_않는다(): void
+    public function test_슬랙이_실패하면_예외_없이_로그를_남긴다(): void
     {
         Http::fake(['hooks.slack.com/*' => Http::response('boom', 500)]);
         AppSetting::write('slack.rank_done_webhook_url', 'https://hooks.slack.com/services/T0/B0/xxx');
+        Log::spy();
 
-        RankCheckSlack::done('쇼핑', 1, 1, 1, now());
+        $r = RankCheckSlack::done('쇼핑', 1, 1, 1, now());
 
-        $this->assertTrue(true);
+        $this->assertSame('HTTP 500 boom', $r);
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m) => str_contains($m, '순위체크 알림 실패 · 코드 500') && ! str_contains($m, 'hooks.slack.com'))->once();
     }
 
     public function test_전용_웹훅이_없으면_제이커브_단체_웹훅과_담당자_태그를_쓴다(): void
