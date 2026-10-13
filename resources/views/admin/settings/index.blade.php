@@ -85,6 +85,8 @@
             @include('admin.settings._simplefield', ['name' => 'jandi_order_webhook_url', 'label' => '웹훅 URL (주문 접수 알림)', 'value' => $jandiOrderWebhookUrl, 'secret' => true, 'placeholder' => 'https://hooks.slack.com/services/…'])
             {{-- 놓친 주문 알림(2026-10-07) — 미주문 요약(09·13·17시)이 가는 슬랙 채널 --}}
             @include('admin.settings._simplefield', ['name' => 'slack_missed_order_webhook_url', 'label' => '놓친 주문 알림 슬랙 웹훅 (미주문 요약 09·13·17시)', 'value' => $slackMissedOrderWebhookUrl, 'secret' => true, 'placeholder' => 'https://hooks.slack.com/services/…'])
+            {{-- 순위체크 완료 알림(2026-10-13) — 플레이스·쇼핑 순위체크가 끝나면 이 채널로 --}}
+            @include('admin.settings._simplefield', ['name' => 'slack_rank_done_webhook_url', 'label' => '순위체크 완료 알림 슬랙 웹훅 (플레이스·쇼핑 완료 즉시)', 'value' => $slackRankDoneWebhookUrl, 'secret' => true, 'placeholder' => 'https://hooks.slack.com/services/…'])
         </div>
     </div>
 

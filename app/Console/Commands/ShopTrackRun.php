@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Shopping\ShopRankSlotService;
 use App\Models\ShopRankSlot;
+use App\Support\RankCheckSlack;
 use Illuminate\Console\Command;
 
 /** 활성 쇼핑 순위 추적 슬롯의 현재 순위를 조회·기록 (스케줄러 — 매시간). */
@@ -26,19 +27,27 @@ class ShopTrackRun extends Command
         $this->info($slots->count().'개 슬롯 처리 시작');
 
         $deep = (bool) $this->option('deep');
+        $startedAt = now();
         $done = 0;
+        $found = 0;
+        $blocked = false;
         foreach ($slots as $slot) {
             $r = $service->run($slot, $deep);
             if (! empty($r['blocked']) && empty($r['found'])) {
                 $this->warn('쇼핑 API 한도(429) — 중단 (다음 실행에서 재개)');
+                $blocked = true;
                 break;
             }
             $this->line($slot->keyword.' → '.(! empty($r['found']) ? $r['rank'].'위' : '순위권 밖'));
             $done++;
+            $found += ! empty($r['found']) ? 1 : 0;
             usleep(500000); // 0.5s — 슬롯 간 간격(엔진 자체 페이지 delay 존재)
         }
 
         $this->info("완료: {$done}건 기록");
+        if (! $this->option('slot') && ! $this->option('user')) {
+            RankCheckSlack::done('쇼핑', $slots->count(), $done, $found, $startedAt, $blocked);
+        }
 
         return self::SUCCESS;
     }
