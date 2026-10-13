@@ -43,14 +43,14 @@ if (config('rankfree.community.schedule_enabled', true)) {
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('11:00')->withoutOverlapping()->runInBackground();
 Schedule::command('place:track-run')->timezone('Asia/Seoul')->dailyAt('16:00')->withoutOverlapping()->runInBackground();
 
-// 쇼핑 순위추적 — 하루 2회(08:00·20:00 KST). 활성 슬롯 순위 조회·기록.
+// 쇼핑 순위추적 — 하루 2회(11:00·16:00 KST, 2026-10-13 담당 직원 요청으로 08:00·20:00 에서 변경). 활성 슬롯 순위 조회·기록.
 // 2026-08-03 shop.json 종료(공지 32564)로 중단했다가, 2026-08-04 서버 수집으로 되살렸다.
 //   --deep: 20위까지는 slot API 1콜(0.3초)로 끝내고, 그 밖만 서버 브라우저로 본다(키워드당 20~30초).
 //   확장(사용자 PC)이 꺼져 있어도 완결된다 — 배치라 느려도 무방하다.
 //   전제: `shoprank:login` 이 유지하는 네이버 세션. 브라우저는 실행 중에만 뜬다(xvfb-run, 동시 1개).
 if (config('rankfree.shopping.track_schedule_enabled', true)) {
-    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('08:00')->withoutOverlapping()->runInBackground();
-    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('20:00')->withoutOverlapping()->runInBackground();
+    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('11:00')->withoutOverlapping()->runInBackground();
+    Schedule::command('shop:track-run --deep')->timezone('Asia/Seoul')->dailyAt('16:00')->withoutOverlapping()->runInBackground();
 }
 
 // 세부주문(일할) 예약 발주 — 진행일 도래 회차를 매일 아침 업체로 자동 전송(승인된 주문만).
