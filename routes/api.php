@@ -166,6 +166,9 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth.apikey:shop_keyword')->group(function (): void {
         // 쇼핑 순위체크 등록(2026-10-08) — 부스팅샵 진행 중 쇼핑 주문 자동 등록
         Route::post('/shop-rank/slots', [\App\Http\Controllers\Api\ShopRankApiController::class, 'store'])->middleware('throttle:60,1');
+        // 쇼핑 순위 읽기(2026-10-14) — 슬롯 목록(?label= 앱 사용자별) · 슬롯 상세(일별 기록)
+        Route::get('/shop-rank/slots', [\App\Http\Controllers\Api\ShopRankApiController::class, 'index']);
+        Route::get('/shop-rank/slots/{slot}', [\App\Http\Controllers\Api\ShopRankApiController::class, 'show'])->whereNumber('slot');
         // 플레이스 순위체크 등록(2026-10-11) — 부스팅샵 진행 중 플레이스 주문 자동 등록
         Route::post('/place-rank/slots', [\App\Http\Controllers\Api\PlaceRankApiController::class, 'store'])->middleware('throttle:60,1');
         Route::get('/shop-keywords', [ShopKeywordApiController::class, 'index']);
