@@ -55,6 +55,30 @@
                                     <span class="badge" style="font-size:var(--fs-xs);padding:2px 8px;">{{ \App\Models\ApiKey::SCOPES[$sc] ?? $sc }}</span>
                                 @endforeach
                             </div>
+                            @php $scopeErrors = $errors->getBag('scopes_'.$key->id); @endphp
+                            <details class="mt-2" @if ($scopeErrors->any()) open @endif>
+                                <summary class="text-accent" style="cursor:pointer;font-size:var(--fs-xs);">권한 수정</summary>
+                                <form method="POST" action="{{ route('console.api-keys.update-scopes', $key) }}" class="mt-2">
+                                    @csrf
+                                    @method('PATCH')
+                                    <fieldset>
+                                        <legend class="text-muted mb-1" style="font-size:var(--fs-xs);">권한 (scope) · 최소 1개 선택</legend>
+                                        @forelse ($allowedScopes as $code)
+                                            <label class="flex items-center gap-1.5 text-ink mb-1" style="font-size:var(--fs-xs);">
+                                                <input type="checkbox" name="scopes[]" value="{{ $code }}"
+                                                       @checked(in_array($code, (array) ($scopeErrors->any() ? old('scopes', []) : $key->scopes), true))>
+                                                {{ \App\Models\ApiKey::SCOPES[$code] ?? $code }}
+                                            </label>
+                                        @empty
+                                            <p class="text-muted" style="font-size:var(--fs-xs);">사용 가능한 API 기능이 없습니다. 관리자에게 권한을 요청하세요.</p>
+                                        @endforelse
+                                    </fieldset>
+                                    @if ($scopeErrors->any())
+                                        <div role="alert" class="mt-1" style="color:var(--color-error);font-size:var(--fs-xs);">{{ $scopeErrors->first() }}</div>
+                                    @endif
+                                    <button type="submit" class="btn btn-secondary btn-sm mt-2" @disabled($allowedScopes === [])>권한 저장</button>
+                                </form>
+                            </details>
                         </td>
                         <td class="px-3 py-3 text-muted" style="font-size:var(--fs-xs);max-width:160px;">
                             <span class="truncate block" title="{{ $key->allowed_ips }}">{{ $key->allowed_ips ?: '전체 허용' }}</span>

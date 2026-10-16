@@ -98,6 +98,79 @@ class ApiKeyTest extends TestCase
         $this->assertSame(100, $key->fresh()->daily_limit);
     }
 
+    public function test_owner_updates_scopes_without_changing_other_key_fields(): void
+    {
+        $user = $this->makeUser();
+        [$key, $plain] = ApiKey::issue($user, 'Scope edit', ['keyword'], now()->addMonth(), 100, '127.0.0.1');
+        $before = $key->fresh()->getAttributes();
+        \Illuminate\Support\Facades\Log::spy();
+        $this->actingAs($user)->from('/console/api-keys')
+            ->patch(route('console.api-keys.update-scopes', $key), [
+                'scopes' => ['rank'], 'daily_limit' => 1, 'allowed_ips' => '*',
+                'key_hash' => 'tampered', 'key_prefix' => 'tampered',
+                'expires_at' => null, 'is_active' => false,
+            ])->assertRedirect('/console/api-keys')->assertSessionHas('status');
+        $after = $key->fresh();
+        $this->assertSame(['rank'], $after->scopes);
+        foreach ($before as $field => $value) {
+            if (! in_array($field, ['scopes', 'updated_at'], true)) {
+                $this->assertSame($value, $after->getAttributes()[$field], $field);
+            }
+        }
+        $this->assertSame($plain, $after->plainKey());
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->once()->with(
+            'api_key.scopes_updated', \Mockery::on(fn ($context) =>
+                $context['actor_id'] === $user->id && $context['api_key_id'] === $key->id
+                && $context['before_scopes'] === ['keyword'] && $context['after_scopes'] === ['rank']
+                && isset($context['changed_at']) && count($context) === 5
+            )
+        );
+        $headers = ['Authorization' => 'Bearer '.$plain];
+        $this->getJson('/api/v1/rank/slots', $headers)->assertOk();
+        $this->getJson('/api/v1/keyword?keyword=test', $headers)->assertForbidden();
+        $this->get('/console/api-keys')->assertOk()->assertSee('권한 수정')
+            ->assertSee(route('console.api-keys.update-scopes', $key), false);
+    }
+
+    public function test_scope_update_requires_owner(): void
+    {
+        [$key] = ApiKey::issue($this->makeUser(), 'Private', ['rank'], null, null, null);
+        $url = route('console.api-keys.update-scopes', $key);
+        $this->patch($url, ['scopes' => ['keyword']])->assertRedirect('/login');
+        $this->actingAs($this->makeUser('other@example.test'))->patch($url, ['scopes' => ['keyword']])->assertForbidden();
+        $this->assertSame(['rank'], $key->fresh()->scopes);
+    }
+
+    public function test_scope_validation_errors_reopen_only_the_affected_editor(): void
+    {
+        $user = $this->makeUser();
+        [$key] = ApiKey::issue($user, 'Invalid selection', ['rank'], null, null, null);
+        $this->actingAs($user)->from('/console/api-keys')
+            ->patch(route('console.api-keys.update-scopes', $key), ['scopes' => []])
+            ->assertSessionHasErrors('scopes', null, 'scopes_'.$key->id);
+        $errors = session('errors');
+        $this->view('console.api-keys', [
+            'keys' => collect([$key]), 'allowedScopes' => $user->allowedApiScopes(), 'errors' => $errors,
+        ])->assertSee('role="alert"', false)->assertSee('<details class="mt-2"  open ', false);
+    }
+
+    public function test_scope_update_rejects_empty_invalid_and_unallowed_scopes(): void
+    {
+        $user = $this->makeUser();
+        $user->update(['api_scopes' => ['rank']]);
+        [$key] = ApiKey::issue($user, 'Restricted', ['rank'], null, null, null);
+        foreach ([[], ['keyword'], ['unknown'], ['rank', 'keyword'], ['rank', 'rank'], [null], [['rank']], 'rank'] as $scopes) {
+            $this->actingAs($user)->from('/console/api-keys')
+                ->patch(route('console.api-keys.update-scopes', $key), ['scopes' => $scopes])
+                ->assertSessionHasErrors(null, null, 'scopes_'.$key->id);
+            $this->assertSame(['rank'], $key->fresh()->scopes);
+        }
+        $this->patch(route('console.api-keys.update-scopes', $key), [])->assertSessionHasErrors('scopes', null, 'scopes_'.$key->id);
+        $user->update(['api_scopes' => []]);
+        $this->patch(route('console.api-keys.update-scopes', $key), ['scopes' => ['rank']])
+            ->assertSessionHasErrors('scopes.0', null, 'scopes_'.$key->id);
+    }
+
     public function test_rank_scope_allows_rank_endpoint(): void
     {
         $user = $this->makeUser();

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ApiKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 /** API 키 관리 — 콘솔 셀프서비스 (발급·허용기간·일일 한도·허용 IP·활성 토글·삭제). */
 class ApiKeyController extends Controller
@@ -47,6 +49,28 @@ class ApiKeyController extends Controller
         return back()
             ->with('newApiKey', $plain)
             ->with('status', "API 키 '{$key->name}' 발급 완료. 아래 키는 지금 한 번만 표시되니 안전한 곳에 보관하세요.");
+    }
+
+    public function updateScopes(Request $request, ApiKey $key)
+    {
+        abort_unless($key->user_id === $request->user()->id, 403);
+
+        $data = $request->validateWithBag('scopes_'.$key->id, [
+            'scopes' => ['required', 'array', 'min:1'],
+            'scopes.*' => ['required', 'string', 'distinct', Rule::in($request->user()->allowedApiScopes())],
+        ]);
+        $before = $key->scopes;
+        $key->update(['scopes' => array_values($data['scopes'])]);
+
+        Log::info('api_key.scopes_updated', [
+            'actor_id' => $request->user()->id,
+            'api_key_id' => $key->id,
+            'changed_at' => now()->toIso8601String(),
+            'before_scopes' => $before,
+            'after_scopes' => $key->scopes,
+        ]);
+
+        return back()->with('status', "'{$key->name}' 키의 권한을 변경했습니다. 다음 API 호출부터 적용됩니다.");
     }
 
     public function updateLimit(Request $request, ApiKey $key)
