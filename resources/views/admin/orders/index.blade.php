@@ -2,6 +2,7 @@
 @section('page-title', '주문 관리')
 
 @section('admin-content')
+<a class="btn mb-4" href="{{ route('admin.topups') }}">충전 요청 관리</a>
 @php
     $statusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
     $total = $counts->sum();

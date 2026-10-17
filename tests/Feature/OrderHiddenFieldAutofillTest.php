@@ -106,6 +106,9 @@ class OrderHiddenFieldAutofillTest extends TestCase
         $this->assertStringNotContainsString('상품 이미지 URL', $html);
         $this->assertStringNotContainsString('내부 메모', $html);
 
+        // 웹 주문은 선충전 잔액으로 결제한다.
+        app(\App\Domain\Order\PrepaidWallet::class)->change($customer->id, 1100, 'test:hidden-fields', '테스트 충전');
+
         // 필수+숨김(상점명·이미지)을 입력하지 않아도 주문이 접수된다 — 기본값만 시드
         $this->actingAs($customer)->post(route('order.store', $product->order_token), [
             'f_keyword' => '장롱', 'f_shop_url' => 'https://smartstore.naver.com/x/products/123', 'quantity' => 10,

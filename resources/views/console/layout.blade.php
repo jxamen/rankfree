@@ -120,6 +120,7 @@
             </div>
         </div>
 
+        <a class="px-4 py-3" href="{{ route('wallet') }}">잔액·충전·내역</a>
         @php
             $__tree = \App\Domain\Access\MenuService::sidebarTree(auth()->user(), 'console');
             // 첫 그룹 앞의 최상위 항목만 상단 고정, 그 이후(그룹+끼어있는 항목)는 메뉴 순서대로 스크롤

@@ -154,7 +154,7 @@ class OrderPlacer
             }
         }
 
-        $order = DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon) {
+        $order = DB::transaction(function () use ($product, $user, $qty, $days, $values, $unit, $gross, $discount, $userCoupon, $opts) {
             // 동시 제출로 같은 쿠폰이 두 번 쓰이지 않게 잠금 후 미사용 재확인
             if ($userCoupon) {
                 $locked = UserCoupon::whereKey($userCoupon->id)->whereNull('used_at')->lockForUpdate()->first();
@@ -177,10 +177,13 @@ class OrderPlacer
                 'user_coupon_id' => $userCoupon?->id,
                 'discount_amount' => $discount,
             ]);
+            if ($opts['prepaid'] ?? false) {
+                app(PrepaidWallet::class)->change($user->id, -\App\Support\Vat::total((float) $order->total_price), 'order:'.$order->id, '주문 차감 '.$order->order_no);
+            }
             $userCoupon?->update(['used_at' => now(), 'order_id' => $order->id]);
 
             return $order;
-        });
+        }, 5);
 
         // 기간형(daily) 주문 — 세부주문서(1일 1건) 자동 생성 + 업체 분산·Short URL 배정
         try {

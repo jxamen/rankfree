@@ -16,6 +16,7 @@ class MarketingOrder extends Model
         'processing' => '진행중',
         'completed' => '완료',
         'canceled' => '취소',
+        'rejected' => '거절',
     ];
 
     protected $fillable = [
@@ -119,7 +120,7 @@ class MarketingOrder extends Model
     public function restoreCoupon(): void
     {
         if ($this->user_coupon_id && $this->userCoupon) {
-            $this->userCoupon->update(['used_at' => null, 'order_id' => null]);
+            $this->userCoupon()->where('order_id', $this->id)->update(['used_at' => null, 'order_id' => null]);
         }
     }
 

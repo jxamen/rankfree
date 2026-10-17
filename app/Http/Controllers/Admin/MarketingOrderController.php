@@ -228,6 +228,7 @@ class MarketingOrderController extends Controller
     /** 세부주문 개별 발주 — 진행일과 무관하게 관리자가 수동 전송(실패·취소 회차 재발주 포함). */
     public function dispatchItem(\App\Models\MarketingOrderItem $item, \App\Domain\Order\OrderDispatchService $dispatcher, \App\Domain\Order\OrderItemPlanner $planner)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($item->order);
         if ($item->status === 'sent') {
             return back()->withErrors(['items' => "{$item->day_no}일차는 이미 전송됐습니다 — 다시 보내려면 먼저 취소하세요."]);
         }
@@ -319,6 +320,11 @@ class MarketingOrderController extends Controller
         $gross = (float) $order->unit_price * $qty * max(1, (int) ($days ?: 1));
         $total = max(0, $gross - (float) $order->discount_amount);
 
+        if (\Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$order->id)->exists()
+            && ($qty !== (int) $order->quantity || (int) $days !== (int) $order->days)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['quantity' => '잔액 결제 주문의 수량·기간은 변경할 수 없습니다. 취소·환원 후 새로 주문하세요.']);
+        }
+
         $order->update([
             'quantity' => $qty,
             'days' => $days,
@@ -380,6 +386,7 @@ class MarketingOrderController extends Controller
      */
     public function placeVendorOrder(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         if ($order->status !== 'pending') {
             return back()->withErrors(['place' => "주문 {$order->order_no}: 접수 상태에서만 발주할 수 있습니다(현재 ".(MarketingOrder::STATUSES[$order->status] ?? $order->status).')']);
         }
@@ -417,6 +424,7 @@ class MarketingOrderController extends Controller
 
     public function approve(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         // 필수 내부(숨김) 필드가 비어 있으면 발주 차단 — 수집·수동 입력으로 채운 뒤 승인
         $order->loadMissing('product.fields');
         $fv = (array) $order->field_values;
@@ -500,6 +508,7 @@ class MarketingOrderController extends Controller
     /** 실패한 업체 전송 건 재전송. */
     public function retryDispatch(\App\Models\OrderDispatch $dispatch, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($dispatch->order);
         $d = $dispatcher->retry($dispatch);
 
         return back()->with('status', "'{$d->vendor_name}' 재전송 — ".\App\Models\OrderDispatch::STATUSES[$d->status]);
@@ -589,6 +598,7 @@ class MarketingOrderController extends Controller
      */
     public function boostingShopOrder(Request $request, MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         if ($order->boostingService() === 'shopping') {
             return $this->boostingShoppingOrder($request, $order, $client);
         }
@@ -1036,11 +1046,17 @@ class MarketingOrderController extends Controller
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', array_keys(MarketingOrder::STATUSES))],
         ]);
-        // 취소 전환 시 쿠폰 복원(취소를 다시 되돌려도 쿠폰은 재사용되지 않음 — 필요하면 재발행)
-        if ($data['status'] === 'canceled' && $order->status !== 'canceled') {
-            $order->restoreCoupon();
-        }
-        $order->update($data);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($order, $data) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if (in_array($locked->status, ['canceled', 'rejected']) && $locked->status !== $data['status'] && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$locked->id)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '환원된 주문은 다시 진행할 수 없습니다. 새 주문을 접수하세요.']);
+            }
+            if (in_array($data['status'], ['canceled', 'rejected'])) {
+                app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
+                $locked->restoreCoupon();
+            }
+            $locked->update($data);
+        });
 
         return back()->with('status', "주문 {$order->order_no} 상태를 '".MarketingOrder::STATUSES[$data['status']]."'(으)로 변경했습니다.");
     }
@@ -1048,9 +1064,13 @@ class MarketingOrderController extends Controller
     public function destroy(MarketingOrder $order)
     {
         $no = $order->order_no;
-        $order->restoreCoupon();   // 삭제 주문에 묶인 쿠폰은 되돌려준다
-        $order->delete();
+        \Illuminate\Support\Facades\DB::transaction(function () use ($order) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
+            $locked->restoreCoupon();
+            $locked->delete();
+        });
 
-        return redirect()->route('admin.orders.show', $order)->with('status', "주문 {$no} 을(를) 삭제했습니다.");
+        return redirect()->route('admin.orders')->with('status', "주문 {$no} 을(를) 삭제했습니다.");
     }
 }

@@ -15,6 +15,17 @@
 
 @section('admin-content')
 @php
+    $walletDebit = \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$order->id)->first();
+@endphp
+@if($walletDebit)
+<div class="card p-4 mb-4">잔액 결제 · {{ number_format(-$walletDebit->amount) }}원 (부가세 포함)
+@if(\Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$order->id)->exists()) · 환원 완료 @endif
+</div>
+@else
+<div class="card p-4 mb-4">기존 주문·API 주문: 기존 입금 확인·승인 절차로 처리합니다.</div>
+@endif
+
+@php
     $statusColor = ['pending' => 'var(--color-muted)', 'processing' => 'var(--color-accent)', 'completed' => 'var(--color-success)', 'canceled' => 'var(--color-error)'];
     $fieldMap = $order->product?->fields->keyBy('field_key') ?? collect();
     // 내부(숨김) 필드 — 고객에겐 안 보이고 외부 발주 전달에 쓰는 값(수집 자동 채움 + 수동 입력)
