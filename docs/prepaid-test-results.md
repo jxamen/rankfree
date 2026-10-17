@@ -47,3 +47,12 @@
 - `Tests\Feature\ShopProductListTest::test_shows_recent_seller_captcha_questions_with_image_links`
 - `Tests\Feature\ShopRankTrackTest::test_store_creates_slots_and_runs_first_check`
 - `Tests\Feature\ShopSerpTalkTest::test_talk_id_is_saved_and_rendered`
+
+
+## PR #15 검수 보완 재검증 (2026-10-18)
+
+동일 테스트 전용 APP_KEY, SQLite, memory_limit=1G, SHOP_EXPOSURE_FETCH_DELAY_MS=0으로 기준 4f1db2d 전체를 재실행했다: 816개 / 784 통과 / 32 실패. 수정본 전체는 833개 / 801 통과 / 같은 32 실패(12,956 assertions). 실패 테스트 이름 집합을 자동 비교하여 신규 실패 0, 기존 실패 해소 0을 확인했다.
+
+외부 검수 원본 `/tmp/rk15rev-runtime/PrepaidReviewTest.php`도 수정 없이 7개 모두 통과(53 assertions). 저장소에 추가한 검수·회귀 10개는 전체 실행에서 모두 통과했으며 발주 직전 취소, 발주 중 취소/상태 초기화/환원/삭제 차단, 예약 서비스 직접 호출, API 조회·목록·필터를 검증한다. 업체 HTTP는 fake하고 운영 DB에 접근하지 않았다. 실제 MySQL 병렬 실행은 수행하지 않았다.
+
+상세 비교: `docs/evidence/16rk-prepaid-f1/test-comparison.json`. 보호 대상 8개 파일 SHA-256 및 시작 커밋 대비 동일 확인: `docs/evidence/16rk-prepaid-f1/protected-files.json`.

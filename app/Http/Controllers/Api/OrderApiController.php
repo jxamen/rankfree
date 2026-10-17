@@ -91,8 +91,12 @@ class OrderApiController extends Controller
     public function index(Request $request)
     {
         $q = MarketingOrder::with('product')->where('user_id', $request->user()->id)->latest();
-        if (($st = $request->query('status')) && isset(MarketingOrder::STATUSES[$st])) {
-            $q->where('status', $st);
+        if (($st = $request->query('status')) && in_array($st, ['pending', 'processing', 'completed', 'canceled'], true)) {
+            $q->whereIn('status', match ($st) {
+                'canceled' => ['canceled', 'rejected'],
+                'processing' => ['processing', 'dispatching'],
+                default => [$st],
+            });
         }
         $perPage = max(1, min(100, (int) $request->query('per_page', 20)));
         $page = $q->paginate($perPage);
@@ -154,10 +158,16 @@ class OrderApiController extends Controller
 
     private function orderJson(MarketingOrder $o): array
     {
+        $status = match ($o->status) {
+            'rejected' => 'canceled',
+            'dispatching' => 'processing',
+            default => $o->status,
+        };
+
         return [
             'order_no' => $o->order_no,
-            'status' => $o->status,
-            'status_label' => MarketingOrder::STATUSES[$o->status] ?? $o->status,
+            'status' => $status,
+            'status_label' => MarketingOrder::STATUSES[$status] ?? $status,
             'product' => ['id' => $o->product?->id, 'title' => $o->product?->title],
             'quantity' => $o->quantity,
             'days' => $o->days,

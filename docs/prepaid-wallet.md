@@ -47,3 +47,11 @@
 - [충전·잔액·원장](evidence/16rk-prepaid/topup.png)
 - [관리자 입금 확인](evidence/16rk-prepaid/admin-confirm.png)
 - [주문 잔액 차감](evidence/16rk-prepaid/order-debit.png)
+
+## PR #15 검수 보완: 발주와 환원
+
+모든 외부 발주는 OrderDispatchState의 주문 행 잠금으로 pending/processing → dispatching 전이를 커밋한 뒤 실행한다. 일반·세부·예약·재전송은 OrderDispatchService의 실제 send 직전, 부스팅샵 플레이스/쇼핑은 API 호출 직전에 같은 전이를 사용한다. 발주 기록 생성 자체는 외부 전송이 아니므로 취소가 먼저 완료되면 기록은 canceled로 남고 업체 호출은 생략한다.
+
+취소·거절·삭제도 동일한 주문 행 잠금을 사용한다. dispatching 상태의 변경 및 삭제를 거절하고, 선충전 차감이 있는 processing 주문의 자동 환원을 거절하여 관리자 확인으로 넘긴다. 차감 원장이 없는 기존 주문의 취소 동작은 유지하며 잔액을 적립하지 않는다. 전송 완료는 잠금 안에서 최신 dispatching 상태에만 적용한다. 미래 회차 승인도 최신 pending 상태만 활성화한다. 부스팅샵의 명시적인 실패는 발주 전 상태로 복귀하며, 호출 결과를 알 수 없는 예외는 processing으로 남겨 확인하게 한다. 프로세스가 강제 종료되어 dispatching에 남은 주문도 자동 환원하지 않고 관리자 확인이 필요하다.
+
+v1 API는 rejected를 canceled(취소), dispatching을 processing(진행중)으로 직렬화하며 기존 필드를 유지한다. canceled/processing 목록 필터는 대응하는 내부 상태도 포함하고 rejected/dispatching은 v1 필터 값으로 인정하지 않는다(기존 미지원 필터처럼 무시).

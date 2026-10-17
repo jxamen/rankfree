@@ -13,6 +13,7 @@ class MarketingOrder extends Model
     /** 주문 상태 (코드 => 라벨). */
     public const STATUSES = [
         'pending' => '접수',
+        'dispatching' => '발주 중',
         'processing' => '진행중',
         'completed' => '완료',
         'canceled' => '취소',

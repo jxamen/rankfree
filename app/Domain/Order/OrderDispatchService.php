@@ -203,6 +203,11 @@ class OrderDispatchService
     /** 채널별 전송 — 결과를 dispatch 레코드에 기록. */
     private function send(OrderDispatch $d): void
     {
+        if (! app(OrderDispatchState::class)->beginDispatch($d->order)) {
+            $d->update(['status' => 'canceled', 'response' => '주문 상태 변경으로 발주 차단']);
+
+            return;
+        }
         try {
             $ok = match ($d->channel) {
                 // 리워드 풀은 외부로 보내지 않는다 — 미션 풀 편입이 곧 발주다(.claude/reward design-04 §2-1).
@@ -219,6 +224,7 @@ class OrderDispatchService
         $d->status = $ok ? 'sent' : 'failed';
         $d->sent_at = now();
         $d->save();
+        app(OrderDispatchState::class)->finishDispatch($d->order);
     }
 
     private function sendApi(OrderDispatch $d): bool

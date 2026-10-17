@@ -239,7 +239,7 @@ class MarketingOrderController extends Controller
         $r = $dispatcher->dispatchItem($item);
         // 첫 발주로 주문 활성화 — 접수 상태면 진행중 전환(이후 회차는 스케줄러가 자동 발주)
         if ($r['ok'] && $order && $order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
             $r['message'] .= ' · 주문을 진행중으로 전환했습니다(남은 회차는 진행일 아침 자동 발주).';
         }
 
@@ -417,7 +417,7 @@ class MarketingOrderController extends Controller
         if (! $result['ok']) {
             return back()->withErrors(['place' => "주문 {$order->order_no}: ".$result['message']]);
         }
-        $order->update(['status' => 'processing']);
+        app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
 
         return back()->with('status', "주문 {$order->order_no} 발주 완료 — ".$result['message']);
     }
@@ -446,7 +446,7 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['approve' => $result['message']]);
         }
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return back()->with('status', "주문 {$order->order_no} 승인 — ".$result['message']);
@@ -653,7 +653,15 @@ class MarketingOrderController extends Controller
         ], fn ($v) => $v !== null && $v !== '');
         $params['search_keywords'] = $keywords->all();
 
-        $result = $client->place($params);
+        $dispatchState = app(\App\Domain\Order\OrderDispatchState::class);
+        if (! ($previousStatus = $dispatchState->beginDispatch($order))) {
+            return back()->withErrors(['boosting' => '현재 주문 상태에서는 발주할 수 없습니다. 관리자 확인이 필요합니다.']);
+        }
+        try {
+            $result = $client->place($params);
+        } finally {
+            $dispatchState->finishDispatch($order, $result['ok'] ?? true, $previousStatus);
+        }
         $body = is_array($result['body']) ? $result['body'] : [];
 
         // 발주 기록 — API 키는 클라이언트가 붙이므로 payload 에 남지 않는다
@@ -678,7 +686,7 @@ class MarketingOrderController extends Controller
 
         $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return redirect()->route('admin.orders.show', $order)->with('status',
@@ -857,7 +865,15 @@ class MarketingOrderController extends Controller
         $params['landing_urls'] = $urls->all();
         $params['tags'] = $tags->all();
 
-        $result = $client->shopping($params);
+        $dispatchState = app(\App\Domain\Order\OrderDispatchState::class);
+        if (! ($previousStatus = $dispatchState->beginDispatch($order))) {
+            return back()->withErrors(['boosting' => '현재 주문 상태에서는 발주할 수 없습니다. 관리자 확인이 필요합니다.']);
+        }
+        try {
+            $result = $client->shopping($params);
+        } finally {
+            $dispatchState->finishDispatch($order, $result['ok'] ?? true, $previousStatus);
+        }
         $body = is_array($result['body']) ? $result['body'] : [];
 
         $days = (int) \Illuminate\Support\Carbon::parse($data['fr_date'])->diffInDays(\Illuminate\Support\Carbon::parse($data['to_date'])) + 1;
@@ -881,7 +897,7 @@ class MarketingOrderController extends Controller
 
         $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return redirect()->route('admin.orders.show', $order)->with('status',
@@ -1044,10 +1060,14 @@ class MarketingOrderController extends Controller
     public function updateStatus(Request $request, MarketingOrder $order)
     {
         $data = $request->validate([
-            'status' => ['required', 'in:'.implode(',', array_keys(MarketingOrder::STATUSES))],
+            'status' => ['required', 'in:'.implode(',', array_diff(array_keys(MarketingOrder::STATUSES), ['dispatching']))],
         ]);
         \Illuminate\Support\Facades\DB::transaction(function () use ($order, $data) {
             $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === 'dispatching' ||
+                ($locked->status === 'processing' && in_array($data['status'], ['canceled', 'rejected']) && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists())) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '발주 중·처리 중 주문은 자동 취소·환원할 수 없습니다. 관리자 확인이 필요합니다.']);
+            }
             if (in_array($locked->status, ['canceled', 'rejected']) && $locked->status !== $data['status'] && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$locked->id)->exists()) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['status' => '환원된 주문은 다시 진행할 수 없습니다. 새 주문을 접수하세요.']);
             }
@@ -1066,6 +1086,9 @@ class MarketingOrderController extends Controller
         $no = $order->order_no;
         \Illuminate\Support\Facades\DB::transaction(function () use ($order) {
             $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === 'dispatching' || ($locked->status === 'processing' && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists())) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '발주 중·처리 중 주문은 자동 삭제·환원할 수 없습니다. 관리자 확인이 필요합니다.']);
+            }
             app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
             $locked->restoreCoupon();
             $locked->delete();
