@@ -34,7 +34,7 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
-            'kind' => 'required|in:403,429,보안문자,success,unavailable',
+            'kind' => 'required|in:403,429,보안문자,success',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
         ]);
@@ -142,7 +142,6 @@ class ShopKeywordExposureController extends Controller
             $progress['retry_at'] = (int) ceil(max(microtime(true) + 2, $until) * 1000);
         }
         return response()->json($progress + [
-            'browser_unavailable' => (bool) Cache::get('shop-exposure:browser-unavailable:'.$analysis->id),
             'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis),
             'collector_ip' => (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'),
         ]);
@@ -172,7 +171,6 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
-        app(\App\Domain\Shopping\ShopBrowserWatchdog::class)->recover($analysis);
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
         }

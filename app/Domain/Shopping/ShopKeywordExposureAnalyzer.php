@@ -140,11 +140,15 @@ class ShopKeywordExposureAnalyzer
      */
     public static function usesServerFallback(ShopKeywordAnalysis $analysis): bool
     {
-        return (bool) Cache::get('shop-exposure:server-fallback:'.$analysis->id, false);
+        // Deliberately ignore stale PR #30 flags. Browser work never transfers.
+        return false;
     }
 
     public function checkBatch(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
+        if (Cache::has('shop-exposure:server-fallback:'.$analysis->id) || $analysis->check_method === 'search' || $analysis->collection_source === '브라우저' || $analysis->collection_source === '확장 수집기') {
+            return $this->progress($analysis);
+        }
         if ($analysis->refresh()->collectionStopped()) {
             return $this->progress($analysis);
         }

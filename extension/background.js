@@ -71,7 +71,6 @@ function removeTab(id, tries) {
 const productInfoWaiters = new Map();
 
 const handlers = {
-  async ping() { return { ok: true }; },
   /** 로그인 → 토큰 저장 */
   async login({ email, password, apiBase }) {
     const base = (apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
@@ -1022,7 +1021,7 @@ Object.assign(handlers, {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
     if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
-      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : result.status === 0 ? 'unavailable' : null;
+      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
       if (kind) {
         try {
           const { token, apiBase } = await getStore();

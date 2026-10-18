@@ -61,6 +61,12 @@ class ShopKeywordExposureTest extends TestCase
             // api 방식(shop.json) — m.search 와 같은 규칙: "고함량" 조합에서만 내 상품(111) 노출.
             // ⚠️ api 테스트에서만 활성(self::$fakeShopJson) — 항상 items 를 주면 prepare 의 백필·재료 추출이
             //    바뀌어 기존 크롤링 테스트의 조합 기대가 어긋난다.
+            if (self::$fakeShopJson && str_contains($url, 'ns-portal.shopping.naver.com')) {
+                $mine = str_contains((string) ($request->data()['query'] ?? ''), '고함량');
+                return Http::response(['data' => [['slots' => [['data' => [
+                    'sourceType' => 'SAS', 'channelProductId' => $mine ? '111' : '222', 'rank' => 1,
+                ]]]]]]);
+            }
             if (str_contains($url, 'openapi.naver.com/v1/search/shop.json')) {
                 if (! self::$fakeShopJson) {
                     return Http::response('', 200);
@@ -93,6 +99,14 @@ class ShopKeywordExposureTest extends TestCase
 
     private function runChecks(User $user, ShopKeywordAnalysis $a): void
     {
+        if ($a->check_method === 'search') {
+            foreach ($a->combos()->whereNull('rank')->get() as $item) {
+                $this->travel(2)->seconds(); // Model the extension's minimum spacing and route throttle.
+                $html = str_contains($item->keyword, '고함량') ? $this->htmlWith : $this->htmlWithout;
+                $this->actingAs($user)->postJson(route('admin.shop-keyword.check-html', $a), ['item_id' => $item->id, 'html' => $html])->assertOk();
+            }
+            return;
+        }
         for ($i = 0; $i < 10; $i++) {
             if ((int) $this->actingAs($user)->post(route('admin.shop-keyword.check', $a))->json('remaining') <= 0) {
                 break;

@@ -28,6 +28,10 @@ class ShopSerpTab {
       if (saved.rfSerpTabKeyword !== keyword || saved.rfSerpTabId == null) return null;
       const tab = await this.browser.tabs.get(saved.rfSerpTabId);
       const url = new URL(tab.url);
+      if (url.origin === 'https://m.search.naver.com' && url.hash === '#rfnav' && url.searchParams.get('query') === keyword) {
+        await this.browser.tabs.sendMessage(tab.id, { type: '__rfNavResume' });
+        return null;
+      }
       if (!['https://search.shopping.naver.com', 'https://msearch.shopping.naver.com'].includes(url.origin) || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
       await this.scrollResults(tab.id);
       const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
