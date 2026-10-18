@@ -84,7 +84,7 @@ class BoostingShopClient
     private function post(array $params, string $path = '/api/order/place'): array
     {
         if (! $this->configured()) {
-            return ['ok' => false, 'order_no' => null, 'error' => '부스팅샵 API 키가 설정되지 않았습니다 — .env BOOSTINGSHOP_API_KEY 를 확인하세요.', 'body' => null, 'status' => 0];
+            return ['outcome' => 'rejected', 'ok' => false, 'order_no' => null, 'error' => '부스팅샵 API 키가 설정되지 않았습니다 — .env BOOSTINGSHOP_API_KEY 를 확인하세요.', 'body' => null, 'status' => 0];
         }
 
         $url = config('rankfree.boosting_shop.base_url').$path;
@@ -93,13 +93,14 @@ class BoostingShopClient
         $body = $res->json();
         if (! is_array($body)) {
             // JSON 이 아니면(점검 페이지·오류 HTML 등) 응답 앞부분을 사유로 남긴다
-            return ['ok' => false, 'order_no' => null, 'error' => 'HTTP '.$res->status().' — 응답을 해석하지 못했습니다: '.mb_substr(trim((string) $res->body()), 0, 300), 'body' => $res->body(), 'status' => $res->status()];
+            return ['outcome' => 'unknown', 'ok' => false, 'order_no' => null, 'error' => 'HTTP '.$res->status().' — 응답을 해석하지 못했습니다: '.mb_substr(trim((string) $res->body()), 0, 300), 'body' => $res->body(), 'status' => $res->status()];
         }
 
         $ok = ($body['result'] ?? '') === 'success';
 
         return [
-            'ok' => $ok,
+            'outcome' => $res->successful() && in_array($body['result'] ?? '', ['success', 'fail'], true) ? ($ok ? 'accepted' : 'rejected') : 'unknown',
+            'ok' => $ok && $res->successful(),
             'order_no' => isset($body['order_no']) ? (int) $body['order_no'] : null,
             'error' => $ok ? null : (string) ($body['error'] ?? '알 수 없는 오류'),
             'body' => $body,

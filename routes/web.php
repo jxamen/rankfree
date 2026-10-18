@@ -116,6 +116,8 @@ Route::post('/lead', [MarketingLeadController::class, 'store'])->middleware('thr
 
 // 마케팅 상품 주문 페이지 (회원 전용 — order_token 기반, 주문자는 로그인 회원으로 자동 연결)
 Route::middleware('auth')->group(function () {
+    Route::get('/wallet', [\App\Http\Controllers\WalletController::class, 'index'])->name('wallet');
+    Route::post('/wallet/topups', [\App\Http\Controllers\WalletController::class, 'store'])->middleware('throttle:10,1')->name('wallet.topups');
     Route::get('/order/{token}', [OrderController::class, 'show'])->name('order.show');
     Route::post('/order/{token}', [OrderController::class, 'store'])->name('order.store');
     Route::post('/order-resolve-place', [OrderController::class, 'resolvePlace'])->middleware('throttle:30,1')->name('order.resolve-place');
@@ -405,9 +407,12 @@ $__admin->group(function () {
     Route::delete('/products/{product}', [MarketingProductController::class, 'destroy'])->name('products.destroy');
 
     // 주문 관리 (목록·상세·상태 변경 · 승인=외부 발주)
+    Route::get('/topups', [\App\Http\Controllers\Admin\TopupController::class, 'index'])->name('topups');
+    Route::post('/topups/{topup}/review', [\App\Http\Controllers\Admin\TopupController::class, 'review'])->name('topups.review');
     Route::get('/orders', [MarketingOrderController::class, 'index'])->name('orders');
     Route::get('/orders/{order}', [MarketingOrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{order}/status', [MarketingOrderController::class, 'updateStatus'])->name('orders.status');
+    Route::post('/orders/{order}/refund-after-vendor-cancellation', [MarketingOrderController::class, 'refundAfterVendorCancellation'])->name('orders.refund-after-vendor-cancellation');
     Route::post('/orders/{order}/approve', [MarketingOrderController::class, 'approve'])->name('orders.approve');
     Route::post('/orders/{order}/shop-keyword', [MarketingOrderController::class, 'createShopKeyword'])->middleware('throttle:30,1')->name('orders.shop-keyword');
     // 목록 '주문넣기' — 필수값 검증 후 매핑된 업체로 발주(2026-07-23)

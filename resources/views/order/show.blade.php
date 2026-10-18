@@ -28,6 +28,7 @@
         </div></div>
     @endif
 
+    <div class="card p-4 mb-4">사용 가능 잔액 <b>{{ number_format((int) auth()->user()->prepaid_balance) }}원</b> · 주문 시 부가세 포함 금액 차감 · <a href="{{ route('wallet') }}">잔액·충전·내역</a></div>
     @if (session('order_done'))
         @php
             $bankConfigured = ! empty($bankInfo['bank']) && ! empty($bankInfo['account']);
@@ -41,7 +42,9 @@
             <p class="text-ink font-semibold mt-2" style="font-size:var(--fs-base);">주문이 접수되었습니다</p>
             <p class="text-muted mt-1" style="font-size:var(--fs-xs);">주문번호 <b class="text-ink">{{ session('order_done') }}</b></p>
 
-            @if ($bankConfigured)
+            @if (session('order_prepaid'))
+                <p class="mt-4">잔액에서 {{ number_format($donePay) }}원을 차감하고 작업을 접수했습니다.</p>
+            @elseif ($bankConfigured)
                 {{-- 무통장 입금 안내 — 아래 계좌로 입금하시면 확인 후 진행됩니다 --}}
                 <div class="mt-4 mx-auto text-left" style="max-width:420px;border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:18px 20px;background:var(--color-surface-soft);">
                     <div class="text-muted font-semibold mb-3 text-center" style="font-size:var(--fs-xs);">아래 계좌로 입금해 주세요</div>

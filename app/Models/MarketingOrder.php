@@ -13,9 +13,11 @@ class MarketingOrder extends Model
     /** 주문 상태 (코드 => 라벨). */
     public const STATUSES = [
         'pending' => '접수',
+        'dispatching' => '발주 중',
         'processing' => '진행중',
         'completed' => '완료',
         'canceled' => '취소',
+        'rejected' => '거절',
     ];
 
     protected $fillable = [
@@ -25,6 +27,7 @@ class MarketingOrder extends Model
     ];
 
     protected $casts = [
+        'external_dispatched_at' => 'datetime',
         'field_values' => 'array',
         'boosting_draft' => 'array',   // 부스팅샵 전송값 저장분(2026-08-27) — 확인 화면에서 다듬은 값·노출 순위
         'quantity' => 'integer', 'days' => 'integer',
@@ -119,7 +122,7 @@ class MarketingOrder extends Model
     public function restoreCoupon(): void
     {
         if ($this->user_coupon_id && $this->userCoupon) {
-            $this->userCoupon->update(['used_at' => null, 'order_id' => null]);
+            $this->userCoupon()->where('order_id', $this->id)->update(['used_at' => null, 'order_id' => null]);
         }
     }
 

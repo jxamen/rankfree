@@ -228,6 +228,7 @@ class MarketingOrderController extends Controller
     /** 세부주문 개별 발주 — 진행일과 무관하게 관리자가 수동 전송(실패·취소 회차 재발주 포함). */
     public function dispatchItem(\App\Models\MarketingOrderItem $item, \App\Domain\Order\OrderDispatchService $dispatcher, \App\Domain\Order\OrderItemPlanner $planner)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($item->order);
         if ($item->status === 'sent') {
             return back()->withErrors(['items' => "{$item->day_no}일차는 이미 전송됐습니다 — 다시 보내려면 먼저 취소하세요."]);
         }
@@ -235,10 +236,10 @@ class MarketingOrderController extends Controller
         if ($order && $planner->mappingUsesShortUrl($order->product) && trim((string) $item->short_url) === '') {
             return back()->withErrors(['items' => "{$item->day_no}일차: Short URL 이 배정되지 않아 발주할 수 없습니다."]);
         }
-        $r = $dispatcher->dispatchItem($item);
+        $r = $dispatcher->dispatchItem($item, explicitReissue: $item->status === 'canceled');
         // 첫 발주로 주문 활성화 — 접수 상태면 진행중 전환(이후 회차는 스케줄러가 자동 발주)
         if ($r['ok'] && $order && $order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
             $r['message'] .= ' · 주문을 진행중으로 전환했습니다(남은 회차는 진행일 아침 자동 발주).';
         }
 
@@ -248,15 +249,18 @@ class MarketingOrderController extends Controller
     /** 세부주문 취소 — 회차 취소 + 연결 전송 기록도 취소 표시(시트 행은 수동 정리). */
     public function cancelItem(\App\Models\MarketingOrderItem $item)
     {
-        if ($item->status === 'canceled') {
-            return back()->withErrors(['items' => '이미 취소된 세부주문입니다.']);
-        }
-        $item->update(['status' => 'canceled']);
-        if ($item->dispatch && $item->dispatch->status !== 'canceled') {
-            $item->dispatch->update(['status' => 'canceled']);
-        }
+        return app(\App\Domain\Order\OrderDispatchState::class)->cancelDispatches($item->order, function (MarketingOrder $order) use ($item) {
+            $item = $item->fresh();
+            if ($item->status === 'canceled') {
+                return back()->withErrors(['items' => '이미 취소된 세부주문입니다.']);
+            }
+            $item->update(['status' => 'canceled']);
+            if ($item->dispatch && $item->dispatch->status !== 'canceled') {
+                $item->dispatch->update(['status' => 'canceled']);
+            }
 
-        return back()->with('status', "{$item->day_no}일차 세부주문을 취소했습니다. 시트에 이미 적힌 행은 직접 정리하세요.");
+            return back()->with('status', "{$item->day_no}일차 세부주문을 취소했습니다. 시트에 이미 적힌 행은 직접 정리하세요.");
+        });
     }
 
     /** 내부(숨김) 필드 값 수동 저장 — 수집이 안 채운 항목을 관리자가 직접 입력. */
@@ -319,6 +323,11 @@ class MarketingOrderController extends Controller
         $gross = (float) $order->unit_price * $qty * max(1, (int) ($days ?: 1));
         $total = max(0, $gross - (float) $order->discount_amount);
 
+        if (\Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$order->id)->exists()
+            && ($qty !== (int) $order->quantity || (int) $days !== (int) $order->days)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['quantity' => '잔액 결제 주문의 수량·기간은 변경할 수 없습니다. 취소·환원 후 새로 주문하세요.']);
+        }
+
         $order->update([
             'quantity' => $qty,
             'days' => $days,
@@ -363,7 +372,7 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['internal' => '연결된 유입키워드 분석이 없습니다 — 먼저 수집요청을 하세요.']);
         }
 
-        // 상품 정보 다시 수집 — 확장이 저장한 최신 상품정보(ShopProductInfo)를 분석에 반영(가격·제목·상점명 갱신, 2026-07-24)
+        // 상품 정보 다시 수집 — 확장이 저장한 최신 상품정보(\App\Models\ShopProductInfo)를 분석에 반영(가격·제목·상점명 갱신, 2026-07-24)
         $r = $analyzer->refreshProductInfo($analysis);
         // 갱신된 분석값으로 주문 내부 필드 채움
         $filled = $autofill->fillFromAnalysis($analysis->fresh(), force: true);
@@ -380,6 +389,7 @@ class MarketingOrderController extends Controller
      */
     public function placeVendorOrder(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         if ($order->status !== 'pending') {
             return back()->withErrors(['place' => "주문 {$order->order_no}: 접수 상태에서만 발주할 수 있습니다(현재 ".(MarketingOrder::STATUSES[$order->status] ?? $order->status).')']);
         }
@@ -410,13 +420,14 @@ class MarketingOrderController extends Controller
         if (! $result['ok']) {
             return back()->withErrors(['place' => "주문 {$order->order_no}: ".$result['message']]);
         }
-        $order->update(['status' => 'processing']);
+        app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
 
         return back()->with('status', "주문 {$order->order_no} 발주 완료 — ".$result['message']);
     }
 
     public function approve(MarketingOrder $order, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         // 필수 내부(숨김) 필드가 비어 있으면 발주 차단 — 수집·수동 입력으로 채운 뒤 승인
         $order->loadMissing('product.fields');
         $fv = (array) $order->field_values;
@@ -438,7 +449,7 @@ class MarketingOrderController extends Controller
             return back()->withErrors(['approve' => $result['message']]);
         }
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return back()->with('status', "주문 {$order->order_no} 승인 — ".$result['message']);
@@ -500,6 +511,7 @@ class MarketingOrderController extends Controller
     /** 실패한 업체 전송 건 재전송. */
     public function retryDispatch(\App\Models\OrderDispatch $dispatch, \App\Domain\Order\OrderDispatchService $dispatcher)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($dispatch->order);
         $d = $dispatcher->retry($dispatch);
 
         return back()->with('status', "'{$d->vendor_name}' 재전송 — ".\App\Models\OrderDispatch::STATUSES[$d->status]);
@@ -511,45 +523,49 @@ class MarketingOrderController extends Controller
      */
     public function cancelDispatch(\App\Models\OrderDispatch $dispatch)
     {
-        if ($dispatch->status === 'canceled') {
-            return back()->withErrors(['dispatch' => '이미 취소된 발주입니다.']);
-        }
-        $dispatch->update(['status' => 'canceled']);
-        // 연결 세부주문은 대기로 되돌려 재발주 가능하게
-        \App\Models\MarketingOrderItem::where('dispatch_id', $dispatch->id)->where('status', '!=', 'canceled')
-            ->update(['status' => 'pending']);
+        return app(\App\Domain\Order\OrderDispatchState::class)->cancelDispatches($dispatch->order, function (MarketingOrder $order) use ($dispatch) {
+            $dispatch = $dispatch->fresh();
+            if ($dispatch->status === 'canceled') {
+                return back()->withErrors(['dispatch' => '이미 취소된 발주입니다.']);
+            }
+            $dispatch->update(['status' => 'canceled']);
+            // 연결 세부주문은 대기로 되돌려 재발주 가능하게
+            \App\Models\MarketingOrderItem::where('dispatch_id', $dispatch->id)->where('status', '!=', 'canceled')
+                ->update(['status' => 'pending']);
 
-        $msg = "'{$dispatch->vendor_name}' 발주를 취소했습니다.";
-        if ($dispatch->channel === 'gsheet' && $dispatch->getOriginal('status') !== 'failed') {
-            $msg .= ' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요.';
-        }
-        $order = $dispatch->order;
-        if ($order && $order->status === 'processing' && ! $order->dispatches()->where('status', '!=', 'canceled')->exists()) {
-            $order->update(['status' => 'pending']);
-            $msg .= ' 활성 발주가 없어 접수 상태로 되돌렸습니다 — 다시 발주할 수 있습니다.';
-        }
+            $msg = "'{$dispatch->vendor_name}' 발주를 취소했습니다.";
+            if ($dispatch->channel === 'gsheet' && $dispatch->getOriginal('status') !== 'failed') {
+                $msg .= ' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요.';
+            }
+            if ($order && $order->status === 'processing' && ! $order->dispatches()->where('status', '!=', 'canceled')->exists()) {
+                $order->update(['status' => 'pending']);
+                $msg .= ' 활성 발주가 없어 접수 상태로 되돌렸습니다 — 다시 발주할 수 있습니다.';
+            }
 
-        return back()->with('status', $msg);
+            return back()->with('status', $msg);
+        });
     }
 
     /** 발주 전체 취소(목록용) — 주문의 활성 발주를 모두 취소하고 접수 상태로 되돌린다(재발주용). */
     public function cancelDispatches(MarketingOrder $order)
     {
-        $active = $order->dispatches()->where('status', '!=', 'canceled')->get();
-        if ($active->isEmpty()) {
-            return back()->withErrors(['dispatch' => "주문 {$order->order_no}: 취소할 발주가 없습니다."]);
-        }
-        foreach ($active as $d) {
-            $d->update(['status' => 'canceled']);
-        }
-        // 전송·실패 세부주문은 대기로 되돌려 재발주 가능하게(취소 회차는 유지)
-        $order->items()->whereIn('status', ['sent', 'failed'])->update(['status' => 'pending']);
-        if ($order->status === 'processing') {
-            $order->update(['status' => 'pending']);
-        }
+        return app(\App\Domain\Order\OrderDispatchState::class)->cancelDispatches($order, function (MarketingOrder $order) {
+            $active = $order->dispatches()->where('status', '!=', 'canceled')->get();
+            if ($active->isEmpty()) {
+                return back()->withErrors(['dispatch' => "주문 {$order->order_no}: 취소할 발주가 없습니다."]);
+            }
+            foreach ($active as $d) {
+                $d->update(['status' => 'canceled']);
+            }
+            // 전송·실패 세부주문은 대기로 되돌려 재발주 가능하게(취소 회차는 유지)
+            $order->items()->whereIn('status', ['sent', 'failed'])->update(['status' => 'pending']);
+            if ($order->status === 'processing') {
+                $order->update(['status' => 'pending']);
+            }
 
-        return back()->with('status', "주문 {$order->order_no} 발주 {$active->count()}건을 취소하고 접수 상태로 되돌렸습니다."
-            .' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요. 이제 다시 발주할 수 있습니다.');
+            return back()->with('status', "주문 {$order->order_no} 발주 {$active->count()}건을 취소하고 접수 상태로 되돌렸습니다."
+                .' 시트에 추가된 행은 자동으로 지워지지 않으니 필요하면 직접 정리하세요. 이제 다시 발주할 수 있습니다.');
+        });
     }
 
     /**
@@ -589,6 +605,7 @@ class MarketingOrderController extends Controller
      */
     public function boostingShopOrder(Request $request, MarketingOrder $order, \App\Domain\Order\BoostingShopClient $client)
     {
+        app(\App\Domain\Order\PrepaidWallet::class)->assertNotRefunded($order);
         if ($order->boostingService() === 'shopping') {
             return $this->boostingShoppingOrder($request, $order, $client);
         }
@@ -643,24 +660,43 @@ class MarketingOrderController extends Controller
         ], fn ($v) => $v !== null && $v !== '');
         $params['search_keywords'] = $keywords->all();
 
-        $result = $client->place($params);
+        $dispatchState = app(\App\Domain\Order\OrderDispatchState::class);
+        if (! ($previousStatus = $dispatchState->beginDispatch($order))) {
+            return back()->withErrors(['boosting' => '현재 주문 상태에서는 발주할 수 없습니다. 관리자 확인이 필요합니다.']);
+        }
+        try {
+            $result = $client->place($params);
+        } catch (\Throwable $e) {
+            $result = ['ok' => false, 'outcome' => 'unknown', 'body' => null, 'error' => '결과 불명 — 관리자 확인 필요', 'order_no' => null];
+        }
         $body = is_array($result['body']) ? $result['body'] : [];
 
         // 발주 기록 — API 키는 클라이언트가 붙이므로 payload 에 남지 않는다
         $days = (int) \Illuminate\Support\Carbon::parse($data['fr_date'])->diffInDays(\Illuminate\Support\Carbon::parse($data['to_date'])) + 1;
-        $dispatch = \App\Models\OrderDispatch::create([
-            'order_id' => $order->id,
-            'vendor_id' => null,
-            'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
-            'channel' => 'api',
-            'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
-            'payload' => $params,
-            'status' => $result['ok'] ? 'sent' : 'failed',
-            'response' => mb_substr($result['ok']
-                ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
-                : '실패 — '.$result['error'], 0, 1900),
-            'sent_at' => now(),
-        ]);
+        $dispatch = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $params, $data, $body, $days, $result, $dispatchState, $previousStatus) {
+            MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $dispatch = \App\Models\OrderDispatch::create([
+                'order_id' => $order->id,
+                'vendor_id' => null,
+                'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
+                'channel' => 'api',
+                'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
+                'payload' => $params,
+                'status' => $result['ok'] ? 'sent' : 'failed',
+                'response' => mb_substr($result['ok']
+                    ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
+                    : (($result['outcome'] ?? 'unknown') === 'unknown' ? '결과 불명 — 관리자 확인 필요: ' : '실패 — ').$result['error'], 0, 1900),
+                'sent_at' => now(),
+            ]);
+            if ($result['ok'] || ($result['outcome'] ?? 'unknown') === 'unknown') {
+                $dispatchState->recordExternalDispatch($order);
+            }
+            if (($result['outcome'] ?? 'unknown') !== 'unknown') {
+                $dispatchState->finishDispatch($order, $result['ok'], $previousStatus);
+            }
+
+            return $dispatch;
+        });
 
         if (! $result['ok']) {
             return back()->withInput()->withErrors(['boosting' => "부스팅샵 접수 실패 — {$result['error']}"]);
@@ -668,7 +704,7 @@ class MarketingOrderController extends Controller
 
         $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return redirect()->route('admin.orders.show', $order)->with('status',
@@ -847,23 +883,42 @@ class MarketingOrderController extends Controller
         $params['landing_urls'] = $urls->all();
         $params['tags'] = $tags->all();
 
-        $result = $client->shopping($params);
+        $dispatchState = app(\App\Domain\Order\OrderDispatchState::class);
+        if (! ($previousStatus = $dispatchState->beginDispatch($order))) {
+            return back()->withErrors(['boosting' => '현재 주문 상태에서는 발주할 수 없습니다. 관리자 확인이 필요합니다.']);
+        }
+        try {
+            $result = $client->shopping($params);
+        } catch (\Throwable $e) {
+            $result = ['ok' => false, 'outcome' => 'unknown', 'body' => null, 'error' => '결과 불명 — 관리자 확인 필요', 'order_no' => null];
+        }
         $body = is_array($result['body']) ? $result['body'] : [];
 
         $days = (int) \Illuminate\Support\Carbon::parse($data['fr_date'])->diffInDays(\Illuminate\Support\Carbon::parse($data['to_date'])) + 1;
-        $dispatch = \App\Models\OrderDispatch::create([
-            'order_id' => $order->id,
-            'vendor_id' => null,
-            'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
-            'channel' => 'api',
-            'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
-            'payload' => $params,
-            'status' => $result['ok'] ? 'sent' : 'failed',
-            'response' => mb_substr($result['ok']
-                ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
-                : '실패 — '.$result['error'], 0, 1900),
-            'sent_at' => now(),
-        ]);
+        $dispatch = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $params, $data, $body, $days, $result, $dispatchState, $previousStatus) {
+            MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $dispatch = \App\Models\OrderDispatch::create([
+                'order_id' => $order->id,
+                'vendor_id' => null,
+                'vendor_name' => \App\Models\OrderDispatch::BOOSTING_VENDOR,
+                'channel' => 'api',
+                'quantity' => (int) ($body['total_quantity'] ?? $data['day_quantity'] * $days),
+                'payload' => $params,
+                'status' => $result['ok'] ? 'sent' : 'failed',
+                'response' => mb_substr($result['ok']
+                    ? '부스팅샵 주문번호 '.$result['order_no'].' · '.json_encode($body, JSON_UNESCAPED_UNICODE)
+                    : (($result['outcome'] ?? 'unknown') === 'unknown' ? '결과 불명 — 관리자 확인 필요: ' : '실패 — ').$result['error'], 0, 1900),
+                'sent_at' => now(),
+            ]);
+            if ($result['ok'] || ($result['outcome'] ?? 'unknown') === 'unknown') {
+                $dispatchState->recordExternalDispatch($order);
+            }
+            if (($result['outcome'] ?? 'unknown') !== 'unknown') {
+                $dispatchState->finishDispatch($order, $result['ok'], $previousStatus);
+            }
+
+            return $dispatch;
+        });
 
         if (! $result['ok']) {
             return back()->withInput()->withErrors(['boosting' => "부스팅샵 접수 실패 — {$result['error']}"]);
@@ -871,7 +926,7 @@ class MarketingOrderController extends Controller
 
         $order->product?->update(['boosting_product_no' => $data['product_no']]);   // 다음 주문부터 자동 채움
         if ($order->status === 'pending') {
-            $order->update(['status' => 'processing']);
+            app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
         }
 
         return redirect()->route('admin.orders.show', $order)->with('status',
@@ -1034,23 +1089,53 @@ class MarketingOrderController extends Controller
     public function updateStatus(Request $request, MarketingOrder $order)
     {
         $data = $request->validate([
-            'status' => ['required', 'in:'.implode(',', array_keys(MarketingOrder::STATUSES))],
+            'status' => ['required', 'in:'.implode(',', array_diff(array_keys(MarketingOrder::STATUSES), ['dispatching']))],
         ]);
-        // 취소 전환 시 쿠폰 복원(취소를 다시 되돌려도 쿠폰은 재사용되지 않음 — 필요하면 재발행)
-        if ($data['status'] === 'canceled' && $order->status !== 'canceled') {
-            $order->restoreCoupon();
-        }
-        $order->update($data);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($order, $data) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === 'dispatching' ||
+                ($locked->status === 'processing' && in_array($data['status'], ['canceled', 'rejected']) && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists())) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '발주 중·처리 중 주문은 자동 취소·환원할 수 없습니다. 관리자 확인이 필요합니다.']);
+            }
+            if (in_array($locked->status, ['canceled', 'rejected']) && $locked->status !== $data['status'] && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$locked->id)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '환원된 주문은 다시 진행할 수 없습니다. 새 주문을 접수하세요.']);
+            }
+            if (in_array($data['status'], ['canceled', 'rejected'])) {
+                app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
+                $locked->restoreCoupon();
+            }
+            $locked->update($data);
+        });
 
         return back()->with('status', "주문 {$order->order_no} 상태를 '".MarketingOrder::STATUSES[$data['status']]."'(으)로 변경했습니다.");
+    }
+
+    /** The single override: administrator has verified cancellation with every vendor. */
+    public function refundAfterVendorCancellation(Request $request, MarketingOrder $order)
+    {
+        $data = $request->validate([
+            'vendor_cancellation_confirmed' => ['required', 'accepted'],
+            'confirmation_note' => ['required', 'string', 'max:160'],
+        ]);
+        app(\App\Domain\Order\PrepaidWallet::class)->refundAfterVendorCancellation($order, $request->user(), $data['confirmation_note']);
+
+        return back()->with('status', '업체 취소 확인을 기록하고 주문 잔액을 환원했습니다.');
     }
 
     public function destroy(MarketingOrder $order)
     {
         $no = $order->order_no;
-        $order->restoreCoupon();   // 삭제 주문에 묶인 쿠폰은 되돌려준다
-        $order->delete();
+        \Illuminate\Support\Facades\DB::transaction(function () use ($order) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === 'dispatching' || ($locked->status === 'processing' && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists())) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['status' => '발주 중·처리 중 주문은 자동 삭제·환원할 수 없습니다. 관리자 확인이 필요합니다.']);
+            }
+            app(\App\Domain\Order\PrepaidWallet::class)->assertAutomaticRefundAllowed($locked);
+            app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
+            $locked->restoreCoupon();
+            $locked->delete();
+        });
 
-        return redirect()->route('admin.orders.show', $order)->with('status', "주문 {$no} 을(를) 삭제했습니다.");
+        return redirect()->route('admin.orders')->with('status', "주문 {$no} 을(를) 삭제했습니다.");
     }
 }

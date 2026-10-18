@@ -80,6 +80,7 @@ class OrderController extends Controller
 
         try {
             $order = $placer->place($request->user(), $product, $input, [
+                'prepaid' => true,
                 'quantity' => $request->input('quantity'),
                 'days' => $request->input('days'),
                 'user_coupon_id' => $request->input('user_coupon_id'),
@@ -90,6 +91,7 @@ class OrderController extends Controller
 
         // GTM 구매 전환 — ?conv=purchase + 금액(value)·주문번호(oid=transaction_id)
         return redirect()->route('order.show', ['token' => $token, 'conv' => 'purchase', 'value' => (int) $order->total_price, 'oid' => $order->order_no])
+            ->with('order_prepaid', true)
             ->with('order_done', $order->order_no)
             ->with('order_amount', $order->total_price);
     }
