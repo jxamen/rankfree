@@ -137,7 +137,8 @@
     <div id="sk-prog" class="card p-4 mb-4" data-url="{{ route('admin.shop-keyword.check', $analysis) }}">
         <div class="flex items-center justify-between mb-2">
             <span id="sk-prog-label" class="text-ink" style="font-size:var(--fs-sm);">
-                @if ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서"로 재개합니다
+                @if ($isPaused && \Illuminate\Support\Facades\Cache::get('shop-exposure:tab-closed:'.$analysis->id))수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작
+                @elseif ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서"로 재개합니다
                 @else순위 확인 중… {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 {{ $th }}위 노출 {{ $analysis->exposed_count }}@endif
             </span>
             <div class="flex items-center gap-2">
@@ -432,6 +433,7 @@
 <script>
 window.__SK = {
     csrf: '{{ csrf_token() }}',
+    analysisId: {{ (int) $analysis->id }},
     core: @json($analysis->core_keyword),
     th: {{ (int) $th }},
     tagLabels: @json($tagLabel),
@@ -603,6 +605,7 @@ window.__SK = {
         if (showResume && resume) resume.classList.remove('hidden');
     }
     function renderProgress(d) {
+        if (d.status === 'paused') halt(d.tab_closed ? '수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작' : '멈춤 — 이어서를 누르면 다시 시작', false);
         const notice = document.getElementById('sk-collection-error');
         if (d.status && !['blocked', 'error'].includes(d.status) && !d.blocked) {
             if (notice) notice.remove();
@@ -862,6 +865,7 @@ window.__SK = {
             if (stopped) return;
             errCount = 0;
             renderProgress(d);
+            if (stopped) return;
             if (d.parallel_reduced) {
                 parallelTabs = 1;
                 const parallelNotice = document.getElementById('sk-parallel-notice');
@@ -881,10 +885,19 @@ window.__SK = {
                         if (policyResponse.status === 423) { await waitBusy(policyResponse); break; }
                         if (!policyResponse.ok) { halt('수집 정책을 읽지 못했습니다', true); return; }
                         const fresh = (await policyResponse.json()).data;
-                        renderProgress(fresh); d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
+                        renderProgress(fresh); if (stopped) return; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
+                    if (res?.tab_closed) {
+                        if (res.paused) {
+                            stopped = true;
+                            if (stopBtn) { stopBtn.textContent = '이어서'; stopBtn.disabled = false; }
+                            if (label) label.textContent = '수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작';
+                            await post(cfg.urls.collectorEvent, {kind:'tab_closed'}).catch(() => {});
+                        }
+                        return;
+                    }
                     if (res?.parallel_reduced) {
                         parallelTabs = 1;
                         const parallelNotice = document.getElementById('sk-parallel-notice');
@@ -904,7 +917,7 @@ window.__SK = {
                     if (stopped) return;
                     if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword;
+                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword);
                         await sleep(1500);
                         continue; // Inspect the same tab until the person clears the gate.
                     }
@@ -1040,6 +1053,7 @@ window.__SK = {
             if (r && r.status === 419) { location.reload(); return; }
             if (r && (r.status === 403 || r.status === 404 || r.status === 409)) throw new Error('재개할 수 없습니다 (HTTP ' + r.status + ') — 새로고침 해주세요');
             if (!r || !r.ok) reportClientError('resume', 'pause(false) HTTP ' + (r ? r.status : 'network'));
+            if (extMode) await extCall('resumeShopSerp', {analysisId: cfg.analysisId});
             RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
             failedItems.clear();
             stopped = false; errCount = 0;

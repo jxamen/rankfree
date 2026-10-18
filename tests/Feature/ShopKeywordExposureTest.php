@@ -349,6 +349,9 @@ class ShopKeywordExposureTest extends TestCase
         $a = $this->store($u);
         $this->assertSame('checking', $a->status);
 
+        // 중단 전에 이미 수집 중인 판정만 늦게 도착할 수 있다.
+        $p = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
+
         // "중단" — 서버에 paused 저장
         $this->actingAs($u)->postJson(route('admin.shop-keyword.pause', $a), ['paused' => true])->assertOk();
         $this->assertSame('paused', $a->refresh()->status);
@@ -360,7 +363,7 @@ class ShopKeywordExposureTest extends TestCase
             ->assertSee('paused: true', false);
 
         // 중단 직후 늦게 도착한 확장 판정 1건이 paused 를 checking 으로 덮어쓰지 않는다
-        $p = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
+        $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $a))->assertJsonPath('data.items', []);
         $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
             'item_id' => $p['items'][0]['id'], 'claim_token' => $p['items'][0]['claim_token'], 'html' => $this->htmlWith,
         ])->assertOk();

@@ -10,6 +10,35 @@ const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
 const shopSerpPool = new ShopSerpPool({tabFactory: slot => slot ? new ShopSerpTab({slot}) : shopSerpTab, policyFactory: slot => slot ? new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot)}) : shopSerpPolicy});
 
+// Session ownership survives service-worker suspension, including idle captcha tabs.
+let rfCloseWork = Promise.resolve();
+chrome.tabs.onRemoved.addListener(id => {
+  rfCloseWork = rfCloseWork.then(async () => {
+    const session = await chrome.storage.session.get(null);
+    if (session['rfSerpIntentional:' + id]) return;
+    for (let slot = 0; slot < 4; slot++) {
+      const suffix = slot ? ':lane:' + slot : '';
+      if (session['rfSerpTabId' + suffix] !== id) continue;
+      const analysisId = session['rfSerpAnalysisId' + suffix];
+      if (!analysisId) continue;
+      await chrome.storage.session.set({['rfSerpTabId' + suffix]:null});
+      const key = 'rfSerpClosed:' + analysisId;
+      const closed = (await chrome.storage.local.get(key))[key] || [];
+      if (!closed.includes(slot)) closed.push(slot);
+      const remaining = Array.from({length:4},(_,i)=>i).some(i => {
+        const tail = i ? ':lane:' + i : '';
+        return i !== slot && session['rfSerpAnalysisId' + tail] === analysisId && session['rfSerpTabId' + tail] != null && !closed.includes(i);
+      });
+      await chrome.storage.local.set({[key]:remaining ? closed : [0,1,2,3], ...(!remaining ? {['rfSerpCloseAck:' + analysisId]:false} : {})});
+      if (!remaining) {
+        const {token, apiBase} = await getStore();
+        const delivered = await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {method:'POST',token,apiBase,body:{kind:'tab_closed'}});
+        await chrome.storage.local.set({['rfSerpCloseAck:' + analysisId]:!!delivered.ok});
+      }
+    }
+  }).catch(console.error);
+});
+
 const DEFAULT_API_BASE = 'https://rankfree.kr';
 
 
@@ -55,16 +84,17 @@ async function apiFetch(path, { method = 'GET', body = null, token = null, apiBa
 // (user may be dragging a tab)" 로 프로미스를 '거부'한다. 콜백 없이 부르면 try/catch 로는
 // 못 잡아 'Uncaught (in promise)' 로 샌다. 거부를 삼키고, 드래그가 끝나면 잠시 뒤 재시도해
 // 수집 탭이 남지 않게 한다.
-function removeTab(id, tries) {
+async function removeTab(id, tries) {
   if (id == null) return;
   tries = tries == null ? 4 : tries;
+  try { await chrome.storage.session.set({['rfSerpIntentional:' + id]:true}); } catch (_) { return; }
   let p;
   try { p = chrome.tabs.remove(id); } catch (e) { return; }
   if (p && typeof p.catch === 'function') {
     p.catch((e) => {
       if (tries > 0 && /dragging|cannot be edited/i.test(String((e && e.message) || e))) {
         setTimeout(() => removeTab(id, tries - 1), 600);
-      }
+      } else chrome.storage.session.set({['rfSerpIntentional:' + id]:false}).catch(() => {});
     });
   }
 }
@@ -940,6 +970,7 @@ async function watchShopKeywordQueue() {
   if (skwCheckActive && Date.now() - skwCheckHeartbeat > 120000 && !productInfoWaiters.size && !skwQueueActive) {
     // Reload terminates the old lane and its callbacks before a new worker claims a lease.
     const current = globalThis.rfSerpCurrent || {};
+    if (current.analysisId && (await chrome.storage.local.get('rfSerpClosed:' + current.analysisId))['rfSerpClosed:' + current.analysisId]?.length === 4) return;
     await reportShopClientEvent(current.analysisId, current.keyword, 'watchdog', 'worker promise stalled >120s', 'watchdog_restart');
     chrome.runtime.reload();
     return;
@@ -990,13 +1021,14 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, alternativeKeywords: items.filter(x => x.keyword !== it.keyword).map(x => x.keyword), target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
           if (res?.parallel_reduced) parallelTabs = 1;
           skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
           await sleep(1500);
           if (Date.now() - lastScreenSerpAt < 60000) return;
         } while (true);
+        if (res?.tab_closed) { if (res.paused) batchStopped = true; return; }
         if (!res || res.ok === false) {
           await reportShopClientEvent(d.analysis_id, it.keyword, 'read', res?.message || 'empty result');
           failedItems.add(it.item_id);
@@ -1070,11 +1102,43 @@ Object.assign(handlers, {
    * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
-  async resumeShopSerp({ collectorIp }) {
+  async resumeShopSerp({ collectorIp, analysisId }) {
+    await rfCloseWork;
+    if (analysisId) await chrome.storage.local.set({['rfSerpClosed:' + analysisId]:[]});
     return shopSerpPolicy.resume(collectorIp || 'browser');
   },
+  async __rfCollectionContext(_, sender) {
+    const data = await chrome.storage.session.get(null);
+    for (let slot = 0; slot < 4; slot++) {
+      const tail = slot ? ':lane:' + slot : '';
+      if (sender?.tab?.id != null && sender.tab.id === data['rfSerpTabId' + tail]) return {owned:true, recovering:!!data['rfSerpRecovery' + tail]};
+    }
+    return {owned:false};
+  },
   async shopSerpStatus() { return globalThis.rfSerpCurrent || {}; },
-  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
+  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, alternativeKeywords = [], parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
+    await rfCloseWork;
+    if (analysisId) {
+      const key = 'rfSerpClosed:' + analysisId;
+      const closed = (await chrome.storage.local.get(key))[key] || [];
+      if (closed.length === 4) {
+        const ackKey = 'rfSerpCloseAck:' + analysisId;
+        if (!(await chrome.storage.local.get(ackKey))[ackKey]) {
+          const {token, apiBase} = await getStore();
+          const delivered = await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {method:'POST',token,apiBase,body:{kind:'tab_closed'}});
+          await chrome.storage.local.set({[ackKey]:!!delivered.ok});
+          return {ok:false,paused:true,tab_closed:true};
+        }
+        const {token, apiBase} = await getStore();
+        const state = await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-state', {token,apiBase});
+        if (!state.ok || state.json?.data?.status !== 'checking') {
+          // Retry delivery if the close happened while the server was unavailable.
+          await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {method:'POST',token,apiBase,body:{kind:'tab_closed'}});
+          return {ok:false,paused:true,tab_closed:true};
+        }
+        await chrome.storage.local.set({[key]:[]});
+      }
+    }
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
@@ -1087,6 +1151,7 @@ Object.assign(handlers, {
     }
     const result = await shopSerpPool.run(analysisId, kw, parallel_tabs, async ({tab, policy}) => {
     tab.openIntervalMs = tab_open_interval_ms;
+    tab.alternativeKeywords = alternativeKeywords;
     return policy.run(kw, async effectiveGap => {
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
       if (collection_mode !== 'fetch') return tab.read(kw, target);
@@ -1104,6 +1169,10 @@ Object.assign(handlers, {
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
     }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => tab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
     }, tab_open_interval_ms);
+    await rfCloseWork;
+    if (analysisId && (await chrome.storage.local.get('rfSerpClosed:' + analysisId))['rfSerpClosed:' + analysisId]?.length === 4) {
+      return {ok:false,paused:true,tab_closed:true};
+    }
     if (result.ok) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }

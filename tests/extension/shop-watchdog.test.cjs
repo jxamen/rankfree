@@ -43,6 +43,12 @@ test('boosting copy waits beyond 15 minutes, finishes and processes next order; 
  assert.ok(clock>900000);assert.deepEqual(links,[1,2]);assert.ok(notes.some(x=>x.includes('자동 복구')));
  await assert.rejects(vm.runInContext('process({no:3})',c),/분석 상태: error/);
 });
+test('watchdog never reloads a worker for an analysis whose tabs were all closed',async()=>{
+ let reloads=0,events=0;
+ const c=context({skwCheckActive:true,skwCheckHeartbeat:800000,rfSerpCurrent:{analysisId:42},apiFetch:async()=>{events++;return {ok:true};},chrome:{storage:{local:{get:async()=>({'rfSerpClosed:42':[0,1,2,3]})}},runtime:{reload:()=>reloads++}}});
+ await vm.runInContext(code+';watchShopKeywordQueue()',c);
+ assert.equal(reloads,0);assert.equal(events,0);
+});
 
 test('watchdog defers runtime reload while product tab or queue save is active',async()=>{
  for(const extra of [{productInfoWaiters:new Map([['111',()=>{}]])},{skwQueueActive:true}]) {

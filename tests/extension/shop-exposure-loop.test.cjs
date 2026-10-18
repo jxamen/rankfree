@@ -83,7 +83,7 @@ test('one lower toggle pauses and resumes; upper and captcha buttons removed', a
  let click, runs=0;const actions=[];
  const button={addEventListener:(type,fn)=>click=fn};
  const context=vm.createContext({stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
- post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
+ extCall:async()=>({ok:true}),post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
  vm.runInContext(code,context);
  await click(); assert.equal(context.stopped,true); assert.equal(button.textContent,'이어서');
  await click(); assert.equal(context.stopped,false); assert.equal(button.textContent,'중단');assert.equal(runs,1); assert.deepEqual(actions,[true,false]);

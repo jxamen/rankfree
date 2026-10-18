@@ -1,6 +1,7 @@
 // Collection-only navigation: inspect the rendered shopping block before using the menu.
 (async () => {
-  if (location.hash !== '#rfnav') return;
+  const context = await chrome.runtime.sendMessage({type:'__rfCollectionContext'});
+  if (location.hash !== '#rfnav' && !context?.owned) return;
   const blocked = () => /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(document.body?.innerText || '');
   const visible = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
   const send = result => chrome.runtime.sendMessage({type: '__rfSerpRead', result});
@@ -39,6 +40,12 @@
     }
     return document.readyState === 'loading' ? undefined : [];
   }
+  chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+    if (msg?.type !== '__rfSerpPeek') return;
+    const products = blocked() ? null : shoppingProducts();
+    const challengeVisible = [...document.querySelectorAll('input')].some(el => visible(el) && /captcha|입력|보안|정답/i.test([el.name,el.id,el.placeholder,el.getAttribute('aria-label')].join(' ')));
+    reply({ok:Array.isArray(products) && (products.length > 0 || /검색 결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '')),products:products || [],result_source:'integrated',captcha:blocked(),challengeVisible});
+  });
   let running = false, finished = false;
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (msg?.type !== '__rfNavResume') return;
@@ -60,7 +67,7 @@
         }
         if (menu && products === null) {
           const url = new URL(menu.href, location.href);
-          url.hash = 'rfserp';
+          url.hash = '';
           menu.href = url.href;
           menu.removeAttribute('target');
           finished = true;
@@ -72,5 +79,5 @@
       await send({ok:false,status:0,message:'못 읽음 — 통합검색 상품 목록 또는 쇼핑 메뉴'});
     } finally { running = false; }
   }
-  await navigate();
+  if (!context?.recovering) await navigate();
 })();

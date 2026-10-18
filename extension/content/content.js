@@ -8,7 +8,7 @@
  *  3) rankfree 서버의 키워드 분석(월간 검색량 등)을 합쳐서 표시
  *  4) 탭 구조로 기능 전환 (v0.1은 '시장 분석'만 구현, 나머지는 준비 중)
  */
-(function () {
+(async function () {
   'use strict';
 
   // ------------------------------------------------------------------
@@ -3820,7 +3820,8 @@
     });
   } catch (e) { /* noop */ }
 
-  if (location.hash === '#rfserp') {
+  const collectionContext = await chrome.runtime.sendMessage({type:'__rfCollectionContext'}).catch(() => null);
+  if (location.hash === '#rfserp' || (collectionContext?.owned && !collectionContext.recovering && /shopping\.naver\.com/.test(location.hostname))) {
     runSerpRead();
   } else if (location.hash.indexOf('#rfcollect') === 0) {
     runCollect();
