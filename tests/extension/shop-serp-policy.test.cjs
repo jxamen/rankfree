@@ -27,10 +27,23 @@ for (const blocked of [{ok:false,status:403},{ok:false,status:429},{ok:false,sta
   f.advance(1800000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,2);
  });
 }
-test('20 consecutive successes reduce interval gradually, never below floor', async()=>{
- const f=fixture({gap:1700});
- for(let i=0;i<40;i++) await f.policy.run(String(i),async()=>({ok:true,html:''}));
- assert.equal(f.data.rfSerpPolicy.gap,1600);
+test('165 successes retain interval without periodic rests', async()=>{
+ for(const gap of [1600,3200]) {
+  const f=fixture({gap}); const times=[];
+  for(let i=0;i<165;i++) await f.policy.run(String(i),async()=>{times.push(f.now());return {ok:true,html:''};});
+  assert.equal(f.data.rfSerpPolicy.gap,gap);
+  assert.ok(times.slice(1).every((t,i)=>t-times[i]===gap));
+ }
+});
+test('first request after cooldown blocked again renews wait and records resume',async()=>{
+ const f=fixture(); let calls=0;
+ const block=async()=>{calls++;return {ok:false,status:403};};
+ await f.policy.run('a',block); assert.equal(f.data.rfSerpPolicy.blockedOnResume,false);
+ f.advance(1800000); await f.policy.run('b',block);
+ assert.equal(f.data.rfSerpPolicy.blockedOnResume,true);
+ assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,6400);
+ assert.equal(f.data.rfSerpPolicy.until,f.now()+1800000);
+ assert.equal((await f.policy.run('c',block)).cooldown,true); assert.equal(calls,2);
 });
 test('storage failure stops before network',async()=>{
  const p=new ShopSerpPolicy({storage:{get:async()=>{throw Error('disk');}},cache:{get:async()=>undefined}});

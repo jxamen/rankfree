@@ -15,6 +15,27 @@ class ShopSerpPacingTest extends TestCase
         Http::assertSentCount(1);
         $this->assertSame(3200, Cache::get('shop-serp:server-policy')['gap']);
     }
+    public function test_resume_block_renews_wait_and_is_logged(): void
+    {
+        Cache::flush();
+        Cache::put('shop-serp:server-policy', ['gap' => 3200, 'until' => microtime(true) - 1]);
+        Http::fake(['*' => Http::response('', 403)]);
+        \Illuminate\Support\Facades\Log::spy();
+        $s = new NaverShopExposureService();
+        $this->assertSame('http_403', $s->exposure('resume', [])['error']);
+        $this->assertSame(6400, Cache::get('shop-serp:server-policy')['gap']);
+        $this->assertGreaterThan(microtime(true) + 1790, Cache::get('shop-serp:server-policy')['until']);
+        $this->assertSame('collector_cooldown', $s->exposure('next', [])['error']);
+        Http::assertSentCount(1);
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_serp_request', \Mockery::on(fn ($data) => $data['blocked_on_resume'] === true))->once();
+    }
+    public function test_success_does_not_change_interval(): void
+    {
+        Cache::flush(); Http::fake(['*' => Http::response('<html></html>')]);
+        Cache::put('shop-serp:server-policy', ['gap' => 3200, 'successes' => 19]);
+        (new NaverShopExposureService())->exposure('success', []);
+        $this->assertSame(3200, Cache::get('shop-serp:server-policy')['gap']);
+    }
     public function test_captcha_is_never_cached_as_a_valid_result(): void
     {
         Cache::flush(); Http::fake(['*' => Http::response('<html>보안문자 입력</html>')]);

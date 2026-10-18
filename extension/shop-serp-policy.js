@@ -51,18 +51,18 @@ class ShopSerpPolicy {
       if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, retryAt: s.until, message: '최근 차단으로 30분 휴식 중입니다.' };
       const wait = Math.max(0, (s.last || 0) + s.gap - this.now());
       if (wait) await this.wait(wait);
+      const resumedAfterBlock = !!s.until;
       const previous = s.last;
       s.last = this.now();
       await this.storage.set({ rfSerpPolicy: s });
       const res = await fetcher();
       if (res.captcha || res.status === 403 || res.status === 429) {
-        s.gap = Math.min(15000, s.gap * 2); s.until = this.now() + 1800000; s.successes = 0;
+        s.gap = Math.min(15000, s.gap * 2); s.until = this.now() + 1800000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
         await this.cache.put(key, res);
-        s.successes = (s.successes || 0) + 1;
-        if (s.successes >= 20) { s.gap = Math.max(1600, s.gap - 100); s.successes = 0; }
-      } else { s.successes = 0; }
+      }
+      if (!(res.captcha || res.status === 403 || res.status === 429)) s.until = 0;
       const hour = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', dateStyle: 'short', timeStyle: 'short', hour12: false }).format(s.last).slice(0, 13);
       s.hourly = s.hourly || {};
       const bucket = s.hourly[hour] || { requests: 0, http403: 0, http429: 0, captchas: 0, slowEntries: 0 };

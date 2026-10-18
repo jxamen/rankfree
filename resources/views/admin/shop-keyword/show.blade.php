@@ -531,7 +531,6 @@ window.__SK = {
     let errCount = 0;
     let extMode = false;
     let lastD = null;          // 마지막 진행상황(중단 라벨용)
-    let sessionChecked = 0;    // 이 세션에서 확인한 수 — 많아지면 간격을 늘려 보안문자 유발 완화
     // 전역 수집 잠금의 주인 ID — 페이지 로드마다 새로. 다른 곳이 수집 중이면 서버가 423 → 15초마다 줄 서서 재시도
     const RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
     async function waitBusy(res) {
@@ -737,11 +736,6 @@ window.__SK = {
         });
     }
 
-    // 느린 모드 — 보안문자·차단 후 30분(브라우저별, 새로고침·다른 분석에도 유지). 저장소가 막혀도 확인은 계속된다
-    const SLOW_KEY = 'rf-sk-slow-until';
-    function setSlowMode() { try { localStorage.setItem(SLOW_KEY, String(Date.now() + 30 * 60 * 1000)); } catch (e) {} }
-    function isSlowMode() { try { return Date.now() < Number(localStorage.getItem(SLOW_KEY) || 0); } catch (e) { return false; } }
-
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     async function runExtLoop() {
         while (!stopped) {
@@ -770,7 +764,6 @@ window.__SK = {
                 if (!res.ok) {
                     // 보안문자 페이지든 403/429 차단이든 **보안문자를 풀어야** 이어진다(실측) — 같은 안내로 통일
                     if (res.captcha || res.status === 403 || res.status === 429) {
-                        setSlowMode();   // 한 번 막히면 30분간 종전(느린) 간격으로 되돌린다
                         halt(res.captcha
                             ? '네이버 보안문자가 떴습니다 — "보안문자 풀기"로 새 탭에서 풀고, "이어서 확인"을 눌러주세요'
                             : '네이버가 접속을 차단했습니다(' + (res.status || '차단') + ') — "보안문자 풀기"에서 보안문자를 푼 뒤 "이어서 확인"을 눌러주세요', true);
@@ -792,17 +785,7 @@ window.__SK = {
                         if (p.rank !== undefined) applyItemResult(it, p);   // 배지·노출/광고·패턴 실시간 갱신
                     }
                 } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }
-                // 차단 완화 페이싱 — 간격 ≈0.5~0.9s, 80건마다 8~12초 휴식으로 규칙적 연속 요청 패턴을 끊는다.
-                // (2026-09-29 대표님 지시로 가속: 종전 0.9~1.6s · 250건 이후 1.8~3s · 60건마다 12~20s → 전체 약 절반 시간)
-                // 보안문자·차단을 한 번 만나면 30분간 느린 모드(종전 0.9~1.6s · 60건마다 12~20s)로 자동 복귀.
-                // (병렬은 같은 IP 라 분당 총 요청수가 그대로여서 차단 완화 효과가 없다 — 총량 감속 + 휴식이 유효)
-                sessionChecked++;
-                const slow = isSlowMode();
-                if (!stopped && sessionChecked % (slow ? 60 : 80) === 0) {
-                    if (label) label.textContent = '차단 방지 휴식 중… 잠시 후 자동 재개' + (slow ? ' · 느린 모드(최근 차단)' : '') + (lastD ? ` (${lastD.checked}/${lastD.total})` : '');
-                    await sleep(slow ? 12000 + Math.random() * 8000 : 8000 + Math.random() * 4000);
-                }
-                await sleep(slow ? 900 + Math.random() * 700 : 500 + Math.random() * 400);
+                // 요청 간격과 실제 차단 후 대기는 확장의 공용 정책에서만 적용한다.
             }
         }
     }
@@ -839,7 +822,7 @@ window.__SK = {
             halt(`서버 확인이 잠시 제한됨(${d.checked}/${d.total}) — 랭크프리 확장을 설치하면 브라우저에서 끝까지 확인됩니다. "이어서 확인"으로 재시도`, true);
             return;
         }
-        setTimeout(poll, 500);
+        setTimeout(poll, 0);
     }
 
     // ── 보충(확장 전용, 순위 루프와 병행) — 제품명·SEO태그 + 함께많이찾는·경쟁브랜드·속성 ──
