@@ -936,7 +936,7 @@ async function drainShopKeywordCheckQueue() {
       if (!items.length) return;                           // 확인할 조합 없음
       for (const it of items) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
-        const res = await handlers.fetchShopSerp({ keyword: it.keyword });
+        const res = await handlers.fetchShopSerp({ keyword: it.keyword, analysisId: d.analysis_id });
         if (!res || res.ok === false) {
           // 보안문자·차단이면 30분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
           if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
@@ -1000,12 +1000,12 @@ Object.assign(handlers, {
    * 서버와 브라우저 모두 차단될 수 있으므로 공통 속도 정책을 적용한다.
    * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
    */
-  async fetchShopSerp({ keyword }, sender) {
+  async fetchShopSerp({ keyword, analysisId }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
-    return shopSerpPolicy.run(kw, async () => {
+    const result = await shopSerpPolicy.run(kw, async () => {
     let res;
     try {
       res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
@@ -1030,6 +1030,20 @@ Object.assign(handlers, {
     }
     return { ok: true, status: res.status, html: picked };
     });
+    if (analysisId && !result.cached && !result.cooldown) {
+      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
+      if (kind) {
+        try {
+          const { token, apiBase } = await getStore();
+          const policy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
+          await apiFetch('/api/ext/shop-keyword/' + Number(analysisId) + '/collector-event', {
+            method: 'POST', token, apiBase,
+            body: { kind, collector: sender && sender.tab ? 'screen' : 'extension', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume },
+          });
+        } catch (e) { /* reporting must not interrupt collection */ }
+      }
+    }
+    return result;
   },
 
   /**

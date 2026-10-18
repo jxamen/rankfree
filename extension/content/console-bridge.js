@@ -17,7 +17,7 @@
 
   // 페이지 요청 타입 → 확장 핸들러
   const ROUTES = {
-    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || '') }],
+    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), analysisId: Number(m.analysisId) || 0 }],
     fetchKeywordSignals: (m) => ['fetchKeywordSignals', { keyword: String(m.keyword || '') }],
     collectProductPage: (m) => ['collectProductPage', { url: String(m.url || '') }],
   };

@@ -26,6 +26,19 @@ class ExtShopKeywordController extends Controller
 {
     public function __construct(private ShopKeywordExposureAnalyzer $analyzer) {}
 
+    public function collectorEvent(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        $this->authorizeScope($request);
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+        $data = $request->validate([
+            'kind' => 'required|in:403,429,보안문자,success',
+            'collector' => 'required|in:extension,screen',
+            'blocked_on_resume' => 'sometimes|boolean',
+        ]);
+        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), $data['collector'], $data['kind'], $data['blocked_on_resume'] ?? false);
+        return response()->json(['ok' => true]);
+    }
+
     /** shop_keyword 권한 없으면 403 — 이 자동 수집은 허용된 회원 전용. */
     private function authorizeScope(Request $request): void
     {

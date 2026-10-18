@@ -206,6 +206,13 @@ class ShopKeywordExposureAnalyzer
                     $stopped = true;   // 일시 오류 — rank 오기록 대신 중단(재시도 가능)
                     break;
                 }
+                $alertKind = match ($res['error'] ?? '') {
+                    'http_403' => '403', 'http_429' => '429', 'captcha' => '보안문자',
+                    default => empty($res['error']) && empty($res['blocked']) ? 'success' : null,
+                };
+                if ($alertKind) {
+                    app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false));
+                }
                 // fetch 실패/차단 → rank 저장 안 함(미확인 유지, 재시도 가능)
                 if (! empty($res['error']) || ! empty($res['blocked'])) {
                     $stopped = true;
