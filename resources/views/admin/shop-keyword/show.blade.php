@@ -12,17 +12,17 @@
     <input id="sk-interval" class="input" style="width:90px" type="number" min="1" max="30" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::baseInterval() / 1000, 1, '.', '') }}">
     <label for="sk-parallel-tabs">동시 검색 탭 수</label>
     <input id="sk-parallel-tabs" class="input" style="width:75px" type="number" min="1" max="4" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'] }}">
+    <span id="sk-parallel-notice" role="status"></span>
     <label for="sk-tab-open-seconds">탭 여는 간격(초)</label>
     <input id="sk-tab-open-seconds" class="input" style="width:80px" type="number" min="0" max="60" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::parallelSettings()['tab_open_interval_ms'] / 1000, 1, '.', '') }}">
     <label for="sk-keywords-per-day">하루 키워드 수</label>
     <input id="sk-keywords-per-day" class="input" style="width:80px" type="number" min="10" max="500" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::keywordsPerDay() }}">
-    <span id="sk-parallel-notice" role="status"></span>
     <select id="sk-collection-mode" class="input" style="width:auto">
       <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'tab')>브라우저 탭으로 열기</option>
       <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
     </select>
-    <button id="sk-interval-save" type="button" class="btn btn-secondary btn-sm">저장</button>
-    <button id="sk-interval-reset" type="button" class="btn btn-ghost btn-sm">간격 초기화</button>
+    <button id="sk-interval-save" type="button" disabled class="btn btn-secondary btn-sm">저장</button>
+    <button id="sk-interval-reset" type="button" disabled class="btn btn-ghost btn-sm">간격 초기화</button>
     <span id="sk-interval-notice" role="status"></span>
 </div>
 @endif
@@ -415,6 +415,19 @@
     @unless ($anyRef)<div class="text-muted-soft" style="font-size:var(--fs-xs);">참고 키워드가 없습니다.</div>@endunless
 </div>
 
+<dialog id="sk-captcha-modal" aria-labelledby="sk-captcha-title" style="position:fixed;inset:0;margin:auto;box-sizing:border-box;max-height:calc(100% - 32px);overflow:auto;width:min(520px,calc(100% - 32px));border:0;border-radius:16px;padding:32px;box-shadow:0 24px 80px #0005;">
+    <h2 id="sk-captcha-title" style="font-size:24px;font-weight:700;margin:0 0 16px;">네이버 보안문자가 떴어요</h2>
+    <p>수집 탭에서 보안문자를 풀어 주세요. 풀면 자동으로 이어집니다.</p>
+    <p style="margin:16px 0;overflow-wrap:anywhere;">지금 키워드: <strong id="sk-captcha-keyword"></strong></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary" id="sk-captcha-open">수집 탭 열기</button>
+        <button type="button" class="btn" id="sk-captcha-dismiss">닫기</button>
+        <button type="button" class="btn" id="sk-captcha-stop" hidden>탭 닫고 멈추기</button>
+    </div>
+    <p id="sk-captcha-feedback" role="status"></p>
+</dialog>
+<style>#sk-captcha-modal::backdrop{background:rgba(0,0,0,.5)}</style>
+
 <style>
 .sk-del{border:0;background:none;cursor:pointer;color:var(--color-muted-soft);line-height:1;padding:0 1px;}.sk-del:hover{color:var(--color-error);}
 .sk-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--color-hairline);background:none;border-radius:var(--radius-pill);padding:3px 10px;font-size:var(--fs-xs);color:var(--color-muted);cursor:pointer;}
@@ -579,6 +592,50 @@ window.__SK = {
         });
     }
 
+    // Captcha modal controller: one notification per uninterrupted wait episode.
+    const captchaModal = document.getElementById('sk-captcha-modal');
+    const captchaWaits = new Map();
+    let captchaDismissed = false;
+    const captchaOpen = document.getElementById('sk-captcha-open');
+    const captchaStop = document.getElementById('sk-captcha-stop');
+    const captchaFeedback = document.getElementById('sk-captcha-feedback');
+    function captchaState(key, keyword, waiting) {
+        if (waiting) captchaWaits.set(key, keyword || cfg.core);
+        else captchaWaits.delete(key);
+        if (!captchaWaits.size) {
+            captchaModal.close(); captchaDismissed = false;
+            captchaStop.hidden = true; captchaFeedback.textContent = '';
+            return;
+        }
+        document.getElementById('sk-captcha-keyword').textContent = [...captchaWaits.values()].join(', ');
+        if (!captchaDismissed && !captchaModal.open) captchaModal.showModal();
+    }
+    document.getElementById('sk-captcha-dismiss').onclick = () => { captchaDismissed = true; captchaModal.close(); };
+    captchaModal.addEventListener('cancel', () => { captchaDismissed = true; });
+    captchaOpen.onclick = async () => {
+        captchaOpen.disabled = true;
+        try {
+            const r = await extCall('controlShopSerpTab', {analysisId:cfg.analysisId, action:'focus'}, 5000);
+            if (!r?.ok && captchaWaits.size) {
+                captchaStop.hidden = false;
+                captchaFeedback.textContent = '수집 탭을 열지 못했어요. 탭을 닫고 분석을 멈출 수 있어요.';
+            }
+        } finally { captchaOpen.disabled = false; }
+    };
+    captchaStop.onclick = async () => {
+        captchaStop.disabled = true;
+        halt('수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작', false);
+        try {
+            const r = await post(cfg.urls.pause, {paused:true});
+            if (!r.ok) throw new Error('중단 저장에 실패했어요. 다시 시도해 주세요.');
+            const closed = await extCall('controlShopSerpTab', {analysisId:cfg.analysisId, action:'close'}, 10000);
+            if (!closed?.ok) throw new Error('분석은 멈췄어요. 수집 탭은 직접 닫아 주세요.');
+            captchaWaits.clear(); captchaState('server', '', false);
+        } catch (e) { captchaFeedback.textContent = e.message; if (!captchaModal.open) captchaModal.showModal(); }
+        finally { captchaStop.disabled = false; }
+    };
+    // End captcha modal controller.
+
     // 확장 브릿지 호출(window.postMessage 왕복) — 타임아웃 시 null
     function extCall(type, payload, timeoutMs) {
         const requestId = crypto.randomUUID();
@@ -600,6 +657,7 @@ window.__SK = {
 
     function halt(msg, showResume) {
         stopped = true;
+        captchaModal.close();
         if (label) label.textContent = msg;
         if (stopBtn) { stopBtn.classList.remove('hidden'); stopBtn.textContent = '이어서'; }
         if (showResume && resume) resume.classList.remove('hidden');
@@ -613,6 +671,9 @@ window.__SK = {
             if (captcha) captcha.classList.add('hidden');
             if (!stopped && label) label.textContent = '진행 중 — 순위 확인 중…';
         }
+        if (stopped) { captchaWaits.clear(); captchaState('server', '', false); }
+        else if (d.blocked || d.status === 'blocked') captchaState('server', d.current_keyword || d.keyword || d.items?.[0]?.keyword, true);
+        else captchaState('server', '', false);
         if (d.total === undefined) return;
         lastD = d;
         if (Array.isArray(d.exposed_items)) { syncExposed(d.exposed_items); d.exposed = d.exposed_items.length; }
@@ -792,25 +853,66 @@ window.__SK = {
     let currentIntervalMs = {{ \App\Services\ShopExposureBlockAlert::baseInterval() }};
     let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
     const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 30초)';
+    // Browser collection preferences: server values seed this browser only once.
+    let browserSettings;
+    let settingsInExtension = false;
+    async function loadBrowserSettings() {
+        const defaults = {
+            interval_ms: currentIntervalMs,
+            parallel_tabs: {{ \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'] }},
+            tab_open_interval_ms: {{ \App\Services\ShopExposureBlockAlert::parallelSettings()['tab_open_interval_ms'] }},
+            collection_mode: {{ \Illuminate\Support\Js::from(\App\Services\ShopExposureBlockAlert::collectionMode()) }}
+        };
+        const r = extMode ? await extCall('getShopSettings', {}, 5000) : null;
+        if (extMode && !r?.ok) throw new Error('확장을 업데이트하고 새로고침해 주세요.');
+        settingsInExtension = !!r?.ok;
+        browserSettings = r?.settings || JSON.parse(localStorage.getItem('rfShopSettings') || 'null') || defaults;
+        await persistBrowserSettings(browserSettings);
+        showBrowserSettings();
+        for (const id of ['sk-interval-save','sk-interval-reset']) { const button = document.getElementById(id); if (button) button.disabled = false; }
+    }
+    async function persistBrowserSettings(value, manual = false) {
+        if (settingsInExtension) {
+            const r = await extCall('setShopSettings', {settings:value, analysisId:cfg.analysisId, manual}, 5000);
+            if (!r?.ok) throw new Error('이 브라우저에 설정을 저장하지 못했습니다.');
+        } else {
+            if (manual) { const r = await post(cfg.urls.collectorEvent, {kind:'parallel_reset'}); if (!r.ok) throw new Error('설정 적용에 실패했습니다.'); }
+            localStorage.setItem('rfShopSettings', JSON.stringify(value));
+        }
+        browserSettings = value;
+        currentIntervalMs = value.interval_ms;
+        parallelTabs = value.parallel_tabs;
+    }
+    function showBrowserSettings() {
+        for (const [id,value] of Object.entries({'sk-interval':browserSettings.interval_ms/1000,'sk-parallel-tabs':browserSettings.parallel_tabs,'sk-tab-open-seconds':browserSettings.tab_open_interval_ms/1000,'sk-collection-mode':browserSettings.collection_mode})) {
+            const input = document.getElementById(id); if (input) input.value = value;
+        }
+    }
+    function applyBrowserSettings(d) {
+        if (!browserSettings) return d;
+        Object.assign(d, browserSettings, {parallel_tabs:d.parallel_reduced ? 1 : browserSettings.parallel_tabs, interval_revision:'browser:' + browserSettings.interval_ms});
+        parallelTabs = d.parallel_tabs;
+        const notice = document.getElementById('sk-parallel-notice');
+        if (notice) notice.textContent = d.parallel_reduced ? '이 분석은 차단으로 1개로 진행 중' : '';
+        return d;
+    }
     @if(auth()->user()->isAdmin())
     const intervalInput = document.getElementById('sk-interval');
     const notice = document.getElementById('sk-interval-notice');
-    async function saveGap(button, url, body) {
-        button.disabled = true;
+    document.getElementById('sk-interval-save').onclick = async function () {
+        if (![intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) return;
+        this.disabled = true;
         try {
-            const r = await post(url, body);
-            if (!r.ok) throw new Error('간격은 1.0~30.0초, 소수 1자리까지 입력하세요.');
-            currentIntervalMs = (await r.json()).interval_ms;
-            notice.textContent = '설정 저장됨';
-            if (body?.keywords_per_day) location.reload();
+            await persistBrowserSettings({interval_ms:Number(intervalInput.value)*1000,parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Number(document.getElementById('sk-tab-open-seconds').value)*1000,collection_mode:document.getElementById('sk-collection-mode').value}, true);
+            const r = await post('{{ route('admin.shop-keyword.interval', $analysis) }}', {seconds:intervalInput.value, keywords_per_day:document.getElementById('sk-keywords-per-day').value});
+            if (!r.ok) throw new Error('주문 목표 저장에 실패했습니다.');
+            notice.textContent = '저장했습니다 — 다음 키워드부터 적용됩니다.';
         } catch (e) { notice.textContent = e.message; }
-        finally { button.disabled = false; }
-    }
-    document.getElementById('sk-interval-save').onclick = function () {
-        if ([intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value, collection_mode: document.getElementById('sk-collection-mode').value, parallel_tabs: document.getElementById('sk-parallel-tabs').value, tab_open_seconds: document.getElementById('sk-tab-open-seconds').value, keywords_per_day: document.getElementById('sk-keywords-per-day').value });
+        finally { this.disabled = false; }
     };
-    document.getElementById('sk-interval-reset').onclick = function () {
-        saveGap(this, '{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
+    document.getElementById('sk-interval-reset').onclick = async function () {
+        try { await persistBrowserSettings({...browserSettings,interval_ms:4000}); showBrowserSettings(); notice.textContent = '이 브라우저 간격 초기화됨'; }
+        catch(e) { notice.textContent = e.message; }
     };
     @endif
 
@@ -854,7 +956,7 @@ window.__SK = {
                 if (r.status === 423) { await waitBusy(r); continue; }
                 if (r.status === 401 || r.status === 403 || r.status === 404 || r.status === 419) { halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false); return; }
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                d = (await r.json()).data;
+                d = applyBrowserSettings((await r.json()).data);
             } catch (e) {
                 await reportClientError('pending', e);
                 // 연결 오류로 멈추지 않는다 — 서버 재시작·잠깐 끊김에도 계속 다시 시도(대표님 10/18 22:06 「서버 오류로 멈춘건」)
@@ -869,7 +971,7 @@ window.__SK = {
             if (d.parallel_reduced) {
                 parallelTabs = 1;
                 const parallelNotice = document.getElementById('sk-parallel-notice');
-                if (parallelNotice) parallelNotice.textContent = '차단 감지 — 동시 검색 1개로 줄임';
+                if (parallelNotice) parallelNotice.textContent = '이 분석은 차단으로 1개로 진행 중';
             }
             currentIntervalMs = d.interval_ms || currentIntervalMs;
             if (label) label.textContent += intervalLabel();
@@ -884,12 +986,13 @@ window.__SK = {
                         const policyResponse = await fetch(pendingUrl(!!res && (res.cooldown || res.captcha || [403, 429].includes(res.status)), true), { headers: { Accept: 'application/json' } });
                         if (policyResponse.status === 423) { await waitBusy(policyResponse); break; }
                         if (!policyResponse.ok) { halt('수집 정책을 읽지 못했습니다', true); return; }
-                        const fresh = (await policyResponse.json()).data;
-                        renderProgress(fresh); if (stopped) return; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
+                        const fresh = applyBrowserSettings((await policyResponse.json()).data);
+                        renderProgress(fresh); if (stopped) return; d.parallel_revision = fresh.parallel_revision; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision; d.parallel_tabs = fresh.parallel_tabs; d.tab_open_interval_ms = fresh.tab_open_interval_ms;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
-                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
                     if (res?.tab_closed) {
+                        captchaState(it.id, '', false);
                         if (res.paused) {
                             stopped = true;
                             if (stopBtn) { stopBtn.textContent = '이어서'; stopBtn.disabled = false; }
@@ -901,7 +1004,7 @@ window.__SK = {
                     if (res?.parallel_reduced) {
                         parallelTabs = 1;
                         const parallelNotice = document.getElementById('sk-parallel-notice');
-                        if (parallelNotice) parallelNotice.textContent = '차단 감지 — 동시 검색 1개로 줄임';
+                        if (parallelNotice) parallelNotice.textContent = '이 분석은 차단으로 1개로 진행 중';
                     }
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Successful cache results also release stale waits; cooldown replies do not.
@@ -916,6 +1019,8 @@ window.__SK = {
                     }
                     if (stopped) return;
                     if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
+                    if (res.ok && !res.cooldown) captchaState('server', '', false);
+                    captchaState(it.id, it.keyword, !!(res.cooldown || res.captcha || res.status === 403 || res.status === 429));
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
                         if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword);
                         await sleep(1500);
@@ -1038,6 +1143,7 @@ window.__SK = {
     if (stopBtn) stopBtn.addEventListener('click', async function () {
         if (!stopped) {
             stopped = true;
+            captchaWaits.clear(); captchaState('server', '', false);
             stopBtn.textContent = '이어서';
             stopBtn.disabled = true;
             if (label) label.textContent = '멈춤 — 진행 중이던 요청까지 마칩니다';
@@ -1054,6 +1160,7 @@ window.__SK = {
             if (r && (r.status === 403 || r.status === 404 || r.status === 409)) throw new Error('재개할 수 없습니다 (HTTP ' + r.status + ') — 새로고침 해주세요');
             if (!r || !r.ok) reportClientError('resume', 'pause(false) HTTP ' + (r ? r.status : 'network'));
             if (extMode) await extCall('resumeShopSerp', {analysisId: cfg.analysisId});
+            await loadBrowserSettings();
             RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
             failedItems.clear();
             stopped = false; errCount = 0;
@@ -1115,8 +1222,9 @@ window.__SK = {
     }, 15000);
 
     (async function boot() {
-        if (cfg.ended) return;
         extMode = await waitExt(1500);
+        try { await loadBrowserSettings(); } catch(e) { const notice = document.getElementById('sk-interval-notice'); if (notice) notice.textContent = e.message; halt(e.message, false); return; }
+        if (cfg.ended) return;
         const immediate = sessionStorage.getItem('rf-continue-now-{{ (int) $analysis->id }}');
         sessionStorage.removeItem('rf-continue-now-{{ (int) $analysis->id }}');
         if (extMode && !stopped && !immediate) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다

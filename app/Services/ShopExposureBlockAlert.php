@@ -15,9 +15,16 @@ class ShopExposureBlockAlert
         $reduced = $analysisId !== null && Cache::has('shop-parallel-reduced:'.$analysisId);
         return [
             'parallel_reduced' => $reduced,
+            'parallel_revision' => $analysisId ? Cache::get('shop-parallel-revision:'.$analysisId) : null,
             'parallel_tabs' => $reduced ? 1 : min(4, max(1, (int) \App\Models\AppSetting::read('shop.exposure.parallel_tabs', '1'))),
             'tab_open_interval_ms' => min(60000, max(0, (int) \App\Models\AppSetting::read('shop.exposure.tab_open_interval_ms', '3000'))),
         ];
+    }
+
+    public static function resetParallel(int $analysisId): void
+    {
+        Cache::forget('shop-parallel-reduced:'.$analysisId);
+        Cache::forever('shop-parallel-revision:'.$analysisId, (string) \Illuminate\Support\Str::uuid());
     }
 
     public static function keywordsPerDay(): int

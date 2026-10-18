@@ -100,3 +100,31 @@ test('parallel workers stagger initial starts in tabless mode too',async()=>{
  assert.equal(starts.length,4);
  for(let i=1;i<starts.length;i++)assert.ok(starts[i]-starts[i-1]>=13,'initial workers must be spaced');
 });
+test('manual width overrides a block, grows 1 to 2 and shrinks queued work without stopping',async()=>{
+ const store=storage(),p=pool(store);
+ await p.run(42,'blocked',2,async()=>({captcha:true}));
+ await store.set({rfShopSettings:{parallel_tabs:2,tab_open_interval_ms:0}});
+ await p.clearReduction(42);
+ let active=0,max=0;
+ const execute=async()=>{max=Math.max(max,++active);await pause(10);active--;return {ok:true};};
+ await Promise.all([p.run(42,'a',1,execute),p.run(42,'b',1,execute)]);
+ assert.equal(max,2);
+ await store.set({rfShopSettings:{parallel_tabs:1,tab_open_interval_ms:0}});max=0;
+ await Promise.all([p.run(42,'c',2,execute),p.run(42,'d',2,execute)]);
+ assert.equal(max,1);
+ await p.run(42,'blocked-again',2,async()=>({status:429}));
+ assert.equal(p.gates.has('42'),true);
+});
+test('already waiting keyword reads new width while the first keyword is still running',async()=>{
+ const store=storage(),p=pool(store);
+ await store.set({rfShopSettings:{parallel_tabs:1,tab_open_interval_ms:0}});
+ let release,secondStarted=false;
+ const barrier=new Promise(r=>release=r);
+ const first=p.run(73,'first',1,async()=>{await barrier;return {ok:true};});
+ while(!p.active.size) await pause(1);
+ const second=p.run(73,'second',1,async()=>{secondStarted=true;return {ok:true};});
+ await pause(15);assert.equal(secondStarted,false);
+ await store.set({rfShopSettings:{parallel_tabs:2,tab_open_interval_ms:0}});
+ try {await second;assert.equal(secondStarted,true);assert.equal(p.active.size,1);}finally{release();}
+ await first;
+});

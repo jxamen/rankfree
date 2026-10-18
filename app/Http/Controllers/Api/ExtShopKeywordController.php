@@ -29,6 +29,7 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         return response()->json(['data' => [
             'collector_ip' => $request->ip(),
+            'browser_default_interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval(),
             'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
         ] + \App\Services\ShopExposureBlockAlert::parallelSettings()]);
@@ -51,11 +52,15 @@ class ExtShopKeywordController extends Controller
             'keyword' => 'sometimes|nullable|string|max:300',
             'stage' => 'sometimes|nullable|string|max:80',
             'message' => 'sometimes|nullable|string|max:1000',
-            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart,tab_closed',
+            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart,tab_closed,parallel_reset',
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
+        if ($data['kind'] === 'parallel_reset') {
+            \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+            return response()->json(['ok' => true]);
+        }
         if ($data['kind'] === 'tab_closed') {
             if (! in_array($analysis->refresh()->status, ['ad_ended', 'target_reached', 'done'], true)) {
                 $analysis->update(['status' => 'paused']);
@@ -238,7 +243,7 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
 
         $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
-        $limit = min(\App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'], max(1, (int) $request->query('limit', \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'])));
+        $limit = min(4, max(1, (int) $request->query('limit', \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'])));
 
         // Failed reads remain unknown. Once this runner has skipped every remaining item,
         // release its own lease so the next analysis can start immediately.
@@ -281,7 +286,7 @@ class ExtShopKeywordController extends Controller
             return response()->json(['data' => ['items' => [], 'busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
         }
 
-        $limit = min($limit, \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs']);
+        $limit = min($limit, \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_reduced'] ? 1 : 4);
         // Never hand the extension more work than the remaining top-five quota.
         if ($analysis->keyword_target) {
             $limit = min($limit, max(1, $analysis->keyword_target - $analysis->topFiveCount()));

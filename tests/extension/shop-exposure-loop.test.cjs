@@ -37,8 +37,8 @@ test('admin extension loop keeps browser work until human recovery even with sta
  const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
  const start=blade.indexOf('    const failedItems = new Map();');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
- let calls=0,saves=0,serverCalls=0;const waits=[],events=[];
- const context=vm.createContext({URL,location:{href:'http://localhost/admin'},loopActive:false,serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
+ let calls=0,saves=0,serverCalls=0;const waits=[],events=[],modalStates=[];
+ const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:(id,keyword,waiting)=>modalStates.push({id,keyword,waiting}),URL,location:{href:'http://localhost/admin'},loopActive:false,serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
   extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw',result_source:'shopping'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
@@ -46,6 +46,7 @@ test('admin extension loop keeps browser work until human recovery even with sta
  });
  await vm.runInContext(code+';runExtLoop()',context);
  assert.equal(calls,5);assert.equal(saves,1);assert.equal(serverCalls,0);assert.equal(context.serverFallback,false);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[1500,1500,1500,1500]);
+ assert.deepEqual(modalStates.filter(s=>s.id===1).map(s=>s.waiting),[true,true,true,true,false]);
 });
 
 test('admin clears the old failure notice on the next successful progress response', () => {
@@ -53,7 +54,7 @@ test('admin clears the old failure notice on the next successful progress respon
  const start=blade.indexOf('    function renderProgress(d)');
  const code=blade.slice(start,blade.indexOf('    // ── 상태 필터',start));
  let removed=0;
- const context=vm.createContext({stopped:false,label:{textContent:'보안문자 대기'},document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
+ const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:()=>{},stopped:false,label:{textContent:'보안문자 대기'},document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
  vm.runInContext(code+`;renderProgress({status:'blocked'});renderProgress({status:'error'});`,context);
  assert.equal(removed,0);
  vm.runInContext(`renderProgress({status:'checking'});`,context);
@@ -82,7 +83,7 @@ test('one lower toggle pauses and resumes; upper and captcha buttons removed', a
  const code=blade.slice(start,blade.indexOf('    // 상품정보 다시 수집',start));
  let click, runs=0;const actions=[];
  const button={addEventListener:(type,fn)=>click=fn};
- const context=vm.createContext({stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
+ const context=vm.createContext({loadBrowserSettings:async()=>{},applyBrowserSettings:d=>d,captchaState:()=>{},captchaWaits:new Map(),stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
  extCall:async()=>({ok:true}),post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
  vm.runInContext(code,context);
  await click(); assert.equal(context.stopped,true); assert.equal(button.textContent,'이어서');
@@ -94,7 +95,7 @@ test('ordinary read failure immediately advances, retaining failed rank as unkno
  const start=blade.indexOf('    const failedItems = new Map();');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
  const calls=[],saves=[];let halted='';
- const context=vm.createContext({URL,location:{href:'http://localhost',reload:()=>{throw Error('unexpected reload');}},loopActive:false,stopped:false,errCount:0,currentIntervalMs:4000,intervalLabel:()=>'',cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/event'}},RUNNER:'test',label:{},document:{getElementById:()=>null},renderProgress:()=>{},sleep:async()=>{},
+ const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:()=>{},URL,location:{href:'http://localhost',reload:()=>{throw Error('unexpected reload');}},loopActive:false,stopped:false,errCount:0,currentIntervalMs:4000,intervalLabel:()=>'',cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/event'}},RUNNER:'test',label:{},document:{getElementById:()=>null},renderProgress:()=>{},sleep:async()=>{},
  fetch:async url=>{const excluded=url.searchParams.getAll('exclude[]');return {ok:true,json:async()=>({data:{items:excluded.includes('1')?(saves.length?[]:[{id:2,keyword:'next'}]):[{id:1,keyword:'bad'}]}})};},
  extCall:async(type,args)=>{calls.push(args.keyword);return args.keyword==='bad'?{ok:false,message:'상품 목록 읽기 15초 초과'}:{ok:true,html:'valid'};},
  post:async(url,body)=>{if(url==='/save')saves.push(body.item_id);return {ok:true,json:async()=>({status:'checking'})};},

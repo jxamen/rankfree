@@ -19,24 +19,24 @@ class ShopKeywordIntervalTest extends TestCase
         return ShopKeywordAnalysis::create(['user_id' => $user->id, 'core_keyword' => '테스트', 'threshold' => 5, 'status' => 'paused']);
     }
 
-    public function test_saved_base_applies_to_both_policies_and_daily_reset_preserves_counts(): void
+    public function test_browser_setting_save_keeps_server_defaults_and_daily_reset_preserves_counts(): void
     {
         Cache::flush();
         $a = $this->analysis();
         $this->assertSame(4000, ShopExposureBlockAlert::baseInterval());
         $this->postJson(route('admin.shop-keyword.interval', $a), ['seconds' => '12.5', 'collection_mode' => 'fetch'])->assertOk()->assertJsonPath('interval_ms', 12500);
-        $this->assertSame('12500', AppSetting::read('shop.exposure.interval_ms'));
-        $this->assertSame('fetch', ShopExposureBlockAlert::collectionMode());
-        $this->assertSame(12500, Cache::get(NaverShopExposureService::policyKey())['gap']);
-        $this->assertSame(12500, ShopExposureBlockAlert::interval('127.0.0.1'));
+        $this->assertSame(4000, ShopExposureBlockAlert::baseInterval());
+        $this->assertSame('tab', ShopExposureBlockAlert::collectionMode());
+        $this->assertNull(Cache::get(NaverShopExposureService::policyKey()));
+        $this->assertSame(4000, ShopExposureBlockAlert::interval('127.0.0.1'));
         $countKey = 'shop-block:'.hash('sha256', '127.0.0.1').':'.now('Asia/Seoul')->format('Y-m-d');
         Cache::put($countKey, 2);
-        $this->assertSame(13100, ShopExposureBlockAlert::interval('127.0.0.1'));
-        $this->postJson(route('admin.shop-keyword.reset-interval', $a))->assertOk()->assertJsonPath('interval_ms', 12500);
+        $this->assertSame(4600, ShopExposureBlockAlert::interval('127.0.0.1'));
+        $this->postJson(route('admin.shop-keyword.reset-interval', $a))->assertOk()->assertJsonPath('interval_ms', 4000);
         $this->assertSame(2, Cache::get($countKey));
-        $this->assertSame(12500, ShopExposureBlockAlert::interval('127.0.0.1'));
+        $this->assertSame(4000, ShopExposureBlockAlert::interval('127.0.0.1'));
         $this->travel(1)->days();
-        $this->assertSame(12500, ShopExposureBlockAlert::interval('127.0.0.1'));
+        $this->assertSame(4000, ShopExposureBlockAlert::interval('127.0.0.1'));
     }
 
     public function test_continue_preserves_pending_keyword_results_and_statistics(): void
