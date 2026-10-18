@@ -68,7 +68,7 @@ class ShopSerpPolicy {
       if (this.now() < (s.until || 0)) {
         const recovered = probe ? await probe() : null;
         if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
-        s.until = 0; s.blockedOnResume = false;
+        s.until = 0; s.blockedOnResume = false; s.last = this.now();
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
