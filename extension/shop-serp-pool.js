@@ -8,17 +8,18 @@ class ShopSerpPool {
   }
   async restart(analysisId, ip = 'browser') {
     const key = String(analysisId || 'legacy');
-    // Forget every document, including lanes not instantiated since SW suspension.
+    // Keep live documents and browser pacing; only closed lanes need replacements.
+    const closed = await this.closedSlots(key);
     const session = {};
     for (let slot = 0; slot < 4; slot++) {
       const tail = slot ? ':lane:' + slot : '';
-      for (const name of ['rfSerpTabId', 'rfSerpTabKeyword', 'rfSerpAnalysisId', 'rfSerpRecovery']) session[name + tail] = null;
+      if (closed.includes(slot)) for (const name of ['rfSerpTabId', 'rfSerpTabKeyword', 'rfSerpAnalysisId', 'rfSerpRecovery']) session[name + tail] = null;
       const lane = this.lanes.get(slot);
-      if (lane) { lane.tab.tabId = null; lane.tab.target = null; lane.tab.alternativeKeywords = []; }
+      if (closed.includes(slot) && lane) { lane.tab.tabId = null; lane.tab.target = null; lane.tab.alternativeKeywords = []; }
       await (lane?.policy || this.policyFactory(slot)).resume(ip);
     }
-    await chrome.storage.session.set({...session, rfSerpLastOpened:0});
-    await this.storage.set({['rfSerpClosed:' + key]:[], ['rfSerpCloseAck:' + key]:false, ['rfSerpReduced:' + key]:null, rfSerpLastLaneStarted:0});
+    await chrome.storage.session.set(session);
+    await this.storage.set({['rfSerpClosed:' + key]:[], ['rfSerpCloseAck:' + key]:false, ['rfSerpReduced:' + key]:null, ['rfSerpFirstDone:' + key]:false});
     this.gates.delete(key);
     this.affinity.clear();
     this.started.clear();
@@ -67,12 +68,14 @@ class ShopSerpPool {
     let width = closedAtStart.length ? Number((await this.storage.get(widthKey))[widthKey]) || Number(count) || 1 : Number(count) || 1;
     await this.storage.set({[widthKey]:Math.min(4, Math.max(1, width))});
     let slot;
+    let first = false;
     let gateSaved;
     while (slot === undefined) {
       const prefs = (await this.storage.get('rfShopSettings')).rfShopSettings;
       if (prefs) { count = prefs.parallel_tabs; startGap = prefs.tab_open_interval_ms; }
       if (!closedAtStart.length) width = Number(count) || 1;
       const closed = await this.closedSlots(key);
+      const firstDone = (await this.storage.get('rfSerpFirstDone:' + key))['rfSerpFirstDone:' + key];
       const admission = this.admission.then(() => {
         const available = Array.from({length:Math.min(4, Math.max(1, width))},(_,i)=>i).filter(i => !closed.includes(i));
         if (!available.length) { slot = -1; return; }
@@ -82,11 +85,11 @@ class ShopSerpPool {
         }
         const reduced = this.gates.has(key);
         const cap = reduced ? 1 : Math.min(available.length, Math.max(1, Number(count) || 1));
-        if (this.active.size >= cap) return;
+        if (this.active.size >= (firstDone ? cap : 1)) return;
         const preferred = reduced ? this.gates.get(key) : this.affinity.get(key + ':' + keyword);
         const candidates = preferred !== undefined && available.includes(preferred) ? [preferred] : available;
         slot = candidates.find(i => !this.active.has(i));
-        if (slot !== undefined) this.active.add(slot);
+        if (slot !== undefined) { this.active.add(slot); first = !firstDone; }
       });
       this.admission = admission.catch(() => {});
       await admission;
@@ -96,6 +99,13 @@ class ShopSerpPool {
     if (slot === -1) return {ok:false, paused:true, tab_closed:true, message:'수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작'};
     if (!this.lanes.has(slot)) this.lanes.set(slot, {tab:this.tabFactory(slot), policy:this.policyFactory(slot)});
     this.affinity.set(key + ':' + keyword, slot);
+    let released = false;
+    const release = async () => {
+      if (released) return;
+      released = true;
+      try { if (first) await this.storage.set({['rfSerpFirstDone:' + key]:true}); }
+      finally { this.active.delete(slot); }
+    };
     try {
       const lane = this.lanes.get(slot);
       lane.tab.analysisId = analysisId;
@@ -104,16 +114,16 @@ class ShopSerpPool {
       await this.stagger(key, slot, startGap);
       // A manual decrease can arrive while this lane waits for its opening gap.
       const latest = (await this.storage.get('rfShopSettings')).rfShopSettings;
-      if (latest && slot >= latest.parallel_tabs) return this.run(analysisId, keyword, latest.parallel_tabs, execute, latest.tab_open_interval_ms);
+      if (latest && slot >= latest.parallel_tabs) { await release(); return this.run(analysisId, keyword, latest.parallel_tabs, execute, latest.tab_open_interval_ms); }
       const result = await execute(lane);
       if (await lane.tab.isClosed()) return {ok:false, tab_closed:true, paused:(await this.closedSlots(key)).length === 4};
-      if (result.deferred) return this.run(analysisId, keyword, 1, execute, startGap);
+      if (result.deferred) { await release(); return this.run(analysisId, keyword, 1, execute, startGap); }
       if (!this.gates.has(key) && (result.captcha || [403,429].includes(result.status))) {
         this.gates.set(key, slot);
         await this.storage.set({['rfSerpReduced:' + key]:slot});
       }
       return {...result, parallel_reduced:this.gates.has(key), parallel_tabs:this.gates.has(key) ? 1 : count};
-    } finally { this.active.delete(slot); }
+    } finally { await release(); }
   }
 }
 globalThis.ShopSerpPool = ShopSerpPool;
