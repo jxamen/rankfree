@@ -427,6 +427,7 @@ window.__SK = {
         pause: '{{ route('admin.shop-keyword.pause', $analysis) }}',
         pending: '{{ route('admin.shop-keyword.pending', $analysis) }}',
         checkHtml: '{{ route('admin.shop-keyword.check-html', $analysis) }}',
+        collectorEvent: '{{ route('admin.shop-keyword.collector-event', $analysis) }}',
         supplement: '{{ route('admin.shop-keyword.supplement', $analysis) }}',
         productInfo: '{{ route('admin.shop-keyword.product-info', $analysis) }}',
     },
@@ -762,6 +763,14 @@ window.__SK = {
             for (const it of d.items) {
                 if (stopped) return;
                 const res = await extCall('fetchShopSerp', { keyword: it.keyword, analysisId: {{ (int) $analysis->id }} }, 30000);
+                // Only actual network results generate events; cached/cooldown replies do not.
+                if (res && !res.cached && !res.cooldown) {
+                    const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
+                    if (kind) {
+                        try { await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume }); }
+                        catch (e) { /* collection can continue if event delivery fails */ }
+                    }
+                }
                 if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
                 if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
                 if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {

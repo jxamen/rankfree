@@ -50,15 +50,15 @@ test('admin extension loop repeats three-minute waits until success without savi
  const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
  const start=blade.indexOf('    async function runExtLoop()');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
- let calls=0,saves=0;const waits=[];
- const context=vm.createContext({stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
+ let calls=0,saves=0;const waits=[],events=[];
+ const context=vm.createContext({stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
   extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,html:'raw'},
   sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
-  post:async()=>{saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
+  post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
  await vm.runInContext(code+';runExtLoop()',context);
- assert.equal(calls,5);assert.equal(saves,1);assert.deepEqual(waits,[180000,180000,180000,180000]);
+ assert.equal(calls,5);assert.equal(saves,1);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[180000,180000,180000,180000]);
 });
 
 test('admin clears the old failure notice on the next successful progress response', () => {

@@ -21,7 +21,7 @@ class ShopExposureRunLock
     public const TTL = 90;
 
     /**
-     * 잠금 획득·갱신. 비어 있거나 같은 주인이면 성공, 같은 scope 에서 다른 주인이 들고 있으면 실패 + 주인 정보.
+     * 잠금 획득·갱신. 같은 분석은 실행 토큰이 바뀌어도 갱신한다. 다른 분석은 종료·무활동 시에만 넘겨받는다.
      *
      * @return array{ok: bool, holder: ?array{owner: string, analysis_id: int, keyword: string, at: int}}
      */
@@ -31,14 +31,19 @@ class ShopExposureRunLock
 
         return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword) {
             $cur = Cache::get($key);
-            if (is_array($cur) && ($cur['owner'] ?? '') !== $owner) {
-                return ['ok' => false, 'holder' => $cur];
+            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) !== $analysisId) {
+                $holder = ShopKeywordAnalysis::find((int) ($cur['analysis_id'] ?? 0));
+                $lastSeen = max((int) ($cur['at'] ?? 0), $holder?->collection_seen_at?->timestamp ?? 0);
+                $stopped = ! $holder || in_array($holder->status, ['done', 'target_reached', 'ad_ended', 'paused'], true);
+                if (! $stopped && $lastSeen > now()->timestamp - self::TTL) {
+                    return ['ok' => false, 'holder' => $cur];
+                }
             }
             $ip = str_starts_with($scope, 'ip:') ? substr($scope, 3) : null;
             $ip = filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null;
             $source = str_starts_with($owner, 'ext:') ? '확장 수집기' : ($ip ? '브라우저' : '서버');
             ShopKeywordAnalysis::whereKey($analysisId)->update(['collection_ip' => $ip, 'collection_source' => $source, 'collection_seen_at' => now()]);
-            Cache::put($key, ['ip' => $ip, 'source' => $source, 'owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword, 'at' => time()], self::TTL);
+            Cache::put($key, ['ip' => $ip, 'source' => $source, 'owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword, 'at' => now()->timestamp], self::TTL);
 
             return ['ok' => true, 'holder' => null];
         });

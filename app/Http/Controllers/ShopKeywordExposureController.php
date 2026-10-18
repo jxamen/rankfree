@@ -29,6 +29,20 @@ class ShopKeywordExposureController extends Controller
 
     public function __construct(private ShopKeywordExposureAnalyzer $analyzer) {}
 
+    /** Browser collection reports use the page session, without an extension API token. */
+    public function collectorEvent(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+        $data = $request->validate([
+            'kind' => 'required|in:403,429,보안문자,success',
+            'blocked_on_resume' => 'sometimes|boolean',
+        ]);
+        app(\App\Services\ShopExposureBlockAlert::class)->record(
+            $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false
+        );
+        return response()->json(['ok' => true]);
+    }
+
     public function index(Request $request)
     {
         $uid = $request->user()->id;
