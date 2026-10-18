@@ -740,6 +740,16 @@ window.__SK = {
         });
     }
 
+    async function waitRestriction(until, source) {
+        while (!stopped) {
+            const left = Math.max(0, until - Date.now());
+            if (!left) break;
+            if (label) label.textContent = source + ' 확인 제한 — ' + Math.ceil(left / 1000) + '초 남음';
+            await sleep(Math.min(1000, left));
+        }
+        if (!stopped && label) label.textContent = '순위 다시 확인 중…';
+    }
+
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     async function runExtLoop() {
         while (!stopped) {
@@ -774,14 +784,16 @@ window.__SK = {
                 if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
                 if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
                 if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                    if (label) label.textContent = '네이버 확인 제한 — 3분 뒤 한 번 다시 확인합니다';
-                    await sleep(Math.max(0, (res.retryAt || Date.now() + 180000) - Date.now()));
+                    await waitRestriction(res.retryAt || Date.now() + 180000, '네이버');
                     break; // 미확인 항목을 다시 조회한다. 재차단이면 같은 대기를 반복한다.
                 }
                 if (!res.ok) {
                     halt('네이버 응답 오류(' + (res.status || res.message || '통신') + ') — 잠시 후 "이어서 확인"을 눌러주세요', true);
                     return;
                 }
+                if (label) label.textContent = '순위 확인 중(확장)…';
+                const oldNotice = document.getElementById('sk-collection-error');
+                if (oldNotice) oldNotice.remove();
                 try {
                     const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '', runner: RUNNER });
                     if (cr.status === 409) { stopped = true; location.reload(); return; }
@@ -828,8 +840,7 @@ window.__SK = {
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
             if (d.retry_at) {
-                if (label) label.textContent = '서버 확인 제한 — 3분 뒤 한 번 다시 확인합니다';
-                await sleep(Math.max(0, d.retry_at - Date.now()));
+                await waitRestriction(d.retry_at, '서버');
                 if (!stopped) poll();
                 return;
             }

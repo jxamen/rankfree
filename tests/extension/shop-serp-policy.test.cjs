@@ -64,3 +64,23 @@ test('repeated blocks always wait exactly three minutes without a retry limit', 
   assert.equal(f.data.rfSerpPolicy.gap,1600);
  }
 });
+
+test('legacy thirty minute policy is capped once, expires and clears queue state on success', async()=>{
+ const f=fixture({until:Date.parse('2026-10-18T12:30:00+09:00'),http403:7});
+ f.data.rfSkwCheckSkipUntil=f.data.rfSerpPolicy.until;
+ const r=await f.policy.run('a',async()=>{throw Error('must wait');});
+ assert.equal(r.retryAt,f.now()+180000); assert.equal(f.data.rfSkwCheckSkipUntil,r.retryAt);
+ f.advance(60000); assert.equal((await f.policy.run('a',async()=>{})).retryAt,r.retryAt);
+ f.advance(120000); await f.policy.run('a',async()=>({ok:true,status:200,html:''}));
+ assert.equal(f.data.rfSerpPolicy.until,0); assert.equal(f.data.rfSerpPolicy.blockedOnResume,false);
+ assert.equal(f.data.rfSkwCheckSkipUntil,0); assert.equal(f.data.rfSerpPolicy.http403,7);
+});
+test('network failure preserves restriction history and permission pause survives SERP success',async()=>{
+ const f=fixture({until:1,blockedOnResume:true});
+ await f.policy.run('a',async()=>({ok:false,status:0}));
+ assert.equal(f.data.rfSerpPolicy.until,1);
+ f.data.rfSkwCheckSkipReason='permission';f.data.rfSkwCheckSkipUntil=f.now()+21600000;
+ await f.policy.run('b',async()=>({ok:true,status:200,html:''}));
+ assert.equal(f.data.rfSkwCheckSkipReason,'permission');
+ assert.ok(f.data.rfSkwCheckSkipUntil>f.now());
+});

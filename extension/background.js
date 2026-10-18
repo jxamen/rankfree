@@ -919,7 +919,15 @@ async function drainShopKeywordCheckQueue() {
   if (Date.now() - lastScreenSerpAt < 60000) return;      // 화면이 돌고 있으면 양보
   const { token, apiBase } = await getStore();
   if (!token) return;
-  const s = await chrome.storage.local.get(['rfSkwCheckSkipUntil']);
+  const s = await chrome.storage.local.get(['rfSkwCheckSkipUntil', 'rfSkwCheckSkipReason', 'rfSerpPolicy']);
+  const until = s.rfSerpPolicy && s.rfSerpPolicy.until;
+  if (s.rfSkwCheckSkipReason !== 'permission' && s.rfSkwCheckSkipUntil > Date.now() + 180000
+      && (s.rfSkwCheckSkipReason === 'naver' || (until && Math.abs(s.rfSkwCheckSkipUntil - until) <= 5000))) {
+    s.rfSkwCheckSkipUntil = Date.now() + 180000;
+    await chrome.storage.local.set({ rfSkwCheckSkipUntil: s.rfSkwCheckSkipUntil, rfSkwCheckSkipReason: 'naver',
+      rfSerpPolicy: { ...s.rfSerpPolicy, until: s.rfSkwCheckSkipUntil } });
+    chrome.alarms.create('rf-skw-check-retry', { when: s.rfSkwCheckSkipUntil });
+  }
   if (Date.now() < (s.rfSkwCheckSkipUntil || 0)) return;  // 권한 없음·차단 백오프 중
 
   skwCheckActive = true;
@@ -927,7 +935,7 @@ async function drainShopKeywordCheckQueue() {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
       const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=40', { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
-        await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000 });
+        await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
       }
       if (!q.ok || !q.json || !q.json.data) return;        // 네트워크·일시 오류 — 다음 알람에 재시도
@@ -941,7 +949,7 @@ async function drainShopKeywordCheckQueue() {
           // 보안문자·차단이면 3분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
           if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
             const retryAt = res.retryAt || Date.now() + 3 * 60 * 1000;
-            await chrome.storage.local.set({ rfSkwCheckSkipUntil: retryAt });
+            await chrome.storage.local.set({ rfSkwCheckSkipUntil: retryAt, rfSkwCheckSkipReason: 'naver' });
             chrome.alarms.create('rf-skw-check-retry', { when: retryAt });
             try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
             return;
@@ -1032,6 +1040,9 @@ Object.assign(handlers, {
     }
     return { ok: true, status: res.status, html: picked };
     });
+    if (result.ok && !result.cached) {
+      try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
+    }
     if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
       const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
       if (kind) {

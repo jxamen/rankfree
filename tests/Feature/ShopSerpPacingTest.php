@@ -6,6 +6,23 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 class ShopSerpPacingTest extends TestCase
 {
+    public function test_legacy_wait_is_capped_without_losing_statistics_and_success_clears_it(): void
+    {
+        Cache::flush();
+        Cache::put('shop-serp:server-policy', ['until' => microtime(true) + 1800, 'successes' => 8]);
+        Http::fake(['*' => Http::response('<html></html>')]);
+        $service = new NaverShopExposureService();
+        $this->assertSame('collector_cooldown', $service->exposure('legacy', [])['error']);
+        $state = Cache::get('shop-serp:server-policy');
+        $this->assertEqualsWithDelta(microtime(true) + 180, $state['until'], 1);
+        $this->assertSame(8, $state['successes']);
+        Http::assertNothingSent();
+        $state['until'] = microtime(true) - 1;
+        Cache::put('shop-serp:server-policy', $state);
+        $this->assertFalse($service->exposure('legacy', [])['blocked']);
+        $this->assertSame(0, Cache::get('shop-serp:server-policy')['until']);
+    }
+
     public function test_block_cools_down_other_keywords_without_retrying(): void
     {
         Cache::flush(); Http::fake(['*' => Http::response('', 403)]);

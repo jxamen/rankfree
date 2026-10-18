@@ -12,6 +12,12 @@ class ShopExposureBlockAlert
 {
     public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false): void
     {
+        if ($kind === 'success') {
+            Cache::forget('shop-exposure:error:'.$analysis->id);
+            if ($analysis->exists) {
+                ShopKeywordAnalysis::whereKey($analysis->id)->whereIn('status', ['blocked', 'error'])->update(['status' => 'checking']);
+            }
+        }
         try {
             Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($analysis, $ip, $collector, $kind, $blockedOnResume) {
                 $now = now('Asia/Seoul');
