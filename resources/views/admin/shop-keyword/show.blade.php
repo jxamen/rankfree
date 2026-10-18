@@ -840,8 +840,9 @@ window.__SK = {
                 d = (await r.json()).data;
             } catch (e) {
                 await reportClientError('pending', e);
-                if (++errCount > 6) { halt('서버 연결 오류로 중단 — 새로고침 해주세요', false); return; }
-                await sleep(Math.min(8000, 1000 * errCount));
+                // 연결 오류로 멈추지 않는다 — 서버 재시작·잠깐 끊김에도 계속 다시 시도(대표님 10/18 22:06 「서버 오류로 멈춘건」)
+                ++errCount;
+                await sleep(Math.min(30000, 1000 * errCount));
                 continue;
             }
             if (stopped) return;
