@@ -5,6 +5,9 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
+importScripts('shop-serp-policy.js');
+const shopSerpPolicy = new ShopSerpPolicy();
+
 const DEFAULT_API_BASE = 'https://rankfree.kr';
 
 
@@ -937,7 +940,7 @@ async function drainShopKeywordCheckQueue() {
         const res = await handlers.fetchShopSerp({ keyword: it.keyword });
         if (!res || res.ok === false) {
           // 보안문자·차단이면 30분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
-          if (res && (res.captcha || res.status === 403 || res.status === 429)) {
+          if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
             await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 30 * 60 * 1000 });
             try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
             return;
@@ -948,6 +951,7 @@ async function drainShopKeywordCheckQueue() {
           method: 'POST', body: { item_id: it.item_id, html: res.html || '' }, token, apiBase,
         });
         if (r.status === 401 || r.status === 403) return;
+        if (r.json && r.json.status === 'target_reached') return;
         await new Promise((x) => setTimeout(x, 900 + Math.random() * 700));   // 화면 루프와 같은 페이싱
       }
     }
@@ -994,7 +998,7 @@ function pickInitialStateScripts(html) {
 Object.assign(handlers, {
   /**
    * 쇼핑 노출 키워드(25) — m.search 모바일 검색 HTML 을 브라우저(사용자 IP)에서 가져온다.
-   * 서버 fetch 는 IP rate-limit(429)로 수십 건에서 멈추지만 브라우저는 한도가 없다.
+   * 서버와 브라우저 모두 차단될 수 있으므로 공통 속도 정책을 적용한다.
    * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
    */
   async fetchShopSerp({ keyword }, sender) {
@@ -1002,6 +1006,7 @@ Object.assign(handlers, {
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
+    return shopSerpPolicy.run(kw, async () => {
     let res;
     try {
       res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
@@ -1025,6 +1030,7 @@ Object.assign(handlers, {
       }
     }
     return { ok: true, status: res.status, html: picked };
+    });
   },
 
   /**
