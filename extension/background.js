@@ -923,9 +923,8 @@ async function drainShopKeywordCheckQueue() {
   if (Date.now() < (s.rfSkwCheckSkipUntil || 0)) return;  // 권한 없음·차단 백오프 중
 
   skwCheckActive = true;
-  const startedAt = Date.now();
   try {
-    while (Date.now() - startedAt < 150000) {              // 알람 주기(3분) 안에서만 — 다음 알람이 이어받는다
+    while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
       const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=40', { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000 });
@@ -951,8 +950,8 @@ async function drainShopKeywordCheckQueue() {
           method: 'POST', body: { item_id: it.item_id, html: res.html || '' }, token, apiBase,
         });
         if (r.status === 401 || r.status === 403) return;
-        if (r.json && r.json.status === 'target_reached') return;
-        await new Promise((x) => setTimeout(x, 900 + Math.random() * 700));   // 화면 루프와 같은 페이싱
+        if (r.json && r.json.status === 'target_reached') break;
+        // 공용 ShopSerpPolicy가 1600ms 하한과 실제 차단 후 대기를 적용한다.
       }
     }
   } catch (e) { /* noop */ } finally {

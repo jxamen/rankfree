@@ -57,6 +57,7 @@ class NaverShopExposureService
             if ($wait > 0) {
                 usleep((int) ($wait * 1000000));
             }
+            $resumedAfterBlock = ! empty($state['until']);
             $previous = $state['last'] ?? null;
             $state['last'] = microtime(true);
             Cache::put('shop-serp:server-policy', $state, now()->addDay());
@@ -72,19 +73,13 @@ class NaverShopExposureService
                 $state['gap'] = min(15000, $gap * 2);
                 $state['until'] = microtime(true) + 1800;
                 $state['successes'] = 0;
-            } elseif ($r->ok()) {
-                $state['successes'] = ($state['successes'] ?? 0) + 1;
-                if ($state['successes'] >= 20) {
-                    $state['gap'] = max($floor, $gap - 100);
-                    $state['successes'] = 0;
-                }
             } else {
-                $state['successes'] = 0;
+                $state['until'] = 0;
             }
             Cache::put('shop-serp:server-policy', $state, now()->addDay());
             Log::info('shop_serp_request', ['collector' => 'server', 'status' => $r->status(), 'captcha' => (bool) $captcha,
                 'interval_ms' => $previous === null ? null : round(($state['last'] - $previous) * 1000),
-                'slow_entry' => (bool) $blocked, 'gap_ms' => $state['gap'] ?? $gap]);
+                'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked, 'slow_entry' => (bool) $blocked, 'gap_ms' => $state['gap'] ?? $gap]);
             if (! $r->ok() || $captcha) {
                 return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status()] + $out;
             }
