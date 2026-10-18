@@ -70,8 +70,8 @@ class NaverShopExposureService
             $captcha = strlen($html) < 150000 && preg_match('/비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한/u', $html);
             $blocked = in_array($r->status(), [403, 429], true) || $captcha;
             if ($blocked) {
-                $state['gap'] = min(15000, $gap * 2);
-                $state['until'] = microtime(true) + 1800;
+                $state['gap'] = $gap;
+                $state['until'] = microtime(true) + 180;
                 $state['successes'] = 0;
             } else {
                 $state['until'] = 0;

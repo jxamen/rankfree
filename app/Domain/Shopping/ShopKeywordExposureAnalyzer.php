@@ -256,8 +256,15 @@ class ShopKeywordExposureAnalyzer
             }
             $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
+            $retryAt = null;
+            if ($stopped && isset($res) && in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true)) {
+                $until = (float) (Cache::get('shop-serp:server-policy', [])['until'] ?? 0);
+                $retryAt = (int) ceil(1000 * ($until > microtime(true) ? $until : microtime(true) + 180));
+            }
+
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
+                'retry_at' => $retryAt,
                 'items' => $batchResults];
         } finally {
             $lock->release();

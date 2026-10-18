@@ -1,6 +1,6 @@
 /* One browser-wide lane for screen + background exposure checks.
  * 1600 ms is a provisional conservative floor, NOT a measured safe interval.
- * A blocked response is never retried automatically within its 30 minute cooldown.
+ * A blocked response is never retried automatically within its 3 minute cooldown.
  */
 class ShopSerpPolicy {
   constructor({ storage = chrome.storage.local, now = () => Date.now(), wait = ms => new Promise(r => setTimeout(r, ms)), cache = null } = {}) {
@@ -48,7 +48,7 @@ class ShopSerpPolicy {
       const data = await this.storage.get('rfSerpPolicy');
       const s = data.rfSerpPolicy || {};
       s.gap = Math.max(1600, Math.min(15000, Number(s.gap) || 1600));
-      if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, retryAt: s.until, message: '최근 차단으로 30분 휴식 중입니다.' };
+      if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, retryAt: s.until, message: '최근 차단으로 3분 휴식 중입니다.' };
       const wait = Math.max(0, (s.last || 0) + s.gap - this.now());
       if (wait) await this.wait(wait);
       const resumedAfterBlock = !!s.until;
@@ -57,7 +57,7 @@ class ShopSerpPolicy {
       await this.storage.set({ rfSerpPolicy: s });
       const res = await fetcher();
       if (res.captcha || res.status === 403 || res.status === 429) {
-        s.gap = Math.min(15000, s.gap * 2); s.until = this.now() + 1800000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
+        s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
         await this.cache.put(key, res);

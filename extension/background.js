@@ -938,9 +938,11 @@ async function drainShopKeywordCheckQueue() {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         const res = await handlers.fetchShopSerp({ keyword: it.keyword, analysisId: d.analysis_id });
         if (!res || res.ok === false) {
-          // 보안문자·차단이면 30분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
+          // 보안문자·차단이면 3분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
           if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
-            await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 30 * 60 * 1000 });
+            const retryAt = res.retryAt || Date.now() + 3 * 60 * 1000;
+            await chrome.storage.local.set({ rfSkwCheckSkipUntil: retryAt });
+            chrome.alarms.create('rf-skw-check-retry', { when: retryAt });
             try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
             return;
           }
@@ -1455,6 +1457,7 @@ Object.assign(handlers, {
 // ── 알람·부트 훅 — 핸들러 등록 뒤에 와야 첫 알람이 빈 handlers 를 만나지 않는다 ─────────
 try {
   chrome.alarms.onAlarm.addListener((a) => {
+    if (a && a.name === 'rf-skw-check-retry') drainShopKeywordCheckQueue();
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
     // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
     if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue().then(drainShopKeywordCheckQueue);

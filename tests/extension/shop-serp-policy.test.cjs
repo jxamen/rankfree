@@ -19,12 +19,12 @@ test('screen and queue calls serialize and share same-day raw HTML cache; tomorr
   f.advance(86400000); await f.policy.run('키워드',fetcher); assert.equal(calls,3);
 });
 for (const blocked of [{ok:false,status:403},{ok:false,status:429},{ok:false,status:200,captcha:true}]) {
- test('block pauses 30 minutes and increases spacing: '+JSON.stringify(blocked), async () => {
+ test('block pauses 3 minutes without increasing spacing: '+JSON.stringify(blocked), async () => {
   const f=fixture(); let calls=0;
   await f.policy.run('a',async()=>{calls++;return blocked;});
   const r=await f.policy.run('b',async()=>{calls++;return {ok:true};});
-  assert.equal(r.cooldown,true); assert.equal(calls,1); assert.equal(f.data.rfSerpPolicy.gap,3200); assert.equal(f.data.rfSerpPolicy.slowEntries,1);
-  f.advance(1800000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,2);
+  assert.equal(r.cooldown,true); assert.equal(calls,1); assert.equal(f.data.rfSerpPolicy.gap,1600); assert.equal(f.data.rfSerpPolicy.slowEntries,1);
+  f.advance(180000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,2);
  });
 }
 test('165 successes retain interval without periodic rests', async()=>{
@@ -39,13 +39,27 @@ test('first request after cooldown blocked again renews wait and records resume'
  const f=fixture(); let calls=0;
  const block=async()=>{calls++;return {ok:false,status:403};};
  await f.policy.run('a',block); assert.equal(f.data.rfSerpPolicy.blockedOnResume,false);
- f.advance(1800000); await f.policy.run('b',block);
+ f.advance(180000); await f.policy.run('b',block);
  assert.equal(f.data.rfSerpPolicy.blockedOnResume,true);
- assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,6400);
- assert.equal(f.data.rfSerpPolicy.until,f.now()+1800000);
+ assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,1600);
+ assert.equal(f.data.rfSerpPolicy.until,f.now()+180000);
  assert.equal((await f.policy.run('c',block)).cooldown,true); assert.equal(calls,2);
 });
 test('storage failure stops before network',async()=>{
  const p=new ShopSerpPolicy({storage:{get:async()=>{throw Error('disk');}},cache:{get:async()=>undefined}});
  let calls=0; assert.equal((await p.run('a',async()=>{calls++;})).ok,false); assert.equal(calls,0);
+});
+
+test('repeated blocks always wait exactly three minutes without a retry limit', async()=>{
+ for (const status of [403,429,200]) {
+  const f=fixture(); let calls=0;
+  const block=async()=>{calls++;return {ok:false,status,captcha:status===200};};
+  for(let i=0;i<5;i++) {
+   await f.policy.run('a',block);
+   assert.equal(calls,i+1); assert.equal(f.data.rfSerpPolicy.until,f.now()+180000);
+   f.advance(179999); assert.equal((await f.policy.run('a',block)).cooldown,true);
+   assert.equal(calls,i+1); f.advance(1);
+  }
+  assert.equal(f.data.rfSerpPolicy.gap,1600);
+ }
 });
