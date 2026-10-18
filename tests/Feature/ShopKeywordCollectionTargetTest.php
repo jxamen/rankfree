@@ -68,4 +68,19 @@ class ShopKeywordCollectionTargetTest extends TestCase
         unset($data['order_end_date']);
         $this->postJson('/api/v1/shop-keywords', $data)->assertUnprocessable();
     }
+
+    public function test_five_day_url_groups_use_only_top_five_target_keywords(): void
+    {
+        $u = User::factory()->create();
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '검증', 'threshold' => 5,
+            'order_days' => 5, 'keyword_target' => 250]);
+        foreach (range(1, 255) as $i) {
+            $a->items()->create([
+                'kind' => 'combo', 'source' => 'combo', 'keyword' => '키워드'.$i, 'rank' => 3, 'checked_at' => now()]);
+        }
+        $links = app(ShopKeywordShortLinkService::class)->generate($a, 5);
+        $this->assertCount(5, $links);
+        $this->assertSame([50, 50, 50, 50, 50], $links->map(fn ($link) => count($link->keywords))->all());
+        $this->assertNotContains('키워드251', $links->flatMap(fn ($link) => $link->keywords)->all());
+    }
 }

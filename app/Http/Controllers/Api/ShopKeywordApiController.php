@@ -69,6 +69,9 @@ class ShopKeywordApiController extends Controller
                 $existing->update($orderMeta);
                 if ($existing->targetReached()) {
                     $existing->update(['status' => 'target_reached']);
+                } elseif ($existing->status === 'target_reached') {
+                    // A longer order can resume the still-unchecked combinations.
+                    $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
                 }
             }
 
