@@ -766,6 +766,7 @@ window.__SK = {
                 const res = await extCall('fetchShopSerp', { keyword: it.keyword }, 30000);
                 if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
                 if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
+                if (res.cooldown) { halt(res.message + " 잠시 후 이어서 확인하세요.", true); return; }
                 if (!res.ok) {
                     // 보안문자 페이지든 403/429 차단이든 **보안문자를 풀어야** 이어진다(실측) — 같은 안내로 통일
                     if (res.captcha || res.status === 403 || res.status === 429) {

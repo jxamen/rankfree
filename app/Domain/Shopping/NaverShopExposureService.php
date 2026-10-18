@@ -3,6 +3,8 @@
 namespace App\Domain\Shopping;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -36,27 +38,63 @@ class NaverShopExposureService
             return $out;
         }
 
+        $cacheKey = 'shop-serp:'.now('Asia/Seoul')->format('Y-m-d').':'.hash('sha256', $kw);
+        $lock = Cache::lock('shop-serp:server-lane', $timeout + 20);
+        if (! $lock->get()) {
+            return ['blocked' => true, 'error' => 'collector_busy'] + $out;
+        }
         try {
+            if (Cache::has($cacheKey)) {
+                return $this->rankFromHtml(Cache::get($cacheKey), $target) + $out;
+            }
+            $state = Cache::get('shop-serp:server-policy', []);
+            if (microtime(true) < ($state['until'] ?? 0)) {
+                return ['blocked' => true, 'error' => 'collector_cooldown'] + $out;
+            }
+            $floor = max(1600, (int) config('rankfree.shopping.exposure.min_interval_ms', 1600));
+            $gap = max($floor, (int) ($state['gap'] ?? $floor));
+            $wait = max(0, ($state['last'] ?? 0) + $gap / 1000 - microtime(true));
+            if ($wait > 0) {
+                usleep((int) ($wait * 1000000));
+            }
+            $previous = $state['last'] ?? null;
+            $state['last'] = microtime(true);
+            Cache::put('shop-serp:server-policy', $state, now()->addDay());
             $r = Http::withHeaders([
                 'user-agent' => self::MO_UA,
                 'accept' => 'text/html,application/xhtml+xml',
                 'referer' => 'https://m.search.naver.com/',
             ])->timeout($timeout)->get('https://m.search.naver.com/search.naver', ['where' => 'm', 'query' => $kw]);
+            $html = $r->body();
+            $captcha = strlen($html) < 150000 && preg_match('/비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한/u', $html);
+            $blocked = in_array($r->status(), [403, 429], true) || $captcha;
+            if ($blocked) {
+                $state['gap'] = min(15000, $gap * 2);
+                $state['until'] = microtime(true) + 1800;
+                $state['successes'] = 0;
+            } elseif ($r->ok()) {
+                $state['successes'] = ($state['successes'] ?? 0) + 1;
+                if ($state['successes'] >= 20) {
+                    $state['gap'] = max($floor, $gap - 100);
+                    $state['successes'] = 0;
+                }
+            } else {
+                $state['successes'] = 0;
+            }
+            Cache::put('shop-serp:server-policy', $state, now()->addDay());
+            Log::info('shop_serp_request', ['collector' => 'server', 'status' => $r->status(), 'captcha' => (bool) $captcha,
+                'interval_ms' => $previous === null ? null : round(($state['last'] - $previous) * 1000),
+                'slow_entry' => (bool) $blocked, 'gap_ms' => $state['gap'] ?? $gap]);
+            if (! $r->ok() || $captcha) {
+                return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status()] + $out;
+            }
+            Cache::put($cacheKey, $html, now('Asia/Seoul')->endOfDay());
+            return $this->rankFromHtml($html, $target) + $out;
         } catch (Throwable) {
-            $out['blocked'] = true;
-            $out['error'] = 'http_exception';
-
-            return $out;
+            return ['blocked' => true, 'error' => 'http_exception'] + $out;
+        } finally {
+            $lock->release();
         }
-
-        if (! $r->ok()) {
-            $out['blocked'] = true;
-            $out['error'] = 'http_'.$r->status();
-
-            return $out;
-        }
-
-        return $this->rankFromHtml($r->body(), $target) + $out;
     }
 
     /**
