@@ -104,7 +104,7 @@
 </div>
 
 @php
-    $remaining = $analysis->targetReached() ? 0 : $combos->whereNull('rank')->count();
+    $remaining = $analysis->status === 'ad_ended' || $analysis->targetReached() ? 0 : $combos->whereNull('rank')->count();
     // 중단은 서버에 저장된다(status=paused) — 새로고침해도 자동 재시작하지 않고 "이어서 확인"으로만 재개
     $isPaused = $analysis->status === 'paused';
 @endphp
@@ -418,7 +418,8 @@ window.__SK = {
     productUrl: @json((string) $analysis->product_url),
     needTitle: @json(! $analysis->product_title && (string) $analysis->product_id !== ''),
     needSupplement: @json($needSupplement),
-    paused: @json($analysis->status === 'paused'),
+    paused: @json($analysis->collectionStopped()),
+    ended: @json($analysis->status === 'ad_ended'),
     method: @json($analysis->check_method ?? 'api'),   // api=서버 slot API 폴링(상위 20위) | search=확장 통합검색 크롤링
 
     urls: {
@@ -748,6 +749,7 @@ window.__SK = {
             let d;
             try {
                 const r = await fetch(cfg.urls.pending + (cfg.urls.pending.includes('?') ? '&' : '?') + 'runner=' + RUNNER, { headers: { Accept: 'application/json' } });
+                if (r.status === 409) { stopped = true; location.reload(); return; }
                 if (r.status === 423) { await waitBusy(r); continue; }
                 if (r.status === 401 || r.status === 403 || r.status === 404 || r.status === 419) { halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false); return; }
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -783,12 +785,13 @@ window.__SK = {
                 }
                 try {
                     const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '', runner: RUNNER });
+                    if (cr.status === 409) { stopped = true; location.reload(); return; }
                     if (cr.status === 423) { await waitBusy(cr); break; }   // 잠금을 잃음(다른 곳이 시작) — pending 에서 줄 선다
                     if (cr.status === 401 || cr.status === 403 || cr.status === 419) { halt('세션이 만료됐습니다 — 새로고침 해주세요', false); return; }
                     if (cr.ok) {
                         const p = await cr.json();
                         renderProgress(p);
-                        if (p.status === 'target_reached') { stopped = true; return; }
+                        if (['target_reached', 'ad_ended'].includes(p.status)) { stopped = true; return; }
                         if (p.rank !== undefined) applyItemResult(it, p);   // 배지·노출/광고·패턴 실시간 갱신
                     }
                 } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }
@@ -818,6 +821,7 @@ window.__SK = {
         try {
             r = await fetch(cfg.urls.check, { method: 'POST', headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ runner: RUNNER }) });
         } catch (e) { retry(); return; }
+        if (r.status === 409) { stopped = true; location.reload(); return; }
         if (r.status === 423) { await waitBusy(r); if (!stopped) poll(); return; }
         if (r.status === 419 || r.status === 401 || r.status === 403 || r.status === 404) {
             halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false);
@@ -889,6 +893,7 @@ window.__SK = {
     // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)
     const recollect = document.getElementById('sk-recollect');
     if (recollect) recollect.addEventListener('click', async function () {
+        if (cfg.ended) return;
         if (!cfg.productUrl) { alert('제품 URL이 없어 수집할 수 없습니다.'); return; }
         recollect.disabled = true;
         recollect.textContent = '수집 중…';
@@ -912,6 +917,7 @@ window.__SK = {
     });
 
     (async function boot() {
+        if (cfg.ended) return;
         extMode = await waitExt(1500);
         if (extMode && !stopped) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다
         if (!box) return;   // 미확인 조합 없음 — 보충만 수행
