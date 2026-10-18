@@ -43,10 +43,19 @@ class ShopSerpPolicy {
     const key = day + ':' + keyword.trim().normalize('NFC');
     // Fail closed when durable storage fails: avoid silently repeating same-day requests.
     try {
-      const hit = await this.cache.get(key);
-      if (hit) return { ...hit, cached: true };
       const data = await this.storage.get('rfSerpPolicy');
       const s = data.rfSerpPolicy || {};
+      if ((s.until || 0) > this.now() + 180000) {
+        const previousUntil = s.until;
+        s.until = this.now() + 180000;
+        await this.storage.set({ rfSerpPolicy: s });
+        const queue = await this.storage.get(['rfSkwCheckSkipUntil', 'rfSkwCheckSkipReason']);
+        if (Math.abs((queue.rfSkwCheckSkipUntil || 0) - previousUntil) <= 5000 && queue.rfSkwCheckSkipReason !== 'permission') {
+          await this.storage.set({ rfSkwCheckSkipUntil: s.until, rfSkwCheckSkipReason: 'naver' });
+        }
+      }
+      const hit = await this.cache.get(key);
+      if (hit) return { ...hit, cached: true };
       s.gap = Math.max(1600, Math.min(15000, Number(s.gap) || 1600));
       if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, retryAt: s.until, message: '최근 차단으로 3분 휴식 중입니다.' };
       const wait = Math.max(0, (s.last || 0) + s.gap - this.now());
@@ -60,9 +69,15 @@ class ShopSerpPolicy {
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
+        s.until = 0; s.blockedOnResume = false;
+        await this.storage.set({ rfSerpPolicy: s });
+        const queue = await this.storage.get('rfSkwCheckSkipReason');
+        if (queue.rfSkwCheckSkipReason !== 'permission') {
+          await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
+        }
         await this.cache.put(key, res);
       }
-      if (!(res.captcha || res.status === 403 || res.status === 429)) s.until = 0;
+
       const hour = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', dateStyle: 'short', timeStyle: 'short', hour12: false }).format(s.last).slice(0, 13);
       s.hourly = s.hourly || {};
       const bucket = s.hourly[hour] || { requests: 0, http403: 0, http429: 0, captchas: 0, slowEntries: 0 };
@@ -77,7 +92,7 @@ class ShopSerpPolicy {
       s.http429 = (s.http429 || 0) + (res.status === 429 ? 1 : 0);
       s.captchas = (s.captchas || 0) + (res.captcha ? 1 : 0);
       await this.storage.set({ rfSerpPolicy: s });
-      return { ...res, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
+      return { ...res, retryAt: s.until || null, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
     } catch (e) { return { ok: false, message: '속도·당일 캐시 저장소 오류 — 수집을 멈췄습니다.' }; }
   }
 }

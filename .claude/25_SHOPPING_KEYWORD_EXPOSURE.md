@@ -162,3 +162,10 @@
 
 ### 주문별 수집 상한 (2026-10-18)
 외부 생성 API의 `order_start_date`/`order_end_date`(Y-m-d, 양끝 포함)로 `order_days`와 `keyword_target`을 저장한다. 목표는 `SHOP_KEYWORDS_PER_DAY`(기본 50) × 실제 주문 일수이며 Short URL 그룹만 100개로 제한한다. 5위 이내 고유 키워드 수가 목표에 닿으면 `target_reached`로 저장하고 큐·배치·HTML 결과 추가 저장·재조합을 중단한다. 지연 도착 HTML은 분석 행 잠금 안에서 목표를 다시 검사한다. 대상 주문의 Short URL 키워드는 5위 이내 중 목표 개수까지만 채택한다. 목록·상세와 API는 상태/목표/기간을 표시한다. API 목록 `collection_limits=true`는 부스팅샵의 배포 호환성 확인용이다. 상품정보 큐는 배송비 null도 재수집 대상으로 보되 24시간 쿨다운을 유지한다(0은 무료배송 완료).
+
+### 2026-10-18 제한 상태 이관·해제 (rf-unblock)
+
+- `shop-serp:server-policy.until`(초), 확장 `rfSerpPolicy.until`(밀리초)은 로드 시 현재+3분을 넘으면 현재+3분으로 제한한다. 통계·실제 차단 이벤트는 보존한다.
+- 확장 큐 `rfSkwCheckSkipUntil`은 네이버 차단 사유 또는 정책 만료와 5초 이내 일치하는 예전 값만 함께 이관한다. 새 `rfSkwCheckSkipReason=permission`의 API 권한 없음 6시간 대기는 유지한다.
+- 실제 정상 요청은 정책 대기, 네이버 큐 대기, 확장 배지·재확인 알람을 해제한다. 성공 이벤트는 분석의 blocked/error 및 오류 캐시를 즉시 해제하며 paused/target_reached/ad_ended는 유지한다. 당일 캐시 응답은 실제 네트워크 차단 해제 증거로 쓰지 않는다.
+- 관리자 화면은 반환된 retryAt/retry_at 기준 남은 초를 매초 표시하고, 정상 응답 직후 확인 중으로 바꾼다. 실패한 통신 응답만으로 차단 상태를 해제하지 않는다.

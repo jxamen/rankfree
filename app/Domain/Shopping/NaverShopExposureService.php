@@ -48,6 +48,10 @@ class NaverShopExposureService
                 return $this->rankFromHtml(Cache::get($cacheKey), $target) + $out;
             }
             $state = Cache::get('shop-serp:server-policy', []);
+            if (($state['until'] ?? 0) > microtime(true) + 180) {
+                $state['until'] = microtime(true) + 180;
+                Cache::put('shop-serp:server-policy', $state, now()->addDay());
+            }
             if (microtime(true) < ($state['until'] ?? 0)) {
                 return ['blocked' => true, 'error' => 'collector_cooldown'] + $out;
             }
@@ -73,7 +77,7 @@ class NaverShopExposureService
                 $state['gap'] = $gap;
                 $state['until'] = microtime(true) + 180;
                 $state['successes'] = 0;
-            } else {
+            } elseif ($r->ok()) {
                 $state['until'] = 0;
             }
             Cache::put('shop-serp:server-policy', $state, now()->addDay());

@@ -54,7 +54,7 @@ test('admin extension loop repeats three-minute waits until success without savi
  const context=vm.createContext({stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
   extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,html:'raw'},
-  sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
+  waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
   post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
  await vm.runInContext(code+';runExtLoop()',context);
@@ -71,4 +71,17 @@ test('admin clears the old failure notice on the next successful progress respon
  assert.equal(removed,0);
  vm.runInContext(`renderProgress({status:'checking'});`,context);
  assert.equal(removed,1);
+});
+
+test('legacy queue wait migrates before early return; permission pause is preserved',async()=>{
+ for(const permission of [false,true]) {
+  let written,alarm;
+  const context=vm.createContext({skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+   getStore:async()=>({token:'test'}),
+   chrome:{storage:{local:{get:async()=>({rfSkwCheckSkipUntil:2800000,rfSerpPolicy:{until:2799900,http403:8},rfSkwCheckSkipReason:permission?'permission':undefined}),set:async v=>{written=v;}}},alarms:{create:(n,o)=>{alarm=o;}}},
+  });
+  await vm.runInContext(loop+';drainShopKeywordCheckQueue()',context);
+  if(permission) assert.equal(written,undefined);
+  else {assert.equal(written.rfSkwCheckSkipUntil,1180000);assert.equal(written.rfSerpPolicy.http403,8);assert.equal(alarm.when,1180000);}
+ }
 });

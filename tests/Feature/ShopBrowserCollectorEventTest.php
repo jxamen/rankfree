@@ -31,6 +31,20 @@ class ShopBrowserCollectorEventTest extends TestCase
         Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($e) => $e['collector'] === 'browser' && $e['today_count'] === 4))->once();
     }
 
+    public function test_success_event_immediately_clears_failure_but_preserves_pause_and_counts(): void
+    {
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        $u = User::factory()->create(['role' => 'operator']);
+        $this->actingAs($u);
+        foreach (['blocked', 'error', 'paused', 'target_reached', 'ad_ended'] as $status) {
+            $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '회복', 'status' => $status]);
+            \Illuminate\Support\Facades\Cache::put('shop-exposure:error:'.$a->id, 'http_403');
+            $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success'])->assertOk();
+            $this->assertSame(in_array($status, ['blocked', 'error']) ? 'checking' : $status, $a->fresh()->status);
+            $this->assertNull(\Illuminate\Support\Facades\Cache::get('shop-exposure:error:'.$a->id));
+        }
+    }
+
     private function assertEvent(ShopKeywordAnalysis $a, string $kind): void
     {
         Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($e) =>
