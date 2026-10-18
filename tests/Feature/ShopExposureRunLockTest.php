@@ -139,4 +139,25 @@ class ShopExposureRunLockTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$plain)->postJson("/api/ext/shop-keyword/{$api->id}/check-html", ['item_id' => 1, 'html' => ''])
             ->assertOk();
     }
+    public function test_watchdog_uses_saves_not_screen_heartbeats_and_only_own_checking_analysis(): void
+    {
+        $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);
+        $other = $this->analysis(User::factory()->create());
+        $paused = $this->analysis($u); $paused->update(['status' => 'paused']);
+        $a = $this->analysis($u);
+        $saved = ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => 'saved', 'rank' => 0, 'checked_at' => now()]);
+        [, $plain] = ExtToken::issue($u);
+        $this->withHeader('Authorization', 'Bearer '.$plain)
+            ->getJson('/api/ext/shop-keyword/check-queue?watchdog=1')->assertOk()->assertJsonPath('data.items', []);
+        $this->travel(121)->seconds();
+        // Policy requests may keep collection_seen_at fresh while saves have stopped.
+        $a->update(['collection_seen_at' => now()]);
+        $this->getJson('/api/ext/shop-keyword/check-queue?watchdog=1')->assertOk()->assertJsonPath('data.analysis_id', $a->id);
+        $saved->update(['checked_at' => now()]);
+        $this->getJson('/api/ext/shop-keyword/check-queue')->assertOk()->assertJsonPath('data.analysis_id', $a->id);
+        $this->postJson('/api/ext/shop-keyword/'.$other->id.'/collector-event', ['kind' => 'client_error', 'stage' => 'queue', 'message' => 'denied'])->assertForbidden();
+        \Illuminate\Support\Facades\Log::shouldReceive('warning')->once()->with('shop_exposure_client_event', \Mockery::on(fn ($d) => $d['analysis_id'] === $a->id && $d['keyword'] === '할로윈포장' && $d['stage'] === 'queue'));
+        $this->postJson('/api/ext/shop-keyword/'.$a->id.'/collector-event', ['kind' => 'client_error', 'keyword' => '할로윈포장', 'stage' => 'queue', 'message' => 'promise stalled'])->assertOk();
+    }
+
 }

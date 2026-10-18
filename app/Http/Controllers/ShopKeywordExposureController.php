@@ -34,10 +34,21 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
-            'kind' => 'required|in:403,429,보안문자,success',
+            'keyword' => 'sometimes|nullable|string|max:300',
+            'stage' => 'sometimes|nullable|string|max:80',
+            'message' => 'sometimes|nullable|string|max:1000',
+            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
+        if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
+            \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
+                'analysis_id' => $analysis->id, 'user_id' => $request->user()->id,
+                'kind' => $data['kind'], 'keyword' => $data['keyword'] ?? '',
+                'stage' => $data['stage'] ?? '', 'message' => $data['message'] ?? '',
+            ]);
+            return response()->json(['ok' => true]);
+        }
         app(\App\Services\ShopExposureBlockAlert::class)->record(
             $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
         );
