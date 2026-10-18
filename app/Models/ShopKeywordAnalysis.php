@@ -21,7 +21,10 @@ class ShopKeywordAnalysis extends Model
         'created_via', 'order_start_date', 'order_end_date', 'order_days', 'keyword_target',
     ];
 
+    protected $hidden = ['collection_ip', 'collection_source', 'collection_seen_at'];
+
     protected $casts = [
+        'collection_seen_at' => 'datetime',
         'threshold' => 'integer',
         'token_count' => 'integer',
         'combo_count' => 'integer',

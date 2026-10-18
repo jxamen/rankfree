@@ -190,7 +190,7 @@ class ExtShopKeywordController extends Controller
         $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
-            return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'])]]);
+            return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
         }
 
         // Never hand the extension more work than the remaining top-five quota.
@@ -223,7 +223,7 @@ class ExtShopKeywordController extends Controller
         $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
-            return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'])], 403);
+            return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())], 403);
         }
 
         $item = $analysis->combos()->whereKey((int) $data['item_id'])->first();

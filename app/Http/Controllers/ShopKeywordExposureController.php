@@ -121,7 +121,7 @@ class ShopKeywordExposureController extends Controller
             return null;
         }
 
-        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder']),
+        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin()),
             'analysis_id' => (int) ($r['holder']['analysis_id'] ?? 0)] + $this->analyzer->progress($analysis), 423);
     }
 
