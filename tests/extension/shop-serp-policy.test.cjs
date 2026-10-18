@@ -151,3 +151,14 @@ test('saved 1 second interval supports 300ms increments and date reset to saved 
  await f.policy.run('b',async()=>({ok:true}),'ip',1000,'next-day');
  assert.equal(f.data.rfSerpPolicy.gap,1000);
 });
+
+test('integrated top-five cache is scoped to the product target', async () => {
+ const store={},hits=new Map();let reads=0;
+ const p=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},
+  wait:async()=>{},cache:{get:async k=>hits.get(k),put:async(k,v)=>hits.set(k,v)}});
+ const fetcher=async()=>({ok:true,status:200,html:String(++reads),result_source:'integrated'});
+ const a=await p.run('same',fetcher,'ip',1000,null,null,'product-a');
+ const b=await p.run('same',fetcher,'ip',1000,null,null,'product-b');
+ const cached=await p.run('same',fetcher,'ip',1000,null,null,'product-a');
+ assert.equal(a.html,'1');assert.equal(b.html,'2');assert.equal(cached.html,'1');assert.equal(cached.cached,true);
+});

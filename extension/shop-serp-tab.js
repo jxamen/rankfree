@@ -4,14 +4,6 @@ class ShopSerpTab {
     this.browser = browser; this.timeoutMs = timeoutMs; this.wait = wait;
     this.tabId = null;
   }
-  async scrollResults(tabId) {
-    // Execute in the collection tab even when it is inactive. Never activate it.
-    await this.browser.scripting.executeScript({
-      target: { tabId },
-      func: () => window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' }),
-    });
-    await this.wait(750);
-  }
   static html(products) {
     const slots = products.map((p, i) => ({ data: {
       sourceType: p.isAd ? 'AD' : 'SAS', rank: p.rank || i + 1,
@@ -33,24 +25,24 @@ class ShopSerpTab {
         return null;
       }
       if (!['https://search.shopping.naver.com', 'https://msearch.shopping.naver.com'].includes(url.origin) || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
-      await this.scrollResults(tab.id);
-      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
+      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek', prepare: true });
       if (r?.ok && Array.isArray(r.products)) {
-        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' };
       }
     } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
     return null;
   }
-  async read(keyword) {
+  async read(keyword, target = {}) {
     const c = this.browser;
     let tab;
     let finish;
     const result = new Promise(resolve => { finish = resolve; });
     const blocked = () => finish({ ok: false, captcha: true, status: 200, message: '네이버 보안 화면 감지 — 3분 후 재확인합니다.' });
-    const onMessage = (msg, sender) => {
+    const onMessage = (msg, sender, reply) => {
+      if (tab && sender?.tab?.id === tab.id && msg?.type === '__rfSerpTarget') { reply(target); return; }
       if (!tab || sender?.tab?.id !== tab.id || msg?.type !== '__rfSerpRead') return;
       const r = msg.result;
-      if (r?.ok && Array.isArray(r.products)) finish({ ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' });
+      if (r?.ok && Array.isArray(r.products)) finish({ ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' });
       else if (r && !r.ok) finish(r);
     };
     const onUpdated = (id, info) => {
