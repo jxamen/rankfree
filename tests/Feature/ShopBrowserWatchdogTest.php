@@ -16,6 +16,14 @@ class ShopBrowserWatchdogTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_jobs_queued_before_upgrade_default_to_the_existing_lane(): void
+    {
+        $legacy = new ShopKeywordCheckJob(71);
+        unset($legacy->serverOnly);
+        $restored = unserialize(serialize($legacy));
+        $this->assertFalse($restored->serverOnly);
+    }
+
     public function test_stale_browser_transfers_once_progresses_without_page_and_returns_on_recovery(): void
     {
         Cache::flush(); Queue::fake();

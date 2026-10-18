@@ -25,7 +25,13 @@ class ShopKeywordCheckJob implements ShouldQueue
     /** 안전 상한 — 무한 재큐 방지(조합 3000 / 배치 15 기준 충분). */
     private const MAX_ROUNDS = 400;
 
-    public function __construct(public int $analysisId, public int $round = 1, public bool $serverOnly = false) {}
+    // Keep a class default so already queued payloads from 0.5.3 can be unserialized.
+    public bool $serverOnly = false;
+
+    public function __construct(public int $analysisId, public int $round = 1, bool $serverOnly = false)
+    {
+        $this->serverOnly = $serverOnly;
+    }
 
     public function handle(ShopKeywordExposureAnalyzer $analyzer): void
     {
