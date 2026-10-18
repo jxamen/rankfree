@@ -1,7 +1,6 @@
 // Collection-only navigation: inspect the rendered shopping block before using the menu.
 (async () => {
   if (location.hash !== '#rfnav') return;
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const blocked = () => /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한/.test(document.body?.innerText || '');
   const visible = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
   const send = result => chrome.runtime.sendMessage({type: '__rfSerpRead', result});
@@ -49,14 +48,14 @@
   async function navigate() {
     running = true;
     try {
-      for (let attempt = 0; attempt < 120; attempt++) {
+      {
         if (blocked()) { await send({ok:false,captcha:true,status:200}); return; }
         const menu = [...document.querySelectorAll('a[href]')].find(a => visible(a) &&
           (a.getAttribute('role') === 'tab' || a.closest('nav, [role=tablist]')) && a.textContent.trim() === '쇼핑' && new URL(a.href, location.href).hostname.endsWith('.naver.com'));
         const products = shoppingProducts();
         if (Array.isArray(products)) {
           finished = true;
-          await send({ok:true,status:200,products,result_source:'integrated'});
+          await send(products.length || /검색 결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '') ? {ok:true,status:200,products,result_source:'integrated'} : {ok:false,status:0,message:'못 읽음 — 통합검색 상품 목록'});
           return;
         }
         if (menu && products === null) {
@@ -68,9 +67,9 @@
           menu.click();
           return;
         }
-        await sleep(250);
+
       }
-      await send({ok:false,status:0,message:'통합검색 로딩 또는 상단 쇼핑 메뉴 표시를 기다리다 시간이 초과되었습니다.'});
+      await send({ok:false,status:0,message:'못 읽음 — 통합검색 상품 목록 또는 쇼핑 메뉴'});
     } finally { running = false; }
   }
   await navigate();

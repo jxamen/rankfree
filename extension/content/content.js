@@ -3727,7 +3727,7 @@
     if (serpScrolled) return true;
     if (serpPreparing) return serpPreparing;
     serpPreparing = (async () => {
-      for (let attempt = 0; attempt < 28; attempt++) {
+      {
         const text = document.body?.innerText || '';
         if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) return false;
         const empty = /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
@@ -3740,7 +3740,6 @@
           serpScrolled = true;
           return true;
         }
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
       return false;
     })();

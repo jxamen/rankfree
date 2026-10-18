@@ -110,6 +110,7 @@ class ShopSerpTab {
         const r = await c.tabs.sendMessage(tab.id, {type:'__rfSerpPeek'});
         if (r?.ok && Array.isArray(r.products)) finish({ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:'shopping',mode:'tab'});
         else if (r?.captcha) blocked();
+        else finish({ok:false,status:0,message:'못 읽음 — 쇼핑 상품 목록'});
       } catch (_) {} finally { inspecting = false; }
     }, 500);
     try {

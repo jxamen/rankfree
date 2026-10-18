@@ -25,20 +25,38 @@ class ShopExposureRunLockTest extends TestCase
         return $a;
     }
 
-    public function test_same_analysis_rejects_second_runner_until_release_or_expiry(): void
+    public function test_same_analysis_transfers_to_new_runner_and_fences_old_runner(): void
     {
         $u = User::factory()->create(['role' => 'operator']);
         $a = $this->analysis($u);
         $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
         $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['ok']);
         $this->travel(30)->seconds();
-        $this->assertFalse($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
-        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['ok']);
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['taken_over']);
         $lock->release('ip:192.0.2.1', $a->id);
+        $this->travel(91)->seconds();
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['taken_over']);
         $this->assertTrue($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
         $holder = \Illuminate\Support\Facades\Cache::get('shop-exposure:runner:ip:192.0.2.1');
         $this->assertSame('ext:new', $holder['owner']);
         $this->assertSame(now()->timestamp, $holder['at']);
+    }
+
+    public function test_waiting_runner_does_not_refresh_or_acquire_lock(): void
+    {
+        $a = $this->analysis(User::factory()->create());
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $scope = 'ip:192.0.2.1';
+        $lock->acquire($scope, 'page:waiting', $a->id);
+        $seen = $a->refresh()->collection_seen_at->timestamp;
+        $this->travel(30)->seconds();
+        $this->assertTrue($lock->acquire($scope, 'page:waiting', $a->id, '', false)['ok']);
+        $this->assertSame($seen, $a->refresh()->collection_seen_at->timestamp);
+        $this->travel(61)->seconds();
+        $this->assertNull(\Illuminate\Support\Facades\Cache::get('shop-exposure:runner:'.$scope));
+        $this->assertTrue($lock->acquire($scope, 'page:waiting', $a->id, '', false)['ok']);
+        $this->assertNull(\Illuminate\Support\Facades\Cache::get('shop-exposure:runner:'.$scope));
     }
 
     public function test_stopped_or_stale_holder_yields_but_active_other_analysis_does_not(): void
@@ -86,7 +104,20 @@ class ShopExposureRunLockTest extends TestCase
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $a).'?runner=pageA')->assertOk();
     }
 
-    public function test_extension_background_queue_yields_to_running_page(): void
+    public function test_extension_skips_unread_analysis_and_releases_its_lease_for_next(): void
+    {
+        $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);
+        $a = $this->analysis($u, 'api');
+        $b = $this->analysis($u, 'api');
+        [, $plain] = ExtToken::issue($u);
+        $this->withHeader('Authorization', 'Bearer '.$plain)->getJson('/api/ext/shop-keyword/check-queue?runner=queue')
+            ->assertOk()->assertJsonPath('data.analysis_id', $a->id);
+        $this->getJson('/api/ext/shop-keyword/check-queue?runner=queue&exclude[]='.$a->combos()->first()->id)
+            ->assertOk()->assertJsonPath('data.analysis_id', $b->id);
+        $this->assertNull($a->combos()->first()->rank);
+    }
+
+    public function test_extension_background_queue_takes_over_same_analysis(): void
     {
         $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);
         $page = $this->analysis($u);
@@ -96,10 +127,16 @@ class ShopExposureRunLockTest extends TestCase
 
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $page).'?runner=pageA')->assertOk();
 
-        // 확장 큐는 빈 목록(다음 알람에 재시도), 저장 요청은 403(현 확장이 루프를 멈춘다)
+        // 같은 분석은 확장이 넘겨받고 이전 페이지는 조용히 멈춘다.
         $this->withHeader('Authorization', 'Bearer '.$plain)->getJson('/api/ext/shop-keyword/check-queue')
-            ->assertOk()->assertJsonPath('data.items', [])->assertJsonPath('data.busy', true);
+            ->assertOk()->assertJsonPath('data.analysis_id', $api->id);
+        $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $page).'?runner=pageA')
+            ->assertStatus(423)->assertJson(['taken_over' => true, 'message' => '다른 창/확장이 이어 받았어요']);
+        $item = $page->combos()->first();
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $page), ['item_id' => $item->id, 'html' => '', 'runner' => 'pageA'])
+            ->assertStatus(423)->assertJson(['taken_over' => true]);
+        $this->assertNull($item->refresh()->rank);
         $this->withHeader('Authorization', 'Bearer '.$plain)->postJson("/api/ext/shop-keyword/{$api->id}/check-html", ['item_id' => 1, 'html' => ''])
-            ->assertStatus(403);
+            ->assertOk();
     }
 }

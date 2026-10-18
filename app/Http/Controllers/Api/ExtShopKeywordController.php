@@ -59,7 +59,7 @@ class ExtShopKeywordController extends Controller
     /** 전역 수집 잠금 주인 — 확장(브라우저)마다 다른 토큰의 해시(토큰 값은 저장하지 않는다). */
     private function extRunner(Request $request): string
     {
-        return 'ext:'.substr(hash('sha256', (string) $request->bearerToken()), 0, 16);
+        return 'ext:'.substr(hash('sha256', (string) $request->bearerToken()), 0, 16).':'.substr(preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->input('runner', 'legacy')), 0, 40);
     }
 
     /**
@@ -200,12 +200,24 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
 
+        $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
         $limit = min(40, max(1, (int) $request->query('limit', 40)));
+
+        // Failed reads remain unknown. Once this runner has skipped every remaining item,
+        // release its own lease so the next analysis can start immediately.
+        if ($request->input('exclude', [])) {
+            $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->where('created_via', 'api')
+                ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereIn('id', $request->input('exclude')))
+                ->whereDoesntHave('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude')))->pluck('id');
+            foreach ($skipped as $id) {
+                app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $id, $this->extRunner($request));
+            }
+        }
 
         $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->where('created_via', 'api')
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
-            ->whereHas('combos', fn ($q) => $q->whereNull('rank'))
+            ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude', [])))
             ->orderBy('id')->first();
 
         if (! $analysis) {
@@ -218,14 +230,14 @@ class ExtShopKeywordController extends Controller
         $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
-            return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
+            return response()->json(['data' => ['items' => [], 'busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
         }
 
         // Never hand the extension more work than the remaining top-five quota.
         if ($analysis->keyword_target) {
             $limit = min($limit, max(1, $analysis->keyword_target - $analysis->topFiveCount()));
         }
-        $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get(['id', 'keyword']);
+        $items = $analysis->combos()->whereNull('rank')->whereNotIn('id', $request->input('exclude', []))->orderBy('id')->limit($limit)->get(['id', 'keyword']);
 
         return response()->json(['data' => [
             'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
@@ -260,7 +272,7 @@ class ExtShopKeywordController extends Controller
         $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
-            return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())], 403);
+            return response()->json(['busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())], 403);
         }
 
         $item = $analysis->combos()->whereKey((int) $data['item_id'])->first();

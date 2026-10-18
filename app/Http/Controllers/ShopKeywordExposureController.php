@@ -180,17 +180,17 @@ class ShopKeywordExposureController extends Controller
      * scope 기본 = 요청 IP(브라우저가 네이버를 부른다). 주인 = 페이지가 보낸 runner(페이지 로드마다 새로),
      * 없으면(반영 전에 열어 둔 옛 탭) 사용자 단위.
      */
-    private function runBusy(Request $request, ShopKeywordAnalysis $analysis, ?string $scope = null): ?JsonResponse
+    private function runBusy(Request $request, ShopKeywordAnalysis $analysis, ?string $scope = null, bool $renew = true): ?JsonResponse
     {
         $runner = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->input('runner', ''));
         $owner = $runner !== '' ? 'page:'.substr($runner, 0, 40) : 'user:'.$request->user()->id;
         $lock = app(ShopExposureRunLock::class);
-        $r = $lock->acquire($scope ?? 'ip:'.$request->ip(), $owner, (int) $analysis->id, (string) $analysis->core_keyword);
+        $r = $lock->acquire($scope ?? 'ip:'.$request->ip(), $owner, (int) $analysis->id, (string) $analysis->core_keyword, $renew);
         if ($r['ok']) {
             return null;
         }
 
-        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin()),
+        return response()->json(['busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin()),
             'analysis_id' => (int) ($r['holder']['analysis_id'] ?? 0)] + $this->analyzer->progress($analysis), 423);
     }
 
@@ -202,7 +202,7 @@ class ShopKeywordExposureController extends Controller
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
         }
-        if ($busy = $this->runBusy($request, $analysis)) {
+        if ($busy = $this->runBusy($request, $analysis, null, ! $request->boolean('waiting'))) {
             return $busy;
         }
 

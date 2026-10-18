@@ -51,7 +51,7 @@ for(const kind of ['products','empty','captcha','unknown'])test('document-only r
  await vm.runInContext(readFn+'runSerpRead()',context);
  assert.equal(messages.length,1);const r=messages[0].result;
  assert.equal(r.ok,['products','empty'].includes(kind));assert.equal(!!r.captcha,kind==='captcha');
- if(kind==='unknown'){assert.equal(reads,28);assert.equal(r.status,0);}
+ if(kind==='unknown'){assert.equal(reads,1);assert.equal(r.status,0);}
 });
 
 test('reuses one tab across keywords and worker instances; recreates only after user closes it',async()=>{
