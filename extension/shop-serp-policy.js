@@ -77,7 +77,13 @@ class ShopSerpPolicy {
       s.gap = Math.max(1000, Math.min(30000, Math.max(Number(s.gap) || 4000, Number(serverGap) || 4000)));
       await save();
       const hit = await this.cache.get(key);
-      if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
+      if (hit?.ok) {
+        s.until = 0; s.blockedOnResume = false;
+        await save();
+        const queue = await this.storage.get('rfSkwCheckSkipReason');
+        if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
+        return { ...hit, captcha: false, cooldown: false, blocked: false, cached: true, interval_ms: s.gap, retryAt: null, blockedOnResume: false };
+      }
       if (this.now() < (s.until || 0)) {
         const recovered = probe ? await probe() : null;
         if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };

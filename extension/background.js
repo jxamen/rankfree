@@ -1041,10 +1041,10 @@ Object.assign(handlers, {
       globalThis.rfSerpCurrent = { keyword: kw, screen: '쇼핑' };
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
     }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => shopSerpTab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
-    if (result.ok && !result.cached) {
+    if (result.ok) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
-    if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
+    if (analysisId && !(sender && sender.tab) && (!result.cached || result.ok) && !result.cooldown) {
       const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
       if (kind) {
         try {

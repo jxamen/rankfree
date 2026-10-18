@@ -39,7 +39,7 @@ test('admin extension loop keeps browser work until human recovery even with sta
  let calls=0,saves=0,serverCalls=0;const waits=[],events=[];
  const context=vm.createContext({serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
-  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,html:'raw'},
+  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
   post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
@@ -52,11 +52,12 @@ test('admin clears the old failure notice on the next successful progress respon
  const start=blade.indexOf('    function renderProgress(d)');
  const code=blade.slice(start,blade.indexOf('    // ── 상태 필터',start));
  let removed=0;
- const context=vm.createContext({document:{getElementById:()=>({remove:()=>removed++})}});
+ const context=vm.createContext({stopped:false,label:{textContent:'보안문자 대기'},document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
  vm.runInContext(code+`;renderProgress({status:'blocked'});renderProgress({status:'error'});`,context);
  assert.equal(removed,0);
  vm.runInContext(`renderProgress({status:'checking'});`,context);
  assert.equal(removed,1);
+ assert.match(context.label.textContent,/진행 중/);
 });
 
 test('legacy queue wait migrates before early return; permission pause is preserved',async()=>{

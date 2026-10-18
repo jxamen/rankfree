@@ -320,7 +320,7 @@ class ShopKeywordExposureAnalyzer
             $item->checked_at = now();
             $item->save();
 
-            Cache::forget('shop-exposure:error:'.$analysis->id);
+            \App\Services\ShopExposureBlockAlert::clearWait($analysis);
             $this->backfillMe($analysis, $res['me'] ?? null);
 
             $checked = (int) $analysis->combos()->whereNotNull('rank')->count();

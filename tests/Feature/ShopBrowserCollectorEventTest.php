@@ -47,6 +47,7 @@ class ShopBrowserCollectorEventTest extends TestCase
 
     public function test_human_browser_success_clears_retry_and_preserves_gap_and_block_count(): void
     {
+        \App\Models\AppSetting::write('shop.exposure.interval_ms', '2000');
         config(['services.slack.notifications.bot_user_oauth_token' => null]);
         $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '사람 재개', 'status' => 'blocked']);
@@ -63,6 +64,7 @@ class ShopBrowserCollectorEventTest extends TestCase
 
     public function test_admin_reset_preserves_counts_and_cooldown_and_denies_member(): void
     {
+        \App\Models\AppSetting::write('shop.exposure.interval_ms', '2000');
         $u = User::factory()->create(['role' => 'member']);
         $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => 'reset']);
         $this->actingAs($u)->postJson(route('admin.shop-keyword.reset-interval', $a))->assertForbidden();

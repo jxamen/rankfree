@@ -172,3 +172,15 @@ test('tab collection waits the configured interval after each completed result',
   assert.ok(starts[1]-ends[0]>=gap);
  }
 });
+
+test('cached success clears a later captcha wait and queue flags without another request', async () => {
+ const f=fixture();
+ await f.policy.run('saved',async()=>({ok:true,html:'saved'}));
+ await f.policy.run('blocked',async()=>({ok:false,captcha:true}));
+ f.data.rfSkwCheckSkipUntil=f.now()+180000; f.data.rfSkwCheckSkipReason='naver';
+ const r=await f.policy.run('saved',async()=>{throw Error('must use cache');});
+ assert.equal(r.ok,true); assert.equal(r.cached,true); assert.equal(r.captcha,false);
+ assert.equal(r.retryAt,null); assert.equal(r.blockedOnResume,false);
+ assert.equal(f.data.rfSerpPolicy.until,0); assert.equal(f.data.rfSkwCheckSkipUntil,0);
+ assert.equal(f.data.rfSerpPolicy.gap,4300);
+});

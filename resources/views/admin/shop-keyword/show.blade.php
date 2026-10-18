@@ -603,7 +603,12 @@ window.__SK = {
     }
     function renderProgress(d) {
         const notice = document.getElementById('sk-collection-error');
-        if (notice && !['blocked', 'error'].includes(d.status)) notice.remove();
+        if (d.status && !['blocked', 'error'].includes(d.status) && !d.blocked) {
+            if (notice) notice.remove();
+            const captcha = document.getElementById('sk-captcha');
+            if (captcha) captcha.classList.add('hidden');
+            if (!stopped && label) label.textContent = '진행 중 — 순위 확인 중…';
+        }
         if (d.total === undefined) return;
         lastD = d;
         if (Array.isArray(d.exposed_items)) { syncExposed(d.exposed_items); d.exposed = d.exposed_items.length; }
@@ -612,7 +617,7 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '진행 중 — 브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
@@ -804,13 +809,13 @@ window.__SK = {
     document.getElementById('sk-continue-now').onclick = async function () {
         this.disabled = true;
         try {
-            if (!await waitExt(1500)) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
+            if (!await waitExt(1500)) throw new Error('확장 0.6.3을 설치하고 새로고침해 주세요.');
             stopped = true;
             const r = await post('{{ route('admin.shop-keyword.continue-now', $analysis) }}');
             if (!r.ok) throw new Error('재개할 수 없습니다.');
             const data = await r.json();
             const result = await extCall('resumeShopSerp', { collectorIp: data.collector_ip }, 90000);
-            if (!result?.ok) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
+            if (!result?.ok) throw new Error('확장 0.6.3을 설치하고 새로고침해 주세요.');
             sessionStorage.setItem('rf-continue-now-{{ (int) $analysis->id }}', '1');
             location.reload();
         } catch (e) { notice.textContent = e.message; this.disabled = false; }
@@ -874,8 +879,8 @@ window.__SK = {
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
-                    // Only actual network results generate events; cached/cooldown replies do not.
-                    if (res && !res.cached && !res.cooldown) {
+                    // Successful cache results also release stale waits; cooldown replies do not.
+                    if (res && (!res.cached || res.ok) && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
                             try {
