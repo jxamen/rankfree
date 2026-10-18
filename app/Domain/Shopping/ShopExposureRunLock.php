@@ -21,17 +21,28 @@ class ShopExposureRunLock
     public const TTL = 90;
 
     /**
-     * 잠금 획득·갱신. 같은 실행자만 갱신한다. 다른 실행자는 같은 분석이어도 종료·무활동 시에만 넘겨받는다.
+     * 잠금 획득·갱신. 같은 분석은 새 실행자가 인계한다. 인계된 실행자는 다시 획득할 수 없다.
      *
-     * @return array{ok: bool, holder: ?array{owner: string, analysis_id: int, keyword: string, at: int}}
+     * @return array{ok: bool, holder: ?array, taken_over?: bool}
      */
-    public function acquire(string $scope, string $owner, int $analysisId, string $keyword = ''): array
+    public function acquire(string $scope, string $owner, int $analysisId, string $keyword = '', bool $renew = true): array
     {
         $key = self::KEY.$scope;
 
-        return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword) {
+        return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword, $renew) {
             $cur = Cache::get($key);
-            if (is_array($cur) && ((int) ($cur['analysis_id'] ?? 0) !== $analysisId || ($cur['owner'] ?? '') !== $owner)) {
+            $revoked = $key.':revoked:'.$analysisId.':'.hash('sha256', $owner);
+            if (Cache::has($revoked)) {
+                return ['ok' => false, 'holder' => $cur, 'taken_over' => true];
+            }
+            // Waiting screens inspect ownership without acquiring or extending the lease.
+            if (! $renew) {
+                return ['ok' => ! is_array($cur) || (($cur['owner'] ?? '') === $owner && (int) ($cur['analysis_id'] ?? 0) === $analysisId), 'holder' => $cur, 'taken_over' => is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId && ($cur['owner'] ?? '') !== $owner];
+            }
+            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId && ($cur['owner'] ?? '') !== $owner) {
+                Cache::forever($key.':revoked:'.$analysisId.':'.hash('sha256', $cur['owner']), true);
+            }
+            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) !== $analysisId) {
                 $holder = ShopKeywordAnalysis::find((int) ($cur['analysis_id'] ?? 0));
                 $lastSeen = max((int) ($cur['at'] ?? 0), $holder?->collection_seen_at?->timestamp ?? 0);
                 $stopped = ! $holder || in_array($holder->status, ['done', 'target_reached', 'ad_ended', 'paused'], true);
@@ -50,12 +61,12 @@ class ShopExposureRunLock
     }
 
     /** 이 scope 에서 이 분석을 돌리던 잠금을 푼다(중단·완료). */
-    public function release(string $scope, int $analysisId): void
+    public function release(string $scope, int $analysisId, ?string $owner = null): void
     {
         $key = self::KEY.$scope;
-        Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $analysisId) {
+        Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $analysisId, $owner) {
             $cur = Cache::get($key);
-            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId) {
+            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId && ($owner === null || ($cur['owner'] ?? '') === $owner)) {
                 Cache::forget($key);
             }
         });

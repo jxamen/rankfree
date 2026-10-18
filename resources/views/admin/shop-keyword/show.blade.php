@@ -547,10 +547,10 @@ window.__SK = {
     let extMode = false;
     let lastD = null;          // 마지막 진행상황(중단 라벨용)
     // 전역 수집 잠금의 주인 ID — 페이지 로드마다 새로. 다른 곳이 수집 중이면 서버가 423 → 15초마다 줄 서서 재시도
-    const RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    let RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
     async function waitBusy(res) {
         let msg = '다른 수집이 진행 중이에요 — 끝나면 자동으로 이어서 시작합니다';
-        try { msg = (await res.json()).message || msg; } catch (e) {}
+        try { const d = await res.json(); msg = d.message || msg; if (d.taken_over) { halt(msg, true); return; } } catch (e) {}
         if (label) label.textContent = msg;
         await sleep(15000);
     }
@@ -811,9 +811,10 @@ window.__SK = {
 
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     const failedItems = new Map();
-    function pendingUrl() {
+    function pendingUrl(waiting = false) {
         const url = new URL(cfg.urls.pending, location.href);
         url.searchParams.set('runner', RUNNER);
+        if (waiting) url.searchParams.set('waiting', '1');
         for (const id of failedItems.keys()) url.searchParams.append('exclude[]', id);
         return url;
     }
@@ -837,6 +838,7 @@ window.__SK = {
                 await sleep(Math.min(8000, 1000 * errCount));
                 continue;
             }
+            if (stopped) return;
             errCount = 0;
             renderProgress(d);
             currentIntervalMs = d.interval_ms || currentIntervalMs;
@@ -846,12 +848,12 @@ window.__SK = {
             for (const it of d.items) {
                 if (stopped) return;
                 let res;
-                let readRetries = 0;
                 while (!stopped) {
                     // Refresh pacing before each request, including retries of the same keyword.
                     try {
-                        const policyResponse = await fetch(pendingUrl(), { headers: { Accept: 'application/json' } });
-                        if (!policyResponse.ok) { stopped = true; location.reload(); return; }
+                        const policyResponse = await fetch(pendingUrl(!!res && (res.cooldown || res.captcha || [403, 429].includes(res.status))), { headers: { Accept: 'application/json' } });
+                        if (policyResponse.status === 423) { await waitBusy(policyResponse); break; }
+                        if (!policyResponse.ok) { halt('수집 정책을 읽지 못했습니다', true); return; }
                         const fresh = (await policyResponse.json()).data;
                         renderProgress(fresh); d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
@@ -875,17 +877,15 @@ window.__SK = {
                         await sleep(1500);
                         continue; // Inspect the same tab until the person clears the gate.
                     }
-                    if (!res.ok && readRetries++ < 1) {
-                        if (label) label.textContent = '읽기 실패 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 1회 재시도';
-                        await sleep(1500);
-                        continue;
-                    }
                     break;
                 }
                 if (stopped) return;
+                if (!res) continue;
                 if (!res.ok) {
                     failedItems.set(it.id, res.message || String(res.status));
-                    if (label) label.textContent = '읽기 실패 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 다음 키워드로 이동';
+                    const badge = document.querySelector?.('#sk-combos .sk-badge[data-item="' + it.id + '"] .sk-rank');
+                    if (badge) { badge.textContent = '못 읽음'; badge.title = res.message || String(res.status); }
+                    if (label) label.textContent = '못 읽음 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 다음 키워드로 이동';
                     continue;
                 }
                 if (label) label.textContent = '진행 중 — ' + it.keyword + intervalLabel() + (failedItems.size ? ' · 읽기 실패 ' + failedItems.size + '개' : '');
@@ -996,6 +996,7 @@ window.__SK = {
         try {
             const r = await post(cfg.urls.pause, {paused: false});
             if (!r.ok) throw new Error('재개할 수 없습니다');
+            RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
             failedItems.clear();
             stopped = false; errCount = 0;
             stopBtn.textContent = '중단';

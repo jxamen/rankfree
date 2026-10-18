@@ -7,7 +7,7 @@ const loop = source.slice(source.indexOf('async function drainShopKeywordCheckQu
 test('background drains beyond alarm budget with no success sleeps, and proceeds after a reached target', async () => {
  let clock = 1000000, batches = 0, checks = 0, saves = 0;
  const context = vm.createContext({
-  skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
+  crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
   getStore:async()=>({token:'test',apiBase:'test'}),
   chrome:{storage:{local:{get:async()=>({})}}},
   handlers:{fetchShopSerp:async()=>{clock+=1600;checks++;return {ok:true,html:'raw'};}},
@@ -22,7 +22,7 @@ test('background drains beyond alarm budget with no success sleeps, and proceeds
 test('background inspects the same keyword every 1.5 seconds until human recovery, then saves', async () => {
  let calls=0, saves=0, batches=0; const waits=[];
  const context=vm.createContext({
-  skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+  crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
   getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}}},
   sleep:async ms=>waits.push(ms),
   handlers:{fetchShopSerp:async args=>{assert.equal(args.keyword,'same');calls++;return calls===1?{ok:false,status:403}:calls<4?{ok:false,cooldown:true,retryAt:1180000}:{ok:true,html:'solved'};}},
@@ -63,7 +63,7 @@ test('admin clears the old failure notice on the next successful progress respon
 test('legacy queue wait migrates before early return; permission pause is preserved',async()=>{
  for(const permission of [false,true]) {
   let written,alarm;
-  const context=vm.createContext({skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+  const context=vm.createContext({crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
    getStore:async()=>({token:'test'}),
    chrome:{storage:{local:{get:async()=>({rfSkwCheckSkipUntil:2800000,rfSerpPolicy:{until:2799900,http403:8},rfSkwCheckSkipReason:permission?'permission':undefined}),set:async v=>{written=v;}}},alarms:{create:(n,o)=>{alarm=o;}}},
   });
@@ -88,7 +88,7 @@ test('one lower toggle pauses and resumes; upper and captcha buttons removed', a
  await click(); assert.equal(context.stopped,false); assert.equal(button.textContent,'중단');assert.equal(runs,1); assert.deepEqual(actions,[true,false]);
 });
 
-test('ordinary read failure retries once then advances, retaining failed rank as unknown',async()=>{
+test('ordinary read failure immediately advances, retaining failed rank as unknown',async()=>{
  const blade=fs.readFileSync('resources/views/admin/shop-keyword/show.blade.php','utf8');
  const start=blade.indexOf('    const failedItems = new Map();');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
@@ -99,5 +99,31 @@ test('ordinary read failure retries once then advances, retaining failed rank as
  post:async(url,body)=>{if(url==='/save')saves.push(body.item_id);return {ok:true,json:async()=>({status:'checking'})};},
  halt:msg=>{halted=msg;context.stopped=true;}});
  await vm.runInContext(code+';runExtLoop()',context);
- assert.deepEqual(calls,['bad','bad','next']);assert.deepEqual(saves,[2]);assert.match(halted,/읽기 실패 1개/);
+ assert.deepEqual(calls,['bad','next']);assert.deepEqual(saves,[2]);assert.match(halted,/읽기 실패 1개/);
+});
+
+
+test('taken over admin runner halts immediately without a queue wait', async () => {
+ const blade=fs.readFileSync('resources/views/admin/shop-keyword/show.blade.php','utf8');
+ const start=blade.indexOf('    async function waitBusy(');
+ const code=blade.slice(start,blade.indexOf('    const sleep',start));
+ let halted, waits=0;
+ const context=vm.createContext({label:{},halt:msg=>{halted=msg;},sleep:async()=>waits++,res:{json:async()=>({taken_over:true,message:'다른 창/확장이 이어 받았어요'})}});
+ await vm.runInContext(code+';waitBusy(res)',context);
+ assert.equal(halted,'다른 창/확장이 이어 받았어요');assert.equal(waits,0);
+});
+
+test('background excludes unread keyword and immediately drains the next analysis', async () => {
+ let batches=0; const queries=[],calls=[],saves=[];
+ const context=vm.createContext({crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+  getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}}},rfSerpCurrent:{},
+  sleep:async()=>{throw Error('unexpected wait');},
+  handlers:{fetchShopSerp:async args=>{calls.push(args.keyword);return args.keyword==='bad'?{ok:false,message:'못 읽음'}:{ok:true,html:'valid'};}},
+  apiFetch:async(path,args)=>{
+   if(path.includes('check-queue')) { queries.push(path);return {ok:true,json:{data:{analysis_id:++batches,items:batches<3?[{item_id:batches,keyword:batches===1?'bad':'next'}]:[]}}}; }
+   saves.push(args.body.item_id);return {ok:true,json:{}};
+  },
+ });
+ await vm.runInContext(loop+';drainShopKeywordCheckQueue()',context);
+ assert.deepEqual(calls,['bad','next']);assert.deepEqual(saves,[2]);assert.match(queries[1],/exclude\[\]=1/);
 });

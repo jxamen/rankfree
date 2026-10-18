@@ -933,10 +933,12 @@ async function drainShopKeywordCheckQueue() {
   }
   if (Date.now() < (s.rfSkwCheckSkipUntil || 0)) return;  // 권한 없음·차단 백오프 중
 
+  const failedItems = new Set();
+  const runner = crypto.randomUUID();
   skwCheckActive = true;
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
-      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1', { token, apiBase });
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
@@ -955,10 +957,12 @@ async function drainShopKeywordCheckQueue() {
           if (Date.now() - lastScreenSerpAt < 60000) return;
         } while (true);
         if (!res || res.ok === false) {
+          failedItems.add(it.item_id);
+          globalThis.rfSerpCurrent = { keyword: it.keyword, screen: '못 읽음' };
           continue;
         }
         const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
-          method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source }, token, apiBase,
+          method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source, runner }, token, apiBase,
         });
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
