@@ -333,25 +333,25 @@ class ShopKeywordExposureController extends Controller
         return response()->json(['data' => ['status' => $analysis->status]]);
     }
 
-    /**
-     * "노출 재확인" — 노출(1~threshold위) 판정 조합만 미확인으로 되돌려 다시 확인한다.
-     * 광고 판별 로직 개선(슈퍼적립 등) 전에 오가닉으로 오판된 기록을 정정하는 용도.
-     */
+    /** "노출 재확인" — 저장된 결과를 보존하고 미확인·수집 실패 항목만 이어서 확인한다. */
     public function recheckExposed(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
-        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
-        $reset = $analysis->combos()->whereBetween('rank', [1, (int) $analysis->threshold])
-            ->update(['rank' => null, 'ad_exposed' => false, 'checked_at' => null]);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($analysis) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            abort_if($analysis->status === 'ad_ended', 409, '종료(광고 끝남)');
 
-        $analysis->update([
-            'checked_count' => $analysis->combos()->whereNotNull('rank')->count(),
-            'exposed_count' => 0,
-            'status' => $reset > 0 ? 'checking' : $analysis->status,
-        ]);
+            // 수집 실패는 rank=NULL로 남는다. rank=0(확인된 미노출)도 유효한 결과다.
+            $remaining = $analysis->combos()->whereNull('rank')->count();
+            $analysis->update([
+                'checked_count' => $analysis->combos()->whereNotNull('rank')->count(),
+                'exposed_count' => $analysis->combos()->whereBetween('rank', [1, (int) $analysis->threshold])->count(),
+                'status' => $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? 'checking' : 'done'),
+            ]);
 
-        return response()->json(['data' => ['reset' => $reset]]);
+            return response()->json(['data' => ['reset' => 0, 'remaining' => $remaining, 'status' => $analysis->status]]);
+        });
     }
 
     /** "새로 조합" — 노출 실패분 감추고 새 조합 생성(노출 키워드는 유지). */

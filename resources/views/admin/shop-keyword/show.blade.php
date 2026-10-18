@@ -91,7 +91,7 @@
     <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('admin.shop-keyword.regenerate', $analysis) }}"
         title="노출 안 된 조합을 접고 새 조합을 생성합니다(노출 키워드는 유지)">＋ 새로 조합</button>
     <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
-        title="노출 판정된 조합만 미확인으로 되돌려 다시 확인합니다 — 광고(슈퍼적립) 오판 정정용">노출 재확인</button>
+        title="기존 결과는 보존하고 미확인·수집 실패 항목만 이어서 확인합니다">노출 재확인</button>
     {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
     <button type="button" id="sk-recollect" class="btn btn-secondary btn-sm"
         title="확장으로 상품페이지(제목·관련태그·대표이미지·가격)를 다시 수집합니다">상품정보 다시 수집</button>
@@ -488,7 +488,7 @@ window.__SK = {
             .catch(() => { btn.disabled = false; alert('삭제에 실패했습니다.'); });
     });
 
-    // 노출 재확인 — 노출 판정 조합만 미확인으로 되돌려 다시 확인(광고 오판 정정)
+    // 노출 재확인 — 기존 결과를 보존하고 미확인·수집 실패 항목만 재개
     const recheck = document.getElementById('sk-recheck');
     if (recheck) recheck.addEventListener('click', function () {
         recheck.disabled = true;
@@ -496,8 +496,9 @@ window.__SK = {
         fetch(recheck.dataset.url, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } })
             .then((r) => r.ok ? r.json() : Promise.reject())
             .then((d) => {
-                if ((((d || {}).data || {}).reset || 0) === 0) {
-                    alert('재확인할 노출 조합이 없습니다.');
+                const data = (d || {}).data || {};
+                if ((data.remaining || 0) === 0 || data.status === 'target_reached') {
+                    alert(data.status === 'target_reached' ? '목표에 도달했습니다. 기존 수집 결과를 유지합니다.' : '미확인·수집 실패 항목이 없습니다. 기존 수집 결과를 유지합니다.');
                     recheck.disabled = false;
                     recheck.textContent = '노출 재확인';
                 } else {
