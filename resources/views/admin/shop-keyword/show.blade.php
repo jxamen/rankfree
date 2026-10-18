@@ -10,6 +10,13 @@
 <div class="flex flex-wrap items-center gap-2 mb-3">
     <label for="sk-interval">간격(초)</label>
     <input id="sk-interval" class="input" style="width:90px" type="number" min="1" max="30" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::baseInterval() / 1000, 1, '.', '') }}">
+    <label for="sk-parallel-tabs">동시 검색 탭 수</label>
+    <input id="sk-parallel-tabs" class="input" style="width:75px" type="number" min="1" max="4" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'] }}">
+    <label for="sk-tab-open-seconds">탭 여는 간격(초)</label>
+    <input id="sk-tab-open-seconds" class="input" style="width:80px" type="number" min="0" max="60" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::parallelSettings()['tab_open_interval_ms'] / 1000, 1, '.', '') }}">
+    <label for="sk-keywords-per-day">하루 키워드 수</label>
+    <input id="sk-keywords-per-day" class="input" style="width:80px" type="number" min="10" max="500" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::keywordsPerDay() }}">
+    <span id="sk-parallel-notice" role="status"></span>
     <select id="sk-collection-mode" class="input" style="width:auto">
       <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'tab')>브라우저 탭으로 열기</option>
       <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
@@ -571,18 +578,20 @@ window.__SK = {
 
     // 확장 브릿지 호출(window.postMessage 왕복) — 타임아웃 시 null
     function extCall(type, payload, timeoutMs) {
+        const requestId = crypto.randomUUID();
         return new Promise((resolve) => {
             const timer = setTimeout(() => { window.removeEventListener('message', on); resolve(null); }, timeoutMs || 30000);
             function on(e) {
                 if (e.source !== window) return;
                 const m = e.data;
                 if (!m || m.source !== 'rankfree-ext' || m.type !== type + 'Result') return;
+                if (m.requestId !== requestId && (m.requestId || Number(payload?.parallel_tabs) > 1)) return;
                 clearTimeout(timer);
                 window.removeEventListener('message', on);
                 resolve(m);
             }
             window.addEventListener('message', on);
-            window.postMessage(Object.assign({ source: 'rankfree-console', type: type }, payload || {}), '*');
+            window.postMessage(Object.assign({ source: 'rankfree-console', type: type, requestId }, payload || {}), '*');
         });
     }
 
@@ -788,12 +797,13 @@ window.__SK = {
             const r = await post(url, body);
             if (!r.ok) throw new Error('간격은 1.0~30.0초, 소수 1자리까지 입력하세요.');
             currentIntervalMs = (await r.json()).interval_ms;
-            notice.textContent = (currentIntervalMs / 1000).toFixed(1) + '초로 저장됨';
+            notice.textContent = '설정 저장됨';
+            if (body?.keywords_per_day) location.reload();
         } catch (e) { notice.textContent = e.message; }
         finally { button.disabled = false; }
     }
     document.getElementById('sk-interval-save').onclick = function () {
-        if (intervalInput.reportValidity()) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value, collection_mode: document.getElementById('sk-collection-mode').value });
+        if ([intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value, collection_mode: document.getElementById('sk-collection-mode').value, parallel_tabs: document.getElementById('sk-parallel-tabs').value, tab_open_seconds: document.getElementById('sk-tab-open-seconds').value, keywords_per_day: document.getElementById('sk-keywords-per-day').value });
     };
     document.getElementById('sk-interval-reset').onclick = function () {
         saveGap(this, '{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
@@ -816,9 +826,12 @@ window.__SK = {
         try { await post(cfg.urls.collectorEvent, {kind:'client_error', stage, keyword: String(keyword).slice(0,300), message: String(error?.message || error).slice(0,1000)}); } catch (_) {}
     }
 
-    function pendingUrl(waiting = false) {
+    let parallelTabs = 4;
+    function pendingUrl(waiting = false, policyOnly = false) {
         const url = new URL(cfg.urls.pending, location.href);
         url.searchParams.set('runner', RUNNER);
+        url.searchParams.set('limit', parallelTabs);
+        if (policyOnly) url.searchParams.set('policy_only', '1');
         if (waiting) url.searchParams.set('waiting', '1');
         for (const id of failedItems.keys()) url.searchParams.append('exclude[]', id);
         return url;
@@ -848,24 +861,34 @@ window.__SK = {
             if (stopped) return;
             errCount = 0;
             renderProgress(d);
+            if (d.parallel_reduced) {
+                parallelTabs = 1;
+                const parallelNotice = document.getElementById('sk-parallel-notice');
+                if (parallelNotice) parallelNotice.textContent = '차단 감지 — 동시 검색 1개로 줄임';
+            }
             currentIntervalMs = d.interval_ms || currentIntervalMs;
             if (label) label.textContent += intervalLabel();
-            if (!d.items || !d.items.length) { if (failedItems.size) { halt('멈춤 — 나머지 확인 완료 · 읽기 실패 ' + failedItems.size + '개 · ' + [...failedItems.values()].at(-1) + ' (이어서로 재시도)', true); return; } location.reload(); return; }
+            if (!d.items || !d.items.length) { if (d.remaining > 0 && !failedItems.size) { await sleep(1000); continue; } if (failedItems.size) { halt('멈춤 — 나머지 확인 완료 · 읽기 실패 ' + failedItems.size + '개 · ' + [...failedItems.values()].at(-1) + ' (이어서로 재시도)', true); return; } location.reload(); return; }
 
-            for (const it of d.items) {
+            const processItem = async it => {
                 if (stopped) return;
                 let res;
                 while (!stopped) {
                     // Refresh pacing before each request, including retries of the same keyword.
                     try {
-                        const policyResponse = await fetch(pendingUrl(!!res && (res.cooldown || res.captcha || [403, 429].includes(res.status))), { headers: { Accept: 'application/json' } });
+                        const policyResponse = await fetch(pendingUrl(!!res && (res.cooldown || res.captcha || [403, 429].includes(res.status)), true), { headers: { Accept: 'application/json' } });
                         if (policyResponse.status === 423) { await waitBusy(policyResponse); break; }
                         if (!policyResponse.ok) { halt('수집 정책을 읽지 못했습니다', true); return; }
                         const fresh = (await policyResponse.json()).data;
                         renderProgress(fresh); d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
-                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
+                    if (res?.parallel_reduced) {
+                        parallelTabs = 1;
+                        const parallelNotice = document.getElementById('sk-parallel-notice');
+                        if (parallelNotice) parallelNotice.textContent = '차단 감지 — 동시 검색 1개로 줄임';
+                    }
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Successful cache results also release stale waits; cooldown replies do not.
                     if (res && (!res.cached || res.ok) && !res.cooldown) {
@@ -887,22 +910,22 @@ window.__SK = {
                     break;
                 }
                 if (stopped) return;
-                if (!res) continue;
+                if (!res) return;
                 if (!res.ok) {
                     await reportClientError('read', res.message || String(res.status), it.keyword);
                     failedItems.set(it.id, res.message || String(res.status));
                     const badge = document.querySelector?.('#sk-combos .sk-badge[data-item="' + it.id + '"] .sk-rank');
                     if (badge) { badge.textContent = '못 읽음'; badge.title = res.message || String(res.status); }
                     if (label) label.textContent = '못 읽음 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 다음 키워드로 이동';
-                    continue;
+                    return;
                 }
                 if (label) label.textContent = '진행 중 — ' + it.keyword + intervalLabel() + (failedItems.size ? ' · 읽기 실패 ' + failedItems.size + '개' : '');
                 const oldNotice = document.getElementById('sk-collection-error');
                 if (oldNotice) oldNotice.remove();
                 try {
-                    const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '', result_source: res.result_source, runner: RUNNER });
+                    const cr = await post(cfg.urls.checkHtml, { item_id: it.id, html: res.html || '', result_source: res.result_source, runner: RUNNER, claim_token: it.claim_token });
                     if (cr.status === 409) { stopped = true; location.reload(); return; }
-                    if (cr.status === 423) { await waitBusy(cr); break; }   // 잠금을 잃음(다른 곳이 시작) — pending 에서 줄 선다
+                    if (cr.status === 423) { await waitBusy(cr); return; }   // 잠금을 잃음(다른 곳이 시작) — pending 에서 줄 선다
                     if (cr.status === 401 || cr.status === 403 || cr.status === 419) { halt('세션이 만료됐습니다 — 새로고침 해주세요', false); return; }
                     if (cr.ok) {
                         const p = await cr.json();
@@ -913,7 +936,15 @@ window.__SK = {
                     }
                 } catch (e) { await reportClientError('save', e, it.keyword); }
                 // 요청 간격과 실제 차단 후 대기는 확장의 공용 정책에서만 적용한다.
-            }
+            };
+            const heartbeat = typeof setInterval === 'function' ? setInterval(() => {
+                if (!stopped) fetch(pendingUrl(false, true), {headers:{Accept:'application/json'}}).catch(() => {});
+            }, 30000) : null;
+            try {
+                if (Number(d.parallel_tabs) > 1) await Promise.all(d.items.map(processItem));
+                else for (const it of d.items) { await processItem(it); if (stopped) break; }
+            } finally { if (heartbeat !== null) clearInterval(heartbeat); }
+
         }
     }
 

@@ -5,9 +5,10 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
-importScripts('shop-serp-policy.js', 'shop-serp-tab.js');
+importScripts('shop-serp-policy.js', 'shop-serp-tab.js', 'shop-serp-pool.js');
 const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
+const shopSerpPool = new ShopSerpPool({tabFactory: slot => slot ? new ShopSerpTab({slot}) : shopSerpTab, policyFactory: slot => slot ? new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot)}) : shopSerpPolicy});
 
 const DEFAULT_API_BASE = 'https://rankfree.kr';
 
@@ -958,11 +959,12 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
   if (skwCheckActive) return; // Another alarm may have claimed the lane while storage was loading.
   const failedItems = new Set();
   const runner = crypto.randomUUID();
+  let parallelTabs = 4;
   skwCheckActive = true;
   skwCheckHeartbeat = Date.now();
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
-      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1' + (watchdog ? '&watchdog=1' : '') + '&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=' + parallelTabs + (watchdog ? '&watchdog=1' : '') + '&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
@@ -975,11 +977,14 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
         lastScreenSerpAt = 0; watchdog = false;
       }
       if (!items.length) return;                           // 확인할 조합 없음
-      for (const it of items) {
+      let batchStopped = false;
+      const processItem = async it => {
+        if (batchStopped) return;
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
+          if (res?.parallel_reduced) parallelTabs = 1;
           skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
           await sleep(1500);
@@ -989,16 +994,25 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
           await reportShopClientEvent(d.analysis_id, it.keyword, 'read', res?.message || 'empty result');
           failedItems.add(it.item_id);
           globalThis.rfSerpCurrent = { keyword: it.keyword, screen: '못 읽음' };
-          continue;
+          return;
         }
         const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
-          method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source, runner }, token, apiBase,
+          method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source, runner, claim_token: it.claim_token }, token, apiBase,
         });
         if (!r.ok) await reportShopClientEvent(d.analysis_id, it.keyword, 'save', 'HTTP ' + r.status);
         if (r.status === 401 || r.status === 403) return;
-        if (r.json && r.json.status === 'target_reached') break;
+        if (r.json && r.json.status === 'target_reached') batchStopped = true;
         // 공용 ShopSerpPolicy가 저장된 기본 간격과 실제 차단 후 대기를 적용한다.
-      }
+      };
+      // Tab opening may legitimately take 3 * 60s. Renew reservations while those jobs wait.
+      const heartbeat = typeof setInterval === 'function' ? setInterval(() => {
+        apiFetch('/api/ext/shop-keyword/check-queue?policy_only=1&runner=' + runner, {token,apiBase}).catch(() => {});
+      }, 30000) : null;
+      try {
+        if (Number(d.parallel_tabs) > 1) await Promise.all(items.map(processItem));
+        else for (const it of items) { await processItem(it); if (batchStopped) break; }
+      } finally { if (heartbeat !== null) clearInterval(heartbeat); }
+
     }
   } catch (e) {
     const current = globalThis.rfSerpCurrent || {};
@@ -1053,7 +1067,7 @@ Object.assign(handlers, {
     return shopSerpPolicy.resume(collectorIp || 'browser');
   },
   async shopSerpStatus() { return globalThis.rfSerpCurrent || {}; },
-  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode }, sender) {
+  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
@@ -1062,12 +1076,15 @@ Object.assign(handlers, {
       const settings = await getStore();
       const policy = await apiFetch('/api/ext/shop-keyword/interval-policy', { token: settings.token, apiBase: settings.apiBase });
       if (!policy.ok || !policy.json?.data) return { ok: false, message: '간격 정책을 읽지 못했습니다.' };
-      ({ collector_ip: collectorIp, interval_ms, interval_revision, collection_mode } = policy.json.data);
+      ({ collector_ip: collectorIp, interval_ms, interval_revision, collection_mode, parallel_tabs, tab_open_interval_ms } = policy.json.data);
     }
-    const result = await shopSerpPolicy.run(kw, async effectiveGap => {
+    const result = await shopSerpPool.run(analysisId, kw, parallel_tabs, async ({tab, policy}) => {
+    tab.openIntervalMs = tab_open_interval_ms;
+    return policy.run(kw, async effectiveGap => {
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
-      if (collection_mode !== 'fetch') return shopSerpTab.read(kw, target);
+      if (collection_mode !== 'fetch') return tab.read(kw, target);
       const read = async (url, source) => {
+        if (tab.allowOpen && !tab.allowOpen()) return {ok:false,deferred:true};
         const r = await handlers.spFetchHtml({url});
         const captcha = /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한/.test(r.text || '');
         return {ok: r.ok && !captcha, status: r.status, captcha, html: source === 'shopping' && r.ok && !captcha ? ShopSerpTab.fetchedHtml(r.text || '') : r.text || '', result_source: source,
@@ -1078,7 +1095,8 @@ Object.assign(handlers, {
       await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '쇼핑' };
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
-    }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => shopSerpTab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
+    }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => tab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
+    }, tab_open_interval_ms);
     if (result.ok) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
