@@ -57,9 +57,10 @@ class ShopKeywordIntervalTest extends TestCase
     public function test_controls_render_with_saved_value_even_when_paused(): void
     {
         $a = $this->analysis();
+        ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => '테스트']);
         AppSetting::write('shop.exposure.interval_ms', '12500');
         $this->get(route('admin.shop-keyword.show', $a))->assertOk()
-            ->assertSee('간격(초)')->assertSee('value="12.5"', false)->assertSee('바로 이어서');
+            ->assertSee('간격(초)')->assertSee('value="12.5"', false)->assertSee('id="sk-stop"', false)->assertDontSee('id="sk-continue-now"', false)->assertDontSee('id="sk-resume"', false);
     }
 
     public function test_validation_and_admin_ownership(): void

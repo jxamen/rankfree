@@ -60,7 +60,7 @@ const html = (slots, hidden=false) => `<nav><a role="tab" href="https://msearch.
   await p.goto('https://msearch.shopping.naver.com/search/all?query=cup#rfserp');
   const sequence=await p.evaluate(async reader=>{
    const events=[];window.scrollBy=()=>events.push('scroll');
-   window.domNextData=()=>{events.push('read');return {products:[{id:'123',rank:1}]};};
+   window.serpProducts=()=>{events.push('read');return {products:[{id:'123',rank:1}]};};
    Object.defineProperty(document,'readyState',{configurable:true,get:()=>window.ready||'loading'});
    window.ready='loading';const list=document.querySelector('[data-product-list]');list.style.display='none';
    setTimeout(()=>{events.push('complete');window.ready='complete';},100);
@@ -70,7 +70,7 @@ const html = (slots, hidden=false) => `<nav><a role="tab" href="https://msearch.
    await new Promise(resolve=>window.peek({type:'__rfSerpPeek'},null,resolve));
    return {events,result:window.result};
   },reader);
-  assert.deepEqual(sequence.events,['complete','visible','read','scroll','read','send','read']);
+  assert.deepEqual(sequence.events,['read','scroll','complete','visible','read','send','read']);
   assert.equal(sequence.result.result_source,'shopping');evidence.push({shoppingRead:sequence});
   // Reproduce the reported 66/38 discrepancy with real DOM updates.
   await p.setContent('<div id="sk-sum-exposed">66</div><div id="sk-sum-checked">103</div><p id="sk-search-judged"></p><table><tbody id="sk-exposed-body"><tr data-item="999"><td>38</td></tr></tbody></table><button class="sk-copy" data-copy="exposed"></button>');

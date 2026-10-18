@@ -9,7 +9,7 @@ function browser(){
  const messages=event(),updated=event(),removed=event();let created=0,closed=0;const updates=[],store={},live=new Map();
  const c={scripting:{executeScript:async()=>{}},runtime:{onMessage:messages},storage:{session:{get:async()=>store,set:async v=>Object.assign(store,v)}},tabs:{onUpdated:updated,onRemoved:removed,
  create:async opts=>{created++;assert.equal(opts.active,false);assert.equal(opts.pinned,false);assert.match(opts.url,/m.search.naver.com\/search.naver\?where=m&query=/);const tab={id:created+6,url:opts.url};live.set(tab.id,tab);return tab;},
- update:async(id,opts)=>{assert.equal(opts.active,false);updates.push({id,...opts});Object.assign(live.get(id),opts);return live.get(id);},
+ update:async(id,opts)=>{assert.equal(opts.active,!!opts.active);updates.push({id,...opts});Object.assign(live.get(id),opts);return live.get(id);},
  get:async id=>{if(!live.has(id))throw Error('No tab');return live.get(id);},remove:async()=>{closed++;}}};
  return {c,messages,updated,removed,updates,live,counts:()=>({created,closed})};
 }
@@ -46,12 +46,12 @@ const readFn=content.slice(readStart,content.indexOf('  // 백그라운드 상�
 for(const kind of ['products','empty','captcha','unknown'])test('document-only reader '+kind,async()=>{
  const messages=[];let reads=0;
  const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
- domNextData:()=>{reads++;return kind==='products'?{products:[{id:123}]}:null;},
+ serpProducts:()=>{reads++;return kind==='products'?{products:[{id:123}]}:null;},
  chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async m=>messages.push(m)}},setTimeout:f=>f(),fetch:()=>{throw Error('must not fetch');}});
  await vm.runInContext(readFn+'runSerpRead()',context);
  assert.equal(messages.length,1);const r=messages[0].result;
  assert.equal(r.ok,['products','empty'].includes(kind));assert.equal(!!r.captcha,kind==='captcha');
- if(kind==='unknown'){assert.equal(reads,60);assert.equal(r.status,0);}
+ if(kind==='unknown'){assert.equal(reads,28);assert.equal(r.status,0);}
 });
 
 test('reuses one tab across keywords and worker instances; recreates only after user closes it',async()=>{
@@ -83,7 +83,7 @@ test('passive peek survives reader restart, reads only matching keyword and neve
  assert.equal(await reader.peek('other'),null);assert.equal(inspections,0);
  assert.equal(await reader.peek('same'),null);solved=true;f.live.get(7).url='https://msearch.shopping.naver.com/search/all?query=same';
  assert.equal((await reader.peek('same')).ok,true);
- assert.equal(f.updates.length,0);assert.deepEqual(f.counts(),{created:1,closed:0});
+ assert.ok(f.updates.every(u=>u.active===true && !u.url));assert.deepEqual(f.counts(),{created:1,closed:0});
 });
 
 for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,async()=>{
@@ -92,7 +92,7 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
  let listener,reply;
  const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},setTimeout:f=>f(),chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
  getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
- domNextData:()=>kind==='products'?{products:[{id:1}]}:null,
+ serpProducts:()=>kind==='products'?{products:[{id:1}]}:null,
  fetch:()=>{throw Error('No network allowed');}});
  vm.runInContext(code,context);await new Promise(resolve=>listener({type:'__rfSerpPeek'},null,r=>{reply=r;resolve();}));
  assert.equal(reply.ok,['products','empty'].includes(kind));
@@ -101,7 +101,7 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
 test('loaded document scrolls once and settles before reading rank',async()=>{
  const events=[];
  const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>events.push('scroll')},
- getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:''}},domNextData:()=>{events.push('read');return {products:[{id:1}]};},
+ getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:''}},serpProducts:()=>{events.push('read');return {products:[{id:1}]};},
  chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async()=>events.push('send')}},setTimeout:(f,ms)=>{events.push(ms);f();}});
  await vm.runInContext(readFn+'runSerpRead()',context);
  assert.deepEqual(events,['read','scroll',750,'read','send']);
@@ -134,4 +134,17 @@ test('tabless shopping HTML normalizes embedded list, identity and advertisement
  const slots=state.initProps.pagedSlot[0].slots;
  assert.equal(slots[0].data.sourceType,'AD');assert.equal(slots[1].data.channelProductId,'mine');
  assert.equal(slots[1].data.nvMid,'catalog');assert.equal(slots[1].data.rank,3);
+});
+
+test('captcha activates the existing tab and focuses its window; missing recovery tab is created',async()=>{
+ const f=browser(),focused=[];
+ f.c.windows={update:async(id,opts)=>focused.push({id,...opts})};
+ const reader=new ShopSerpTab({browser:f.c});
+ const p=reader.read('same');await new Promise(setImmediate);
+ f.live.get(7).windowId=42;
+ f.updated.emit(7,{url:'https://captcha.naver.com/gate'});
+ assert.equal((await p).captcha,true);assert.equal(f.updates.at(-1).active,true);assert.deepEqual(focused,[{id:42,focused:true}]);
+ f.live.delete(7);
+ f.c.tabs.create=async opts=>{assert.equal(opts.active,true);assert.match(opts.url,/msearch.shopping.naver.com/);return {id:8,windowId:43};};
+ await reader.peek('same');assert.equal(focused.at(-1).id,43);
 });

@@ -620,7 +620,7 @@
     const candidates = [];
 
     (function walk(node, parent, depth, key) {
-      if (depth > 9 || node == null || typeof node !== 'object') return;
+      if (depth > 16 || node == null || typeof node !== 'object') return;
 
       if (Array.isArray(node)) {
         if (node.length && node[0] && typeof node[0] === 'object') {
@@ -640,7 +640,7 @@
             return;
           }
         }
-        walk(node[0], null, depth + 1, key);
+        for (const child of node) walk(child, null, depth + 1, key);
         return;
       }
 
@@ -660,7 +660,7 @@
     const products = [];
     for (const raw of best.list) {
       const it = normalizeItem(raw, products.length + 1);
-      if (it) products.push(it);
+      if (it) { if (best.promo) it.isAd = true; products.push(it); }
     }
     return products.length ? { products, total } : null;
   }
@@ -862,7 +862,7 @@
       return null;
     };
     // 1) __NEXT_DATA__ (전체가 JSON)
-    let m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    let m = html.match(/<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (m) { const r = tryJson(m[1]); if (r) return r; }
     // 2) window.__PRELOADED_STATE__ / __APOLLO_STATE__ = {...}
     m = html.match(/__(?:PRELOADED_STATE|APOLLO_STATE)__\s*=\s*({[\s\S]*?})\s*;?\s*<\/script>/);
@@ -915,7 +915,7 @@
     });
     if (!res.ok) throw new Error('catalog ' + res.status);
     const html = await res.text();
-    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    const m = html.match(/<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (!m) throw new Error('catalog 데이터 없음');
     const root = JSON.parse(m[1]);
 
@@ -972,7 +972,7 @@
     }
     if (!res.ok) throw new Error('catalog ' + res.status);
     const html = await res.text();
-    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    const m = html.match(/<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (!m) throw new Error('catalog 데이터 없음');
     const root = JSON.parse(m[1]);
 
@@ -3699,19 +3699,40 @@
     } catch (e) { /* noop */ }
   }
 
+  // Mobile shopping cards expose product identity even when hydration JSON is absent.
+  function serpProducts() {
+    const embedded = domNextData();
+    if (embedded?.products?.length) return embedded;
+    const products = [], seen = new Set();
+    for (const card of document.querySelectorAll('[data-shp-contents-id], [class*="product_item"], [class*="productItem"], [class*="ProductItem"]')) {
+      const link = card.querySelector('a[href*="/products/"], a[href*="/catalog/"], a[href*="nvMid="], a[href*="/product/"]');
+      if (!link || !card.getClientRects().length) continue;
+      const href = link.href || '';
+      const channel = href.match(/\/products\/(\d+)/)?.[1] || '';
+      const nvMid = card.getAttribute('data-shp-contents-id') || href.match(/(?:\/catalog\/|[?&]nvMid=|\/product\/)(\d+)/)?.[1] || '';
+      if (!/^\d+$/.test(nvMid || channel)) continue;
+      const key = nvMid || channel;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const ad = !!card.querySelector('[class*="adBadge"], [class*="ad_badge"], [aria-label="광고"]') || /(?:ad|advertisement)/i.test(card.getAttribute('data-shp-contents-type') || '') || /adcr\.naver\.com/.test(href);
+      products.push({channelProductId: channel, nvMid, rank: products.length + 1, isAd: ad,
+        title: link.textContent?.trim() || '', link: href, mallName: '', price: 0});
+    }
+    return products.length ? {products} : null;
+  }
+
   let serpScrolled = false;
   let serpPreparing = null;
   async function prepareSerp() {
     if (serpScrolled) return true;
     if (serpPreparing) return serpPreparing;
     serpPreparing = (async () => {
-      for (let attempt = 0; attempt < 60; attempt++) {
+      for (let attempt = 0; attempt < 28; attempt++) {
         const text = document.body?.innerText || '';
         if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) return false;
         const empty = /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
-        const list = document.querySelector('[class*="product_item"], [class*="product_list"], [class*="ProductList"], [data-shp-contents-id], [data-product-list]');
-        const visible = list && list.getClientRects().length > 0 && getComputedStyle(list).visibility !== 'hidden';
-        if (document.readyState === 'complete' && (empty || (visible && domNextData()?.products?.length))) {
+        // Mobile class names differ from desktop. Embedded products are sufficient evidence.
+        if (empty || serpProducts()?.products?.length) {
           if (!empty) {
             window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' });
             await new Promise(resolve => setTimeout(resolve, 750));
@@ -3728,8 +3749,8 @@
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (msg?.type !== '__rfSerpPeek') return;
     (async () => {
-      if (!await prepareSerp()) { reply({ok:false}); return; }
-      const data = domNextData();
+      if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|접근이\s*제한/.test(document.body?.innerText || '')) { reply({ok:false,captcha:true}); return; }
+      const data = serpProducts();
       const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '');
       reply({ok:normal,products:normal ? (data?.products || []) : undefined,result_source:'shopping'});
     })();
@@ -3741,10 +3762,10 @@
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
     if (!await prepareSerp()) {
       const captcha = /HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(document.body?.innerText || '');
-      await send({ok:false,status:captcha ? 200 : 0,captcha,message:captcha ? '네이버 차단 화면 감지 — 3분 후 재확인합니다.' : '쇼핑 페이지 로딩 또는 상품 목록을 확인하지 못했습니다.'});
+      await send({ok:false,status:captcha ? 200 : 0,captcha,message:captcha ? '네이버 차단 화면 감지 — 수집 탭에서 풀어 주세요.' : '쇼핑 페이지 로딩 또는 상품 목록을 확인하지 못했습니다.'});
       return;
     }
-    const data = domNextData();
+    const data = serpProducts();
     await send({ok:true,status:200,products:data?.products || [],result_source:'shopping'});
   }
 
