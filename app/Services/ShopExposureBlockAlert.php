@@ -31,6 +31,10 @@ class ShopExposureBlockAlert
 
     public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
     {
+        if ($collector === 'browser' && $kind === 'unavailable') {
+            app(\App\Domain\Shopping\ShopBrowserWatchdog::class)->takeover($analysis);
+            return;
+        }
         if ($collector === 'browser' && in_array($kind, ['403', '429', '보안문자'], true)) {
             $new = Cache::lock('shop-exposure:fallback-lock:'.$analysis->id, 5)->block(3, function () use ($analysis) {
                 $key = 'shop-exposure:server-fallback:'.$analysis->id;

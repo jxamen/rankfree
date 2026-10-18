@@ -31,7 +31,7 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
-            'kind' => 'required|in:403,429,보안문자,success',
+            'kind' => 'required|in:403,429,보안문자,success,unavailable',
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
@@ -201,6 +201,7 @@ class ExtShopKeywordController extends Controller
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
         }
+        app(\App\Domain\Shopping\ShopBrowserWatchdog::class)->recover($analysis);
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
         }

@@ -1,6 +1,6 @@
 /* Called inside ShopSerpPolicy's single lane. Reuse one inactive, unpinned collection tab across jobs. */
 class ShopSerpTab {
-  constructor({ browser = chrome, timeoutMs = 45000, wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  constructor({ browser = chrome, timeoutMs = 60000, wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
     this.browser = browser; this.timeoutMs = timeoutMs; this.wait = wait;
     this.tabId = null;
   }
@@ -28,10 +28,10 @@ class ShopSerpTab {
       if (saved.rfSerpTabKeyword !== keyword || saved.rfSerpTabId == null) return null;
       const tab = await this.browser.tabs.get(saved.rfSerpTabId);
       const url = new URL(tab.url);
-      if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
+      if (!['https://search.shopping.naver.com', 'https://msearch.shopping.naver.com'].includes(url.origin) || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
+      await this.scrollResults(tab.id);
       const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
       if (r?.ok && Array.isArray(r.products)) {
-        await this.scrollResults(tab.id);
         return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
       }
     } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
@@ -62,7 +62,7 @@ class ShopSerpTab {
     c.tabs.onRemoved.addListener(onRemoved);
     const timer = setTimeout(() => finish({ ok: false, status: 0, message: '쇼핑 탭 응답 시간이 초과되었습니다.' }), this.timeoutMs);
     try {
-      const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp';
+      const url = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) + '#rfnav';
       const storage = c.storage.session;
       if (this.tabId === null) {
         const saved = await storage.get('rfSerpTabId');
@@ -84,7 +84,7 @@ class ShopSerpTab {
       onUpdated(tab.id, { url: current.url || current.pendingUrl });
       const response = await result;
       clearTimeout(timer);
-      if (response.ok) await this.scrollResults(tab.id);
+
       return response;
     } catch (e) { return { ok: false, status: 0, message: '쇼핑 탭 오류: ' + e.message }; }
     finally {

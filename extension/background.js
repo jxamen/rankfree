@@ -71,6 +71,7 @@ function removeTab(id, tries) {
 const productInfoWaiters = new Map();
 
 const handlers = {
+  async ping() { return { ok: true }; },
   /** 로그인 → 토큰 저장 */
   async login({ email, password, apiBase }) {
     const base = (apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
@@ -1015,42 +1016,13 @@ Object.assign(handlers, {
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     const result = await shopSerpPolicy.run(kw, async () => {
-    const { rfSerpMode = 'tab' } = await chrome.storage.local.get('rfSerpMode');
-    if (rfSerpMode !== 'request') return shopSerpTab.read(kw);
-    let res;
-    try {
-      res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
-        credentials: 'include',
-        headers: { Accept: 'text/html,application/xhtml+xml' },
-      });
-    } catch (e) {
-      return { ok: false, status: 0, message: '네트워크 오류: ' + String((e && e.message) || e) };
-    }
-    if (res.status === 403) {
-      const fallbackPolicy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
-      await new Promise(resolve => setTimeout(resolve, Math.min(10000, Math.max(2000, Number(interval_ms) || 2000, Number(fallbackPolicy.gap) || 2000))));
       return shopSerpTab.read(kw);
-    }
-    if (!res.ok) return { ok: false, status: res.status, message: 'HTTP ' + res.status };
-    const html = await res.text();
-    const picked = pickInitialStateScripts(html);
-    if (!picked) {
-      // 가격비교 슬롯이 없는 경우: 진짜 미노출 키워드일 수도, **보안문자(캡차) 차단 페이지**일 수도 있다.
-      // 정상 SERP 에도 'captcha' 문자열(스크립트 자산 경로 등)이 있어 generic 매칭은 오탐한다(실측 — 분석 15).
-      // 차단 페이지만 잡는다: 캡차 URL 로 리다이렉트됐거나, 작은 페이지(정상 SERP 는 수백 KB)에 한국어 차단 문구.
-      const blockPage = /captcha/i.test(res.url || '')
-        || (html.length < 150000 && /(비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한)/.test(html));
-      if (blockPage) {
-        return { ok: false, captcha: true, status: res.status, message: '네이버 보안문자 감지 — 풀고 이어서 확인하세요.' };
-      }
-    }
-    return { ok: true, status: res.status, html: picked };
     }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek(kw));
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
     if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
-      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
+      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : result.status === 0 ? 'unavailable' : null;
       if (kind) {
         try {
           const { token, apiBase } = await getStore();

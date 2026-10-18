@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko"><meta charset="utf-8"><title>랭크프리 설정</title>
 <body><h1>쇼핑 순위 수집</h1>
-<label>수집 방식 <select id="mode"><option value="tab">탭 (기본)</option><option value="request">요청</option></select></label>
-<p>탭 방식은 비활성 쇼핑 탭 하나에서 현재 브라우저 세션으로 상품을 읽습니다. 요청 방식도 403이면 탭에서 한 번 재확인합니다.</p>
-<p>보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요. 사람이 풀지 않으면 3분 후 재확인합니다.</p><p id="status" role="status"></p>
-<script src="options.js"></script></body></html>
+<p>비활성 수집 탭 하나에서 통합검색 → 쇼핑 메뉴 클릭 → 스크롤 → 순위 확인 순서로 진행합니다.</p>
+<p>창이 닫히거나 확장이 60초 이상 응답하지 않으면 서버가 이어서 수집합니다. 확장이 다시 응답하면 남은 작업을 다시 받습니다.</p>
+<p>네이버 접속 제한 시 기존 3분 재확인 간격을 유지합니다.</p>
+</body></html>

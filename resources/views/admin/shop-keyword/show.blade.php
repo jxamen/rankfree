@@ -800,11 +800,12 @@ window.__SK = {
                 if (stopped) return;
                 let res;
                 while (!stopped) {
-                    res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 60000);
+                    if (!res) res = { ok: false, status: 0 };
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Only actual network results generate events; cached/cooldown replies do not.
                     if (res && !res.cached && !res.cooldown) {
-                        const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
+                        const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : res.status === 0 ? 'unavailable' : null;
                         if (kind) {
                             try {
                                 const event = await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
@@ -874,7 +875,13 @@ window.__SK = {
         // 서버 배치의 건별 결과를 확장 모드와 동일하게 실시간 반영 — 요약 숫자만 늘고
         // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
         (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
-        serverFallback = serverFallback || !!d.server_fallback;
+        serverFallback = !!d.server_fallback;
+        if (d.browser_unavailable && extMode) {
+            try {
+                const alive = await extCall('ping', {}, 3000);
+                if (alive && alive.ok) { runExtLoop(); return; }
+            } catch (e) { /* Server keeps collecting while extension is absent. */ }
+        }
         collectorIp = d.collector_ip || collectorIp;
         renderProgress(d);
         currentIntervalMs = d.interval_ms || currentIntervalMs;

@@ -25,7 +25,7 @@ class ShopKeywordCheckJob implements ShouldQueue
     /** 안전 상한 — 무한 재큐 방지(조합 3000 / 배치 15 기준 충분). */
     private const MAX_ROUNDS = 400;
 
-    public function __construct(public int $analysisId, public int $round = 1) {}
+    public function __construct(public int $analysisId, public int $round = 1, public bool $serverOnly = false) {}
 
     public function handle(ShopKeywordExposureAnalyzer $analyzer): void
     {
@@ -35,6 +35,7 @@ class ShopKeywordCheckJob implements ShouldQueue
         }
         // 사용자가 화면에서 중단(paused)했으면 자동 확인도 멈춘다 — 재개는 화면/API 로.
         $fallback = ShopKeywordExposureAnalyzer::usesServerFallback($analysis);
+        if ($this->serverOnly && ! $fallback) return;
         if (in_array($analysis->status, ['paused', 'target_reached', 'ad_ended'], true) || (! $fallback && $this->round > self::MAX_ROUNDS)) {
             return;
         }
@@ -44,7 +45,7 @@ class ShopKeywordCheckJob implements ShouldQueue
             $lane = $lock->acquire('server', 'fallback:'.$analysis->id, (int) $analysis->id, (string) $analysis->core_keyword);
             if (! $lane['ok']) {
                 if (config('queue.default') !== 'sync') {
-                    self::dispatch($this->analysisId, $this->round)->delay(now()->addSeconds(15));
+                    self::dispatch($this->analysisId, $this->round, $this->serverOnly)->delay(now()->addSeconds(15));
                 }
 
                 return;
@@ -66,7 +67,7 @@ class ShopKeywordCheckJob implements ShouldQueue
             if ($fallback && ! empty($p['retry_at'])) {
                 $delay = max(self::GAP_SEC, (int) ceil($p['retry_at'] / 1000 - microtime(true)));
             }
-            self::dispatch($this->analysisId, $this->round + 1)->delay(now()->addSeconds($delay));
+            self::dispatch($this->analysisId, $this->round + 1, $this->serverOnly)->delay(now()->addSeconds($delay));
         }
     }
 }

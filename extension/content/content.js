@@ -3713,6 +3713,8 @@
   // Only read the loaded document; no API requests or captcha interaction.
   async function runSerpRead() {
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
+    window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' });
+    await new Promise(resolve => setTimeout(resolve, 750));
     for (let attempt = 0; attempt < 20; attempt++) {
       const text = document.body?.innerText || '';
       if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {

@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-    "version": "0.5.3",
+    "version": "0.6.0",
     "description": "네이버 마케팅을 위한 무료 분석 도구 — 쇼핑·플레이스·키워드·블로그·상품 리뷰를 한 곳에서 분석. 사장님·마케터·셀러가 내 순위와 시장을 빠르게 파악하도록 돕습니다. rankfree.kr 무료 로그인.",
     "icons": {
         "16": "icons/icon16.png",
@@ -26,7 +26,8 @@
         "http://127.0.0.1:8000/*",
         "http://localhost:8000/*",
         "https://m.search.naver.com/*",
-        "https://s.search.naver.com/*"
+        "https://s.search.naver.com/*",
+        "https://msearch.shopping.naver.com/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -34,7 +35,8 @@
     "content_scripts": [
         {
             "matches": [
-                "https://search.shopping.naver.com/search/*"
+                "https://search.shopping.naver.com/search/*",
+                "https://msearch.shopping.naver.com/search/*"
             ],
             "js": [
                 "content/injected.js"
@@ -44,7 +46,8 @@
         },
         {
             "matches": [
-                "https://search.shopping.naver.com/search/*"
+                "https://search.shopping.naver.com/search/*",
+                "https://msearch.shopping.naver.com/search/*"
             ],
             "js": [
                 "content/content.js",
@@ -147,6 +150,15 @@
             ],
             "js": [
                 "content/console-bridge.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://m.search.naver.com/search.naver*"
+            ],
+            "js": [
+                "content/shop-navigation.js"
             ],
             "run_at": "document_idle"
         }
