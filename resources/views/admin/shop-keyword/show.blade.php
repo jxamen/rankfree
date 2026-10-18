@@ -762,17 +762,12 @@ window.__SK = {
                 const res = await extCall('fetchShopSerp', { keyword: it.keyword, analysisId: {{ (int) $analysis->id }} }, 30000);
                 if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
                 if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
-                if (res.cooldown) { halt(res.message + " 잠시 후 이어서 확인하세요.", true); return; }
+                if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
+                    if (label) label.textContent = '네이버 확인 제한 — 3분 뒤 한 번 다시 확인합니다';
+                    await sleep(Math.max(0, (res.retryAt || Date.now() + 180000) - Date.now()));
+                    break; // 미확인 항목을 다시 조회한다. 재차단이면 같은 대기를 반복한다.
+                }
                 if (!res.ok) {
-                    // 보안문자 페이지든 403/429 차단이든 **보안문자를 풀어야** 이어진다(실측) — 같은 안내로 통일
-                    if (res.captcha || res.status === 403 || res.status === 429) {
-                        halt(res.captcha
-                            ? '네이버 보안문자가 떴습니다 — "보안문자 풀기"로 새 탭에서 풀고, "이어서 확인"을 눌러주세요'
-                            : '네이버가 접속을 차단했습니다(' + (res.status || '차단') + ') — "보안문자 풀기"에서 보안문자를 푼 뒤 "이어서 확인"을 눌러주세요', true);
-                        const cap = document.getElementById('sk-captcha');
-                        if (cap) cap.classList.remove('hidden');
-                        return;
-                    }
                     halt('네이버 응답 오류(' + (res.status || res.message || '통신') + ') — 잠시 후 "이어서 확인"을 눌러주세요', true);
                     return;
                 }
@@ -821,6 +816,12 @@ window.__SK = {
         renderProgress(d);
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
+            if (d.retry_at) {
+                if (label) label.textContent = '서버 확인 제한 — 3분 뒤 한 번 다시 확인합니다';
+                await sleep(Math.max(0, d.retry_at - Date.now()));
+                if (!stopped) poll();
+                return;
+            }
             // 서버(slot API)가 막히면 확장이 있을 때 브라우저 m.search 경로로 이어서 확인(2026-09-28 — slot API 가 빈 {} 응답)
             if (extMode) { runExtLoop(); return; }
             halt(`서버 확인이 잠시 제한됨(${d.checked}/${d.total}) — 랭크프리 확장을 설치하면 브라우저에서 끝까지 확인됩니다. "이어서 확인"으로 재시도`, true);

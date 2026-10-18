@@ -33,6 +33,26 @@ class ShopExposureBlockAlertTest extends TestCase
         Http::assertSent(fn ($r) => str_contains($r['text'], '보안문자') && str_contains($r['text'], '오늘 1번째') && str_ends_with($r->url(), 'chat.postMessage'));
     }
 
+    public function test_every_repeated_block_logs_the_same_event_shape_with_three_minute_retry(): void
+    {
+        Cache::flush();
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        \Illuminate\Support\Facades\Log::spy();
+        $a = new ShopKeywordAnalysis;
+        $a->id = 66;
+        $a->core_keyword = '반복 차단';
+        for ($i = 0; $i < 5; $i++) {
+            $retry = now('Asia/Seoul')->addMinutes(3)->toIso8601String();
+            app(ShopExposureBlockAlert::class)->record($a, '192.0.2.3', 'server', '403', $i > 0);
+            \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($data) =>
+                $data['retry_at'] === $retry && $data['today_count'] === $i + 1 && $data['blocked_on_resume'] === ($i > 0)
+                && array_keys($data) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at']
+            ))->once();
+            $this->travel(3)->minutes();
+        }
+        $this->travelBack();
+    }
+
     public function test_missing_token_sends_nothing_and_failed_slack_does_not_throw(): void
     {
         Cache::flush();

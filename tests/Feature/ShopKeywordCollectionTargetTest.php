@@ -16,6 +16,33 @@ class ShopKeywordCollectionTargetTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_server_batch_retries_blocked_item_with_three_minute_schedule_and_events(): void
+    {
+        \Illuminate\Support\Facades\Cache::flush();
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        Http::fake(['*' => Http::response('', 403)]);
+        \Illuminate\Support\Facades\Log::spy();
+        $u = User::factory()->create();
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '반복',
+            'product_id' => '111', 'threshold' => 5, 'keyword_target' => 2,
+            'check_method' => 'search', 'status' => 'checking', 'combo_count' => 1]);
+        $item = $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => '검색어']);
+        for ($i = 0; $i < 4; $i++) {
+            $p = app(ShopKeywordExposureAnalyzer::class)->checkBatch($a, 1);
+            $this->assertTrue($p['blocked']);
+            $this->assertGreaterThan(microtime(true) * 1000 + 179000, $p['retry_at']);
+            $this->assertLessThanOrEqual(microtime(true) * 1000 + 180001, $p['retry_at']);
+            $this->assertNull($item->fresh()->rank);
+            $state = \Illuminate\Support\Facades\Cache::get('shop-serp:server-policy');
+            $this->assertSame(1600, $state['gap']);
+            $state['until'] = microtime(true) - 1;
+            $state['last'] = microtime(true) - 2;
+            \Illuminate\Support\Facades\Cache::put('shop-serp:server-policy', $state);
+        }
+        Http::assertSentCount(4);
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::type('array'))->times(4);
+    }
+
     public function test_stops_at_target_and_ignores_already_dispatched_results(): void
     {
         $user = User::factory()->create();

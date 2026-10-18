@@ -13,7 +13,7 @@ class ShopSerpPacingTest extends TestCase
         $this->assertSame('http_403', $s->exposure('a', [])['error']);
         $this->assertSame('collector_cooldown', $s->exposure('b', [])['error']);
         Http::assertSentCount(1);
-        $this->assertSame(3200, Cache::get('shop-serp:server-policy')['gap']);
+        $this->assertSame(1600, Cache::get('shop-serp:server-policy')['gap']);
     }
     public function test_resume_block_renews_wait_and_is_logged(): void
     {
@@ -23,8 +23,9 @@ class ShopSerpPacingTest extends TestCase
         \Illuminate\Support\Facades\Log::spy();
         $s = new NaverShopExposureService();
         $this->assertSame('http_403', $s->exposure('resume', [])['error']);
-        $this->assertSame(6400, Cache::get('shop-serp:server-policy')['gap']);
-        $this->assertGreaterThan(microtime(true) + 1790, Cache::get('shop-serp:server-policy')['until']);
+        $this->assertSame(3200, Cache::get('shop-serp:server-policy')['gap']);
+        $this->assertGreaterThan(microtime(true) + 179, Cache::get('shop-serp:server-policy')['until']);
+        $this->assertLessThanOrEqual(microtime(true) + 180, Cache::get('shop-serp:server-policy')['until']);
         $this->assertSame('collector_cooldown', $s->exposure('next', [])['error']);
         Http::assertSentCount(1);
         \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_serp_request', \Mockery::on(fn ($data) => $data['blocked_on_resume'] === true))->once();
