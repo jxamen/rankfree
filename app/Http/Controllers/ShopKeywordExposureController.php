@@ -104,7 +104,9 @@ class ShopKeywordExposureController extends Controller
     public function saveInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
     {
         abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
-        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch', 'parallel_tabs' => 'sometimes|integer|min:1|max:4', 'tab_open_seconds' => 'sometimes|numeric|min:0|max:60|decimal:0,1', 'keywords_per_day' => 'sometimes|integer|min:10|max:500']);
+        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30', 'collection_mode' => 'sometimes|in:tab,fetch', 'parallel_tabs' => 'sometimes|integer|min:1|max:4', 'tab_open_seconds' => 'sometimes|numeric|min:0|max:60|decimal:0,1', 'keywords_per_day' => 'sometimes|integer|min:10|max:500']);
+        // 브라우저 소수 오차(2.2999…초)로 저장이 막히지 않게 서버에서 0.1초 단위로 맞춘다(대표님 10/19 08:49 「주문 목표 저장에 실패」).
+        $data['seconds'] = round((float) $data['seconds'], 1);
         // Collection preferences live in the browser; only the order target is shared.
         if (isset($data['keywords_per_day'])) \App\Models\AppSetting::write('shop.exposure.keywords_per_day', (string) $data['keywords_per_day']);
         if (isset($data['keywords_per_day'])) {

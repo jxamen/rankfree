@@ -66,9 +66,11 @@ class ShopKeywordIntervalTest extends TestCase
     public function test_validation_and_admin_ownership(): void
     {
         $a = $this->analysis();
-        foreach (['0.9', '30.1', '1.25', 'abc'] as $seconds) {
+        foreach (['0.9', '30.1', 'abc'] as $seconds) {
             $this->postJson(route('admin.shop-keyword.interval', $a), compact('seconds'))->assertUnprocessable();
         }
+        // 브라우저 소수 오차는 0.1초 단위로 맞춰 저장한다.
+        $this->postJson(route('admin.shop-keyword.interval', $a), ['seconds' => '1.25'])->assertOk()->assertJsonPath('interval_ms', 1300);
         foreach (['1.0', '30.0'] as $seconds) {
             $this->postJson(route('admin.shop-keyword.interval', $a), compact('seconds'))->assertOk();
         }
