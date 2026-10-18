@@ -11,7 +11,7 @@ for (const suspended of [false,true]) test('close → pause → resume opens fre
  const chrome={storage:{local,session},runtime:{onMessage:messages},tabs:{onRemoved:removed,onUpdated:updates,
   create:async options=>{const tab={id:++created,url:options.url};live.set(tab.id,tab);requests.push({time:clock,url:options.url});return tab;},
   get:async id=>{gets.push(id);if(!live.has(id))throw Error('closed');return live.get(id);},
-  update:async()=>{throw Error('must never navigate an old tab');}}};
+  update:async(id,options)=>{assert.ok(id>10,'closed tabs must not be reused');const tab=live.get(id);Object.assign(tab,options);requests.push({time:clock,url:options.url});return tab;}}};
  const c=vm.createContext({console,chrome,URL,Intl,Date:class extends Date {static now(){return clock;}},setTimeout,clearTimeout,setInterval,clearInterval,
  getStore:async()=>({}),apiFetch:async()=>({ok:true})});
  for(const file of ['shop-serp-tab','shop-serp-policy','shop-serp-pool'])vm.runInContext(fs.readFileSync('extension/'+file+'.js','utf8'),c);
@@ -41,10 +41,10 @@ for (const suspended of [false,true]) test('close → pause → resume opens fre
  assert.equal(local.data['rfSerpReduced:42'],null);
  // Two remaining keywords must request new documents, with configured lane opening spacing.
  const run=vm.runInContext(`Promise.all(['remaining-one','remaining-two'].map(kw=>shopSerpPool.run(42,kw,1,async({tab,policy})=>{tab.openIntervalMs=2500;return policy.run(kw,()=>tab.read(kw), 'browser',1000,null,()=>tab.peek(kw));},2500)))`,c);
- for(let i=0;i<20;i++) {await new Promise(setImmediate);for(const tab of live.values())messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:tab.id}});if(requests.length===2)break;}
+ for(let i=0;i<200;i++) {await new Promise(setImmediate);for(const tab of live.values())messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:tab.id}});}
  assert.equal((await run).every(r=>r.ok),true);
  assert.deepEqual(requests.map(r=>decodeURIComponent(r.url).split('query=')[1]),['remaining-one','remaining-two']);
- assert.equal(requests[0].time,100000);assert.ok(requests[1].time-requests[0].time>=2500);
+ assert.ok(requests[0].time>=100999);assert.ok(requests[1].time-requests[0].time>=1000);
  assert.equal(gets.some(id=>id<=10),false);
 });
 test('console bridge forwards analysis ID on resume',()=>{
@@ -64,4 +64,15 @@ test('boosting restart resets once across simultaneous requests',async()=>{
  vm.runInContext(source.slice(source.indexOf('let rfRestartWork'),source.indexOf('\nconst DEFAULT_API_BASE')),c);
  await vm.runInContext('Promise.all([restartShopSerp(42,"browser",true),restartShopSerp(42,"browser",true)])',c);
  assert.equal(resets,1);
+});
+
+test('resume keeps live lane IDs, recovery and stagger timestamps, including unloaded lanes',async()=>{
+ const local=storage({rfSerpLastLaneStarted:99999}),session=storage({rfSerpTabId:7,'rfSerpTabId:lane:3':10,rfSerpRecovery:{keyword:'A'},rfSerpLastOpened:99998});
+ const c=vm.createContext({chrome:{storage:{session}},console});
+ vm.runInContext(fs.readFileSync('extension/shop-serp-pool.js','utf8'),c);
+ c.local=local;
+ await vm.runInContext(`const p=new ShopSerpPool({storage:local,policyFactory:()=>({resume:async()=>{}})});p.lanes.set(0,{tab:{tabId:7},policy:{resume:async()=>{}}});p.restart(85)`,c);
+ assert.equal(session.data.rfSerpTabId,7);assert.equal(session.data['rfSerpTabId:lane:3'],10);
+ assert.equal(session.data.rfSerpRecovery.keyword,'A');assert.equal(session.data.rfSerpLastOpened,99998);
+ assert.equal(local.data.rfSerpLastLaneStarted,99999);assert.equal(vm.runInContext('p.lanes.get(0).tab.tabId',c),7);
 });

@@ -13,7 +13,7 @@ class ShopSerpPolicy {
       const data = await this.storage.get(['rfSerpPolicy', 'rfSerpPolicyByIp']);
       const policies = data.rfSerpPolicyByIp || {};
       const s = policies[ip] || data.rfSerpPolicy || {};
-      s.until = 0; s.last = 0; s.blockedOnResume = false;
+      s.until = 0; s.blockedOnResume = false;
       policies[ip] = s;
       await this.storage.set({ rfSerpPolicy: s, rfSerpPolicyByIp: policies, rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
       return { ok: true };

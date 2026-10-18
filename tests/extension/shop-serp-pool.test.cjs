@@ -6,7 +6,7 @@ require('../../extension/shop-serp-pool.js');
 require('../../extension/shop-serp-tab.js');
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function storage(){const data={};return {data,get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,data[k]])),set:async values=>Object.assign(data,values)};}
-function pool(store){return new ShopSerpPool({storage:store,tabFactory:slot=>({slot}),policyFactory:slot=>({slot})});}
+function pool(store){ for (const id of [10,11,42,73,88,501]) store.data["rfSerpFirstDone:"+id]=true; return new ShopSerpPool({storage:store,tabFactory:slot=>({slot}),policyFactory:slot=>({slot})});}
 test('four distinct lanes actually overlap, a gate reduces later work to one, next analysis restores four',async()=>{
  const store=storage(), p=pool(store);let active=0,max=0;const slots=new Set();
  const execute=async ({tab})=>{slots.add(tab.slot);max=Math.max(max,++active);await pause(10);active--;return {ok:true};};
@@ -88,7 +88,7 @@ test('page and bridge correlate out-of-order concurrent replies to the original 
 });
 test('every concurrent lane independently observes the configured keyword interval',async()=>{
  require('../../extension/shop-serp-policy.js');
- const store=storage(),clock=[10000,10000],waits=[[],[]];let p;
+ const store=storage();store.data["rfSerpFirstDone:99"]=true;const clock=[10000,10000],waits=[[],[]];let p;
  p=new ShopSerpPool({storage:store,tabFactory:slot=>({slot}),policyFactory:slot=>new ShopSerpPolicy({storage:p.laneStorage(slot),now:()=>clock[slot],wait:async ms=>{waits[slot].push(ms);clock[slot]+=ms;},cache:{get:async()=>null,put:async()=>{}}})});
  const run=batch=>Promise.all([0,1].map(i=>p.run(99,batch+':'+i,2,({tab,policy})=>policy.run(batch+':'+i,async()=>({ok:true,status:200,result_source:'shopping'}),'ip',1000,'saved-revision'))));
  await run('first');await run('second');
@@ -127,4 +127,17 @@ test('already waiting keyword reads new width while the first keyword is still r
  await store.set({rfShopSettings:{parallel_tabs:2,tab_open_interval_ms:0}});
  try {await second;assert.equal(secondStarted,true);assert.equal(p.active.size,1);}finally{release();}
  await first;
+});
+
+test('new analysis first keyword runs alone even with zero stagger; warm lanes then overlap',async()=>{
+ const store=storage(),p=new ShopSerpPool({storage:store,tabFactory:slot=>({slot}),policyFactory:()=>({})});
+ let release,entered=0,peak=0,active=0;
+ const barrier=new Promise(r=>release=r);
+ const first=p.run(84,'first',4,async()=>{entered++;active++;await barrier;active--;return {ok:true};},0);
+ while(!entered) await pause(1);
+ const rest=Array.from({length:4},(_,i)=>p.run(84,'next'+i,4,async()=>{entered++;peak=Math.max(peak,++active);await pause(10);active--;return {ok:true};},0));
+ await pause(20);assert.equal(entered,1);
+ release();await Promise.all([first,...rest]);assert.equal(peak,4);
+ // A new worker still knows this analysis already passed its first search.
+ assert.equal(store.data['rfSerpFirstDone:84'],true);
 });
