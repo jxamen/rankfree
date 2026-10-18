@@ -1069,7 +1069,7 @@ Object.assign(handlers, {
       if (collection_mode !== 'fetch') return shopSerpTab.read(kw, target);
       const read = async (url, source) => {
         const r = await handlers.spFetchHtml({url});
-        const captcha = /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한/.test(r.text || '');
+        const captcha = /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(r.text || '');
         return {ok: r.ok && !captcha, status: r.status, captcha, html: source === 'shopping' && r.ok && !captcha ? ShopSerpTab.fetchedHtml(r.text || '') : r.text || '', result_source: source,
           message: captcha ? '보안문자 대기 — 브라우저 탭으로 열기로 바꿔 사람이 풀어 주세요.' : r.message};
       };
