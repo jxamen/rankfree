@@ -35,7 +35,7 @@
       const [type, payload] = ROUTES[m.type](m);
       chrome.runtime.sendMessage({ type, payload }, (res) => {
         if (chrome.runtime.lastError) {
-          reply({ ok: false, message: '확장 통신 실패: ' + chrome.runtime.lastError.message + ' — 확장을 새로고침(chrome://extensions) 후 다시 시도하세요.' });
+          reply({ ok: false, status: 0, message: '확장 통신 실패: ' + chrome.runtime.lastError.message + ' — 확장을 새로고침(chrome://extensions) 후 다시 시도하세요.' });
           return;
         }
         reply(res || { ok: false, message: '확장이 응답하지 않았습니다.' });
@@ -43,7 +43,7 @@
     } catch (err) {
       const raw = String((err && err.message) || err);
       reply({
-        ok: false,
+        ok: false, status: 0,
         message: raw.indexOf('context invalidated') >= 0
           ? '확장이 업데이트되었습니다 — 이 페이지를 새로고침(F5)한 뒤 다시 시도하세요.'
           : '확장 호출 실패: ' + raw,

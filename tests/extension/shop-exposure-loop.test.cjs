@@ -32,7 +32,7 @@ test('background inspects the same keyword every 1.5 seconds until human recover
  assert.equal(calls,4);assert.equal(saves,1);assert.deepEqual(waits,[1500,1500,1500]);
 });
 
-test('admin extension loop transfers the first actual block to server without saving it', async()=>{
+test('admin extension loop keeps browser work until human recovery even with stale fallback replies', async()=>{
  const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
  const start=blade.indexOf('    async function runExtLoop()');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
@@ -44,7 +44,7 @@ test('admin extension loop transfers the first actual block to server without sa
   post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
  await vm.runInContext(code+';runExtLoop()',context);
- assert.equal(calls,1);assert.equal(saves,0);assert.equal(serverCalls,1);assert.equal(context.serverFallback,true);assert.deepEqual(events,['403']);assert.deepEqual(waits,[]);
+ assert.equal(calls,5);assert.equal(saves,1);assert.equal(serverCalls,0);assert.equal(context.serverFallback,false);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[1500,1500,1500,1500]);
 });
 
 test('admin clears the old failure notice on the next successful progress response', () => {

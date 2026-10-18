@@ -8,7 +8,7 @@ function event(){const listeners=new Set();return {addListener:f=>listeners.add(
 function browser(){
  const messages=event(),updated=event(),removed=event();let created=0,closed=0;const updates=[],store={},live=new Map();
  const c={scripting:{executeScript:async()=>{}},runtime:{onMessage:messages},storage:{session:{get:async()=>store,set:async v=>Object.assign(store,v)}},tabs:{onUpdated:updated,onRemoved:removed,
- create:async opts=>{created++;assert.equal(opts.active,false);assert.equal(opts.pinned,false);assert.match(opts.url,/search.shopping.naver.com\/search\/all\?query=/);const tab={id:created+6,url:opts.url};live.set(tab.id,tab);return tab;},
+ create:async opts=>{created++;assert.equal(opts.active,false);assert.equal(opts.pinned,false);assert.match(opts.url,/m.search.naver.com\/search.naver\?where=m&query=/);const tab={id:created+6,url:opts.url};live.set(tab.id,tab);return tab;},
  update:async(id,opts)=>{assert.equal(opts.active,false);updates.push({id,...opts});Object.assign(live.get(id),opts);return live.get(id);},
  get:async id=>{if(!live.has(id))throw Error('No tab');return live.get(id);},remove:async()=>{closed++;}}};
  return {c,messages,updated,removed,updates,live,counts:()=>({created,closed})};
@@ -37,7 +37,7 @@ for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])te
  fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:(f,ms)=>{waits.push(ms);f();},
  getStore:async()=>({}),apiFetch:async(_,v)=>events.push(v.body)});
  const r=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"same",analysisId:70});',context);
- assert.equal(r.ok,tabOK);assert.equal(tabs,1);assert.equal(fetches,mode==='request'?1:0);assert.equal(waits.length,mode==='request'?1:0);
+ assert.equal(r.ok,tabOK);assert.equal(tabs,1);assert.equal(fetches,0);assert.equal(waits.length,0);
  assert.equal(events[0].kind,tabOK?'success':'보안문자');assert.equal(!!store.rfSerpPolicy.until,!tabOK);assert.equal(store.rfSerpPolicy.http403,0);
 });
 const content=fs.readFileSync(require('node:path').join(__dirname,'../../extension/content/content.js'),'utf8');
@@ -45,7 +45,7 @@ const readStart=content.indexOf('  async function runSerpRead()');
 const readFn=content.slice(readStart,content.indexOf('  // 백그라운드 상품분석 진행률 수신',readStart));
 for(const kind of ['products','empty','captcha','unknown'])test('document-only reader '+kind,async()=>{
  const messages=[];let reads=0;
- const context=vm.createContext({document:{body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
+ const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},document:{body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
  domNextData:()=>{reads++;return kind==='products'?{products:[{id:123}]}:null;},
  chrome:{runtime:{sendMessage:async m=>messages.push(m)}},setTimeout:f=>f(),fetch:()=>{throw Error('must not fetch');}});
  await vm.runInContext(readFn+'runSerpRead()',context);
@@ -60,7 +60,7 @@ test('reuses one tab across keywords and worker instances; recreates only after 
  await read('first',7);await read('second',7);
  reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});await read('third',7);
  assert.deepEqual(f.counts(),{created:1,closed:0});
- assert.deepEqual(f.updates.map(x=>x.id),[7,7]);assert.match(f.updates[0].url,/query=second#rfserp$/);
+ assert.deepEqual(f.updates.map(x=>x.id),[7,7]);assert.match(f.updates[0].url,/query=second#rfnav$/);
  f.live.delete(7);f.removed.emit(7);assert.equal(f.counts().created,1);
  await read('fourth',8);assert.deepEqual(f.counts(),{created:2,closed:0});
 });
@@ -81,7 +81,7 @@ test('passive peek survives reader restart, reads only matching keyword and neve
  f.c.tabs.sendMessage=async(id,msg)=>{assert.equal(id,7);assert.equal(msg.type,'__rfSerpPeek');inspections++;if(!solved)throw Error('No receiver on captcha');return {ok:true,products:[{id:'123'}]};};
  reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
  assert.equal(await reader.peek('other'),null);assert.equal(inspections,0);
- assert.equal(await reader.peek('same'),null);solved=true;
+ assert.equal(await reader.peek('same'),null);solved=true;f.live.get(7).url='https://msearch.shopping.naver.com/search/all?query=same';
  assert.equal((await reader.peek('same')).ok,true);
  assert.equal(f.updates.length,0);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
@@ -98,41 +98,11 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
  assert.equal(reply.ok,['products','empty'].includes(kind));
 });
 
-for (const gap of [2000,2300]) test('read -> one inactive-tab smooth scroll -> 750ms -> policy gap '+gap+' -> next navigation',async()=>{
- const f=browser(),events=[];let now=Date.parse('2026-10-18T01:00:00Z'),release;
- f.c.scripting.executeScript=async({target,func})=>{
-  assert.equal(target.tabId,7);
-  vm.runInNewContext('('+func.toString()+')()', {window:{innerHeight:900,scrollBy:opts=>{
-   assert.equal(opts.top,900);assert.equal(opts.left,0);assert.equal(opts.behavior,'smooth');events.push('scroll');
-  }}});
- };
- const reader=new ShopSerpTab({browser:f.c,wait:ms=>{assert.equal(ms,750);events.push('settle');return new Promise(r=>{release=()=>{now+=ms;r();};});}});
- const store={rfSerpPolicy:{gap}};
- const policy=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},now:()=>now,
-  wait:async ms=>{assert.equal(ms,gap);events.push('gap');now+=ms;},cache:{get:async()=>null,put:async()=>{}}});
- const update=f.c.tabs.update;
- f.c.tabs.update=async(...args)=>{events.push('navigate');return update(...args);};
- const first=policy.run('a',()=>reader.read('a'));
- const second=policy.run('b',()=>reader.read('b'));
- await new Promise(setImmediate);assert.deepEqual(events,[]);
- events.push('read');
- const message={type:'__rfSerpRead',result:{ok:true,products:[]}};
- f.messages.emit(message,{tab:{id:99}});assert.deepEqual(events,['read']);
- f.messages.emit(message,{tab:{id:7}});f.messages.emit(message,{tab:{id:7}});
- await new Promise(setImmediate);assert.deepEqual(events,['read','scroll','settle']);assert.equal(f.updates.length,0);
- release();await first;await new Promise(setImmediate);
- assert.deepEqual(events,['read','scroll','settle','gap','navigate']);
- events.push('read');f.messages.emit(message,{tab:{id:7}});await new Promise(setImmediate);release();assert.equal((await second).ok,true);
- assert.equal(events.filter(x=>x==='scroll').length,2);
-});
-
-test('failed or blocked documents do not scroll; injection failure stops successful collection',async()=>{
- for(const kind of ['blocked','injection']){
-  const f=browser();let calls=0;
-  f.c.scripting.executeScript=async()=>{calls++;throw Error('injection denied');};
-  const p=new ShopSerpTab({browser:f.c,wait:async()=>{throw Error('must not wait');}}).read('a');
-  await new Promise(setImmediate);
-  f.messages.emit({type:'__rfSerpRead',result:kind==='blocked'?{ok:false,captcha:true}:{ok:true,products:[]}},{tab:{id:7}});
-  assert.equal((await p).ok,false);assert.equal(calls,kind==='blocked'?0:1);
- }
+test('loaded document scrolls once and settles before reading rank',async()=>{
+ const events=[];
+ const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>events.push('scroll')},
+ document:{body:{innerText:''}},domNextData:()=>{events.push('read');return {products:[{id:1}]};},
+ chrome:{runtime:{sendMessage:async()=>events.push('send')}},setTimeout:(f,ms)=>{events.push(ms);f();}});
+ await vm.runInContext(readFn+'runSerpRead()',context);
+ assert.deepEqual(events,['scroll',750,'read','send']);
 });

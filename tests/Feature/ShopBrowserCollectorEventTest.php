@@ -45,7 +45,7 @@ class ShopBrowserCollectorEventTest extends TestCase
         }
     }
 
-    public function test_late_browser_success_preserves_transferred_server_retry_gap_and_block_count(): void
+    public function test_human_browser_success_clears_retry_and_preserves_gap_and_block_count(): void
     {
         config(['services.slack.notifications.bot_user_oauth_token' => null]);
         $u = User::factory()->create(['role' => 'operator']);
@@ -56,9 +56,9 @@ class ShopBrowserCollectorEventTest extends TestCase
         $policy = ['until' => microtime(true) + 180, 'gap' => 5300, 'http403' => 11];
         \Illuminate\Support\Facades\Cache::put($key, $policy);
         $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success', 'interval_ms' => 2300])->assertOk();
-        $this->assertSame($policy, \Illuminate\Support\Facades\Cache::get($key));
+        $this->assertSame(array_replace($policy, ['until' => 0]), \Illuminate\Support\Facades\Cache::get($key));
         $this->assertSame(2300, \App\Services\ShopExposureBlockAlert::interval('192.0.2.25'));
-        $this->assertSame('blocked', $a->fresh()->status);
+        $this->assertSame('checking', $a->fresh()->status);
     }
 
     public function test_admin_reset_preserves_counts_and_cooldown_and_denies_member(): void

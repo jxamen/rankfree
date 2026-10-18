@@ -20,11 +20,11 @@ class ShopExposureFailureStateTest extends TestCase
         foreach (['http_403', 'http_429', 'captcha', 'http_503', 'http_exception', 'collector_busy'] as $error) {
             $a = ShopKeywordAnalysis::create(['user_id' => User::factory()->create()->id,
                 'core_keyword' => '테스트', 'product_url' => 'https://smartstore.naver.com/x/products/111',
-                'status' => 'checking', 'check_method' => 'search', 'threshold' => 5, 'combo_count' => 2]);
+                'status' => 'checking', 'check_method' => 'api', 'threshold' => 5, 'combo_count' => 2]);
             foreach (['a', 'b'] as $keyword) ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => $keyword]);
             $service = \Mockery::mock(NaverShopExposureService::class)->makePartial();
-            $service->shouldReceive('exposure')->once()->andReturn(['error' => $error, 'blocked' => true]);
-            $service->shouldReceive('exposure')->once()->andReturn(['rank' => 1, 'blocked' => false]);
+            $service->shouldReceive('exposureBySlotApi')->once()->andReturn(['error' => $error, 'blocked' => true]);
+            $service->shouldReceive('exposureBySlotApi')->once()->andReturn(['rank' => 1, 'blocked' => false]);
             $this->app->instance(NaverShopExposureService::class, $service);
             $analyzer = $this->app->make(ShopKeywordExposureAnalyzer::class);
             $r = $analyzer->checkBatch($a, 1);
