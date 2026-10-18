@@ -41,6 +41,12 @@ class ShopKeywordExposureController extends Controller
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
+        // Product failures are independent of SERP blocking/pacing and analysis status.
+        if (($data['stage'] ?? '') === 'product' && $data['kind'] === 'client_error') {
+            \Illuminate\Support\Facades\Cache::put('shop-product-status:'.$analysis->id, [
+                'message' => $data['message'] ?? '', 'updated_at' => now()->toIso8601String(),
+            ], now()->addDay());
+        }
         if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
             \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
                 'analysis_id' => $analysis->id, 'user_id' => $request->user()->id,
@@ -53,6 +59,12 @@ class ShopKeywordExposureController extends Controller
             $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
         );
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
+    }
+
+    public function productStatus(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+        return response()->json(\Illuminate\Support\Facades\Cache::get('shop-product-status:'.$analysis->id, ['message' => '']));
     }
 
     public function resetInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse

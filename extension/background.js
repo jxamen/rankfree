@@ -71,6 +71,7 @@ function removeTab(id, tries) {
 
 // 상품페이지 백그라운드 수집 완료 대기 — product.js 의 saveProductInfo 도착으로 해소된다.
 const productInfoWaiters = new Map();
+const productBlockedTabs = new Map();
 
 const handlers = {
   /** 로그인 → 토큰 저장 */
@@ -280,15 +281,17 @@ const handlers = {
       if (w) w(Object.assign({ payload }, r));
       return r;
     };
+    // Extraction must reach the waiting page before the independent API save (30s budget).
+    notify({ ok: true });
     const { token, apiBase } = await getStore();
-    if (!token) return notify({ ok: false, loggedIn: false });
+    if (!token) return { ok: false, loggedIn: false };
     const { ok, status, json } = await apiFetch('/api/ext/product-infos', {
       method: 'POST',
       body: payload,
       token,
       apiBase,
     });
-    return notify({ ok, status, id: json && json.id, message: json && json.message });
+    return { ok, status, id: json && json.id, message: json && json.message };
   },
 
   async listProductAnalyses({ limit } = {}) {
@@ -904,10 +907,14 @@ async function drainShopKeywordProductQueue() {
       if (!it || !it.product_url) continue;
       const pi = await handlers.collectProductPage({ url: it.product_url });
       // 실패(로그인 게이트·타임아웃)는 남겨 두면 다음 주기에 다시 시도된다
-      if (!pi || !pi.ok || !pi.info) continue;
-      await apiFetch('/api/ext/shop-keyword/' + it.analysis_id + '/product-info', {
+      if (!pi || !pi.ok || !pi.info) {
+        await reportShopClientEvent(it.analysis_id, '', 'product', pi?.message || '상품정보 응답 없음');
+        continue;
+      }
+      const saved = await apiFetch('/api/ext/shop-keyword/' + it.analysis_id + '/product-info', {
         method: 'POST', body: { info: pi.info }, token, apiBase,
       });
+      await reportShopClientEvent(it.analysis_id, '', 'product', saved.ok ? '' : '상품정보 저장 실패 (HTTP ' + saved.status + ')');
       await new Promise((r) => setTimeout(r, 1500));   // 연속 탭 열기 간격
     }
   } catch (e) { /* noop */ } finally {
@@ -930,7 +937,7 @@ async function reportShopClientEvent(analysisId, keyword, stage, message, kind =
   } catch (_) {}
 }
 async function watchShopKeywordQueue() {
-  if (skwCheckActive && Date.now() - skwCheckHeartbeat > 120000) {
+  if (skwCheckActive && Date.now() - skwCheckHeartbeat > 120000 && !productInfoWaiters.size && !skwQueueActive) {
     // Reload terminates the old lane and its callbacks before a new worker claims a lease.
     const current = globalThis.rfSerpCurrent || {};
     await reportShopClientEvent(current.analysisId, current.keyword, 'watchdog', 'worker promise stalled >120s', 'watchdog_restart');
@@ -1176,42 +1183,59 @@ Object.assign(handlers, {
     const pid = m[1];
     if (productInfoWaiters.has(pid)) return { ok: false, message: '이미 수집 중입니다.' };
 
-    let tab = null;
-    try {
-      tab = await chrome.tabs.create({ url: m[0], active: false });
-    } catch (e) {
-      return { ok: false, message: '탭 열기 실패: ' + String((e && e.message) || e) };
-    }
-    // 네이버 로그인·캡차 게이트 감지(2026-07-23) — 자동 열림 탭을 네이버가 nid/captcha 로 돌리면
-    // 수집이 영영 안 끝난다. 탭을 앞으로 가져와 사용자가 직접 확인하게 하고, 그 탭은 닫지 않는다.
+    // Reserve synchronously, before tabs.create: concurrent queue/UI calls must not steal the waiter.
+    let finish;
+    const pending = new Promise(resolve => { finish = resolve; });
+    productInfoWaiters.set(pid, finish);
+    let tab = null, timer = null, probe = null, inspecting = false;
     let gate = false;
-    const onUpd = (tabId, info) => {
-      if (!tab || tabId !== tab.id || !info.url) return;
-      if (/^https:\/\/(nid\.naver\.com|captcha\.naver\.com|ncpt\.naver\.com)\//i.test(info.url)) {
-        gate = true;
-        try { chrome.tabs.update(tab.id, { active: true }); } catch (e) { /* noop */ }
-        const w = productInfoWaiters.get(pid);
-        if (w) w({ ok: false, needLogin: true });
-      }
+    const blocked = (message) => {
+      gate = true;
+      finish({ ok: false, blocked: true, message: message || '네이버 제한 화면 — 풀린 뒤 자동 재시도' });
     };
-    try { chrome.tabs.onUpdated.addListener(onUpd); } catch (e) { /* noop */ }
-    const result = await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), 25000);
-      productInfoWaiters.set(pid, (r) => { clearTimeout(timer); resolve(r); });
-    });
-    try { chrome.tabs.onUpdated.removeListener(onUpd); } catch (e) { /* noop */ }
-    productInfoWaiters.delete(pid);
-
-    if (gate) {
-      // 로그인 확인 탭은 유지 — 사용자가 로그인(확인)한 뒤 다시 수집하면 정상 진행
-      return { ok: false, product_id: pid, needLogin: true,
-        message: '네이버가 로그인(보안) 확인을 요구했습니다 — 방금 열린 탭에서 확인·로그인한 뒤 "상품정보 다시 수집"을 다시 눌러주세요.' };
+    const onUpd = (id, info) => {
+      if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
+    };
+    try {
+      chrome.tabs.onUpdated.addListener(onUpd);
+      timer = setTimeout(() => finish({ ok: false, message: '상품정보 수집 시간 초과 — 잠시 후 자동 재시도' }), 25000);
+      const oldTab = productBlockedTabs.get(pid);
+      productBlockedTabs.delete(pid);
+      if (oldTab != null) {
+        try { tab = await chrome.tabs.update(oldTab, { url: m[0], active: false }); } catch (_) {}
+      }
+      if (!tab) tab = await chrome.tabs.create({ url: m[0], active: false });
+      const inspect = async () => {
+        if (inspecting) return;
+        inspecting = true;
+        try {
+          const current = await chrome.tabs.get(tab.id);
+          onUpd(tab.id, { url: current.url });
+          if (current.status === 'loading') return; // reused tab still contains the previous restriction document
+          const results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => {
+            const text = (document.body?.innerText || '').slice(0, 20000);
+            if (/현재 서비스 접속이 불가|서비스에 접속할 수 없/.test(text)) return 'unavailable';
+            return /검색 서비스 이용이 제한|서비스 이용이 제한|접근이 제한|비정상적인 접근|보안 확인|보안문자|자동입력 방지|자동입력방지|captcha/i.test(text);
+          }});
+          if (results?.[0]?.result) blocked(results[0].result === 'unavailable' ? '네이버 상품 서비스 접속 불가 — 잠시 후 자동 재시도' : undefined);
+        } catch (_) { /* navigation can temporarily make the document inaccessible */ }
+        finally { inspecting = false; }
+      };
+      probe = setInterval(inspect, 1000);
+      void inspect();
+      const result = await pending;
+      return { ok: !!result.payload, product_id: pid, info: result.payload || null,
+        blocked: !!result.blocked, retryable: !result.payload, message: result.message || '' };
+    } catch (e) {
+      return { ok: false, retryable: true, message: '상품 탭 수집 실패: ' + String(e.message || e) };
+    } finally {
+      clearTimeout(timer); clearInterval(probe);
+      chrome.tabs.onUpdated.removeListener(onUpd);
+      productInfoWaiters.delete(pid);
+      // Keep a security tab available for the user to solve; retries reuse it below.
+      if (gate && tab) productBlockedTabs.set(pid, tab.id);
+      else removeTab(tab?.id);
     }
-    removeTab(tab && tab.id);
-
-    if (!result) return { ok: false, product_id: pid, message: '상품정보 수집 시간 초과 — 상품 페이지를 한 번 직접 열어주세요.' };
-    // 수집 payload 를 페이지에 직접 돌려준다 — 페이지가 자기 서버에 저장(확장 로그인·apiBase 무관)
-    return { ok: !!(result.ok || result.payload), product_id: pid, info: result.payload || null, message: result.message || '' };
   },
 
   /** 통합검색 등 비쇼핑 페이지 위임 수집 — 쇼핑 검색 페이지를 백그라운드 탭으로 열어 상품을 수집해 회신. */
