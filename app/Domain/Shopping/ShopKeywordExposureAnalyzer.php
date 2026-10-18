@@ -233,6 +233,7 @@ class ShopKeywordExposureAnalyzer
                     if ($fresh->collectionStopped()) {
                         return false;
                     }
+                    $item->result_source = null;
                     $item->rank = (int) ($res['rank'] ?? 0);
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
@@ -281,7 +282,7 @@ class ShopKeywordExposureAnalyzer
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
                 'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? \App\Services\ShopExposureBlockAlert::baseInterval()), 'retry_at' => $retryAt, 'error' => $error,
-                'items' => $batchResults];
+                'items' => $batchResults, 'judged_count' => count($batchResults), 'exposed_items' => $this->exposedItems($analysis)];
         } finally {
             $lock->release();
         }
@@ -293,9 +294,9 @@ class ShopKeywordExposureAnalyzer
      *
      * @return array{remaining:int, checked:int, exposed:int, total:int, blocked:bool, status:string, rank:int, ad:bool}
      */
-    public function applyHtml(ShopKeywordAnalysis $analysis, ShopKeywordAnalysisItem $item, string $html): array
+    public function applyHtml(ShopKeywordAnalysis $analysis, ShopKeywordAnalysisItem $item, string $html, ?string $resultSource = null): array
     {
-        return DB::transaction(function () use ($analysis, $item, $html) {
+        return DB::transaction(function () use ($analysis, $item, $html, $resultSource) {
             $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
             if ($analysis->status === 'ad_ended') {
                 return $this->progress($analysis) + ['skipped' => true];
@@ -313,6 +314,7 @@ class ShopKeywordExposureAnalyzer
             $threshold = (int) $analysis->threshold;
 
             $res = $this->exposure->rankFromHtml($html, $this->targetOf($analysis));
+            $item->result_source = $resultSource;
             $item->rank = (int) ($res['rank'] ?? 0);
             $item->ad_exposed = ! empty($res['ad']);
             $item->checked_at = now();
@@ -334,7 +336,8 @@ class ShopKeywordExposureAnalyzer
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => false, 'status' => $status,
                 'rank' => (int) $item->rank, 'ad' => (bool) $item->ad_exposed,
-                'combo_tag' => (string) $item->combo_tag];   // 패턴 카드 실시간 갱신용
+                'combo_tag' => (string) $item->combo_tag, 'result_source' => $item->result_source,
+                'judged_count' => 1, 'exposed_items' => $this->exposedItems($analysis)];   // 패턴 카드 실시간 갱신용
         });
     }
 
@@ -415,7 +418,7 @@ class ShopKeywordExposureAnalyzer
     }
 
     /** 순위체크 대상 식별자(target) — 분석 레코드에서 복원. */
-    private function targetOf(ShopKeywordAnalysis $analysis): array
+    public function targetOf(ShopKeywordAnalysis $analysis): array
     {
         return [
             'type' => $analysis->product_id ? 'product' : 'mall',
@@ -601,6 +604,14 @@ class ShopKeywordExposureAnalyzer
         return $this->progress($analysis);
     }
 
+    private function exposedItems(ShopKeywordAnalysis $analysis): array
+    {
+        return $analysis->combos()->whereBetween('rank', [1, (int) $analysis->threshold])
+            ->orderBy('checked_at')->orderBy('id')->get(['id', 'keyword', 'rank', 'ad_exposed', 'result_source'])
+            ->map(fn ($item) => ['id' => $item->id, 'keyword' => $item->keyword, 'rank' => $item->rank,
+                'ad' => (bool) $item->ad_exposed, 'result_source' => $item->result_source])->all();
+    }
+
     public function progress(ShopKeywordAnalysis $analysis): array
     {
         $threshold = (int) $analysis->threshold;
@@ -612,6 +623,7 @@ class ShopKeywordExposureAnalyzer
             'total' => (int) $analysis->combo_count,
             'blocked' => $analysis->status === 'blocked',
             'status' => (string) $analysis->status,
+            'exposed_items' => $this->exposedItems($analysis),
             'error' => in_array($analysis->status, ['blocked', 'error'], true) ? Cache::get('shop-exposure:error:'.$analysis->id) : null,
         ];
     }

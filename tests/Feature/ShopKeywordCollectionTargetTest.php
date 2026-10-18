@@ -85,6 +85,34 @@ class ShopKeywordCollectionTargetTest extends TestCase
         $this->postJson('/api/v1/shop-keywords', $data)->assertUnprocessable();
     }
 
+    public function test_kst_same_day_reuses_pending_and_completed_but_next_day_creates_new(): void
+    {
+        Http::fake();
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-18 23:59:00', 'Asia/Seoul'));
+        $u = User::factory()->create(['api_scopes' => ['shop_keyword']]);
+        [, $key] = ApiKey::issue($u, 'test', ['shop_keyword'], null, null, null);
+        $this->withHeader('Authorization', 'Bearer '.$key);
+        $data = ['core_keyword' => '테스트', 'product' => 'https://smartstore.naver.com/x/products/111'];
+        $res = $this->postJson('/api/v1/shop-keywords', $data)->assertCreated()->assertJsonPath('reused', false)->assertJsonPath('reuse_mode', 'new')->assertJsonPath('reuse_label', '새로');
+        $a = ShopKeywordAnalysis::findOrFail($res->json('analysis.id'));
+        $checked = $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => 'checked', 'rank' => 3, 'checked_at' => now()]);
+        $pending = $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => 'pending']);
+        $a->update(['status' => 'paused']);
+        $this->postJson('/api/v1/shop-keywords', $data)->assertOk()->assertJsonPath('analysis.id', $a->id)->assertJsonPath('reuse_mode', 'reused')->assertJsonPath('reuse_label', '재사용(이어서)')->assertJsonPath('analysis.status', 'checking');
+        $this->assertSame(3, $checked->fresh()->rank);
+        $this->assertNull($pending->fresh()->rank);
+        foreach (['done', 'target_reached'] as $status) {
+            $a->update(['status' => $status]);
+            $this->postJson('/api/v1/shop-keywords', $data)->assertOk()->assertJsonPath('analysis.status', $status);
+        }
+        $other = $data; $other['product'] = 'https://smartstore.naver.com/x/products/222';
+        $this->postJson('/api/v1/shop-keywords', $other)->assertCreated()->assertJsonPath('reused', false);
+        $this->travel(2)->minutes();
+        $new = $this->postJson('/api/v1/shop-keywords', $data)->assertCreated()->assertJsonPath('reused', false);
+        $this->assertNotSame($a->id, $new->json('analysis.id'));
+        $this->travelBack();
+    }
+
     public function test_five_day_url_groups_use_only_top_five_target_keywords(): void
     {
         $u = User::factory()->create();

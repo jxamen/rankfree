@@ -1,0 +1,83 @@
+[
+  {
+    "name": "rank one",
+    "screen": "integrated",
+    "elapsedMs": 2,
+    "decidedBeforeComplete": true
+  },
+  {
+    "name": "rank five",
+    "screen": "integrated",
+    "elapsedMs": 1,
+    "decidedBeforeComplete": true
+  },
+  {
+    "name": "rank six",
+    "screen": "integrated",
+    "elapsedMs": 1,
+    "decidedBeforeComplete": true
+  },
+  {
+    "name": "ad only",
+    "screen": "integrated",
+    "elapsedMs": 1,
+    "decidedBeforeComplete": true
+  },
+  {
+    "name": "super point",
+    "screen": "integrated",
+    "elapsedMs": 0,
+    "decidedBeforeComplete": true
+  },
+  {
+    "name": "hidden block",
+    "screen": "shopping"
+  },
+  {
+    "name": "no block",
+    "screen": "shopping"
+  },
+  {
+    "name": "empty block",
+    "screen": "integrated",
+    "elapsedMs": 1,
+    "decidedBeforeComplete": true
+  },
+  {
+    "shoppingRead": {
+      "events": [
+        "complete",
+        "visible",
+        "read",
+        "scroll",
+        "read",
+        "send",
+        "read"
+      ],
+      "result": {
+        "ok": true,
+        "status": 200,
+        "products": [
+          {
+            "id": "123",
+            "rank": 1
+          }
+        ],
+        "result_source": "shopping"
+      }
+    }
+  },
+  {
+    "summaryListSync": {
+      "first": {
+        "rows": 66,
+        "count": "66",
+        "copy": 66
+      },
+      "after": {
+        "rows": 38,
+        "count": "38"
+      }
+    }
+  }
+]

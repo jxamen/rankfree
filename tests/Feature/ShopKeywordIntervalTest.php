@@ -24,8 +24,9 @@ class ShopKeywordIntervalTest extends TestCase
         Cache::flush();
         $a = $this->analysis();
         $this->assertSame(4000, ShopExposureBlockAlert::baseInterval());
-        $this->postJson(route('admin.shop-keyword.interval', $a), ['seconds' => '12.5'])->assertOk()->assertJsonPath('interval_ms', 12500);
+        $this->postJson(route('admin.shop-keyword.interval', $a), ['seconds' => '12.5', 'collection_mode' => 'fetch'])->assertOk()->assertJsonPath('interval_ms', 12500);
         $this->assertSame('12500', AppSetting::read('shop.exposure.interval_ms'));
+        $this->assertSame('fetch', ShopExposureBlockAlert::collectionMode());
         $this->assertSame(12500, Cache::get(NaverShopExposureService::policyKey())['gap']);
         $this->assertSame(12500, ShopExposureBlockAlert::interval('127.0.0.1'));
         $countKey = 'shop-block:'.hash('sha256', '127.0.0.1').':'.now('Asia/Seoul')->format('Y-m-d');

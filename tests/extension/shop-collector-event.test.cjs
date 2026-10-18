@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+require('../../extension/shop-serp-tab.js');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/background.js'), 'utf8');
 const start = source.indexOf('  async fetchShopSerp({');
 const handler = source.slice(start, source.indexOf('\n  /**', start));
@@ -37,6 +38,21 @@ test('console bridge forwards IP and interval to the shared collection policy', 
  let listener, sent;
  const window = {addEventListener: (type, fn) => {listener = fn;}, postMessage:()=>{}};
  vm.runInNewContext(source, {window, document:{documentElement:{setAttribute:()=>{}}}, chrome:{runtime:{sendMessage:(m,cb)=>{sent=m;cb({ok:true});}}}});
- listener({source:window,data:{source:'rankfree-console',type:'fetchShopSerp',keyword:'test',collectorIp:'192.0.2.1',interval_ms:4200}});
- assert.equal(sent.payload.collectorIp,'192.0.2.1');assert.equal(sent.payload.interval_ms,4200);
+ listener({source:window,data:{source:'rankfree-console',type:'fetchShopSerp',keyword:'test',target:{product_id:'123'},collection_mode:'fetch',collectorIp:'192.0.2.1',interval_ms:4200}});
+ assert.equal(sent.payload.collectorIp,'192.0.2.1');assert.equal(sent.payload.interval_ms,4200);assert.equal(sent.payload.collection_mode,'fetch');assert.equal(sent.payload.target.product_id,'123');
+});
+
+test('tabless checks integrated first, falls back only without shopping block and never opens a tab', async () => {
+ for (const [html,expected,blocked] of [['<section data-shopping-block></section>',1,false],['<p>no shopping</p>',2,false],['보안문자',1,true]]) {
+  const calls=[], waits=[];
+  const context=vm.createContext({lastScreenSerpAt:0,ShopSerpTab,
+   shopSerpPolicy:{run:async(k,read,ip,gap)=>{assert.equal(gap,3500);return read();}},
+   shopSerpTab:{read:()=>{throw Error('must not open tab');}},
+   sleep:async ms=>waits.push(ms),
+  });
+  const result=await vm.runInContext('const handlers={spFetchHtml:async ({url})=>{calls.push(url);return {ok:true,status:200,text:calls.length===1?html:"shopping"};},'+handler+'};handlers.fetchShopSerp({keyword:"테스트",collection_mode:"fetch",interval_ms:3500},{tab:{id:1}})',Object.assign(context,{calls,html}));
+  assert.equal(calls.length,expected);assert.equal(result.captcha,blocked);
+  assert.equal(result.result_source,expected===2?'shopping':'integrated');
+  assert.deepEqual(waits,expected===2?[3500]:[]);
+ }
 });

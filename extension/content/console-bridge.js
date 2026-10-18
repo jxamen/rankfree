@@ -17,7 +17,8 @@
 
   // 페이지 요청 타입 → 확장 핸들러
   const ROUTES = {
-    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser'), interval_revision: m.interval_revision ?? null, interval_ms: Math.min(30000, Math.max(1000, Number(m.interval_ms) || 4000)) }],
+    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), target: m.target || {}, collection_mode: m.collection_mode === 'fetch' ? 'fetch' : 'tab', analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser'), interval_revision: m.interval_revision ?? null, interval_ms: Math.min(30000, Math.max(1000, Number(m.interval_ms) || 4000)) }],
+    shopSerpStatus: () => ['shopSerpStatus', {}],
     resumeShopSerp: (m) => ['resumeShopSerp', { collectorIp: String(m.collectorIp || 'browser') }],
     fetchKeywordSignals: (m) => ['fetchKeywordSignals', { keyword: String(m.keyword || '') }],
     collectProductPage: (m) => ['collectProductPage', { url: String(m.url || '') }],

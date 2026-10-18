@@ -10,6 +10,11 @@ use Throwable;
 
 class ShopExposureBlockAlert
 {
+    public static function collectionMode(): string
+    {
+        return \App\Models\AppSetting::read('shop.exposure.collection_mode', 'tab') === 'fetch' ? 'fetch' : 'tab';
+    }
+
     public static function baseInterval(): int
     {
         try {

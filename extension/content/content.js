@@ -3699,37 +3699,53 @@
     } catch (e) { /* noop */ }
   }
 
+  let serpScrolled = false;
+  let serpPreparing = null;
+  async function prepareSerp() {
+    if (serpScrolled) return true;
+    if (serpPreparing) return serpPreparing;
+    serpPreparing = (async () => {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const text = document.body?.innerText || '';
+        if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) return false;
+        const empty = /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
+        const list = document.querySelector('[class*="product_item"], [class*="product_list"], [class*="ProductList"], [data-shp-contents-id], [data-product-list]');
+        const visible = list && list.getClientRects().length > 0 && getComputedStyle(list).visibility !== 'hidden';
+        if (document.readyState === 'complete' && (empty || (visible && domNextData()?.products?.length))) {
+          if (!empty) {
+            window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' });
+            await new Promise(resolve => setTimeout(resolve, 750));
+          }
+          serpScrolled = true;
+          return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      return false;
+    })();
+    try { return await serpPreparing; } finally { serpPreparing = null; }
+  }
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (msg?.type !== '__rfSerpPeek') return;
-    const text = document.body?.innerText || '';
-    if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {
-      reply({ ok: false }); return;
-    }
-    const data = domNextData();
-    const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
-    reply({ ok: normal, products: normal ? (data?.products || []) : undefined });
+    (async () => {
+      if (!await prepareSerp()) { reply({ok:false}); return; }
+      const data = domNextData();
+      const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '');
+      reply({ok:normal,products:normal ? (data?.products || []) : undefined,result_source:'shopping'});
+    })();
+    return true;
   });
 
   // Only read the loaded document; no API requests or captcha interaction.
   async function runSerpRead() {
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
-    window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' });
-    await new Promise(resolve => setTimeout(resolve, 750));
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const text = document.body?.innerText || '';
-      if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {
-        await send({ ok: false, status: 200, captcha: true, message: '네이버 차단 화면 감지 — 3분 후 재확인합니다.' }); return;
-      }
-      const data = domNextData();
-      if (data?.products?.length) {
-        await send({ ok: true, status: 200, products: data.products }); return;
-      }
-      if (/검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text)) {
-        await send({ ok: true, status: 200, products: [] }); return;
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!await prepareSerp()) {
+      const captcha = /HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(document.body?.innerText || '');
+      await send({ok:false,status:captcha ? 200 : 0,captcha,message:captcha ? '네이버 차단 화면 감지 — 3분 후 재확인합니다.' : '쇼핑 페이지 로딩 또는 상품 목록을 확인하지 못했습니다.'});
+      return;
     }
-    await send({ ok: false, status: 0, message: '쇼핑 페이지 상품 구조를 읽지 못했습니다.' });
+    const data = domNextData();
+    await send({ok:true,status:200,products:data?.products || [],result_source:'shopping'});
   }
 
   // 백그라운드 상품분석 진행률 수신 → 로딩 화면 갱신

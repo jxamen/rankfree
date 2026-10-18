@@ -4,14 +4,6 @@ class ShopSerpTab {
     this.browser = browser; this.timeoutMs = timeoutMs; this.wait = wait;
     this.tabId = null;
   }
-  async scrollResults(tabId) {
-    // Execute in the collection tab even when it is inactive. Never activate it.
-    await this.browser.scripting.executeScript({
-      target: { tabId },
-      func: () => window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' }),
-    });
-    await this.wait(750);
-  }
   static html(products) {
     const slots = products.map((p, i) => ({ data: {
       sourceType: p.isAd ? 'AD' : 'SAS', rank: p.rank || i + 1,
@@ -20,6 +12,34 @@ class ShopSerpTab {
       mallName: p.mallName || '', productName: p.title || '', salePrice: p.price || 0,
     } }));
     return '<script>var _INITIAL_STATE = ' + JSON.stringify({ initProps: { pagedSlot: [{ slots }] } }).replace(/</g, '\\u003c') + ';</script>';
+  }
+  // The fetch option uses the same embedded shopping list and ad fields as the tab reader.
+  static fetchedHtml(html) {
+    const match = html.match(/<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (!match) return html;
+    const candidates = [];
+    function walk(node, key = '', depth = 0) {
+      if (!node || typeof node !== 'object' || depth > 12) return;
+      if (Array.isArray(node)) {
+        const sample = node[0]?.item || node[0];
+        if (sample && typeof sample === 'object' && ['productTitle','productName','lowPrice','reviewCount','mallName','rank'].filter(k => k in sample).length >= 2) {
+          candidates.push({list: node, promo: /superSaving|adProduct|\bads?\b/i.test(key), wrapped: !!node[0].item});
+        } else if (node.length) walk(node[0], key, depth + 1);
+      } else for (const k of Object.keys(node)) walk(node[k], k, depth + 1);
+    }
+    walk(JSON.parse(match[1]));
+    const wrapped = candidates.filter(c => !c.promo && c.wrapped && c.list.length >= 10);
+    const main = candidates.filter(c => !c.promo);
+    const best = (wrapped.length ? wrapped : main.length ? main : candidates).sort((a,b) => b.list.length - a.list.length)[0];
+    if (!best) return html;
+    return ShopSerpTab.html(best.list.map((raw, i) => {
+      const p = raw.item || raw;
+      return {channelProductId: p.channelProductId || p.channel?.channelProductId || p.mallProductId,
+        nvMid: p.nvMid || p.id, rank: Number(p.rank) || i + 1,
+        isAd: !!(p.adId || raw.adId || p.adcrUrl || raw.adcrUrl || String(p.adType) === '1' || String(p.type || raw.type).toLowerCase() === 'supersaving' || best.promo),
+        title: p.productTitle || p.productName || p.title, mallName: p.mallName || p.lowMallList?.[0]?.name,
+        price: p.price || p.lowPrice || p.mobileLowPrice, link: p.mallProductUrl || p.crUrl || ''};
+    }));
   }
   // Passive document inspection: never navigate, reload, solve, or change the active tab.
   async peek(keyword) {
@@ -33,27 +53,28 @@ class ShopSerpTab {
         return null;
       }
       if (!['https://search.shopping.naver.com', 'https://msearch.shopping.naver.com'].includes(url.origin) || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
-      await this.scrollResults(tab.id);
-      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
+      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek', prepare: true });
       if (r?.ok && Array.isArray(r.products)) {
-        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' };
       }
     } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
     return null;
   }
-  async read(keyword) {
+  async read(keyword, target = {}) {
     const c = this.browser;
     let tab;
     let finish;
     const result = new Promise(resolve => { finish = resolve; });
     const blocked = () => finish({ ok: false, captcha: true, status: 200, message: '네이버 보안 화면 감지 — 3분 후 재확인합니다.' });
-    const onMessage = (msg, sender) => {
+    const onMessage = (msg, sender, reply) => {
+      if (tab && sender?.tab?.id === tab.id && msg?.type === '__rfSerpTarget') { reply(target); return; }
       if (!tab || sender?.tab?.id !== tab.id || msg?.type !== '__rfSerpRead') return;
       const r = msg.result;
-      if (r?.ok && Array.isArray(r.products)) finish({ ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' });
+      if (r?.ok && Array.isArray(r.products)) finish({ ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' });
       else if (r && !r.ok) finish(r);
     };
     const onUpdated = (id, info) => {
+      if (id === tab?.id && /shopping\.naver\.com/.test(info.url || '')) globalThis.rfSerpCurrent = {keyword, screen: '쇼핑'};
       if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
     };
     const onRemoved = id => {

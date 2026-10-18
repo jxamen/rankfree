@@ -696,6 +696,8 @@ const handlers = {
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // The active collection reader answers this request for its trusted tab.
+  if (msg?.type === '__rfSerpTarget') return false;
   const handler = handlers[msg && msg.type];
   if (!handler) {
     sendResponse({ ok: false, message: 'unknown message: ' + (msg && msg.type) });
@@ -947,7 +949,7 @@ async function drainShopKeywordCheckQueue() {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
           await sleep(1500);
           if (Date.now() - lastScreenSerpAt < 60000) return;
@@ -956,7 +958,7 @@ async function drainShopKeywordCheckQueue() {
           continue;
         }
         const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
-          method: 'POST', body: { item_id: it.item_id, html: res.html || '' }, token, apiBase,
+          method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source }, token, apiBase,
         });
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
@@ -1012,7 +1014,8 @@ Object.assign(handlers, {
   async resumeShopSerp({ collectorIp }) {
     return shopSerpPolicy.resume(collectorIp || 'browser');
   },
-  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision }, sender) {
+  async shopSerpStatus() { return globalThis.rfSerpCurrent || {}; },
+  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
@@ -1021,11 +1024,23 @@ Object.assign(handlers, {
       const settings = await getStore();
       const policy = await apiFetch('/api/ext/shop-keyword/interval-policy', { token: settings.token, apiBase: settings.apiBase });
       if (!policy.ok || !policy.json?.data) return { ok: false, message: '간격 정책을 읽지 못했습니다.' };
-      ({ collector_ip: collectorIp, interval_ms, interval_revision } = policy.json.data);
+      ({ collector_ip: collectorIp, interval_ms, interval_revision, collection_mode } = policy.json.data);
     }
-    const result = await shopSerpPolicy.run(kw, async () => {
-      return shopSerpTab.read(kw);
-    }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek(kw));
+    const result = await shopSerpPolicy.run(kw, async effectiveGap => {
+      globalThis.rfSerpCurrent = { keyword: kw, screen: '통합검색' };
+      if (collection_mode !== 'fetch') return shopSerpTab.read(kw, target);
+      const read = async (url, source) => {
+        const r = await handlers.spFetchHtml({url});
+        const captcha = /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한/.test(r.text || '');
+        return {ok: r.ok && !captcha, status: r.status, captcha, html: source === 'shopping' && r.ok && !captcha ? ShopSerpTab.fetchedHtml(r.text || '') : r.text || '', result_source: source,
+          message: captcha ? '보안문자 대기 — 브라우저 탭으로 열기로 바꿔 사람이 풀어 주세요.' : r.message};
+      };
+      const integrated = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), 'integrated');
+      if (!integrated.ok || /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(integrated.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) return integrated;
+      await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
+      globalThis.rfSerpCurrent = { keyword: kw, screen: '쇼핑' };
+      return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
+    }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => shopSerpTab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }

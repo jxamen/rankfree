@@ -64,8 +64,9 @@ class ShopKeywordExposureController extends Controller
     public function saveInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
     {
         abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
-        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1']);
+        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch']);
         \App\Models\AppSetting::write('shop.exposure.interval_ms', (string) round($data['seconds'] * 1000));
+        if (isset($data['collection_mode'])) \App\Models\AppSetting::write('shop.exposure.collection_mode', $data['collection_mode']);
         $response = $this->resetInterval($request, $analysis);
         \Illuminate\Support\Facades\Log::info('shop_exposure_interval_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
         return $response;
@@ -82,6 +83,7 @@ class ShopKeywordExposureController extends Controller
             Cache::put(NaverShopExposureService::policyKey(), $state, now()->addDay());
         });
         Cache::forget('shop-exposure:error:'.$analysis->id);
+        app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);
         $analysis->update(['check_method' => 'search', 'status' => $analysis->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
         \Illuminate\Support\Facades\Log::info('shop_exposure_continue_now', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String()]);
         return response()->json(['ok' => true, 'collector_ip' => $request->ip()]);
@@ -215,7 +217,7 @@ class ShopKeywordExposureController extends Controller
             app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
         }
 
-        return response()->json(['data' => ['collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
+        return response()->json(['data' => ['target' => $this->analyzer->targetOf($analysis), 'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
     }
 
     /** 확장(브라우저)이 가져온 m.search HTML 로 조합 1건 순위 저장 — 서버 IP 한도와 무관한 기본 경로. */
@@ -230,6 +232,7 @@ class ShopKeywordExposureController extends Controller
 
         $data = $request->validate([
             'item_id' => 'required|integer',
+            'result_source' => 'nullable|in:integrated,shopping',
             'html' => 'nullable|string|max:4000000',   // _INITIAL_STATE script 조각(수백 KB). 빈 값=가격비교 미노출
         ]);
         if ($busy = $this->runBusy($request, $analysis)) {
@@ -242,7 +245,7 @@ class ShopKeywordExposureController extends Controller
             return response()->json($this->analyzer->progress($analysis) + ['skipped' => true]);
         }
 
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? '')));
+        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? null));
     }
 
     /** 확장이 수집한 코어 키워드 신호(가격비교 HTML·함께많이찾는)를 참고/재료 토큰으로 병합. */
@@ -477,6 +480,10 @@ class ShopKeywordExposureController extends Controller
         $tokens = $items->where('kind', 'token')->groupBy('source');
         $combos = $items->where('kind', 'combo')->where('hidden', false)
             ->sortBy(fn ($i) => $this->rankSort($i->rank))->values();
+
+        // Header and list use the same current visible rows, including previously stale summaries.
+        $analysis->checked_count = $combos->whereNotNull('rank')->count();
+        $analysis->exposed_count = $combos->whereBetween('rank', [1, (int) $analysis->threshold])->count();
 
         // 조합 패턴 — 확인된 조합(감춘 것 포함 = 보관 결과)을 유형×단어수로 집계해 노출률 표시
         $th = (int) $analysis->threshold;

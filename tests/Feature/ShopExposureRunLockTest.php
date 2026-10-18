@@ -25,13 +25,16 @@ class ShopExposureRunLockTest extends TestCase
         return $a;
     }
 
-    public function test_same_analysis_can_refresh_after_page_or_worker_restart(): void
+    public function test_same_analysis_rejects_second_runner_until_release_or_expiry(): void
     {
         $u = User::factory()->create(['role' => 'operator']);
         $a = $this->analysis($u);
         $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
         $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['ok']);
         $this->travel(30)->seconds();
+        $this->assertFalse($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['ok']);
+        $lock->release('ip:192.0.2.1', $a->id);
         $this->assertTrue($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
         $holder = \Illuminate\Support\Facades\Cache::get('shop-exposure:runner:ip:192.0.2.1');
         $this->assertSame('ext:new', $holder['owner']);
@@ -87,7 +90,8 @@ class ShopExposureRunLockTest extends TestCase
     {
         $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);
         $page = $this->analysis($u);
-        $api = $this->analysis($u, 'api');
+        $api = $page;
+        $page->update(['created_via' => 'api']);
         [, $plain] = ExtToken::issue($u);
 
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $page).'?runner=pageA')->assertOk();

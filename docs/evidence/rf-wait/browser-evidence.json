@@ -1,0 +1,79 @@
+[
+  {
+    "name": "rank one",
+    "screen": "integrated",
+    "dwellMs": 1661
+  },
+  {
+    "name": "rank five",
+    "screen": "integrated",
+    "dwellMs": 1679
+  },
+  {
+    "name": "rank six",
+    "screen": "shopping"
+  },
+  {
+    "name": "ad only",
+    "screen": "shopping"
+  },
+  {
+    "name": "super point",
+    "screen": "shopping"
+  },
+  {
+    "name": "hidden block",
+    "screen": "shopping"
+  },
+  {
+    "name": "no block",
+    "screen": "shopping"
+  },
+  {
+    "shoppingRead": {
+      "events": [
+        "complete",
+        "visible",
+        "read",
+        "scroll",
+        "read",
+        "send",
+        "read"
+      ],
+      "result": {
+        "ok": true,
+        "status": 200,
+        "products": [
+          {
+            "id": "123",
+            "rank": 1
+          }
+        ],
+        "result_source": "shopping"
+      }
+    }
+  },
+  {
+    "summaryListSync": {
+      "first": {
+        "rows": 66,
+        "count": "66",
+        "copy": 66
+      },
+      "after": {
+        "rows": 38,
+        "count": "38"
+      }
+    }
+  },
+  {
+    "liveNaver": {
+      "target": {
+        "product_id": "5161405021",
+        "id_kind": "channel"
+      },
+      "screen": "integrated",
+      "products": 60
+    }
+  }
+]

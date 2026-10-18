@@ -41,17 +41,17 @@ for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])te
  assert.equal(events[0].kind,tabOK?'success':'보안문자');assert.equal(!!store.rfSerpPolicy.until,!tabOK);assert.equal(store.rfSerpPolicy.http403,0);
 });
 const content=fs.readFileSync(require('node:path').join(__dirname,'../../extension/content/content.js'),'utf8');
-const readStart=content.indexOf('  async function runSerpRead()');
+const readStart=content.indexOf('  let serpScrolled = false;');
 const readFn=content.slice(readStart,content.indexOf('  // 백그라운드 상품분석 진행률 수신',readStart));
 for(const kind of ['products','empty','captcha','unknown'])test('document-only reader '+kind,async()=>{
  const messages=[];let reads=0;
- const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},document:{body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
+ const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
  domNextData:()=>{reads++;return kind==='products'?{products:[{id:123}]}:null;},
- chrome:{runtime:{sendMessage:async m=>messages.push(m)}},setTimeout:f=>f(),fetch:()=>{throw Error('must not fetch');}});
+ chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async m=>messages.push(m)}},setTimeout:f=>f(),fetch:()=>{throw Error('must not fetch');}});
  await vm.runInContext(readFn+'runSerpRead()',context);
  assert.equal(messages.length,1);const r=messages[0].result;
  assert.equal(r.ok,['products','empty'].includes(kind));assert.equal(!!r.captcha,kind==='captcha');
- if(kind==='unknown'){assert.equal(reads,20);assert.equal(r.status,0);}
+ if(kind==='unknown'){assert.equal(reads,60);assert.equal(r.status,0);}
 });
 
 test('reuses one tab across keywords and worker instances; recreates only after user closes it',async()=>{
@@ -86,23 +86,52 @@ test('passive peek survives reader restart, reads only matching keyword and neve
  assert.equal(f.updates.length,0);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
 
-for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,()=>{
- const start=content.indexOf("  chrome.runtime.onMessage.addListener((msg, sender, reply) => {");
+for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,async()=>{
+ const start=content.indexOf('  let serpScrolled = false;');
  const code=content.slice(start,content.indexOf('  // Only read the loaded document',start));
  let listener,reply;
- const context=vm.createContext({chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
- document:{body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
+ const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},setTimeout:f=>f(),chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
+ getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
  domNextData:()=>kind==='products'?{products:[{id:1}]}:null,
  fetch:()=>{throw Error('No network allowed');}});
- vm.runInContext(code,context);listener({type:'__rfSerpPeek'},null,r=>{reply=r;});
+ vm.runInContext(code,context);await new Promise(resolve=>listener({type:'__rfSerpPeek'},null,r=>{reply=r;resolve();}));
  assert.equal(reply.ok,['products','empty'].includes(kind));
 });
 
 test('loaded document scrolls once and settles before reading rank',async()=>{
  const events=[];
  const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>events.push('scroll')},
- document:{body:{innerText:''}},domNextData:()=>{events.push('read');return {products:[{id:1}]};},
- chrome:{runtime:{sendMessage:async()=>events.push('send')}},setTimeout:(f,ms)=>{events.push(ms);f();}});
+ getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:''}},domNextData:()=>{events.push('read');return {products:[{id:1}]};},
+ chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async()=>events.push('send')}},setTimeout:(f,ms)=>{events.push(ms);f();}});
  await vm.runInContext(readFn+'runSerpRead()',context);
- assert.deepEqual(events,['scroll',750,'read','send']);
+ assert.deepEqual(events,['read','scroll',750,'read','send']);
+});
+
+test('target request reaches only its active collection reader, without generic reply racing it', async()=>{
+ const begin=source.indexOf('chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {');
+ const generic=source.slice(begin,source.indexOf('\n});',begin)+4);
+ let listener;
+ vm.runInNewContext(generic,{handlers:{},chrome:{runtime:{onMessage:{addListener:f=>listener=f}}}});
+ let genericReplied=false;
+ assert.equal(listener({type:'__rfSerpTarget'},{tab:{id:7}},()=>genericReplied=true),false);
+ assert.equal(genericReplied,false);
+ const f=browser(),target={product_id:'111',id_kind:'channel'};
+ const p=new ShopSerpTab({browser:f.c,wait:async()=>{}}).read('same',target);await new Promise(setImmediate);
+ let actual;
+ f.messages.emit({type:'__rfSerpTarget'},{tab:{id:99}},v=>actual=v);assert.equal(actual,undefined);
+ f.messages.emit({type:'__rfSerpTarget'},{tab:{id:7}},v=>actual=v);assert.deepEqual(actual,target);
+ f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[{channelProductId:'111',rank:1}],result_source:'integrated'}},{tab:{id:7}});
+ assert.equal((await p).result_source,'integrated');
+});
+
+test('tabless shopping HTML normalizes embedded list, identity and advertisements for server ranking', () => {
+ const root={props:{pageProps:{shoppingResult:{products:[
+  {item:{channelProductId:'ad',productTitle:'advertisement',rank:1,mallName:'mall',adType:'1'}},
+  {item:{channelProductId:'mine',nvMid:'catalog',productTitle:'organic',rank:3,mallName:'mall'}},
+ ]}}}};
+ const html=ShopSerpTab.fetchedHtml('<script id="__NEXT_DATA__" type="application/json">'+JSON.stringify(root)+'</script>');
+ const state=JSON.parse(html.match(/= ([\s\S]*);<\/script>/)[1]);
+ const slots=state.initProps.pagedSlot[0].slots;
+ assert.equal(slots[0].data.sourceType,'AD');assert.equal(slots[1].data.channelProductId,'mine');
+ assert.equal(slots[1].data.nvMid,'catalog');assert.equal(slots[1].data.rank,3);
 });

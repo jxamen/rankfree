@@ -21,7 +21,7 @@ class ShopExposureRunLock
     public const TTL = 90;
 
     /**
-     * 잠금 획득·갱신. 같은 분석은 실행 토큰이 바뀌어도 갱신한다. 다른 분석은 종료·무활동 시에만 넘겨받는다.
+     * 잠금 획득·갱신. 같은 실행자만 갱신한다. 다른 실행자는 같은 분석이어도 종료·무활동 시에만 넘겨받는다.
      *
      * @return array{ok: bool, holder: ?array{owner: string, analysis_id: int, keyword: string, at: int}}
      */
@@ -31,7 +31,7 @@ class ShopExposureRunLock
 
         return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword) {
             $cur = Cache::get($key);
-            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) !== $analysisId) {
+            if (is_array($cur) && ((int) ($cur['analysis_id'] ?? 0) !== $analysisId || ($cur['owner'] ?? '') !== $owner)) {
                 $holder = ShopKeywordAnalysis::find((int) ($cur['analysis_id'] ?? 0));
                 $lastSeen = max((int) ($cur['at'] ?? 0), $holder?->collection_seen_at?->timestamp ?? 0);
                 $stopped = ! $holder || in_array($holder->status, ['done', 'target_reached', 'ad_ended', 'paused'], true);

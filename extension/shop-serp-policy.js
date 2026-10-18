@@ -47,13 +47,13 @@ class ShopSerpPolicy {
       },
     };
   }
-  run(keyword, fetcher, ip = "browser", serverGap = 4000, revision = null, probe = null) {
-    const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision, probe));
+  run(keyword, fetcher, ip = "browser", serverGap = 4000, revision = null, probe = null, scope = "") {
+    const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision, probe, scope));
     this.lane = job.catch(() => {}); return job;
   }
-  async check(keyword, fetcher, ip, serverGap, revision, probe) {
+  async check(keyword, fetcher, ip, serverGap, revision, probe, scope = "") {
     const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(this.now());
-    const key = day + ':tab-v1:' + keyword.trim().normalize('NFC');
+    const key = day + ':tab-v2:' + keyword.trim().normalize('NFC') + ':' + scope;
     // Fail closed when durable storage fails: avoid silently repeating same-day requests.
     try {
       const data = await this.storage.get(['rfSerpPolicy', 'rfSerpPolicyByIp']);
@@ -94,7 +94,7 @@ class ShopSerpPolicy {
       const previous = s.last;
       s.last = this.now();
       await save();
-      const res = await fetcher();
+      const res = await fetcher(s.gap);
       // Include the 403 tab recheck in spacing: next navigation waits after completion.
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
