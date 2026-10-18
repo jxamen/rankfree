@@ -103,7 +103,12 @@ class ShopKeywordExposureController extends Controller
             return $busy;
         }
 
-        return response()->json($this->analyzer->checkBatch($analysis));
+        $result = $this->analyzer->checkBatch($analysis);
+        if (! empty($result['items'])) {
+            app(\App\Domain\Shopping\ShopExposureRunLock::class)->recordProgress('server', (int) $analysis->id);
+        }
+
+        return response()->json($result);
     }
 
     /**
@@ -166,7 +171,10 @@ class ShopKeywordExposureController extends Controller
             return response()->json($this->analyzer->progress($analysis) + ['skipped' => true]);
         }
 
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? '')));
+        $result = $this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''));
+        app(\App\Domain\Shopping\ShopExposureRunLock::class)->recordProgress('ip:'.$request->ip(), (int) $analysis->id);
+
+        return response()->json($result);
     }
 
     /** 확장이 수집한 코어 키워드 신호(가격비교 HTML·함께많이찾는)를 참고/재료 토큰으로 병합. */

@@ -52,6 +52,69 @@ class ShopExposureRunLockTest extends TestCase
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $a).'?runner=pageA')->assertOk();
     }
 
+    public function test_polling_without_results_cannot_keep_another_runner_waiting_past_five_minutes(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $b = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $this->assertTrue($lock->acquire('ip:test', 'page:a', $a->id)['ok']);
+        for ($i = 0; $i < 4; $i++) {
+            $this->travel(60)->seconds();
+            $this->assertTrue($lock->acquire('ip:test', 'page:a', $a->id)['ok']);
+            $this->assertFalse($lock->acquire('ip:test', 'page:b', $b->id)['ok']);
+        }
+        $this->travel(60)->seconds();
+        $this->assertTrue($lock->acquire('ip:test', 'page:b', $b->id)['ok']);
+    }
+
+    public function test_saved_collection_results_extend_progress_deadline(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $b = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock->acquire('ip:127.0.0.1', 'page:a', $a->id);
+        for ($i = 0; $i < 5; $i++) {
+            $this->travel(60)->seconds();
+            if ($i === 3) {
+                $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
+                    'item_id' => $a->combos()->first()->id, 'html' => '', 'runner' => 'a',
+                ])->assertOk();
+            }
+            $this->assertTrue($lock->acquire('ip:127.0.0.1', 'page:a', $a->id)['ok']);
+        }
+        $this->assertFalse($lock->acquire('ip:127.0.0.1', 'page:b', $b->id)['ok']);
+    }
+
+    public function test_progress_on_another_ip_does_not_extend_stalled_ip_lock(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $b = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock->acquire('ip:one', 'page:a', $a->id);
+        for ($i = 0; $i < 4; $i++) {
+            $this->travel(60)->seconds();
+            $lock->acquire('ip:one', 'page:a', $a->id);
+            $lock->acquire('ip:two', 'page:c', $a->id);
+            $lock->recordProgress('ip:two', $a->id);
+        }
+        $this->travel(60)->seconds();
+        $this->assertTrue($lock->acquire('ip:one', 'page:b', $b->id)['ok']);
+        $this->assertFalse($lock->acquire('ip:two', 'page:b', $b->id)['ok']);
+    }
+
+    public function test_same_owner_cannot_replace_another_analysis_lock(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $b = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock->acquire('server', 'user:1', $a->id);
+        $this->assertFalse($lock->acquire('server', 'user:1', $b->id)['ok']);
+    }
+
     public function test_extension_background_queue_yields_to_running_page(): void
     {
         $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);

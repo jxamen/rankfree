@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
  *
  * scope: 브라우저 화면·확장 = 'ip:<요청 IP>'(수집하는 브라우저의 IP), 서버 배치 = 'server'(서버 IP 하나).
  * 수집이 진행되는 동안 매 요청이 갱신하고, TTL(90초) 동안 갱신이 없으면 저절로 풀린다(창 닫힘·보안문자 대기).
+ * 단, 요청이 반복되어도 실제 checked_at 저장이 5분 없으면 다음 획득 요청에서 만료된다.
  * 캐시 값은 순수 배열만(운영 database 캐시에 객체 저장 금지).
  */
 class ShopExposureRunLock
@@ -19,6 +20,8 @@ class ShopExposureRunLock
     private const KEY = 'shop-exposure:runner:';
 
     public const TTL = 90;
+
+    public const PROGRESS_TTL = 300;
 
     /**
      * 잠금 획득·갱신. 비어 있거나 같은 주인이면 성공, 같은 scope 에서 다른 주인이 들고 있으면 실패 + 주인 정보.
@@ -31,16 +34,38 @@ class ShopExposureRunLock
 
         return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword) {
             $cur = Cache::get($key);
-            if (is_array($cur) && ($cur['owner'] ?? '') !== $owner) {
+            $now = now()->timestamp;
+            // pending/queue 조회는 수집 진행이 아니다. 동일 주인의 폴링도 이 기준 시각을 연장하지 않는다.
+            if (is_array($cur)) {
+                $progressAt = (int) ($cur['progress_at'] ?? $cur['at'] ?? 0);
+                if ($now - $progressAt >= self::PROGRESS_TTL) {
+                    $cur = null;
+                }
+            }
+            if (is_array($cur) && (($cur['owner'] ?? '') !== $owner || (int) ($cur['analysis_id'] ?? 0) !== $analysisId)) {
                 return ['ok' => false, 'holder' => $cur];
             }
             $ip = str_starts_with($scope, 'ip:') ? substr($scope, 3) : null;
             $ip = filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null;
             $source = str_starts_with($owner, 'ext:') ? '확장 수집기' : ($ip ? '브라우저' : '서버');
             ShopKeywordAnalysis::whereKey($analysisId)->update(['collection_ip' => $ip, 'collection_source' => $source, 'collection_seen_at' => now()]);
-            Cache::put($key, ['ip' => $ip, 'source' => $source, 'owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword, 'at' => time()], self::TTL);
+            Cache::put($key, ['ip' => $ip, 'source' => $source, 'owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword,
+                'at' => $now, 'progress_at' => $cur['progress_at'] ?? $cur['at'] ?? $now], self::TTL);
 
             return ['ok' => true, 'holder' => null];
+        });
+    }
+
+    /** 이 IP에서 순위 결과를 실제 저장한 뒤에만 호출한다. 목록 조회나 실패는 진행이 아니다. */
+    public function recordProgress(string $scope, int $analysisId): void
+    {
+        $key = self::KEY.$scope;
+        Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $analysisId) {
+            $cur = Cache::get($key);
+            if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId) {
+                $cur['progress_at'] = now()->timestamp;
+                Cache::put($key, $cur, self::TTL);
+            }
         });
     }
 
