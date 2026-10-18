@@ -32,6 +32,7 @@ async function apiFetch(path, { method = 'GET', body = null, token = null, apiBa
   try {
     res = await fetch(base + path, {
       method,
+      signal: AbortSignal.timeout(30000),
       headers,
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -861,6 +862,7 @@ async function drainShopRankQueue(why) {
           method: 'POST', apiBase,
           body: { worker_id: workerId, products: res.products, total: res.total || 0 },
         });
+        if (!r.ok) await reportShopClientEvent(d.analysis_id, it.keyword, 'save', 'HTTP ' + r.status);
         if (r.status === 401 || r.status === 403) return;
 
         // 결과를 눈으로 확인할 수 있게 — 순위가 몇 위로 잡혔는지, 부족해서 되돌려졌는지
@@ -915,11 +917,31 @@ async function drainShopKeywordProductQueue() {
 // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버는 API 분석의 순위를 자동으로 돌리지 않는다.
 // 상품정보가 채워져야 조합이 생기므로 상품정보 큐 다음에 실행한다.
 let skwCheckActive = false;
+let skwCheckHeartbeat = 0;
 let lastScreenSerpAt = 0;   // 관리자 화면 루프가 m.search 를 쓴 시각 — 같은 IP 이중 크롤 방지용
 
-async function drainShopKeywordCheckQueue() {
+async function reportShopClientEvent(analysisId, keyword, stage, message, kind = 'client_error') {
+  try {
+    const {token, apiBase} = await getStore();
+    if (token && analysisId) await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {
+      method: 'POST', token, apiBase, body: {kind, keyword: String(keyword || '').slice(0,300), stage, message: String(message).slice(0,1000)},
+    });
+  } catch (_) {}
+}
+async function watchShopKeywordQueue() {
+  if (skwCheckActive && Date.now() - skwCheckHeartbeat > 120000) {
+    // Reload terminates the old lane and its callbacks before a new worker claims a lease.
+    const current = globalThis.rfSerpCurrent || {};
+    await reportShopClientEvent(current.analysisId, current.keyword, 'watchdog', 'worker promise stalled >120s', 'watchdog_restart');
+    chrome.runtime.reload();
+    return;
+  }
+  await drainShopKeywordCheckQueue(true);
+}
+
+async function drainShopKeywordCheckQueue(watchdog = false) {
   if (skwCheckActive) return;
-  if (Date.now() - lastScreenSerpAt < 60000) return;      // 화면이 돌고 있으면 양보
+  if (!watchdog && Date.now() - lastScreenSerpAt < 60000) return;      // 화면이 돌고 있으면 양보
   const { token, apiBase } = await getStore();
   if (!token) return;
   const s = await chrome.storage.local.get(['rfSkwCheckSkipUntil', 'rfSkwCheckSkipReason', 'rfSerpPolicy']);
@@ -933,12 +955,14 @@ async function drainShopKeywordCheckQueue() {
   }
   if (Date.now() < (s.rfSkwCheckSkipUntil || 0)) return;  // 권한 없음·차단 백오프 중
 
+  if (skwCheckActive) return; // Another alarm may have claimed the lane while storage was loading.
   const failedItems = new Set();
   const runner = crypto.randomUUID();
   skwCheckActive = true;
+  skwCheckHeartbeat = Date.now();
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
-      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1' + (watchdog ? '&watchdog=1' : '') + '&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
@@ -946,17 +970,23 @@ async function drainShopKeywordCheckQueue() {
       if (!q.ok || !q.json || !q.json.data) return;        // 네트워크·일시 오류 — 다음 알람에 재시도
       const d = q.json.data;
       const items = d.items || [];
+      if (watchdog && items.length) {
+        await reportShopClientEvent(d.analysis_id, items[0].keyword, 'takeover', 'no saves for 120s; queue resumed', 'watchdog_restart');
+        lastScreenSerpAt = 0; watchdog = false;
+      }
       if (!items.length) return;                           // 확인할 조합 없음
       for (const it of items) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+          skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
           await sleep(1500);
           if (Date.now() - lastScreenSerpAt < 60000) return;
         } while (true);
         if (!res || res.ok === false) {
+          await reportShopClientEvent(d.analysis_id, it.keyword, 'read', res?.message || 'empty result');
           failedItems.add(it.item_id);
           globalThis.rfSerpCurrent = { keyword: it.keyword, screen: '못 읽음' };
           continue;
@@ -964,12 +994,16 @@ async function drainShopKeywordCheckQueue() {
         const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
           method: 'POST', body: { item_id: it.item_id, html: res.html || '', result_source: res.result_source, runner }, token, apiBase,
         });
+        if (!r.ok) await reportShopClientEvent(d.analysis_id, it.keyword, 'save', 'HTTP ' + r.status);
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
         // 공용 ShopSerpPolicy가 저장된 기본 간격과 실제 차단 후 대기를 적용한다.
       }
     }
-  } catch (e) { /* noop */ } finally {
+  } catch (e) {
+    const current = globalThis.rfSerpCurrent || {};
+    await reportShopClientEvent(current.analysisId, current.keyword, 'queue', e.message);
+  } finally {
     skwCheckActive = false;
   }
 }
@@ -1031,7 +1065,7 @@ Object.assign(handlers, {
       ({ collector_ip: collectorIp, interval_ms, interval_revision, collection_mode } = policy.json.data);
     }
     const result = await shopSerpPolicy.run(kw, async effectiveGap => {
-      globalThis.rfSerpCurrent = { keyword: kw, screen: '통합검색' };
+      globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
       if (collection_mode !== 'fetch') return shopSerpTab.read(kw, target);
       const read = async (url, source) => {
         const r = await handlers.spFetchHtml({url});
@@ -1042,7 +1076,7 @@ Object.assign(handlers, {
       const integrated = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), 'integrated');
       if (!integrated.ok || /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(integrated.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) return integrated;
       await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
-      globalThis.rfSerpCurrent = { keyword: kw, screen: '쇼핑' };
+      globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '쇼핑' };
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
     }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => shopSerpTab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
     if (result.ok) {
@@ -1473,6 +1507,7 @@ Object.assign(handlers, {
 // ── 알람·부트 훅 — 핸들러 등록 뒤에 와야 첫 알람이 빈 handlers 를 만나지 않는다 ─────────
 try {
   chrome.alarms.onAlarm.addListener((a) => {
+    if (a && a.name === 'rf-skw-watchdog') watchShopKeywordQueue();
     if (a && a.name === 'rf-skw-check-retry') drainShopKeywordCheckQueue();
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
     // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
@@ -1480,6 +1515,9 @@ try {
     // 쇼핑 순위체크 워커 — 위 큐와 별도 알람(각자 자기 플래그로 중복 방지)
     if (a && a.name === SHOP_RANK_ALARM) drainShopRankQueue('알람');
   });
+  chrome.alarms.get('rf-skw-watchdog').then(a => {
+    if (!a) chrome.alarms.create('rf-skw-watchdog', { periodInMinutes: 1, delayInMinutes: 1 });
+  }).catch(() => {});
   chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
   // 순위체크는 사람이 결과를 기다리는 경우가 있어 더 자주 본다(MV3 알람 최소 주기는 1분).
   chrome.alarms.create(SHOP_RANK_ALARM, { periodInMinutes: 1, delayInMinutes: 0.5 });

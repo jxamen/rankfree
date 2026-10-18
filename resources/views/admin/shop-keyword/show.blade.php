@@ -812,6 +812,10 @@ window.__SK = {
 
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     const failedItems = new Map();
+    async function reportClientError(stage, error, keyword = '') {
+        try { await post(cfg.urls.collectorEvent, {kind:'client_error', stage, keyword: String(keyword).slice(0,300), message: String(error?.message || error).slice(0,1000)}); } catch (_) {}
+    }
+
     function pendingUrl(waiting = false) {
         const url = new URL(cfg.urls.pending, location.href);
         url.searchParams.set('runner', RUNNER);
@@ -822,7 +826,7 @@ window.__SK = {
     async function runExtLoop() {
         if (loopActive) return;
         loopActive = true;
-        try { await collectLoop(); } finally { loopActive = false; }
+        try { await collectLoop(); } catch (e) { await reportClientError('screen_loop', e); } finally { loopActive = false; }
     }
     async function collectLoop() {
         while (!stopped) {
@@ -835,6 +839,7 @@ window.__SK = {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 d = (await r.json()).data;
             } catch (e) {
+                await reportClientError('pending', e);
                 if (++errCount > 6) { halt('서버 연결 오류로 중단 — 새로고침 해주세요', false); return; }
                 await sleep(Math.min(8000, 1000 * errCount));
                 continue;
@@ -883,6 +888,7 @@ window.__SK = {
                 if (stopped) return;
                 if (!res) continue;
                 if (!res.ok) {
+                    await reportClientError('read', res.message || String(res.status), it.keyword);
                     failedItems.set(it.id, res.message || String(res.status));
                     const badge = document.querySelector?.('#sk-combos .sk-badge[data-item="' + it.id + '"] .sk-rank');
                     if (badge) { badge.textContent = '못 읽음'; badge.title = res.message || String(res.status); }
@@ -904,7 +910,7 @@ window.__SK = {
                         if (p.rank !== undefined && !p.skipped) { applyItemResult(it, p); const lastResult = document.getElementById('sk-last-result'); if (lastResult) lastResult.textContent = '직전: ' + it.keyword + ' · ' + (res.result_source === 'integrated' ? '통합검색' : '쇼핑') + ' → ' + (p.rank > 0 ? p.rank + '위' : '미노출'); if (label) label.textContent += ' · 직전: ' + it.keyword + ' · ' + (res.result_source === 'integrated' ? '통합검색' : '쇼핑') + ' → ' + (p.rank > 0 ? p.rank + '위' : '미노출'); }
                         if (['target_reached', 'ad_ended'].includes(p.status)) { stopped = true; return; }
                     }
-                } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }
+                } catch (e) { await reportClientError('save', e, it.keyword); }
                 // 요청 간격과 실제 차단 후 대기는 확장의 공용 정책에서만 적용한다.
             }
         }

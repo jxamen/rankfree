@@ -41,11 +41,22 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
-            'kind' => 'required|in:403,429,보안문자,success',
+            'keyword' => 'sometimes|nullable|string|max:300',
+            'stage' => 'sometimes|nullable|string|max:80',
+            'message' => 'sometimes|nullable|string|max:1000',
+            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart',
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
+        if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
+            \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
+                'analysis_id' => $analysis->id, 'user_id' => $request->user()->id,
+                'kind' => $data['kind'], 'keyword' => $data['keyword'] ?? '',
+                'stage' => $data['stage'] ?? '', 'message' => $data['message'] ?? '',
+            ]);
+            return response()->json(['ok' => true]);
+        }
         app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }
@@ -194,7 +205,7 @@ class ExtShopKeywordController extends Controller
 
     /**
      * 순위 확인 대기열 — 확인이 남은 **내 API 분석** 하나와 그 미확인 조합을 준다.
-     * 관리자·주문으로 만든 분석(created_via=admin)은 화면이 직접 몰기 때문에 여기서 제외한다.
+     * 관리자·주문 분석도 저장이 2분간 끊기면 확장이 이어받는다.
      */
     public function checkQueue(Request $request): JsonResponse
     {
@@ -206,7 +217,9 @@ class ExtShopKeywordController extends Controller
         // Failed reads remain unknown. Once this runner has skipped every remaining item,
         // release its own lease so the next analysis can start immediately.
         if ($request->input('exclude', [])) {
-            $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->where('created_via', 'api')
+            $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
+                    ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
+                    ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
                 ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereIn('id', $request->input('exclude')))
                 ->whereDoesntHave('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude')))->pluck('id');
             foreach ($skipped as $id) {
@@ -215,13 +228,22 @@ class ExtShopKeywordController extends Controller
         }
 
         $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
-            ->where('created_via', 'api')
+            ->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
+                    ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
+                    ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
             ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude', [])))
             ->orderBy('id')->first();
 
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
+        }
+        // A watchdog must observe saves, not lease/policy heartbeats from a frozen page.
+        if ($request->boolean('watchdog')) {
+            $last = $analysis->combos()->max('checked_at');
+            if ($last && \Illuminate\Support\Carbon::parse($last)->gt(now()->subMinutes(2))) {
+                return response()->json(['data' => ['items' => [], 'recent_save' => true]]);
+            }
         }
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);

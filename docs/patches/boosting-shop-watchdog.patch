@@ -1,0 +1,26 @@
+--- a/ads/skin/shopping/rankfree.batch.skin.php
++++ b/ads/skin/shopping/rankfree.batch.skin.php
+@@ -163,7 +163,6 @@
+         }
+         result = await call('rankfree_analysis_result', item);
+         if (!result.keyword_target) throw new Error('랭크프리 목표 상한 기능 반영 대기 · PR 병합 후 다시 실행해 주세요.');
+-        let deadline = Date.now() + 15 * 60 * 1000;
+         while (!['done', 'target_reached'].includes(result.analysis_status)) {
+             const now = Date.now();
+             const checked = Number(result.checked || 0);
+@@ -175,13 +174,12 @@
+             if (savedAt > 0 && savedAt <= now) item.lastResultAt = Math.max(item.lastResultAt || 0, savedAt);
+             const blocked = ['paused', 'blocked', 'captcha_wait'].includes(result.analysis_status) || result.analysis_blocked === true;
+             if (blocked) {
+-                deadline = now + 15 * 60 * 1000;
+                 note(item, '네이버 막힘 — 풀리면 이 건부터 이어서');
+             } else {
+                 if (['failed', 'error', 'cancelled'].includes(result.analysis_status)) throw new Error('분석 상태: ' + result.analysis_status + ' · 랭크프리에서 확인해 주세요.');
+                 const active = item.lastResultAt > 0 && now - item.lastResultAt <= 120000;
+-                if (now >= deadline && !active) throw new Error('15분 대기 초과 · 최근 2분간 결과 저장 없음 · 이어서 실행해 주세요.');
+-                note(item, '분석 대기 ' + checked + '/' + (result.total || 0) + ' · 5위 이내 ' + (result.top_five_count || 0) + '/' + result.keyword_target + ' · ' + result.order_days + '일');
++                if (!active) note(item, '결과 저장 대기 · 랭크프리 자동 복구를 기다리는 중');
++                if (active) note(item, '분석 대기 ' + checked + '/' + (result.total || 0) + ' · 5위 이내 ' + (result.top_five_count || 0) + '/' + result.keyword_target + ' · ' + result.order_days + '일');
+             }
+             await sleep(10000);
+             result = await call('rankfree_analysis_result', item);

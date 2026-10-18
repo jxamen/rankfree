@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/background.js'), 'utf8');
-const loop = source.slice(source.indexOf('async function drainShopKeywordCheckQueue()'), source.indexOf('\nfunction sleep', source.indexOf('async function drainShopKeywordCheckQueue()')));
+const loop = source.slice(source.indexOf('async function drainShopKeywordCheckQueue('), source.indexOf('\nfunction sleep', source.indexOf('async function drainShopKeywordCheckQueue(')));
 test('background drains beyond alarm budget with no success sleeps, and proceeds after a reached target', async () => {
  let clock = 1000000, batches = 0, checks = 0, saves = 0;
  const context = vm.createContext({
-  crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
+  reportShopClientEvent:async()=>{},crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
   getStore:async()=>({token:'test',apiBase:'test'}),
   chrome:{storage:{local:{get:async()=>({})}}},
   handlers:{fetchShopSerp:async()=>{clock+=1600;checks++;return {ok:true,html:'raw',result_source:checks%2?'integrated':'shopping'};}},
@@ -23,7 +23,7 @@ test('background drains beyond alarm budget with no success sleeps, and proceeds
 test('background inspects the same keyword every 1.5 seconds until human recovery, then saves', async () => {
  let calls=0, saves=0, batches=0; const waits=[];
  const context=vm.createContext({
-  crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+  reportShopClientEvent:async()=>{},crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
   getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}}},
   sleep:async ms=>waits.push(ms),
   handlers:{fetchShopSerp:async args=>{assert.equal(args.keyword,'same');calls++;return calls===1?{ok:false,status:403}:calls<4?{ok:false,cooldown:true,retryAt:1180000}:{ok:true,html:'solved'};}},
@@ -64,7 +64,7 @@ test('admin clears the old failure notice on the next successful progress respon
 test('legacy queue wait migrates before early return; permission pause is preserved',async()=>{
  for(const permission of [false,true]) {
   let written,alarm;
-  const context=vm.createContext({crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+  const context=vm.createContext({reportShopClientEvent:async()=>{},crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
    getStore:async()=>({token:'test'}),
    chrome:{storage:{local:{get:async()=>({rfSkwCheckSkipUntil:2800000,rfSerpPolicy:{until:2799900,http403:8},rfSkwCheckSkipReason:permission?'permission':undefined}),set:async v=>{written=v;}}},alarms:{create:(n,o)=>{alarm=o;}}},
   });
@@ -116,7 +116,7 @@ test('taken over admin runner halts immediately without a queue wait', async () 
 
 test('background excludes unread keyword and immediately drains the next analysis', async () => {
  let batches=0; const queries=[],calls=[],saves=[];
- const context=vm.createContext({crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
+ const context=vm.createContext({reportShopClientEvent:async()=>{},crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
   getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}}},rfSerpCurrent:{},
   sleep:async()=>{throw Error('unexpected wait');},
   handlers:{fetchShopSerp:async args=>{calls.push(args.keyword);return args.keyword==='bad'?{ok:false,message:'못 읽음'}:{ok:true,html:'valid'};}},
