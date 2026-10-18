@@ -104,7 +104,7 @@ class OrderDispatchService
      *
      * @return array{ok: bool, message: string}
      */
-    public function dispatchItem(MarketingOrderItem $item): array
+    public function dispatchItem(MarketingOrderItem $item, bool $explicitReissue = false): array
     {
         $order = $item->order()->with('product')->first();
         if (! $order || ! $order->product) {
@@ -130,9 +130,8 @@ class OrderDispatchService
             'payload' => $this->buildPayload($order, $pv, $item->quantity, $item),
             'status' => 'pending',
         ]);
-        $this->send($d, $item);
+        $this->send($d, $item, $explicitReissue);
         $d->refresh();
-
 
         return ['ok' => $d->status === 'sent', 'message' => "{$item->day_no}일차 → '{$pv->vendor->name}' ".OrderDispatch::STATUSES[$d->status]];
     }
@@ -204,10 +203,10 @@ class OrderDispatchService
     }
 
     /** 채널별 전송 — 결과를 dispatch 레코드에 기록. */
-    private function send(OrderDispatch $d, ?MarketingOrderItem $item = null): void
+    private function send(OrderDispatch $d, ?MarketingOrderItem $item = null, bool $explicitReissue = false): void
     {
         $blockedStatus = null;
-        if (! app(OrderDispatchState::class)->beginDispatch($d->order, $blockedStatus, $item)) {
+        if (! app(OrderDispatchState::class)->beginDispatch($d->order, $blockedStatus, $item, $explicitReissue)) {
             DB::transaction(function () use ($d, $item, $blockedStatus) {
                 MarketingOrder::whereKey($d->order_id)->lockForUpdate()->firstOrFail();
                 $d->update(['status' => $blockedStatus === 'dispatching' ? 'pending' : 'canceled', 'response' => '주문 상태 변경으로 발주 차단']);
@@ -235,6 +234,9 @@ class OrderDispatchService
 
         DB::transaction(function () use ($d, $item, $ok, $unknown) {
             MarketingOrder::whereKey($d->order_id)->lockForUpdate()->firstOrFail();
+            if ($d->channel !== 'reward' && ($ok || $unknown)) {
+                app(OrderDispatchState::class)->recordExternalDispatch($d->order);
+            }
             $d->status = $ok ? 'sent' : 'failed';
             $d->sent_at = now();
             $d->save();

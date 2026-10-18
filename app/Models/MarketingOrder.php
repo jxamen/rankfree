@@ -27,6 +27,7 @@ class MarketingOrder extends Model
     ];
 
     protected $casts = [
+        'external_dispatched_at' => 'datetime',
         'field_values' => 'array',
         'boosting_draft' => 'array',   // 부스팅샵 전송값 저장분(2026-08-27) — 확인 화면에서 다듬은 값·노출 순위
         'quantity' => 'integer', 'days' => 'integer',

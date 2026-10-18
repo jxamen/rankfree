@@ -1,0 +1,8 @@
+No syntax errors detected in app/Domain/Order/OrderDispatchService.php
+No syntax errors detected in app/Domain/Order/OrderDispatchState.php
+No syntax errors detected in app/Domain/Order/PrepaidWallet.php
+No syntax errors detected in app/Http/Controllers/Admin/MarketingOrderController.php
+No syntax errors detected in app/Models/MarketingOrder.php
+No syntax errors detected in routes/web.php
+No syntax errors detected in tests/Feature/PrepaidDispatchReviewTest.php
+No syntax errors detected in database/migrations/2026_10_18_000001_add_external_dispatch_history_to_marketing_orders.php

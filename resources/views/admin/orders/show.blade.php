@@ -21,6 +21,16 @@
 <div class="card p-4 mb-4">잔액 결제 · {{ number_format(-$walletDebit->amount) }}원 (부가세 포함)
 @if(\Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$order->id)->exists()) · 환원 완료 @endif
 </div>
+@if($order->status !== 'dispatching' && ! \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'refund:'.$order->id)->exists())
+<form method="POST" action="{{ route('admin.orders.refund-after-vendor-cancellation', $order) }}" class="card p-4 mb-4"
+      data-confirm="업체 취소 확인 후 잔액을 환원할까요?" data-confirm-text="주문 전체와 남은 회차가 취소되고 결제 잔액이 한 번 환원됩니다." data-confirm-ok="환원">
+    @csrf
+    <p>전송 이력이 있는 주문은 업체에 모든 발주의 취소를 확인한 뒤 환원하세요.</p>
+    <label><input type="checkbox" name="vendor_cancellation_confirmed" value="1" required> 모든 업체의 취소를 확인했습니다.</label>
+    <input name="confirmation_note" class="input mt-2" maxlength="160" required placeholder="업체명 · 확인 일시 · 취소 확인 번호 또는 담당자">
+    <button type="submit" class="btn btn-secondary btn-sm mt-2">업체 취소 확인 후 환원</button>
+</form>
+@endif
 @else
 <div class="card p-4 mb-4">기존 주문·API 주문: 기존 입금 확인·승인 절차로 처리합니다.</div>
 @endif

@@ -236,7 +236,7 @@ class MarketingOrderController extends Controller
         if ($order && $planner->mappingUsesShortUrl($order->product) && trim((string) $item->short_url) === '') {
             return back()->withErrors(['items' => "{$item->day_no}일차: Short URL 이 배정되지 않아 발주할 수 없습니다."]);
         }
-        $r = $dispatcher->dispatchItem($item);
+        $r = $dispatcher->dispatchItem($item, explicitReissue: $item->status === 'canceled');
         // 첫 발주로 주문 활성화 — 접수 상태면 진행중 전환(이후 회차는 스케줄러가 자동 발주)
         if ($r['ok'] && $order && $order->status === 'pending') {
             app(\App\Domain\Order\OrderDispatchState::class)->activatePending($order);
@@ -688,6 +688,9 @@ class MarketingOrderController extends Controller
                     : (($result['outcome'] ?? 'unknown') === 'unknown' ? '결과 불명 — 관리자 확인 필요: ' : '실패 — ').$result['error'], 0, 1900),
                 'sent_at' => now(),
             ]);
+            if ($result['ok'] || ($result['outcome'] ?? 'unknown') === 'unknown') {
+                $dispatchState->recordExternalDispatch($order);
+            }
             if (($result['outcome'] ?? 'unknown') !== 'unknown') {
                 $dispatchState->finishDispatch($order, $result['ok'], $previousStatus);
             }
@@ -907,6 +910,9 @@ class MarketingOrderController extends Controller
                     : (($result['outcome'] ?? 'unknown') === 'unknown' ? '결과 불명 — 관리자 확인 필요: ' : '실패 — ').$result['error'], 0, 1900),
                 'sent_at' => now(),
             ]);
+            if ($result['ok'] || ($result['outcome'] ?? 'unknown') === 'unknown') {
+                $dispatchState->recordExternalDispatch($order);
+            }
             if (($result['outcome'] ?? 'unknown') !== 'unknown') {
                 $dispatchState->finishDispatch($order, $result['ok'], $previousStatus);
             }
@@ -1104,6 +1110,18 @@ class MarketingOrderController extends Controller
         return back()->with('status', "주문 {$order->order_no} 상태를 '".MarketingOrder::STATUSES[$data['status']]."'(으)로 변경했습니다.");
     }
 
+    /** The single override: administrator has verified cancellation with every vendor. */
+    public function refundAfterVendorCancellation(Request $request, MarketingOrder $order)
+    {
+        $data = $request->validate([
+            'vendor_cancellation_confirmed' => ['required', 'accepted'],
+            'confirmation_note' => ['required', 'string', 'max:160'],
+        ]);
+        app(\App\Domain\Order\PrepaidWallet::class)->refundAfterVendorCancellation($order, $request->user(), $data['confirmation_note']);
+
+        return back()->with('status', '업체 취소 확인을 기록하고 주문 잔액을 환원했습니다.');
+    }
+
     public function destroy(MarketingOrder $order)
     {
         $no = $order->order_no;
@@ -1112,6 +1130,7 @@ class MarketingOrderController extends Controller
             if ($locked->status === 'dispatching' || ($locked->status === 'processing' && \Illuminate\Support\Facades\DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists())) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['status' => '발주 중·처리 중 주문은 자동 삭제·환원할 수 없습니다. 관리자 확인이 필요합니다.']);
             }
+            app(\App\Domain\Order\PrepaidWallet::class)->assertAutomaticRefundAllowed($locked);
             app(\App\Domain\Order\PrepaidWallet::class)->refund($locked);
             $locked->restoreCoupon();
             $locked->delete();

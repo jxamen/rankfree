@@ -10,12 +10,12 @@ use Illuminate\Validation\ValidationException;
 class OrderDispatchState
 {
     /** 외부 호출 전에 취소/환원과 동일한 주문 잠금으로 전송 권한을 확보한다. */
-    public function beginDispatch(MarketingOrder $order, ?string &$blockedStatus = null, ?MarketingOrderItem $item = null): string|false
+    public function beginDispatch(MarketingOrder $order, ?string &$blockedStatus = null, ?MarketingOrderItem $item = null, bool $explicitReissue = false): string|false
     {
-        return DB::transaction(function () use ($order, &$blockedStatus, $item) {
+        return DB::transaction(function () use ($order, &$blockedStatus, $item, $explicitReissue) {
             $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
             $blockedStatus = $locked->status;
-            if ($item && in_array($item->fresh()->status, ['sent', 'canceled'])) {
+            if ($item && ($item->fresh()->status === 'sent' || ($item->fresh()->status === 'canceled' && ! $explicitReissue))) {
                 $blockedStatus = 'canceled';
 
                 return false;
@@ -24,11 +24,21 @@ class OrderDispatchState
                 DB::table('wallet_entries')->where('reference', 'refund:'.$locked->id)->exists()) {
                 return false;
             }
+            // Only an explicit request that observed cancellation can reopen this item.
+            if ($item && $explicitReissue && $item->fresh()->status === 'canceled') {
+                $item->update(['status' => 'pending']);
+            }
             $previous = $locked->status;
             $locked->update(['status' => 'dispatching']);
 
             return $previous;
         });
+    }
+
+    /** Called under the order lock before releasing dispatching, including unknown outcomes. */
+    public function recordExternalDispatch(MarketingOrder $order): void
+    {
+        MarketingOrder::whereKey($order->id)->whereNull('external_dispatched_at')->update(['external_dispatched_at' => now()]);
     }
 
     /** 취소/재발주도 전송과 같은 주문 잠금으로 최신 상태를 검증한다. */

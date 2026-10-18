@@ -48,11 +48,61 @@ class PrepaidWallet
         }
     }
 
+    /** Requires the caller's order lock. Never infer vendor cancellation from status. */
+    public function assertAutomaticRefundAllowed(MarketingOrder $order): void
+    {
+        if (! DB::table('wallet_entries')->where('reference', 'order:'.$order->id)->exists()) {
+            return;
+        }
+        $externalHistory = $order->external_dispatched_at || $order->dispatches()->where('channel', '!=', 'reward')
+            ->where(function ($query) {
+                $query->where('status', 'sent')
+                    ->orWhere(fn ($q) => $q->where('status', 'canceled')->whereNotNull('sent_at'))
+                    ->orWhere('response', 'like', '%결과 불명%');
+            })->exists();
+        if ($externalHistory || in_array($order->status, ['dispatching', 'processing'])) {
+            throw ValidationException::withMessages(['status' => '외부 전송 이력 또는 처리 중인 주문은 자동 환원할 수 없습니다. 업체 취소 확인 후 전용 환원을 사용하세요.']);
+        }
+    }
+
     public function refund(MarketingOrder $order): void
+    {
+        DB::transaction(function () use ($order) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $this->assertAutomaticRefundAllowed($locked);
+            $this->creditRefund($locked, '주문 환원 '.$locked->order_no);
+        });
+    }
+
+    /** Only the explicit administrator action may bypass the external-history guard. */
+    public function refundAfterVendorCancellation(MarketingOrder $order, User $admin, string $note): void
+    {
+        abort_unless($admin->isAdmin(), 403);
+        if (trim($note) === '' || mb_strlen($note) > 160) {
+            throw ValidationException::withMessages(['confirmation_note' => '업체 취소 확인 내용을 160자 이내로 입력하세요.']);
+        }
+        DB::transaction(function () use ($order, $admin, $note) {
+            $locked = MarketingOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            // A live sender can still reach the vendor. Never release its claim here.
+            if ($locked->status === 'dispatching') {
+                throw ValidationException::withMessages(['status' => '발주 중·결과 불명 주문은 먼저 업체 대조가 필요합니다.']);
+            }
+            if (! DB::table('wallet_entries')->where('reference', 'order:'.$locked->id)->exists()) {
+                throw ValidationException::withMessages(['status' => '잔액 결제 주문만 환원할 수 있습니다.']);
+            }
+            $this->creditRefund($locked, '업체 취소 확인 · 관리자 #'.$admin->id.' · '.trim($note));
+            $locked->items()->update(['status' => 'canceled']);
+            $locked->dispatches()->update(['status' => 'canceled']);
+            $locked->restoreCoupon();
+            $locked->update(['status' => 'canceled']);
+        });
+    }
+
+    private function creditRefund(MarketingOrder $order, string $description): void
     {
         $debit = DB::table('wallet_entries')->where('reference', 'order:'.$order->id)->first();
         if ($debit) {
-            $this->change($order->user_id, -(int) $debit->amount, 'refund:'.$order->id, '주문 환원 '.$order->order_no);
+            $this->change($order->user_id, -(int) $debit->amount, 'refund:'.$order->id, $description);
         }
     }
 }

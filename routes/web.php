@@ -412,6 +412,7 @@ $__admin->group(function () {
     Route::get('/orders', [MarketingOrderController::class, 'index'])->name('orders');
     Route::get('/orders/{order}', [MarketingOrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{order}/status', [MarketingOrderController::class, 'updateStatus'])->name('orders.status');
+    Route::post('/orders/{order}/refund-after-vendor-cancellation', [MarketingOrderController::class, 'refundAfterVendorCancellation'])->name('orders.refund-after-vendor-cancellation');
     Route::post('/orders/{order}/approve', [MarketingOrderController::class, 'approve'])->name('orders.approve');
     Route::post('/orders/{order}/shop-keyword', [MarketingOrderController::class, 'createShopKeyword'])->middleware('throttle:30,1')->name('orders.shop-keyword');
     // 목록 '주문넣기' — 필수값 검증 후 매핑된 업체로 발주(2026-07-23)
