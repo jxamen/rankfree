@@ -12,7 +12,21 @@ class ShopExposureBlockAlert
 {
     public static function interval(string $ip): int
     {
-        return min(10000, 3000 + 300 * (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.now('Asia/Seoul')->format('Y-m-d'), 0));
+        return min(10000, 2000 + 300 * max(0, (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.now('Asia/Seoul')->format('Y-m-d'), 0) - (int) Cache::get('shop-interval-offset:'.$ip.':'.now('Asia/Seoul')->format('Y-m-d'), 0)));
+    }
+
+    public static function revision(string $ip): string
+    {
+        return now('Asia/Seoul')->format('Y-m-d').':'.Cache::get('shop-interval-revision:'.$ip, 'v2');
+    }
+
+    public static function resetInterval(string $ip): void
+    {
+        Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($ip) {
+            $day = now('Asia/Seoul')->format('Y-m-d');
+            Cache::put('shop-interval-offset:'.$ip.':'.$day, (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.$day, 0), now('Asia/Seoul')->endOfDay());
+            Cache::put('shop-interval-revision:'.$ip, (string) \Illuminate\Support\Str::uuid(), now()->addDays(2));
+        });
     }
 
     public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
@@ -37,7 +51,7 @@ class ShopExposureBlockAlert
                 $event = ['ip' => $ip, 'collector' => $collector, 'analysis_id' => $analysis->id,
                     'core_keyword' => $analysis->core_keyword, 'kind' => $kind, 'today_count' => $count,
                     'blocked_on_resume' => $blockedOnResume, 'retry_at' => $kind === 'success' ? null : $now->copy()->addMinutes(3)->toIso8601String(),
-                    'interval_ms' => max(self::interval($ip), min(10000, $intervalMs ?? 3000))];
+                    'interval_ms' => max(self::interval($ip), min(10000, $intervalMs ?? 2000))];
                 Log::info('shop_exposure_block_event', $event);
                 $token = config('services.slack.notifications.bot_user_oauth_token');
                 $channel = config('services.slack.shop_exposure_block_channel');

@@ -55,7 +55,7 @@ class NaverShopExposureService
             }
             $state = Cache::get(self::policyKey(), []);
             $day = now('Asia/Seoul')->format('Y-m-d');
-            if (isset($state['day']) && $state['day'] !== $day) { $state['gap'] = 3000; }
+            if (isset($state['day']) && $state['day'] !== $day) { $state['gap'] = 2000; }
             $state['day'] = $day;
             if (($state['until'] ?? 0) > microtime(true) + 180) {
                 $state['until'] = microtime(true) + 180;
@@ -64,10 +64,10 @@ class NaverShopExposureService
             if (microtime(true) < ($state['until'] ?? 0)) {
                 return ['blocked' => true, 'error' => 'collector_cooldown'] + $out;
             }
-            $floor = min(10000, max(3000, (int) config('rankfree.shopping.exposure.min_interval_ms', 3000)));
+            $floor = min(10000, max(2000, (int) config('rankfree.shopping.exposure.min_interval_ms', 2000)));
             $gap = min(10000, max($floor, (int) ($state['gap'] ?? $floor)));
             $state['gap'] = $gap;
-            $interval = min(10000, $gap + random_int(0, 1000));
+            $interval = min(10000, $gap);
             $wait = max(0, ($state['last'] ?? 0) + $interval / 1000 - microtime(true));
             if ($wait > 0) {
                 usleep((int) ($wait * 1000000));

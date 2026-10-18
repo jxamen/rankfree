@@ -740,8 +740,26 @@ window.__SK = {
         });
     }
 
-    let currentIntervalMs = 3000;
-    const intervalLabel = () => ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 + 무작위 0~1초(최대 10초)';
+    @if(auth()->user()->isAdmin())
+    if (label) {
+        const reset = document.createElement('button');
+        reset.type = 'button'; reset.textContent = '간격 초기화'; reset.style.marginLeft = '8px';
+        label.after(reset);
+        reset.addEventListener('click', async () => {
+            reset.disabled = true;
+            try {
+                const r = await post('{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
+                if (!r.ok) throw new Error();
+                currentIntervalMs = 2000;
+                reset.textContent = '2초로 초기화됨';
+            } catch (_) { reset.textContent = '초기화 실패 — 재시도'; }
+            finally { reset.disabled = false; }
+        });
+    }
+    @endif
+    let currentIntervalMs = 2000;
+    let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
+    const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 10초)';
 
     async function waitRestriction(until, source) {
         while (!stopped) {
@@ -777,7 +795,7 @@ window.__SK = {
 
             for (const it of d.items) {
                 if (stopped) return;
-                const res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, analysisId: {{ (int) $analysis->id }} }, 90000);
+                const res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
                 if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                 // Only actual network results generate events; cached/cooldown replies do not.
                 if (res && !res.cached && !res.cooldown) {

@@ -934,7 +934,7 @@ async function drainShopKeywordCheckQueue() {
   skwCheckActive = true;
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
-      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=40', { token, apiBase });
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1', { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
@@ -945,7 +945,7 @@ async function drainShopKeywordCheckQueue() {
       if (!items.length) return;                           // 확인할 조합 없음
       for (const it of items) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
-        const res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, analysisId: d.analysis_id });
+        const res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
         if (!res || res.ok === false) {
           // 보안문자·차단이면 3분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
           if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
@@ -962,7 +962,7 @@ async function drainShopKeywordCheckQueue() {
         });
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
-        // 공용 ShopSerpPolicy가 3000ms 하한과 실제 차단 후 대기를 적용한다.
+        // 공용 ShopSerpPolicy가 2000ms 하한과 실제 차단 후 대기를 적용한다.
       }
     }
   } catch (e) { /* noop */ } finally {
@@ -1011,7 +1011,7 @@ Object.assign(handlers, {
    * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
-  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms }, sender) {
+  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
@@ -1030,7 +1030,7 @@ Object.assign(handlers, {
     }
     if (res.status === 403) {
       const fallbackPolicy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
-      await new Promise(resolve => setTimeout(resolve, Math.min(10000, Math.max(3000, Number(interval_ms) || 3000, Number(fallbackPolicy.gap) || 3000) + Math.floor(Math.random() * 1001))));
+      await new Promise(resolve => setTimeout(resolve, Math.min(10000, Math.max(2000, Number(interval_ms) || 2000, Number(fallbackPolicy.gap) || 2000))));
       return shopSerpTab.read(kw);
     }
     if (!res.ok) return { ok: false, status: res.status, message: 'HTTP ' + res.status };
@@ -1047,7 +1047,7 @@ Object.assign(handlers, {
       }
     }
     return { ok: true, status: res.status, html: picked };
-    }, collectorIp || 'browser', interval_ms);
+    }, collectorIp || 'browser', interval_ms, interval_revision);
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }

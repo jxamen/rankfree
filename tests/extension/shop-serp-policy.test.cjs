@@ -15,7 +15,7 @@ test('screen and queue calls serialize and share same-day raw HTML cache; tomorr
   const f = fixture(); let calls = 0; let active = 0; let peak = 0; const times = [];
   const fetcher = async () => { calls++; active++; peak = Math.max(peak,active); times.push(f.now()); await Promise.resolve(); active--; return {ok:true,html:'raw'}; };
   const results = await Promise.all([f.policy.run('키워드',fetcher),f.policy.run('키워드',fetcher),f.policy.run('다른키워드',fetcher)]);
-  assert.equal(calls,2); assert.equal(peak,1); assert.equal(results[1].cached,true); assert.ok(times[1]-times[0]>=3000);
+  assert.equal(calls,2); assert.equal(peak,1); assert.equal(results[1].cached,true); assert.ok(times[1]-times[0]>=2000);
   f.advance(86400000); await f.policy.run('키워드',fetcher); assert.equal(calls,3);
 });
 for (const blocked of [{ok:false,status:403},{ok:false,status:429},{ok:false,status:200,captcha:true}]) {
@@ -23,12 +23,12 @@ for (const blocked of [{ok:false,status:403},{ok:false,status:429},{ok:false,sta
   const f=fixture(); let calls=0;
   await f.policy.run('a',async()=>{calls++;return blocked;});
   const r=await f.policy.run('b',async()=>{calls++;return {ok:true};});
-  assert.equal(r.cooldown,true); assert.equal(calls,1); assert.equal(f.data.rfSerpPolicy.gap,3300); assert.equal(f.data.rfSerpPolicy.slowEntries,1);
+  assert.equal(r.cooldown,true); assert.equal(calls,1); assert.equal(f.data.rfSerpPolicy.gap,2300); assert.equal(f.data.rfSerpPolicy.slowEntries,1);
   f.advance(180000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,2);
  });
 }
 test('165 successes retain interval without periodic rests', async()=>{
- for(const gap of [3000,3200]) {
+ for(const gap of [2000,3200]) {
   const f=fixture({gap}); const times=[];
   for(let i=0;i<165;i++) await f.policy.run(String(i),async()=>{times.push(f.now());return {ok:true,html:''};});
   assert.equal(f.data.rfSerpPolicy.gap,gap);
@@ -42,7 +42,7 @@ test('first request after cooldown blocked again renews wait and records resume'
  f.advance(180000); const repeated = await f.policy.run('b',block);
  assert.equal(repeated.blockedOnResume,true);
  assert.equal(f.data.rfSerpPolicy.blockedOnResume,true);
- assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,3600);
+ assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,2600);
  assert.equal(f.data.rfSerpPolicy.until,f.now()+180000);
  assert.equal((await f.policy.run('c',block)).cooldown,true); assert.equal(calls,2);
 });
@@ -61,7 +61,7 @@ test('repeated blocks always wait exactly three minutes without a retry limit', 
    f.advance(179999); assert.equal((await f.policy.run('a',block)).cooldown,true);
    assert.equal(calls,i+1); f.advance(1);
   }
-  assert.equal(f.data.rfSerpPolicy.gap,4500);
+  assert.equal(f.data.rfSerpPolicy.gap,3500);
  }
 });
 
@@ -79,15 +79,15 @@ test('network failure preserves restriction history and permission pause survive
  const f=fixture({until:1,blockedOnResume:true});
  await f.policy.run('a',async()=>({ok:false,status:0}));
  assert.equal(f.data.rfSerpPolicy.until,1);
- f.data.rfSkwCheckSkipReason='permission';f.data.rfSkwCheckSkipUntil=f.now()+23000000;
+ f.data.rfSkwCheckSkipReason='permission';f.data.rfSkwCheckSkipUntil=f.now()+22000000;
  await f.policy.run('b',async()=>({ok:true,status:200,html:''}));
  assert.equal(f.data.rfSkwCheckSkipReason,'permission');
  assert.ok(f.data.rfSkwCheckSkipUntil>f.now());
 });
-test('next request waits 3000ms after a long tab read or 403 fallback completes',async()=>{
+test('next request waits 2000ms after a long tab read or 403 fallback completes',async()=>{
  const f=fixture();let finished;
  await f.policy.run('a',async()=>{f.advance(5000);finished=f.now();return {ok:true,html:'tab'};});
- await f.policy.run('b',async()=>{assert.ok(f.now()-finished>=3000);return {ok:true,html:'tab'};});
+ await f.policy.run('b',async()=>{assert.ok(f.now()-finished>=2000);return {ok:true,html:'tab'};});
 });
 
 test('IP gaps persist on success, cap at 10 seconds, and reset next KST day', async()=>{
@@ -95,11 +95,24 @@ test('IP gaps persist on success, cap at 10 seconds, and reset next KST day', as
  for(let i=0;i<30;i++){await f.policy.run('a',block,'ip-a');f.advance(180000);}
  assert.equal(f.data.rfSerpPolicy.gap,10000);
  await f.policy.run('ok',async()=>({ok:true}),'ip-a');assert.equal(f.data.rfSerpPolicy.gap,10000);
- await f.policy.run('other',async()=>({ok:true}),'ip-b');assert.equal(f.data.rfSerpPolicy.gap,3000);
- f.advance(86400000);await f.policy.run('tomorrow',async()=>({ok:true}),'ip-a');assert.equal(f.data.rfSerpPolicy.gap,3000);
+ await f.policy.run('other',async()=>({ok:true}),'ip-b');assert.equal(f.data.rfSerpPolicy.gap,2000);
+ f.advance(86400000);await f.policy.run('tomorrow',async()=>({ok:true}),'ip-a');assert.equal(f.data.rfSerpPolicy.gap,2000);
 });
-test('jitter stays within one second and total spacing is capped', async()=>{
+test('spacing has no jitter even when random returns one', async()=>{
  const f=fixture({gap:9500});f.policy.random=()=>1;
  let first;await f.policy.run('a',async()=>{first=f.now();return {ok:true};});
- await f.policy.run('b',async()=>{assert.equal(f.now()-first,10000);return {ok:true};});
+ await f.policy.run('b',async()=>{assert.equal(f.now()-first,9500);return {ok:true};});
+});
+
+test('server revision resets persisted interval on next request, including cache and cooldown',async()=>{
+ const f=fixture();
+ await f.policy.run('a',async()=>({ok:false,status:403}),'ip',8000,'old');
+ assert.equal(f.data.rfSerpPolicy.gap,8300);
+ const r=await f.policy.run('b',async()=>{throw Error('cooldown preserved');},'ip',2000,'new');
+ assert.equal(r.cooldown,true);assert.equal(f.data.rfSerpPolicy.gap,2000);
+ f.advance(180000);
+ await f.policy.run('c',async()=>({ok:true}),'ip',2000,'new');
+ assert.equal(f.data.rfSerpPolicy.gap,2000);
+ await f.policy.run('d',async()=>({ok:false,status:429}),'ip',2000,'new');
+ assert.equal(f.data.rfSerpPolicy.gap,2300);
 });

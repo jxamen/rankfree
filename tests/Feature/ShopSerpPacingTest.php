@@ -30,7 +30,7 @@ class ShopSerpPacingTest extends TestCase
         $this->assertSame('http_403', $s->exposure('a', [])['error']);
         $this->assertSame('collector_cooldown', $s->exposure('b', [])['error']);
         Http::assertSentCount(1);
-        $this->assertSame(3300, Cache::get(NaverShopExposureService::policyKey())['gap']);
+        $this->assertSame(2300, Cache::get(NaverShopExposureService::policyKey())['gap']);
     }
     public function test_resume_block_renews_wait_and_is_logged(): void
     {
@@ -82,13 +82,13 @@ class ShopSerpPacingTest extends TestCase
         $s = new NaverShopExposureService();
         $this->assertSame(10000, $s->exposure('cap', [])['interval_ms']);
         config(['rankfree.shopping.exposure.collector_ip' => '192.0.2.2']);
-        $this->assertSame(3300, $s->exposure('ip2', [])['interval_ms']);
+        $this->assertSame(2300, $s->exposure('ip2', [])['interval_ms']);
         config(['rankfree.shopping.exposure.collector_ip' => '192.0.2.1']);
         $state = Cache::get($key);
         $state['until'] = 0;
         $state['last'] = 0;
         $state['day'] = now('Asia/Seoul')->subDay()->format('Y-m-d');
         Cache::put($key, $state);
-        $this->assertSame(3000, $s->exposure('tomorrow', [])['interval_ms']);
+        $this->assertSame(2000, $s->exposure('tomorrow', [])['interval_ms']);
     }
 }
