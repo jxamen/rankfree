@@ -33,11 +33,11 @@ class ShopKeywordCollectionTargetTest extends TestCase
             $this->assertGreaterThan(microtime(true) * 1000 + 179000, $p['retry_at']);
             $this->assertLessThanOrEqual(microtime(true) * 1000 + 180001, $p['retry_at']);
             $this->assertNull($item->fresh()->rank);
-            $state = \Illuminate\Support\Facades\Cache::get('shop-serp:server-policy');
-            $this->assertSame(1600, $state['gap']);
+            $state = \Illuminate\Support\Facades\Cache::get(\App\Domain\Shopping\NaverShopExposureService::policyKey());
+            $this->assertSame(3300 + 300 * $i, $state['gap']);
             $state['until'] = microtime(true) - 1;
-            $state['last'] = microtime(true) - 2;
-            \Illuminate\Support\Facades\Cache::put('shop-serp:server-policy', $state);
+            $state['last'] = microtime(true) - 11;
+            \Illuminate\Support\Facades\Cache::put(\App\Domain\Shopping\NaverShopExposureService::policyKey(), $state);
         }
         Http::assertSentCount(4);
         \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::type('array'))->times(4);

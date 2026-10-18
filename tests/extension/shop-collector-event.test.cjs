@@ -31,3 +31,12 @@ test('screen delegates delivery to page session; cached and cooldown replies emi
     assert.equal(actual,result);
   }
 });
+
+test('console bridge forwards IP and interval to the shared collection policy', () => {
+ const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/content/console-bridge.js'), 'utf8');
+ let listener, sent;
+ const window = {addEventListener: (type, fn) => {listener = fn;}, postMessage:()=>{}};
+ vm.runInNewContext(source, {window, document:{documentElement:{setAttribute:()=>{}}}, chrome:{runtime:{sendMessage:(m,cb)=>{sent=m;cb({ok:true});}}}});
+ listener({source:window,data:{source:'rankfree-console',type:'fetchShopSerp',keyword:'test',collectorIp:'192.0.2.1',interval_ms:4200}});
+ assert.equal(sent.payload.collectorIp,'192.0.2.1');assert.equal(sent.payload.interval_ms,4200);
+});

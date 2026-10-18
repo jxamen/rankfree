@@ -45,8 +45,8 @@ class ShopExposureBlockAlertTest extends TestCase
             $retry = now('Asia/Seoul')->addMinutes(3)->toIso8601String();
             app(ShopExposureBlockAlert::class)->record($a, '192.0.2.3', 'server', '403', $i > 0);
             \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($data) =>
-                $data['retry_at'] === $retry && $data['today_count'] === $i + 1 && $data['blocked_on_resume'] === ($i > 0)
-                && array_keys($data) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at']
+                $data['interval_ms'] === 2000 + 300 * ($i + 1) && $data['retry_at'] === $retry && $data['today_count'] === $i + 1 && $data['blocked_on_resume'] === ($i > 0)
+                && array_keys($data) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at', 'interval_ms']
             ))->once();
             $this->travel(3)->minutes();
         }

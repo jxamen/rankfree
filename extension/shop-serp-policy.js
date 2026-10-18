@@ -1,10 +1,10 @@
 /* One browser-wide lane for screen + background exposure checks.
- * 1600 ms is a provisional conservative floor, NOT a measured safe interval.
+ * 2000 ms is a provisional conservative floor, NOT a measured safe interval.
  * A blocked response is never retried automatically within its 3 minute cooldown.
  */
 class ShopSerpPolicy {
-  constructor({ storage = chrome.storage.local, now = () => Date.now(), wait = ms => new Promise(r => setTimeout(r, ms)), cache = null } = {}) {
-    this.storage = storage; this.now = now; this.wait = wait;
+  constructor({ storage = chrome.storage.local, now = () => Date.now(), wait = ms => new Promise(r => setTimeout(r, ms)), cache = null, random = Math.random } = {}) {
+    this.random = random; this.storage = storage; this.now = now; this.wait = wait;
     this.cache = cache || this.dailyCache();
     this.lane = Promise.resolve();
   }
@@ -34,43 +34,54 @@ class ShopSerpPolicy {
       },
     };
   }
-  run(keyword, fetcher) {
-    const job = this.lane.then(() => this.check(keyword, fetcher));
+  run(keyword, fetcher, ip = "browser", serverGap = 2000, revision = null) {
+    const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision));
     this.lane = job.catch(() => {}); return job;
   }
-  async check(keyword, fetcher) {
+  async check(keyword, fetcher, ip, serverGap, revision) {
     const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(this.now());
-    const key = day + ':' + keyword.trim().normalize('NFC');
+    const key = day + ':tab-v1:' + keyword.trim().normalize('NFC');
     // Fail closed when durable storage fails: avoid silently repeating same-day requests.
     try {
-      const data = await this.storage.get('rfSerpPolicy');
-      const s = data.rfSerpPolicy || {};
+      const data = await this.storage.get(['rfSerpPolicy', 'rfSerpPolicyByIp']);
+      const policies = data.rfSerpPolicyByIp || {};
+      const s = policies[ip] || (ip === 'browser' ? data.rfSerpPolicy : null) || {};
+      if (s.day && s.day !== day) { s.gap = 2000; }
+      s.day = day;
+      if (revision !== null && s.revision !== revision) { s.gap = Number(serverGap) || 2000; s.revision = revision; }
+      policies[ip] = s;
+      const save = () => this.storage.set({ rfSerpPolicy: s, rfSerpPolicyByIp: policies });
       if ((s.until || 0) > this.now() + 180000) {
         const previousUntil = s.until;
         s.until = this.now() + 180000;
-        await this.storage.set({ rfSerpPolicy: s });
+        await save();
         const queue = await this.storage.get(['rfSkwCheckSkipUntil', 'rfSkwCheckSkipReason']);
         if (Math.abs((queue.rfSkwCheckSkipUntil || 0) - previousUntil) <= 5000 && queue.rfSkwCheckSkipReason !== 'permission') {
           await this.storage.set({ rfSkwCheckSkipUntil: s.until, rfSkwCheckSkipReason: 'naver' });
         }
       }
+      s.gap = Math.max(2000, Math.min(10000, Number(s.gap) || 2000));
+      s.gap = Math.max(2000, Math.min(10000, Math.max(Number(s.gap) || 2000, Number(serverGap) || 2000)));
+      await save();
       const hit = await this.cache.get(key);
-      if (hit) return { ...hit, cached: true };
-      s.gap = Math.max(1600, Math.min(15000, Number(s.gap) || 1600));
-      if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, retryAt: s.until, message: '최근 차단으로 3분 휴식 중입니다.' };
-      const wait = Math.max(0, (s.last || 0) + s.gap - this.now());
+      if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
+      if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '최근 차단으로 3분 휴식 중입니다.' };
+      const wait = Math.max(0, (s.last || 0) + Math.min(10000, s.gap) - this.now());
       if (wait) await this.wait(wait);
       const resumedAfterBlock = !!s.until;
       const previous = s.last;
       s.last = this.now();
-      await this.storage.set({ rfSerpPolicy: s });
+      await save();
       const res = await fetcher();
+      // Include the 403 tab recheck in spacing: next navigation waits after completion.
+      s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
+        s.gap = Math.min(10000, s.gap + 300);
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
         s.until = 0; s.blockedOnResume = false;
-        await this.storage.set({ rfSerpPolicy: s });
+        await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') {
           await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
@@ -91,8 +102,8 @@ class ShopSerpPolicy {
       s.http403 = (s.http403 || 0) + (res.status === 403 ? 1 : 0);
       s.http429 = (s.http429 || 0) + (res.status === 429 ? 1 : 0);
       s.captchas = (s.captchas || 0) + (res.captcha ? 1 : 0);
-      await this.storage.set({ rfSerpPolicy: s });
-      return { ...res, retryAt: s.until || null, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
+      await save();
+      return { ...res, interval_ms: s.gap, retryAt: s.until || null, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
     } catch (e) { return { ok: false, message: '속도·당일 캐시 저장소 오류 — 수집을 멈췄습니다.' }; }
   }
 }

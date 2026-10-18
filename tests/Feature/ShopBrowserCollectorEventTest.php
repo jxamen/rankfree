@@ -45,10 +45,33 @@ class ShopBrowserCollectorEventTest extends TestCase
         }
     }
 
+    public function test_admin_reset_preserves_counts_and_cooldown_and_denies_member(): void
+    {
+        $u = User::factory()->create(['role' => 'member']);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => 'reset']);
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.reset-interval', $a))->assertForbidden();
+        $u->update(['role' => 'admin']);
+        $this->actingAs($u)->withServerVariables(['REMOTE_ADDR' => '192.0.2.1']);
+        $alert = \App\Services\ShopExposureBlockAlert::class;
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        app($alert)->record($a, '192.0.2.1', 'browser', '403');
+        $this->assertSame(2300, $alert::interval('192.0.2.1'));
+        $revision = $alert::revision('192.0.2.1');
+        $key = \App\Domain\Shopping\NaverShopExposureService::policyKey();
+        \Illuminate\Support\Facades\Cache::put($key, ['gap' => 8000, 'until' => 12345]);
+        $this->postJson(route('admin.shop-keyword.reset-interval', $a))->assertOk()->assertJson(['interval_ms' => 2000]);
+        $this->assertSame(2000, $alert::interval('192.0.2.1'));
+        $this->assertNotSame($revision, $alert::revision('192.0.2.1'));
+        $this->assertSame(12345, \Illuminate\Support\Facades\Cache::get($key)['until']);
+        $this->assertSame(2000, \Illuminate\Support\Facades\Cache::get($key)['gap']);
+        app($alert)->record($a, '192.0.2.1', 'browser', '429');
+        $this->assertSame(2300, $alert::interval('192.0.2.1'));
+    }
+
     private function assertEvent(ShopKeywordAnalysis $a, string $kind): void
     {
         Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($e) =>
-            array_keys($e) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at']
+            array_keys($e) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at', 'interval_ms']
             && $e['ip'] === '125.186.176.132' && $e['collector'] === 'browser' && $e['analysis_id'] === $a->id && $e['kind'] === $kind
             && ($kind === 'success' ? $e['retry_at'] === null : $e['retry_at'] === now('Asia/Seoul')->addMinutes(3)->toIso8601String())
         ))->once();

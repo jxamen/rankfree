@@ -212,7 +212,7 @@ class ShopKeywordExposureAnalyzer
                     default => empty($res['error']) && empty($res['blocked']) ? 'success' : null,
                 };
                 if ($alertKind) {
-                    app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false));
+                    app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false), $res['interval_ms'] ?? null);
                 }
                 // fetch 실패/차단 → rank 저장 안 함(미확인 유지, 재시도 가능)
                 if (! empty($res['error']) || ! empty($res['blocked'])) {
@@ -265,13 +265,13 @@ class ShopKeywordExposureAnalyzer
 
             $retryAt = null;
             if ($stopped && isset($res) && in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true)) {
-                $until = (float) (Cache::get('shop-serp:server-policy', [])['until'] ?? 0);
+                $until = (float) (Cache::get(NaverShopExposureService::policyKey(), [])['until'] ?? 0);
                 $retryAt = (int) ceil(1000 * ($until > microtime(true) ? $until : microtime(true) + 180));
             }
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
-                'retry_at' => $retryAt, 'error' => $error,
+                'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? 2000), 'retry_at' => $retryAt, 'error' => $error,
                 'items' => $batchResults];
         } finally {
             $lock->release();

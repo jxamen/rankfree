@@ -5,7 +5,8 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
-importScripts('shop-serp-policy.js');
+importScripts('shop-serp-policy.js', 'shop-serp-tab.js');
+const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
 
 const DEFAULT_API_BASE = 'https://rankfree.kr';
@@ -933,7 +934,7 @@ async function drainShopKeywordCheckQueue() {
   skwCheckActive = true;
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
-      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=40', { token, apiBase });
+      const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=1', { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
         return;
@@ -944,7 +945,7 @@ async function drainShopKeywordCheckQueue() {
       if (!items.length) return;                           // 확인할 조합 없음
       for (const it of items) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
-        const res = await handlers.fetchShopSerp({ keyword: it.keyword, analysisId: d.analysis_id });
+        const res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
         if (!res || res.ok === false) {
           // 보안문자·차단이면 3분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
           if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
@@ -961,7 +962,7 @@ async function drainShopKeywordCheckQueue() {
         });
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
-        // 공용 ShopSerpPolicy가 1600ms 하한과 실제 차단 후 대기를 적용한다.
+        // 공용 ShopSerpPolicy가 2000ms 하한과 실제 차단 후 대기를 적용한다.
       }
     }
   } catch (e) { /* noop */ } finally {
@@ -1006,16 +1007,18 @@ function pickInitialStateScripts(html) {
 // ── 핸들러 확장 — background.js 의 handlers 객체에 사내 전용 핸들러를 덧붙인다 ──────────
 Object.assign(handlers, {
   /**
-   * 쇼핑 노출 키워드(25) — m.search 모바일 검색 HTML 을 브라우저(사용자 IP)에서 가져온다.
-   * 서버와 브라우저 모두 차단될 수 있으므로 공통 속도 정책을 적용한다.
-   * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
+   * 쇼핑 노출 키워드 — 기본은 실제 쇼핑 탭 문서 읽기. 옵션으로 모바일 HTML 요청.
+   * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
+   * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
-  async fetchShopSerp({ keyword, analysisId }, sender) {
+  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     const result = await shopSerpPolicy.run(kw, async () => {
+    const { rfSerpMode = 'tab' } = await chrome.storage.local.get('rfSerpMode');
+    if (rfSerpMode !== 'request') return shopSerpTab.read(kw);
     let res;
     try {
       res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
@@ -1024,6 +1027,11 @@ Object.assign(handlers, {
       });
     } catch (e) {
       return { ok: false, status: 0, message: '네트워크 오류: ' + String((e && e.message) || e) };
+    }
+    if (res.status === 403) {
+      const fallbackPolicy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
+      await new Promise(resolve => setTimeout(resolve, Math.min(10000, Math.max(2000, Number(interval_ms) || 2000, Number(fallbackPolicy.gap) || 2000))));
+      return shopSerpTab.read(kw);
     }
     if (!res.ok) return { ok: false, status: res.status, message: 'HTTP ' + res.status };
     const html = await res.text();
@@ -1039,7 +1047,7 @@ Object.assign(handlers, {
       }
     }
     return { ok: true, status: res.status, html: picked };
-    });
+    }, collectorIp || 'browser', interval_ms, interval_revision);
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
@@ -1051,7 +1059,7 @@ Object.assign(handlers, {
           const policy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
           await apiFetch('/api/ext/shop-keyword/' + Number(analysisId) + '/collector-event', {
             method: 'POST', token, apiBase,
-            body: { kind, collector: 'browser', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume },
+            body: { kind, collector: 'browser', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume, interval_ms: result.interval_ms },
           });
         } catch (e) { /* reporting must not interrupt collection */ }
       }
