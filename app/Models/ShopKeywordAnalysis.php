@@ -18,10 +18,13 @@ class ShopKeywordAnalysis extends Model
     protected $fillable = [
         'user_id', 'marketing_order_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'brand', 'product_title', 'product_price',
         'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned', 'check_method',
-        'created_via',
+        'created_via', 'order_start_date', 'order_end_date', 'order_days', 'keyword_target',
     ];
 
+    protected $hidden = ['collection_ip', 'collection_source', 'collection_seen_at'];
+
     protected $casts = [
+        'collection_seen_at' => 'datetime',
         'threshold' => 'integer',
         'token_count' => 'integer',
         'combo_count' => 'integer',
@@ -29,7 +32,32 @@ class ShopKeywordAnalysis extends Model
         'exposed_count' => 'integer',
         'product_price' => 'integer',
         'banned' => 'array',
+        'order_days' => 'integer',
+        'keyword_target' => 'integer',
     ];
+
+    /** Count only organic top-five keywords, independently of the display threshold. */
+    public function topFiveCount(): int
+    {
+        return $this->combos()->whereBetween('rank', [1, 5])->distinct()->count('keyword');
+    }
+
+    public function targetReached(): bool
+    {
+        return $this->keyword_target > 0 && $this->topFiveCount() >= $this->keyword_target;
+    }
+
+    public function collectionLabel(): string
+    {
+        if ($this->status === 'target_reached' || $this->targetReached()) {
+            return '목표 도달로 멈춤';
+        }
+
+        return match ($this->status) {
+            'pending' => '대기', 'done' => '완료', 'error', 'failed', 'blocked' => '실패',
+            'paused' => '일시정지', default => '진행 중',
+        };
+    }
 
     public function user(): BelongsTo
     {

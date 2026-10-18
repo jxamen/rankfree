@@ -2,6 +2,7 @@
 
 namespace App\Domain\Shopping;
 
+use App\Models\ShopKeywordAnalysis;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -31,7 +32,7 @@ class ShopExposureRunLock
     {
         $key = self::KEY.$scope;
 
-        return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $owner, $analysisId, $keyword) {
+        return Cache::lock($key.':mutex', 5)->block(3, function () use ($key, $scope, $owner, $analysisId, $keyword) {
             $cur = Cache::get($key);
             $now = now()->timestamp;
             // pending/queue 조회는 수집 진행이 아니다. 동일 주인의 폴링도 이 기준 시각을 연장하지 않는다.
@@ -44,7 +45,12 @@ class ShopExposureRunLock
             if (is_array($cur) && (($cur['owner'] ?? '') !== $owner || (int) ($cur['analysis_id'] ?? 0) !== $analysisId)) {
                 return ['ok' => false, 'holder' => $cur];
             }
-            Cache::put($key, ['owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword, 'at' => $now, 'progress_at' => $cur['progress_at'] ?? $cur['at'] ?? $now], self::TTL);
+            $ip = str_starts_with($scope, 'ip:') ? substr($scope, 3) : null;
+            $ip = filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null;
+            $source = str_starts_with($owner, 'ext:') ? '확장 수집기' : ($ip ? '브라우저' : '서버');
+            ShopKeywordAnalysis::whereKey($analysisId)->update(['collection_ip' => $ip, 'collection_source' => $source, 'collection_seen_at' => now()]);
+            Cache::put($key, ['ip' => $ip, 'source' => $source, 'owner' => $owner, 'analysis_id' => $analysisId, 'keyword' => $keyword,
+                'at' => $now, 'progress_at' => $cur['progress_at'] ?? $cur['at'] ?? $now], self::TTL);
 
             return ['ok' => true, 'holder' => null];
         });
@@ -76,11 +82,15 @@ class ShopExposureRunLock
     }
 
     /** 화면에 띄울 안내 — 같은 IP 에서 다른 수집이 도는 분석. */
-    public function busyMessage(array $holder): string
+    public function busyMessage(array $holder, bool $isAdmin = false): string
     {
         $kw = trim((string) ($holder['keyword'] ?? ''));
 
-        return '같은 인터넷 주소(IP)에서 다른 수집이 진행 중이에요 — 분석 #'.(int) ($holder['analysis_id'] ?? 0).($kw !== '' ? " ({$kw})" : '')
+        $ip = $holder['ip'] ?? null;
+        $display = $ip ? ($isAdmin ? $ip : '*** (마스킹)') : '미확인';
+        $collector = (string) ($holder['source'] ?? '수집기 미확인');
+
+        return '수집 IP: '.$display.' · '.$collector.' — 같은 인터넷 주소(IP)에서 다른 수집이 진행 중이에요 — 분석 #'.(int) ($holder['analysis_id'] ?? 0).($kw !== '' ? " ({$kw})" : '')
             .'. 동시에 돌면 네이버가 막아요. 끝나면 자동으로 이어서 시작합니다.';
     }
 }

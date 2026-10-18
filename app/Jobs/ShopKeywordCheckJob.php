@@ -33,7 +33,7 @@ class ShopKeywordCheckJob implements ShouldQueue
             return;
         }
         // 사용자가 화면에서 중단(paused)했으면 자동 확인도 멈춘다 — 재개는 화면/API 로.
-        if ($analysis->status === 'paused' || $this->round > self::MAX_ROUNDS) {
+        if (in_array($analysis->status, ['paused', 'target_reached'], true) || $this->round > self::MAX_ROUNDS) {
             return;
         }
 

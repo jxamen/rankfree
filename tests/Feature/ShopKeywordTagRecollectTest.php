@@ -70,10 +70,24 @@ class ShopKeywordTagRecollectTest extends TestCase
         $a = $this->analysis();
         ShopProductInfo::create([
             'user_id' => $this->user->id, 'channel_product_id' => '111',
+            'delivery_fee' => 0,
             'title' => '내 상품', 'seller_tags' => ['킹크렙포크', '부모님선물'],
             'collected_at' => now()->subDays(3),
         ]);
 
+        $this->assertNotContains($a->id, $this->queueIds());
+    }
+
+    public function test_missing_fee_retries_with_tags_but_recent_collection_cools_down(): void
+    {
+        $a = $this->analysis();
+        $pi = ShopProductInfo::create([
+            'user_id' => $this->user->id, 'channel_product_id' => '111',
+            'title' => '내 상품', 'seller_tags' => ['태그'], 'delivery_fee' => null,
+            'collected_at' => now()->subDays(3),
+        ]);
+        $this->assertContains($a->id, $this->queueIds());
+        $pi->update(['collected_at' => now()]);
         $this->assertNotContains($a->id, $this->queueIds());
     }
 

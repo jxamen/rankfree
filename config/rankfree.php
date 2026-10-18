@@ -190,6 +190,7 @@ return [
         'timeout' => (int) env('NAVER_SHOPPING_TIMEOUT', 15),
         // 노출 키워드 분석(25) — 조합 후보를 순위체크할 때의 상한(쿼터 보호)
         'exposure' => [
+            'keywords_per_day' => (int) env('SHOP_KEYWORDS_PER_DAY', 50),
             'top' => (int) env('SHOP_EXPOSURE_TOP', 5),           // 이 순위 이내면 "노출"로 본다
             'hard_cap' => (int) env('SHOP_EXPOSURE_HARD_CAP', 3000), // 조합 생성 안전 상한(사용자 선택 없음 — 만들 수 있는 만큼 전부)
             'max_combos' => (int) env('SHOP_EXPOSURE_MAX_COMBOS', 100), // (구) 기본 조합 수 — prepare 는 이제 hard_cap 까지 전부 생성

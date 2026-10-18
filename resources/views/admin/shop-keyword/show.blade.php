@@ -2,6 +2,7 @@
 @section('page-title', '쇼핑 노출 키워드 — '.$analysis->core_keyword)
 
 @section('admin-content')
+@include('admin.shop-keyword.collection', ['a' => $analysis])
 @php
     // 조합 재료 소스 + 참고(조합 X) 소스 라벨
     $srcLabel = [
@@ -103,7 +104,7 @@
 </div>
 
 @php
-    $remaining = $combos->whereNull('rank')->count();
+    $remaining = $analysis->targetReached() ? 0 : $combos->whereNull('rank')->count();
     // 중단은 서버에 저장된다(status=paused) — 새로고침해도 자동 재시작하지 않고 "이어서 확인"으로만 재개
     $isPaused = $analysis->status === 'paused';
 @endphp
@@ -786,6 +787,7 @@ window.__SK = {
                     if (cr.ok) {
                         const p = await cr.json();
                         renderProgress(p);
+                        if (p.status === 'target_reached') { stopped = true; return; }
                         if (p.rank !== undefined) applyItemResult(it, p);   // 배지·노출/광고·패턴 실시간 갱신
                     }
                 } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }
