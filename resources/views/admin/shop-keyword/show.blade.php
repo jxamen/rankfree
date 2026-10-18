@@ -872,11 +872,13 @@ window.__SK = {
         for (const id of ['sk-interval-save','sk-interval-reset']) { const button = document.getElementById(id); if (button) button.disabled = false; }
     }
     async function persistBrowserSettings(value, manual = false) {
+        // 확장 저장은 서버를 거치지 않는다 — 확장 로그인 계정 · 토큰과 무관하게 이 브라우저에 저장(대표님 10/19 08:44 「설정을 저장하지 못했습니다」).
+        // 병렬 축소 해제는 화면 세션으로 서버에 알리고, 확장은 다음 검색의 재개 식별값으로 따라온다.
+        if (manual) { const r = await post(cfg.urls.collectorEvent, {kind:'parallel_reset'}); if (!r.ok) throw new Error('설정 적용에 실패했습니다.'); }
         if (settingsInExtension) {
-            const r = await extCall('setShopSettings', {settings:value, analysisId:cfg.analysisId, manual}, 5000);
+            const r = await extCall('setShopSettings', {settings:value, analysisId:cfg.analysisId, manual:false}, 5000);
             if (!r?.ok) throw new Error('이 브라우저에 설정을 저장하지 못했습니다.');
         } else {
-            if (manual) { const r = await post(cfg.urls.collectorEvent, {kind:'parallel_reset'}); if (!r.ok) throw new Error('설정 적용에 실패했습니다.'); }
             localStorage.setItem('rfShopSettings', JSON.stringify(value));
         }
         browserSettings = value;
