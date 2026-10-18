@@ -22,6 +22,24 @@ class ShopParallelClaimsTest extends TestCase
         return $a;
     }
 
+    public function test_resume_and_manual_settings_clear_only_the_analysis_reduction(): void
+    {
+        $a = $this->analysis();
+        Cache::forever('shop-parallel-reduced:'.$a->id, true);
+        Cache::forever('shop-parallel-reduced:'.($a->id+1), true);
+        $this->postJson(route('admin.shop-keyword.pause', $a), ['paused'=>false])->assertOk();
+        $this->assertFalse(ShopExposureBlockAlert::parallelSettings($a->id)['parallel_reduced']);
+        $revision = ShopExposureBlockAlert::parallelSettings($a->id)['parallel_revision'];
+        $this->assertNotNull($revision);
+        Cache::forever('shop-parallel-reduced:'.$a->id, true);
+        [, $token] = \App\Models\ExtToken::issue(User::find($a->user_id));
+        $this->withToken($token);
+        $this->postJson('/api/ext/shop-keyword/'.$a->id.'/collector-event', ['kind'=>'parallel_reset'])->assertOk();
+        $this->assertFalse(ShopExposureBlockAlert::parallelSettings($a->id)['parallel_reduced']);
+        $this->assertNotSame($revision, ShopExposureBlockAlert::parallelSettings($a->id)['parallel_revision']);
+        $this->assertTrue(ShopExposureBlockAlert::parallelSettings($a->id+1)['parallel_reduced']);
+    }
+
     public function test_claims_are_disjoint_across_runners_and_expire_after_two_minutes(): void
     {
         $a = $this->analysis();
@@ -66,7 +84,7 @@ class ShopParallelClaimsTest extends TestCase
         foreach ($a->combos()->limit(2)->get() as $item) $item->update(['rank'=>1]);
         $url=route('admin.shop-keyword.interval',$a);
         $this->postJson($url,['seconds'=>4,'parallel_tabs'=>4,'tab_open_seconds'=>'0.5','keywords_per_day'=>100])->assertOk();
-        $this->assertSame(['parallel_reduced'=>false,'parallel_tabs'=>1,'tab_open_interval_ms'=>3000],ShopExposureBlockAlert::parallelSettings());
+        $this->assertSame(['parallel_reduced'=>false,'parallel_revision'=>null,'parallel_tabs'=>1,'tab_open_interval_ms'=>3000],ShopExposureBlockAlert::parallelSettings());
         $this->assertSame(100,ShopExposureBlockAlert::keywordsPerDay());
         $this->assertSame(200,$a->fresh()->keyword_target);
         $this->assertSame('checking',$a->fresh()->status);

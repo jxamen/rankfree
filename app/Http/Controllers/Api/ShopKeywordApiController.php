@@ -72,6 +72,7 @@ class ShopKeywordApiController extends Controller
         // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
         if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
             if ($existing->status === 'paused' && ! $existing->targetReached()) {
+                \App\Services\ShopExposureBlockAlert::resetParallel((int) $existing->id);
                 $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
             }
             if ($orderMeta && ! in_array($existing->status, ['done', 'target_reached', 'ad_ended'])) {

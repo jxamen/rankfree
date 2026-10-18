@@ -83,7 +83,7 @@ test('one lower toggle pauses and resumes; upper and captcha buttons removed', a
  const code=blade.slice(start,blade.indexOf('    // 상품정보 다시 수집',start));
  let click, runs=0;const actions=[];
  const button={addEventListener:(type,fn)=>click=fn};
- const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:()=>{},captchaWaits:new Map(),stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
+ const context=vm.createContext({loadBrowserSettings:async()=>{},applyBrowserSettings:d=>d,captchaState:()=>{},captchaWaits:new Map(),stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
  extCall:async()=>({ok:true}),post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
  vm.runInContext(code,context);
  await click(); assert.equal(context.stopped,true); assert.equal(button.textContent,'이어서');

@@ -98,7 +98,10 @@ class ShopKeywordCollectionTargetTest extends TestCase
         $checked = $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => 'checked', 'rank' => 3, 'checked_at' => now()]);
         $pending = $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => 'pending']);
         $a->update(['status' => 'paused']);
+        \Illuminate\Support\Facades\Cache::forever('shop-parallel-reduced:'.$a->id, true);
         $this->postJson('/api/v1/shop-keywords', $data)->assertOk()->assertJsonPath('analysis.id', $a->id)->assertJsonPath('reuse_mode', 'reused')->assertJsonPath('reuse_label', '재사용(이어서)')->assertJsonPath('analysis.status', 'checking');
+        $this->assertFalse(\App\Services\ShopExposureBlockAlert::parallelSettings($a->id)['parallel_reduced']);
+        $this->assertNotNull(\App\Services\ShopExposureBlockAlert::parallelSettings($a->id)['parallel_revision']);
         $this->assertSame(3, $checked->fresh()->rank);
         $this->assertNull($pending->fresh()->rank);
         foreach (['done', 'target_reached'] as $status) {

@@ -26,7 +26,7 @@ for (const suspended of [false,true]) test('close → pause → resume opens fre
  for(let id=7;id<11;id++) removed.emit(id);
  await vm.runInContext('rfCloseWork',c);
  assert.equal(local.data['rfSerpClosed:42'].length,4);
- await local.set({'rfSerpReduced:42':2});
+ await local.set({'rfSerpReduced:42':2,rfShopSettings:{parallel_tabs:2,interval_ms:1000,tab_open_interval_ms:2500,collection_mode:'tab'}});
  c.wait=async ms=>{waits.push(ms);await new Promise(setImmediate);clock+=ms;};
  vm.runInContext(`const shopSerpPool=new ShopSerpPool({wait,tabFactory:slot=>new ShopSerpTab({slot,wait}),policyFactory:slot=>new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot),wait,cache:{get:async()=>null,put:async()=>{}},now:()=>Date.now()})});`,c);
  if(!suspended) vm.runInContext(`shopSerpPool.lanes.set(0,{tab:Object.assign(new ShopSerpTab(),{tabId:7}),policy:shopSerpPool.policyFactory(0)});shopSerpPool.started.add('42:0');shopSerpPool.gates.set('42',2);`,c);
@@ -40,7 +40,7 @@ for (const suspended of [false,true]) test('close → pause → resume opens fre
  }
  assert.equal(local.data['rfSerpReduced:42'],null);
  // Two remaining keywords must request new documents, with configured lane opening spacing.
- const run=vm.runInContext(`Promise.all(['remaining-one','remaining-two'].map(kw=>shopSerpPool.run(42,kw,2,async({tab,policy})=>{tab.openIntervalMs=2500;return policy.run(kw,()=>tab.read(kw), 'browser',1000,null,()=>tab.peek(kw));},2500)))`,c);
+ const run=vm.runInContext(`Promise.all(['remaining-one','remaining-two'].map(kw=>shopSerpPool.run(42,kw,1,async({tab,policy})=>{tab.openIntervalMs=2500;return policy.run(kw,()=>tab.read(kw), 'browser',1000,null,()=>tab.peek(kw));},2500)))`,c);
  for(let i=0;i<20;i++) {await new Promise(setImmediate);for(const tab of live.values())messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:tab.id}});if(requests.length===2)break;}
  assert.equal((await run).every(r=>r.ok),true);
  assert.deepEqual(requests.map(r=>decodeURIComponent(r.url).split('query=')[1]),['remaining-one','remaining-two']);
@@ -53,6 +53,10 @@ test('console bridge forwards analysis ID on resume',()=>{
  vm.runInNewContext(fs.readFileSync('extension/content/console-bridge.js','utf8'),{window,document:{documentElement:{setAttribute(){}}},chrome:{runtime:{sendMessage:m=>sent=m}}});
  listener({source:window,data:{source:'rankfree-console',type:'resumeShopSerp',analysisId:42}});
  assert.equal(sent.payload.analysisId,42);
+ listener({source:window,data:{source:'rankfree-console',type:'setShopSettings',analysisId:42,manual:true,settings:{parallel_tabs:2}}});
+ assert.equal(sent.payload.manual,true);assert.equal(sent.payload.analysisId,42);
+ listener({source:window,data:{source:'rankfree-console',type:'fetchShopSerp',analysisId:42,parallel_revision:'restart-2'}});
+ assert.equal(sent.payload.parallel_revision,'restart-2');
 });
 test('boosting restart resets once across simultaneous requests',async()=>{
  const local=storage({'rfSerpClosed:42':[0,1,2,3]});let resets=0;

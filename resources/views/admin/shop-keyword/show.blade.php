@@ -871,11 +871,14 @@ window.__SK = {
         showBrowserSettings();
         for (const id of ['sk-interval-save','sk-interval-reset']) { const button = document.getElementById(id); if (button) button.disabled = false; }
     }
-    async function persistBrowserSettings(value) {
+    async function persistBrowserSettings(value, manual = false) {
         if (settingsInExtension) {
-            const r = await extCall('setShopSettings', {settings:value}, 5000);
+            const r = await extCall('setShopSettings', {settings:value, analysisId:cfg.analysisId, manual}, 5000);
             if (!r?.ok) throw new Error('이 브라우저에 설정을 저장하지 못했습니다.');
-        } else localStorage.setItem('rfShopSettings', JSON.stringify(value));
+        } else {
+            if (manual) { const r = await post(cfg.urls.collectorEvent, {kind:'parallel_reset'}); if (!r.ok) throw new Error('설정 적용에 실패했습니다.'); }
+            localStorage.setItem('rfShopSettings', JSON.stringify(value));
+        }
         browserSettings = value;
         currentIntervalMs = value.interval_ms;
         parallelTabs = value.parallel_tabs;
@@ -900,10 +903,10 @@ window.__SK = {
         if (![intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) return;
         this.disabled = true;
         try {
-            await persistBrowserSettings({interval_ms:Number(intervalInput.value)*1000,parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Number(document.getElementById('sk-tab-open-seconds').value)*1000,collection_mode:document.getElementById('sk-collection-mode').value});
+            await persistBrowserSettings({interval_ms:Number(intervalInput.value)*1000,parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Number(document.getElementById('sk-tab-open-seconds').value)*1000,collection_mode:document.getElementById('sk-collection-mode').value}, true);
             const r = await post('{{ route('admin.shop-keyword.interval', $analysis) }}', {seconds:intervalInput.value, keywords_per_day:document.getElementById('sk-keywords-per-day').value});
             if (!r.ok) throw new Error('주문 목표 저장에 실패했습니다.');
-            location.reload();
+            notice.textContent = '저장했습니다 — 다음 키워드부터 적용됩니다.';
         } catch (e) { notice.textContent = e.message; }
         finally { this.disabled = false; }
     };
@@ -984,10 +987,10 @@ window.__SK = {
                         if (policyResponse.status === 423) { await waitBusy(policyResponse); break; }
                         if (!policyResponse.ok) { halt('수집 정책을 읽지 못했습니다', true); return; }
                         const fresh = applyBrowserSettings((await policyResponse.json()).data);
-                        renderProgress(fresh); if (stopped) return; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision; d.parallel_tabs = fresh.parallel_tabs; d.tab_open_interval_ms = fresh.tab_open_interval_ms;
+                        renderProgress(fresh); if (stopped) return; d.parallel_revision = fresh.parallel_revision; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision; d.parallel_tabs = fresh.parallel_tabs; d.tab_open_interval_ms = fresh.tab_open_interval_ms;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
-                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
                     if (res?.tab_closed) {
                         captchaState(it.id, '', false);
                         if (res.paused) {
@@ -1157,6 +1160,7 @@ window.__SK = {
             if (r && (r.status === 403 || r.status === 404 || r.status === 409)) throw new Error('재개할 수 없습니다 (HTTP ' + r.status + ') — 새로고침 해주세요');
             if (!r || !r.ok) reportClientError('resume', 'pause(false) HTTP ' + (r ? r.status : 'network'));
             if (extMode) await extCall('resumeShopSerp', {analysisId: cfg.analysisId});
+            await loadBrowserSettings();
             RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
             failedItems.clear();
             stopped = false; errCount = 0;

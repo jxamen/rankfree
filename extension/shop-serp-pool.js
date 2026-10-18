@@ -1,5 +1,5 @@
 /* Experimental parallel lanes. Each lane owns its document and pacing policy.
- * A gate permanently reduces this analysis to one lane, including after worker restart. */
+ * A block reduces this analysis to one lane until explicit resume or a manual setting change. */
 class ShopSerpPool {
   constructor({ storage = chrome.storage.local, tabFactory = slot => new ShopSerpTab({ slot }), policyFactory = slot => new ShopSerpPolicy({ storage: this.laneStorage(slot) }), wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
     this.storage = storage; this.tabFactory = tabFactory; this.policyFactory = policyFactory; this.wait = wait;
@@ -24,6 +24,11 @@ class ShopSerpPool {
     this.started.clear();
     globalThis.rfSerpCurrent = {};
     return {ok:true};
+  }
+  async clearReduction(analysisId) {
+    const key = String(analysisId);
+    this.gates.delete(key);
+    await this.storage.set({['rfSerpReduced:' + key]:null});
   }
   laneStorage(slot) {
     const keys = ['rfSerpPolicy', 'rfSerpPolicyByIp'];
@@ -59,11 +64,14 @@ class ShopSerpPool {
     if (saved['rfSerpReduced:' + key] != null) this.gates.set(key, saved['rfSerpReduced:' + key]);
     const widthKey = 'rfSerpWidth:' + key;
     const closedAtStart = await this.closedSlots(key);
-    const width = closedAtStart.length ? Number((await this.storage.get(widthKey))[widthKey]) || Number(count) || 1 : Number(count) || 1;
+    let width = closedAtStart.length ? Number((await this.storage.get(widthKey))[widthKey]) || Number(count) || 1 : Number(count) || 1;
     await this.storage.set({[widthKey]:Math.min(4, Math.max(1, width))});
     let slot;
     let gateSaved;
     while (slot === undefined) {
+      const prefs = (await this.storage.get('rfShopSettings')).rfShopSettings;
+      if (prefs) { count = prefs.parallel_tabs; startGap = prefs.tab_open_interval_ms; }
+      if (!closedAtStart.length) width = Number(count) || 1;
       const closed = await this.closedSlots(key);
       const admission = this.admission.then(() => {
         const available = Array.from({length:Math.min(4, Math.max(1, width))},(_,i)=>i).filter(i => !closed.includes(i));
@@ -94,6 +102,9 @@ class ShopSerpPool {
       lane.tab.isClosed = async () => (await this.closedSlots(key)).includes(slot);
       lane.tab.allowOpen = () => !this.gates.has(key) || this.gates.get(key) === slot;
       await this.stagger(key, slot, startGap);
+      // A manual decrease can arrive while this lane waits for its opening gap.
+      const latest = (await this.storage.get('rfShopSettings')).rfShopSettings;
+      if (latest && slot >= latest.parallel_tabs) return this.run(analysisId, keyword, latest.parallel_tabs, execute, latest.tab_open_interval_ms);
       const result = await execute(lane);
       if (await lane.tab.isClosed()) return {ok:false, tab_closed:true, paused:(await this.closedSlots(key)).length === 4};
       if (result.deferred) return this.run(analysisId, keyword, 1, execute, startGap);

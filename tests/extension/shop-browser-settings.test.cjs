@@ -14,7 +14,7 @@ for(const extension of [false,true]) test(`two browser stores keep preferences a
    const page=await ctx.newPage();await page.goto('http://settings.test');return page;
   }));
   const init=page=>page.evaluate(async({code,extension})=>{
-   let currentIntervalMs=4000,parallelTabs=4;const extMode=extension;
+   let currentIntervalMs=4000,parallelTabs=4;const extMode=extension; const cfg={analysisId:42};
    const extCall=async(type,payload)=>{
     if(type==='getShopSettings')return {ok:true,settings:JSON.parse(localStorage.getItem('mockChromeStorage')||'null')};
     localStorage.setItem('mockChromeStorage',JSON.stringify(payload.settings));return {ok:true};
@@ -62,4 +62,16 @@ test('extension preference handlers persist in chrome local and worker prefers t
  assert.equal((await contexts[1].handlers.getShopSettings()).settings.parallel_tabs,4);
  assert.equal((await contexts[0].handlers.setShopSettings({settings:{...prefs[0],parallel_tabs:0}})).ok,false);
  assert.equal(stores[0].rfShopSettings.parallel_tabs,2);
+});
+
+test('manual save clears server and extension reduction before persisting new browser values',async()=>{
+ const vm=require('node:vm'), src=fs.readFileSync('extension/background.js','utf8');
+ const code=src.slice(src.indexOf('  async getShopSettings('),src.indexOf('  // Only the requested analysis owns'));
+ const calls=[],data={};
+ const ctx=vm.createContext({getStore:async()=>({token:'test'}),apiFetch:async(path,args)=>{calls.push([path,args.body.kind]);return {ok:true};},shopSerpPool:{clearReduction:async id=>calls.push(['extension',id])},chrome:{storage:{local:{get:async()=>data,set:async v=>Object.assign(data,v)}}}});
+ vm.runInContext('globalThis.handlers={'+code+'}',ctx);
+ const settings={parallel_tabs:2,interval_ms:2500,tab_open_interval_ms:700,collection_mode:'tab'};
+ assert.equal((await ctx.handlers.setShopSettings({analysisId:42,manual:true,settings})).ok,true);
+ assert.deepEqual(calls,[['/api/ext/shop-keyword/42/collector-event','parallel_reset'],['extension',42]]);
+ assert.deepEqual(data.rfShopSettings,settings);
 });

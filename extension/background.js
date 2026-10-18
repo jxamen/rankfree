@@ -1014,6 +1014,7 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
   skwCheckHeartbeat = Date.now();
   try {
     while (true) { // 작업이 있는 동안 알람 경계 없이 계속 처리한다
+      parallelTabs = (await chrome.storage.local.get('rfShopSettings')).rfShopSettings?.parallel_tabs || parallelTabs;
       const q = await apiFetch('/api/ext/shop-keyword/check-queue?limit=' + parallelTabs + (watchdog ? '&watchdog=1' : '') + '&runner=' + runner + [...failedItems].map(id => '&exclude[]=' + id).join(''), { token, apiBase });
       if (q.status === 403) {                              // 권한 없는 계정 — 오래 쉰다
         await chrome.storage.local.set({ rfSkwCheckSkipUntil: Date.now() + 6 * 3600 * 1000, rfSkwCheckSkipReason: 'permission' });
@@ -1035,7 +1036,7 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, alternativeKeywords: items.filter(x => x.keyword !== it.keyword).map(x => x.keyword), target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, alternativeKeywords: items.filter(x => x.keyword !== it.keyword).map(x => x.keyword), target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
           if (res?.parallel_reduced) parallelTabs = 1;
           skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
@@ -1132,8 +1133,14 @@ Object.assign(handlers, {
   async getShopSettings() {
     return {ok:true, settings:(await chrome.storage.local.get('rfShopSettings')).rfShopSettings || null};
   },
-  async setShopSettings({settings}) {
+  async setShopSettings({settings, analysisId, manual = false}) {
     if (!settings || !Number.isFinite(settings.interval_ms) || settings.interval_ms < 1000 || settings.interval_ms > 30000 || !Number.isInteger(settings.parallel_tabs) || settings.parallel_tabs < 1 || settings.parallel_tabs > 4 || !Number.isFinite(settings.tab_open_interval_ms) || settings.tab_open_interval_ms < 0 || settings.tab_open_interval_ms > 60000 || !['tab','fetch'].includes(settings.collection_mode)) return {ok:false};
+    if (manual && analysisId) {
+      const {token, apiBase} = await getStore();
+      const reset = await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {method:'POST',token,apiBase,body:{kind:'parallel_reset'}});
+      if (!reset.ok) return {ok:false};
+      await shopSerpPool.clearReduction(analysisId);
+    }
     await chrome.storage.local.set({rfShopSettings:settings});
     return {ok:true};
   },
@@ -1168,7 +1175,7 @@ Object.assign(handlers, {
     return {ok:true};
   },
 
-  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, alternativeKeywords = [], parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
+  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, alternativeKeywords = [], parallel_revision, parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
     await rfCloseWork;
     if (analysisId) {
       const key = 'rfSerpClosed:' + analysisId;
@@ -1201,6 +1208,13 @@ Object.assign(handlers, {
       if (!policy.ok || !policy.json?.data) return { ok: false, message: '간격 정책을 읽지 못했습니다.' };
       ({ collector_ip: collectorIp, interval_ms, interval_revision, collection_mode, parallel_tabs, tab_open_interval_ms } = policy.json.data);
       if (!(await chrome.storage.local.get('rfShopSettings')).rfShopSettings) await chrome.storage.local.set({rfShopSettings:{interval_ms:policy.json.data.browser_default_interval_ms || interval_ms,collection_mode,parallel_tabs,tab_open_interval_ms}});
+    }
+    if (analysisId && parallel_revision) {
+      const revisionKey = 'rfSerpParallelRevision:' + analysisId;
+      if ((await chrome.storage.local.get(revisionKey))[revisionKey] !== parallel_revision) {
+        await shopSerpPool.clearReduction(analysisId);
+        await chrome.storage.local.set({[revisionKey]:parallel_revision});
+      }
     }
     const localSettings = (await chrome.storage.local.get('rfShopSettings')).rfShopSettings;
     if (localSettings) ({interval_ms, collection_mode, parallel_tabs, tab_open_interval_ms} = localSettings);
