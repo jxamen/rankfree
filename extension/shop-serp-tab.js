@@ -1,8 +1,16 @@
 /* Called inside ShopSerpPolicy's single lane. Reuse one inactive, unpinned collection tab across jobs. */
 class ShopSerpTab {
-  constructor({ browser = chrome, timeoutMs = 45000 } = {}) {
-    this.browser = browser; this.timeoutMs = timeoutMs;
+  constructor({ browser = chrome, timeoutMs = 45000, wait = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+    this.browser = browser; this.timeoutMs = timeoutMs; this.wait = wait;
     this.tabId = null;
+  }
+  async scrollResults(tabId) {
+    // Execute in the collection tab even when it is inactive. Never activate it.
+    await this.browser.scripting.executeScript({
+      target: { tabId },
+      func: () => window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' }),
+    });
+    await this.wait(750);
   }
   static html(products) {
     const slots = products.map((p, i) => ({ data: {
@@ -22,7 +30,10 @@ class ShopSerpTab {
       const url = new URL(tab.url);
       if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
       const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
-      if (r?.ok && Array.isArray(r.products)) return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+      if (r?.ok && Array.isArray(r.products)) {
+        await this.scrollResults(tab.id);
+        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+      }
     } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
     return null;
   }
@@ -71,7 +82,10 @@ class ShopSerpTab {
       await storage.set({ rfSerpTabKeyword: keyword });
       const current = await c.tabs.get(tab.id);
       onUpdated(tab.id, { url: current.url || current.pendingUrl });
-      return await result;
+      const response = await result;
+      clearTimeout(timer);
+      if (response.ok) await this.scrollResults(tab.id);
+      return response;
     } catch (e) { return { ok: false, status: 0, message: '쇼핑 탭 오류: ' + e.message }; }
     finally {
       clearTimeout(timer);
