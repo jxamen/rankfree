@@ -135,7 +135,7 @@ class ShopKeywordExposureController extends Controller
             return $busy;
         }
 
-        if ($analysis->collectionStopped() || $analysis->targetReached()) {
+        if ($analysis->status === 'ad_ended' || $analysis->targetReached()) {
             return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
         }
         $limit = $analysis->keyword_target ? min(40, max(1, $analysis->keyword_target - $analysis->topFiveCount())) : 40;

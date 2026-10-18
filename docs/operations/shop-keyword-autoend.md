@@ -13,7 +13,7 @@
 
 ## 2026-10-18 일회 정리 인계
 
-맥북14 gh 인증 무효로 PR 생성·병합·운영 코드 반영은 수행하지 않는다. 윈도 세션 병합 필요.
+맥북14 gh 인증 무효로 PR 생성·병합·운영 코드 반영은 수행하지 않는다. 로컬 및 서버의 HTTPS/SSH push도 인증 실패했다. Git bundle을 가져와 push 후 윈도 세션에서 PR·병합해야 한다.
 
 운영 데이터 정리 상세와 백업 경로는 `~/dev/appmgr/codex-code-queue/results/rf-autoend.result.md` 및 서버 `/home/jcurve/rf-autoend-audit/cleanup.json`에 있다. 기존 코드에 안전한 paused로 우선 중단했다. 이후 다른 작업이 일부를 target_reached로 바꾸었으며 이 상태도 기존 큐에서 제외된다.
 
