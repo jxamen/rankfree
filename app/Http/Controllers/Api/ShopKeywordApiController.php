@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Shopping\NaverShoppingRankService;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Domain\Shopping\ShopKeywordShortLinkService;
 use App\Http\Controllers\Controller;
 use App\Models\ShopKeywordAnalysis;
+use App\Models\ShopProductInfo;
+use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\Request;
 
@@ -36,6 +39,8 @@ class ShopKeywordApiController extends Controller
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|in:4,5',   // 외부 API 는 상위 4·5위 판정만(2026-07-29)
             'check_method' => 'nullable|in:api,search',
+            'order_start_date' => 'nullable|required_with:order_end_date|date_format:Y-m-d',
+            'order_end_date' => 'nullable|required_with:order_start_date|date_format:Y-m-d|after_or_equal:order_start_date',
             // 조합 재료 — 확장 수집분이 없을 때 외부에서 상품정보를 직접 전달(제목이 없으면 조합 품질이 떨어진다)
             'product_info' => 'nullable|array',
             'product_info.title' => 'nullable|string|max:300',
@@ -46,9 +51,30 @@ class ShopKeywordApiController extends Controller
             'product_info.seller_tags.*' => 'nullable|string|max:80',
         ]);
 
+        $orderMeta = [];
+        if (! empty($data['order_start_date']) && ! empty($data['order_end_date'])) {
+            $days = (int) CarbonImmutable::parse($data['order_start_date'])
+                ->diffInDays(CarbonImmutable::parse($data['order_end_date'])) + 1;
+            $orderMeta = [
+                'order_start_date' => $data['order_start_date'], 'order_end_date' => $data['order_end_date'],
+                'order_days' => $days,
+                'keyword_target' => $days * max(1, (int) config('rankfree.shopping.exposure.keywords_per_day', 50)),
+            ];
+        }
+
         // 같은 회원이 같은 키워드 + 같은 상품을 다시 요청하면 새로 만들지 않고 기존 분석을 돌려준다(2026-07-29).
         // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
         if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
+            if ($orderMeta) {
+                $existing->update($orderMeta);
+                if ($existing->targetReached()) {
+                    $existing->update(['status' => 'target_reached']);
+                } elseif ($existing->status === 'target_reached') {
+                    // A longer order can resume the still-unchecked combinations.
+                    $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
+                }
+            }
+
             return response()->json([
                 'analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
                 'reused' => true,   // 새로 만들지 않고 기존 분석을 돌려줬다
@@ -61,6 +87,7 @@ class ShopKeywordApiController extends Controller
             // 확인 방식을 search 로 고정한다 — 기록된 순위 근거와 실제 확인 경로를 일치시킨다.
             'check_method' => 'search',
             'created_via' => 'api',
+            'order_meta' => $orderMeta,
         ];
         if (! empty($data['product_info']['title'])) {
             $opts['product_info'] = [
@@ -103,6 +130,7 @@ class ShopKeywordApiController extends Controller
             'analyses' => collect($rows->items())
                 ->map(fn ($a) => $this->payload($a) + ['product' => $this->productPayload($a, $infos[(string) $a->product_id] ?? null)])
                 ->all(),
+            'collection_limits' => true,
             'page' => $rows->currentPage(),
             'per_page' => $rows->perPage(),
             'total' => $rows->total(),
@@ -127,7 +155,7 @@ class ShopKeywordApiController extends Controller
      */
     private function findExisting(int $userId, string $coreKeyword, string $productInput): ?ShopKeywordAnalysis
     {
-        $target = app(\App\Domain\Shopping\NaverShoppingRankService::class)->resolveTarget($productInput);
+        $target = app(NaverShoppingRankService::class)->resolveTarget($productInput);
         $pid = (string) ($target['product_id'] ?? '');
 
         return ShopKeywordAnalysis::where('user_id', $userId)
@@ -141,9 +169,9 @@ class ShopKeywordApiController extends Controller
     }
 
     /** 분석 1건의 상품정보 조회(생성·상세용). 목록은 productInfoMap 으로 일괄 조회한다. */
-    private function oneProductInfo(ShopKeywordAnalysis $analysis): ?\App\Models\ShopProductInfo
+    private function oneProductInfo(ShopKeywordAnalysis $analysis): ?ShopProductInfo
     {
-        return \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+        return ShopProductInfo::where('user_id', $analysis->user_id)
             ->where('channel_product_id', (string) $analysis->product_id)->first();
     }
 
@@ -155,7 +183,7 @@ class ShopKeywordApiController extends Controller
             return collect();
         }
 
-        return \App\Models\ShopProductInfo::where('user_id', $userId)
+        return ShopProductInfo::where('user_id', $userId)
             ->whereIn('channel_product_id', $ids)->get()->keyBy('channel_product_id');
     }
 
@@ -163,7 +191,7 @@ class ShopKeywordApiController extends Controller
      * 수집·저장된 상품 정보 전체 — SEO 태그(해시태그)·카테고리·대표이미지는 분석 행이 아니라
      * 상품정보 저장소(ShopProductInfo)에 있으므로 여기서 합쳐 돌려준다. 수집 전에는 빈 값.
      */
-    private function productPayload(ShopKeywordAnalysis $analysis, ?\App\Models\ShopProductInfo $pi = null): array
+    private function productPayload(ShopKeywordAnalysis $analysis, ?ShopProductInfo $pi = null): array
     {
         return [
             'title' => (string) ($pi->title ?? $analysis->product_title),
@@ -249,6 +277,12 @@ class ShopKeywordApiController extends Controller
             'threshold' => (int) $analysis->threshold,
             'check_method' => (string) $analysis->check_method,
             'status' => (string) $analysis->status,
+            'collection_status' => $analysis->collectionLabel(),
+            'top_five_count' => $analysis->topFiveCount(),
+            'keyword_target' => $analysis->keyword_target,
+            'order_days' => $analysis->order_days,
+            'order_start_date' => $analysis->order_start_date,
+            'order_end_date' => $analysis->order_end_date,
             'progress' => [
                 'total' => (int) $p['total'],
                 'checked' => (int) $p['checked'],

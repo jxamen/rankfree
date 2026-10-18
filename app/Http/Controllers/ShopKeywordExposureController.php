@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Domain\Order\OrderFieldAutofill;
 use App\Domain\Shopping\NaverShopExposureService;
+use App\Domain\Shopping\ShopExposureRunLock;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
+use App\Domain\Shopping\ShopKeywordShortLinkService;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordAnalysisItem;
 use App\Models\ShopKeywordShortLink;
+use App\Models\ShopProductInfo;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -105,17 +111,17 @@ class ShopKeywordExposureController extends Controller
      * scope 기본 = 요청 IP(브라우저가 네이버를 부른다). 주인 = 페이지가 보낸 runner(페이지 로드마다 새로),
      * 없으면(반영 전에 열어 둔 옛 탭) 사용자 단위.
      */
-    private function runBusy(Request $request, ShopKeywordAnalysis $analysis, ?string $scope = null): ?\Illuminate\Http\JsonResponse
+    private function runBusy(Request $request, ShopKeywordAnalysis $analysis, ?string $scope = null): ?JsonResponse
     {
         $runner = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $request->input('runner', ''));
         $owner = $runner !== '' ? 'page:'.substr($runner, 0, 40) : 'user:'.$request->user()->id;
-        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire($scope ?? 'ip:'.$request->ip(), $owner, (int) $analysis->id, (string) $analysis->core_keyword);
         if ($r['ok']) {
             return null;
         }
 
-        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder']),
+        return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin()),
             'analysis_id' => (int) ($r['holder']['analysis_id'] ?? 0)] + $this->analyzer->progress($analysis), 423);
     }
 
@@ -127,11 +133,15 @@ class ShopKeywordExposureController extends Controller
             return $busy;
         }
 
-        $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit(40)
+        if ($analysis->targetReached()) {
+            return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
+        }
+        $limit = $analysis->keyword_target ? min(40, max(1, $analysis->keyword_target - $analysis->topFiveCount())) : 40;
+        $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)
             ->get(['id', 'keyword'])
             ->map(fn ($i) => ['id' => $i->id, 'keyword' => $i->keyword])->values();
         if ($items->isEmpty()) {
-            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
+            app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
         }
 
         return response()->json(['data' => ['items' => $items] + $this->analyzer->progress($analysis)]);
@@ -171,7 +181,7 @@ class ShopKeywordExposureController extends Controller
         ]);
 
         // 체크 루프가 페이지를 자주 reload 하므로 같은 분석에 반복 병합하지 않는다(10분 가드)
-        if (! \Illuminate\Support\Facades\Cache::add("shop-exposure:supplement:{$analysis->id}", 1, 600)) {
+        if (! Cache::add("shop-exposure:supplement:{$analysis->id}", 1, 600)) {
             return response()->json(['data' => ['added' => 0, 'skipped' => true]]);
         }
 
@@ -207,7 +217,7 @@ class ShopKeywordExposureController extends Controller
         // 이 분석의 상품과 일치할 때만 반영(다른 상품 payload 오염 방지)
         if ($info !== [] && (string) ($info['channel_product_id'] ?? '') === (string) $analysis->product_id
             && ($info['title'] ?? '') !== '') {
-            \App\Models\ShopProductInfo::updateOrCreate(
+            ShopProductInfo::updateOrCreate(
                 ['user_id' => $analysis->user_id, 'channel_product_id' => (string) $analysis->product_id],
                 [
                     'title' => $info['title'] ?? null,
@@ -239,7 +249,7 @@ class ShopKeywordExposureController extends Controller
         // 자동채움 필드(autofill_source)는 수집값이 진실 — 과거에 잘못 매핑돼 채워진 값(예: 상점명 자리에 상품명)도
         // '상품정보 다시 수집' 한 번으로 교정된다. autofill_source 없는 수동 전용 필드는 fillFromAnalysis 가 건드리지 않는다.
         if ($analysis->marketing_order_id) {
-            app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh(), force: true);
+            app(OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh(), force: true);
         }
 
         return response()->json(['data' => $r]);
@@ -257,7 +267,7 @@ class ShopKeywordExposureController extends Controller
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
 
         if ($paused) {
-            $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);   // 중단 — 다른 수집에 바로 양보
+            $lock = app(ShopExposureRunLock::class);   // 중단 — 다른 수집에 바로 양보
             $lock->release('ip:'.$request->ip(), (int) $analysis->id);
             $lock->release('server', (int) $analysis->id);
         }
@@ -310,7 +320,7 @@ class ShopKeywordExposureController extends Controller
 
         // 생성 규칙은 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
         try {
-            app(\App\Domain\Shopping\ShopKeywordShortLinkService::class)->generate($analysis, $groupCount);
+            app(ShopKeywordShortLinkService::class)->generate($analysis, $groupCount);
         } catch (\DomainException $e) {
             return back()->withErrors(['group_count' => $e->getMessage()]);
         }
@@ -324,7 +334,7 @@ class ShopKeywordExposureController extends Controller
 
         // 재배정 규칙도 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
         try {
-            $links = app(\App\Domain\Shopping\ShopKeywordShortLinkService::class)->reassign($analysis);
+            $links = app(ShopKeywordShortLinkService::class)->reassign($analysis);
         } catch (\DomainException $e) {
             return back()->withErrors(['short_links' => $e->getMessage()]);
         }
@@ -403,7 +413,7 @@ class ShopKeywordExposureController extends Controller
 
         // 확장 상품페이지 수집분(2026-07-22) — 대표이미지 + 관련 태그 표기
         $productInfo = $analysis->product_id
-            ? \App\Models\ShopProductInfo::where('user_id', $analysis->user_id)
+            ? ShopProductInfo::where('user_id', $analysis->user_id)
                 ->where('channel_product_id', $analysis->product_id)->first()
             : null;
 

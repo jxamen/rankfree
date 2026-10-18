@@ -2,9 +2,11 @@
 
 namespace App\Domain\Shopping;
 
+use App\Domain\Order\OrderFieldAutofill;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordShortLink;
 use DomainException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -22,7 +24,7 @@ class ShopKeywordShortLinkService
      *
      * @throws DomainException 노출 키워드 없음 · 그룹 수 초과 · 그룹 수 < 호출된 링크 수
      */
-    public function generate(ShopKeywordAnalysis $analysis, int $groupCount): \Illuminate\Support\Collection
+    public function generate(ShopKeywordAnalysis $analysis, int $groupCount): Collection
     {
         $keywords = $this->exposedKeywords($analysis);
         if ($keywords === []) {
@@ -69,7 +71,7 @@ class ShopKeywordShortLinkService
         });
 
         // 연결 주문의 Short URL 자동 채움 필드 반영(빈 필드만) — 발주 전달값
-        app(\App\Domain\Order\OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
+        app(OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
 
         return $analysis->shortLinks()->orderBy('group_no')->get();
     }
@@ -80,7 +82,7 @@ class ShopKeywordShortLinkService
      *
      * @throws DomainException 링크 없음 · 노출 키워드 없음 · 링크 수 > 키워드 수
      */
-    public function reassign(ShopKeywordAnalysis $analysis): \Illuminate\Support\Collection
+    public function reassign(ShopKeywordAnalysis $analysis): Collection
     {
         $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->get();
         if ($links->isEmpty()) {
@@ -117,7 +119,7 @@ class ShopKeywordShortLinkService
     /** 노출 판정(1~threshold 위) 키워드 — 확인 순서 유지, 중복 제거. */
     public function exposedKeywords(ShopKeywordAnalysis $analysis): array
     {
-        $th = (int) $analysis->threshold;
+        $th = $analysis->keyword_target ? 5 : (int) $analysis->threshold;
 
         return $analysis->combos()
             ->whereBetween('rank', [1, $th])
@@ -127,6 +129,7 @@ class ShopKeywordShortLinkService
             ->map(fn ($keyword) => trim((string) $keyword))
             ->filter()
             ->unique()
+            ->take($analysis->keyword_target ?: PHP_INT_MAX)
             ->values()
             ->all();
     }

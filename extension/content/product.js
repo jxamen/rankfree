@@ -1907,6 +1907,23 @@
     if (extra) for (const k in extra) node[k] = extra[k];
     return node;
   }
+  // Unknown shipping must remain null: num(undefined) returns 0 elsewhere in this file.
+  function productDeliveryFee(product) {
+    const info = product && product.productDeliveryInfo;
+    if (!info || typeof info !== 'object') return null;
+    const fee = info.deliveryFee;
+    const nested = fee && typeof fee === 'object' ? fee : null;
+    if (String(info.deliveryFeeType || (nested && nested.deliveryFeeType) || '') === 'FREE') return 0;
+    const candidates = [info.baseFee, nested ? nested.baseFee : fee];
+    for (const value of candidates) {
+      if (value == null || typeof value === 'object') continue;
+      const text = String(value).trim().replace(/,/g, '');
+      if (!/^\d+$/.test(text)) continue;
+      const amount = Number(text);
+      if (Number.isSafeInteger(amount) && amount <= 10000000) return amount;
+    }
+    return null;
+  }
   // 상품정보(제목·업체명·가격·SEO태그·브랜드) 수집 → 서버 저장. 노출 키워드 분석(25) 조합 재료.
   async function collectProductInfo() {
     try {
@@ -1931,10 +1948,8 @@
       ).slice(0, 500);
       const nss = A.naverShoppingSearchInfo || {};
       // 배송비(2026-09-10) — 셀러력 스코어러와 같은 경로(productDeliveryInfo).
-      // FREE=0, 조건부무료·유료=baseFee(1개 살 때 실제 부담액). 노드가 없으면 null 로 두어 기존 값을 덮지 않는다.
-      const dv = A.productDeliveryInfo || null;
-      const deliveryFee = !dv ? null
-        : (String(dv.deliveryFeeType || '') === 'FREE' ? 0 : num(dv.baseFee != null ? dv.baseFee : dv.deliveryFee));
+      // FREE=0, 그 외에는 명시된 기본 배송비. 누락·잘못된 값은 null로 두어 기존 값을 덮지 않는다.
+      const deliveryFee = productDeliveryFee(A);
       const payload = {
         channel_product_id: String(cpid),
         title: String(A.name || A.dispName || getProductName() || '').slice(0, 300),

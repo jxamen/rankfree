@@ -158,3 +158,7 @@
 - 순위 범위: m.search 첫 로드는 가격비교 슬롯 ~15개(실측) — 그 밖은 0(미노출). threshold 5 목적엔 충분.
 - 조합 생성 rate limit(유저당 분석 빈도) — 쿼터 남용 방지.
 - 광고 노출 키워드 활용(입찰 제안 등).
+
+
+### 주문별 수집 상한 (2026-10-18)
+외부 생성 API의 `order_start_date`/`order_end_date`(Y-m-d, 양끝 포함)로 `order_days`와 `keyword_target`을 저장한다. 목표는 `SHOP_KEYWORDS_PER_DAY`(기본 50) × 실제 주문 일수이며 Short URL 그룹만 100개로 제한한다. 5위 이내 고유 키워드 수가 목표에 닿으면 `target_reached`로 저장하고 큐·배치·HTML 결과 추가 저장·재조합을 중단한다. 지연 도착 HTML은 분석 행 잠금 안에서 목표를 다시 검사한다. 대상 주문의 Short URL 키워드는 5위 이내 중 목표 개수까지만 채택한다. 목록·상세와 API는 상태/목표/기간을 표시한다. API 목록 `collection_limits=true`는 부스팅샵의 배포 호환성 확인용이다. 상품정보 큐는 배송비 null도 재수집 대상으로 보되 24시간 쿨다운을 유지한다(0은 무료배송 완료).
