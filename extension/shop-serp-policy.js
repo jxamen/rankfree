@@ -40,7 +40,7 @@ class ShopSerpPolicy {
   }
   async check(keyword, fetcher) {
     const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(this.now());
-    const key = day + ':' + keyword.trim().normalize('NFC');
+    const key = day + ':tab-v1:' + keyword.trim().normalize('NFC');
     // Fail closed when durable storage fails: avoid silently repeating same-day requests.
     try {
       const data = await this.storage.get('rfSerpPolicy');
@@ -65,6 +65,8 @@ class ShopSerpPolicy {
       s.last = this.now();
       await this.storage.set({ rfSerpPolicy: s });
       const res = await fetcher();
+      // Include the 403 tab recheck in spacing: next navigation waits after completion.
+      s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
         s.slowEntries = (s.slowEntries || 0) + 1;

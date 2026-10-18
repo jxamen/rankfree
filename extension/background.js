@@ -5,7 +5,8 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
-importScripts('shop-serp-policy.js');
+importScripts('shop-serp-policy.js', 'shop-serp-tab.js');
+const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
 
 const DEFAULT_API_BASE = 'https://rankfree.kr';
@@ -1006,9 +1007,9 @@ function pickInitialStateScripts(html) {
 // ── 핸들러 확장 — background.js 의 handlers 객체에 사내 전용 핸들러를 덧붙인다 ──────────
 Object.assign(handlers, {
   /**
-   * 쇼핑 노출 키워드(25) — m.search 모바일 검색 HTML 을 브라우저(사용자 IP)에서 가져온다.
-   * 서버와 브라우저 모두 차단될 수 있으므로 공통 속도 정책을 적용한다.
-   * 서버가 파싱하도록 _INITIAL_STATE script 조각만 돌려준다(빈 문자열=가격비교 미노출).
+   * 쇼핑 노출 키워드 — 기본은 실제 쇼핑 탭 문서 읽기. 옵션으로 모바일 HTML 요청.
+   * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
+   * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
   async fetchShopSerp({ keyword, analysisId }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
@@ -1016,6 +1017,8 @@ Object.assign(handlers, {
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     const result = await shopSerpPolicy.run(kw, async () => {
+    const { rfSerpMode = 'tab' } = await chrome.storage.local.get('rfSerpMode');
+    if (rfSerpMode !== 'request') return shopSerpTab.read(kw);
     let res;
     try {
       res = await fetch('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), {
@@ -1024,6 +1027,10 @@ Object.assign(handlers, {
       });
     } catch (e) {
       return { ok: false, status: 0, message: '네트워크 오류: ' + String((e && e.message) || e) };
+    }
+    if (res.status === 403) {
+      await new Promise(resolve => setTimeout(resolve, 1600));
+      return shopSerpTab.read(kw);
     }
     if (!res.ok) return { ok: false, status: res.status, message: 'HTTP ' + res.status };
     const html = await res.text();

@@ -84,3 +84,8 @@ test('network failure preserves restriction history and permission pause survive
  assert.equal(f.data.rfSkwCheckSkipReason,'permission');
  assert.ok(f.data.rfSkwCheckSkipUntil>f.now());
 });
+test('next request waits 1600ms after a long tab read or 403 fallback completes',async()=>{
+ const f=fixture();let finished;
+ await f.policy.run('a',async()=>{f.advance(5000);finished=f.now();return {ok:true,html:'tab'};});
+ await f.policy.run('b',async()=>{assert.ok(f.now()-finished>=1600);return {ok:true,html:'tab'};});
+});

@@ -3699,6 +3699,26 @@
     } catch (e) { /* noop */ }
   }
 
+  // Only read the loaded document; no API requests or captcha interaction.
+  async function runSerpRead() {
+    const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const text = document.body?.innerText || '';
+      if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {
+        await send({ ok: false, status: 200, captcha: true, message: '네이버 차단 화면 감지 — 3분 후 재확인합니다.' }); return;
+      }
+      const data = domNextData();
+      if (data?.products?.length) {
+        await send({ ok: true, status: 200, products: data.products }); return;
+      }
+      if (/검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text)) {
+        await send({ ok: true, status: 200, products: [] }); return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    await send({ ok: false, status: 0, message: '쇼핑 페이지 상품 구조를 읽지 못했습니다.' });
+  }
+
   // 백그라운드 상품분석 진행률 수신 → 로딩 화면 갱신
   try {
     chrome.runtime.onMessage.addListener((msg) => {
@@ -3751,7 +3771,9 @@
     });
   } catch (e) { /* noop */ }
 
-  if (location.hash.indexOf('#rfcollect') === 0) {
+  if (location.hash === '#rfserp') {
+    runSerpRead();
+  } else if (location.hash.indexOf('#rfcollect') === 0) {
     runCollect();
   } else {
     mount();
