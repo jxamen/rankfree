@@ -960,7 +960,7 @@ async function drainShopKeywordCheckQueue() {
         });
         if (r.status === 401 || r.status === 403) return;
         if (r.json && r.json.status === 'target_reached') break;
-        // 공용 ShopSerpPolicy가 2000ms 하한과 실제 차단 후 대기를 적용한다.
+        // 공용 ShopSerpPolicy가 저장된 기본 간격과 실제 차단 후 대기를 적용한다.
       }
     }
   } catch (e) { /* noop */ } finally {
@@ -1009,11 +1009,20 @@ Object.assign(handlers, {
    * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
+  async resumeShopSerp({ collectorIp }) {
+    return shopSerpPolicy.resume(collectorIp || 'browser');
+  },
   async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
+    if (!(sender && sender.tab)) {
+      const settings = await getStore();
+      const policy = await apiFetch('/api/ext/shop-keyword/interval-policy', { token: settings.token, apiBase: settings.apiBase });
+      if (!policy.ok || !policy.json?.data) return { ok: false, message: '간격 정책을 읽지 못했습니다.' };
+      ({ collector_ip: collectorIp, interval_ms, interval_revision } = policy.json.data);
+    }
     const result = await shopSerpPolicy.run(kw, async () => {
       return shopSerpTab.read(kw);
     }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek(kw));

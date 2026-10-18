@@ -10,14 +10,23 @@ use Throwable;
 
 class ShopExposureBlockAlert
 {
+    public static function baseInterval(): int
+    {
+        try {
+            return min(30000, max(1000, (int) \App\Models\AppSetting::read('shop.exposure.interval_ms', '4000')));
+        } catch (\Throwable) {
+            return 4000;
+        }
+    }
+
     public static function interval(string $ip): int
     {
-        return min(10000, 2000 + 300 * max(0, (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.now('Asia/Seoul')->format('Y-m-d'), 0) - (int) Cache::get('shop-interval-offset:'.$ip.':'.now('Asia/Seoul')->format('Y-m-d'), 0)));
+        return min(30000, self::baseInterval() + 300 * max(0, (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.now('Asia/Seoul')->format('Y-m-d'), 0) - (int) Cache::get('shop-interval-offset:'.$ip.':'.now('Asia/Seoul')->format('Y-m-d'), 0)));
     }
 
     public static function revision(string $ip): string
     {
-        return now('Asia/Seoul')->format('Y-m-d').':'.Cache::get('shop-interval-revision:'.$ip, 'v2');
+        return self::baseInterval().':'.now('Asia/Seoul')->format('Y-m-d').':'.Cache::get('shop-interval-revision:'.$ip, 'v2');
     }
 
     public static function resetInterval(string $ip): void
@@ -60,7 +69,7 @@ class ShopExposureBlockAlert
                 $event = ['ip' => $ip, 'collector' => $collector, 'analysis_id' => $analysis->id,
                     'core_keyword' => $analysis->core_keyword, 'kind' => $kind, 'today_count' => $count,
                     'blocked_on_resume' => $blockedOnResume, 'retry_at' => $kind === 'success' ? null : $now->copy()->addMinutes(3)->toIso8601String(),
-                    'interval_ms' => max(self::interval($ip), min(10000, $intervalMs ?? 2000))];
+                    'interval_ms' => max(self::interval($ip), min(30000, $intervalMs ?? self::baseInterval()))];
                 Log::info('shop_exposure_block_event', $event);
                 $token = config('services.slack.notifications.bot_user_oauth_token');
                 $channel = config('services.slack.shop_exposure_block_channel');

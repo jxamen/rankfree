@@ -1,5 +1,5 @@
 /* One browser-wide lane for screen + background exposure checks.
- * 2000 ms is a provisional conservative floor, NOT a measured safe interval.
+ * The saved base defaults to 4000ms; accepted pacing is 1000–30000ms.
  * A blocked response is never retried automatically within its 3 minute cooldown.
  */
 class ShopSerpPolicy {
@@ -7,6 +7,19 @@ class ShopSerpPolicy {
     this.random = random; this.storage = storage; this.now = now; this.wait = wait;
     this.cache = cache || this.dailyCache();
     this.lane = Promise.resolve();
+  }
+  resume(ip) {
+    const job = this.lane.then(async () => {
+      const data = await this.storage.get(['rfSerpPolicy', 'rfSerpPolicyByIp']);
+      const policies = data.rfSerpPolicyByIp || {};
+      const s = policies[ip] || data.rfSerpPolicy || {};
+      s.until = 0; s.last = 0;
+      policies[ip] = s;
+      await this.storage.set({ rfSerpPolicy: s, rfSerpPolicyByIp: policies, rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
+      return { ok: true };
+    });
+    this.lane = job.catch(() => {});
+    return job;
   }
   dailyCache() {
     const db = new Promise((resolve, reject) => {
@@ -34,7 +47,7 @@ class ShopSerpPolicy {
       },
     };
   }
-  run(keyword, fetcher, ip = "browser", serverGap = 2000, revision = null, probe = null) {
+  run(keyword, fetcher, ip = "browser", serverGap = 4000, revision = null, probe = null) {
     const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision, probe));
     this.lane = job.catch(() => {}); return job;
   }
@@ -46,9 +59,9 @@ class ShopSerpPolicy {
       const data = await this.storage.get(['rfSerpPolicy', 'rfSerpPolicyByIp']);
       const policies = data.rfSerpPolicyByIp || {};
       const s = policies[ip] || (ip === 'browser' ? data.rfSerpPolicy : null) || {};
-      if (s.day && s.day !== day) { s.gap = 2000; }
+      if (s.day && s.day !== day) { s.gap = Number(serverGap) || 4000; }
       s.day = day;
-      if (revision !== null && s.revision !== revision) { s.gap = Number(serverGap) || 2000; s.revision = revision; }
+      if (revision !== null && s.revision !== revision) { s.gap = Number(serverGap) || 4000; s.revision = revision; }
       policies[ip] = s;
       const save = () => this.storage.set({ rfSerpPolicy: s, rfSerpPolicyByIp: policies });
       if ((s.until || 0) > this.now() + 180000) {
@@ -60,8 +73,8 @@ class ShopSerpPolicy {
           await this.storage.set({ rfSkwCheckSkipUntil: s.until, rfSkwCheckSkipReason: 'naver' });
         }
       }
-      s.gap = Math.max(2000, Math.min(10000, Number(s.gap) || 2000));
-      s.gap = Math.max(2000, Math.min(10000, Math.max(Number(s.gap) || 2000, Number(serverGap) || 2000)));
+      s.gap = Math.max(1000, Math.min(30000, Number(s.gap) || 4000));
+      s.gap = Math.max(1000, Math.min(30000, Math.max(Number(s.gap) || 4000, Number(serverGap) || 4000)));
       await save();
       const hit = await this.cache.get(key);
       if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
@@ -75,7 +88,7 @@ class ShopSerpPolicy {
         await this.cache.put(key, recovered);
         return { ...recovered, interval_ms: s.gap, retryAt: null };
       }
-      const wait = Math.max(0, (s.last || 0) + Math.min(10000, s.gap) - this.now());
+      const wait = Math.max(0, (s.last || 0) + Math.min(30000, s.gap) - this.now());
       if (wait) await this.wait(wait);
       const resumedAfterBlock = !!s.until;
       const previous = s.last;
@@ -86,7 +99,7 @@ class ShopSerpPolicy {
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
-        s.gap = Math.min(10000, s.gap + 300);
+        s.gap = Math.min(30000, s.gap + 300);
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
         s.until = 0; s.blockedOnResume = false;

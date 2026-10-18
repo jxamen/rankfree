@@ -30,17 +30,17 @@ class ShopSerpPacingTest extends TestCase
         $this->assertSame('http_403', $s->exposure('a', [])['error']);
         $this->assertSame('collector_cooldown', $s->exposure('b', [])['error']);
         Http::assertSentCount(1);
-        $this->assertSame(2300, Cache::get(NaverShopExposureService::policyKey())['gap']);
+        $this->assertSame(4300, Cache::get(NaverShopExposureService::policyKey())['gap']);
     }
     public function test_resume_block_renews_wait_and_is_logged(): void
     {
         Cache::flush();
-        Cache::put(NaverShopExposureService::policyKey(), ['gap' => 3200, 'until' => microtime(true) - 1]);
+        Cache::put(NaverShopExposureService::policyKey(), ['base' => 4000, 'gap' => 5200, 'until' => microtime(true) - 1]);
         Http::fake(['*' => Http::response('', 403)]);
         \Illuminate\Support\Facades\Log::spy();
         $s = new NaverShopExposureService();
         $this->assertSame('http_403', $s->exposure('resume', [])['error']);
-        $this->assertSame(3500, Cache::get(NaverShopExposureService::policyKey())['gap']);
+        $this->assertSame(5500, Cache::get(NaverShopExposureService::policyKey())['gap']);
         $this->assertGreaterThan(microtime(true) + 179, Cache::get(NaverShopExposureService::policyKey())['until']);
         $this->assertLessThanOrEqual(microtime(true) + 180, Cache::get(NaverShopExposureService::policyKey())['until']);
         $this->assertSame('collector_cooldown', $s->exposure('next', [])['error']);
@@ -50,9 +50,9 @@ class ShopSerpPacingTest extends TestCase
     public function test_success_does_not_change_interval(): void
     {
         Cache::flush(); Http::fake(['*' => Http::response('<html></html>')]);
-        Cache::put(NaverShopExposureService::policyKey(), ['gap' => 3200, 'successes' => 19]);
+        Cache::put(NaverShopExposureService::policyKey(), ['base' => 4000, 'gap' => 5200, 'successes' => 19]);
         (new NaverShopExposureService())->exposure('success', []);
-        $this->assertSame(3200, Cache::get(NaverShopExposureService::policyKey())['gap']);
+        $this->assertSame(5200, Cache::get(NaverShopExposureService::policyKey())['gap']);
     }
     public function test_captcha_is_never_cached_as_a_valid_result(): void
     {
@@ -77,18 +77,18 @@ class ShopSerpPacingTest extends TestCase
         Cache::flush();
         config(['rankfree.shopping.exposure.collector_ip' => '192.0.2.1']);
         $key = NaverShopExposureService::policyKey();
-        Cache::put($key, ['gap' => 9900, 'day' => now('Asia/Seoul')->format('Y-m-d')]);
+        Cache::put($key, ['base' => 4000, 'gap' => 29900, 'day' => now('Asia/Seoul')->format('Y-m-d')]);
         Http::fake(['*' => Http::sequence()->push('', 429)->push('', 429)->push('<html></html>', 200)]);
         $s = new NaverShopExposureService();
-        $this->assertSame(10000, $s->exposure('cap', [])['interval_ms']);
+        $this->assertSame(30000, $s->exposure('cap', [])['interval_ms']);
         config(['rankfree.shopping.exposure.collector_ip' => '192.0.2.2']);
-        $this->assertSame(2300, $s->exposure('ip2', [])['interval_ms']);
+        $this->assertSame(4300, $s->exposure('ip2', [])['interval_ms']);
         config(['rankfree.shopping.exposure.collector_ip' => '192.0.2.1']);
         $state = Cache::get($key);
         $state['until'] = 0;
         $state['last'] = 0;
         $state['day'] = now('Asia/Seoul')->subDay()->format('Y-m-d');
         Cache::put($key, $state);
-        $this->assertSame(2000, $s->exposure('tomorrow', [])['interval_ms']);
+        $this->assertSame(4000, $s->exposure('tomorrow', [])['interval_ms']);
     }
 }

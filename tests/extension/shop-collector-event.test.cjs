@@ -13,7 +13,7 @@ for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,st
       shopSerpPolicy: {run:async()=>result},
       getStore:async()=>({token:'token',apiBase:'https://rankfree.kr'}),
       chrome:{storage:{local:{get:async()=>({rfSerpPolicy:{blockedOnResume:true}})}}},
-      apiFetch:async(path,options)=>events.push({path,...options}),
+      apiFetch:async(path,options)=>path.endsWith('interval-policy') ? {ok:true,json:{data:{interval_ms:4000,interval_revision:'v1',collector_ip:'ip'}}} : events.push({path,...options}),
     });
     await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69});',context);
     assert.equal(events.length,1);
@@ -25,7 +25,7 @@ for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,st
 }
 test('screen delegates delivery to page session; cached and cooldown replies emit no extra events',async()=>{
   for(const [result,sender] of [[{ok:false,status:403},{tab:{id:1}}],[{ok:true,cached:true},null],[{ok:false,cooldown:true},null]]) {
-    const context=vm.createContext({lastScreenSerpAt:0,shopSerpPolicy:{run:async()=>result},apiFetch:async()=>{throw Error('unexpected API request');}});
+    const context=vm.createContext({lastScreenSerpAt:0,shopSerpPolicy:{run:async()=>result},...(sender ? {} : {getStore:async()=>({})}),apiFetch:async(path)=>{if(path.endsWith('interval-policy'))return {ok:true,json:{data:{interval_ms:4000}}};throw Error('unexpected API request');}});
     // No getStore is available: the screen path must work without an API token.
     const actual=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69},'+JSON.stringify(sender)+');',context);
     assert.equal(actual,result);

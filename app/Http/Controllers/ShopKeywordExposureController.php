@@ -36,7 +36,7 @@ class ShopKeywordExposureController extends Controller
         $data = $request->validate([
             'kind' => 'required|in:403,429,보안문자,success',
             'blocked_on_resume' => 'sometimes|boolean',
-            'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
+            'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
         app(\App\Services\ShopExposureBlockAlert::class)->record(
             $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
@@ -54,11 +54,37 @@ class ShopKeywordExposureController extends Controller
         if ($serverIp !== $ip) \App\Services\ShopExposureBlockAlert::resetInterval($serverIp);
         Cache::lock('shop-serp:server-lane', 30)->block(2, function () {
             $state = Cache::get(NaverShopExposureService::policyKey(), []);
-            $state['gap'] = 2000;
+            $state['gap'] = \App\Services\ShopExposureBlockAlert::baseInterval();
             Cache::put(NaverShopExposureService::policyKey(), $state, now()->addDay());
         });
-        \Illuminate\Support\Facades\Log::info('shop_exposure_interval_reset', ['ip' => $ip, 'user_id' => $request->user()->id, 'at' => now()->toIso8601String()]);
-        return response()->json(['interval_ms' => 2000]);
+        if (!$request->routeIs('admin.shop-keyword.interval')) \Illuminate\Support\Facades\Log::info('shop_exposure_interval_reset', ['analysis_id' => $analysis->id, 'ip' => $ip, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String()]);
+        return response()->json(['interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
+    }
+
+    public function saveInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
+        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1']);
+        \App\Models\AppSetting::write('shop.exposure.interval_ms', (string) round($data['seconds'] * 1000));
+        $response = $this->resetInterval($request, $analysis);
+        \Illuminate\Support\Facades\Log::info('shop_exposure_interval_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
+        return $response;
+    }
+
+    public function continueNow(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
+        abort_if(in_array($analysis->status, ['ad_ended', 'target_reached']), 409);
+        Cache::lock('shop-serp:server-lane', 30)->block(2, function () {
+            $state = Cache::get(NaverShopExposureService::policyKey(), []);
+            $state['until'] = 0;
+            $state['last'] = 0;
+            Cache::put(NaverShopExposureService::policyKey(), $state, now()->addDay());
+        });
+        Cache::forget('shop-exposure:error:'.$analysis->id);
+        $analysis->update(['check_method' => 'search', 'status' => $analysis->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
+        \Illuminate\Support\Facades\Log::info('shop_exposure_continue_now', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String()]);
+        return response()->json(['ok' => true, 'collector_ip' => $request->ip()]);
     }
 
     public function index(Request $request)

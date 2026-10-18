@@ -384,6 +384,8 @@ $__admin->group(function () {
     Route::get('/shop-keyword/{analysis}', [ShopKeywordExposureController::class, 'show'])->name('shop-keyword.show');
     Route::post('/shop-keyword/{analysis}/check', [ShopKeywordExposureController::class, 'check'])->middleware('throttle:240,1')->name('shop-keyword.check');
     Route::get('/shop-keyword/{analysis}/pending', [ShopKeywordExposureController::class, 'pending'])->middleware('throttle:240,1')->name('shop-keyword.pending');
+    Route::post('/shop-keyword/{analysis}/interval', [ShopKeywordExposureController::class, 'saveInterval'])->middleware('throttle:30,1')->name('shop-keyword.interval');
+    Route::post('/shop-keyword/{analysis}/continue-now', [ShopKeywordExposureController::class, 'continueNow'])->middleware('throttle:30,1')->name('shop-keyword.continue-now');
     Route::post('/shop-keyword/{analysis}/reset-interval', [ShopKeywordExposureController::class, 'resetInterval'])->middleware('throttle:30,1')->name('shop-keyword.reset-interval');
     Route::post('/shop-keyword/{analysis}/collector-event', [ShopKeywordExposureController::class, 'collectorEvent'])->middleware('throttle:120,1')->name('shop-keyword.collector-event');
     Route::post('/shop-keyword/{analysis}/check-html', [ShopKeywordExposureController::class, 'checkHtml'])->middleware('throttle:240,1')->name('shop-keyword.check-html');

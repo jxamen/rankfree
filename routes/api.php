@@ -85,6 +85,7 @@ Route::prefix('ext')->group(function (): void {
         Route::post('/shop-keyword/{analysis}/product-info', [ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
         // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버 자동 체크 없음. 조합 1건당 1회 제출이라 한도를 넉넉히.
         Route::post('/shop-keyword/{analysis}/collector-event', [ExtShopKeywordController::class, 'collectorEvent'])->whereNumber('analysis')->middleware('throttle:120,1');
+        Route::get('/shop-keyword/interval-policy', [ExtShopKeywordController::class, 'intervalPolicy'])->middleware('throttle:240,1');
         Route::get('/shop-keyword/check-queue', [ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1');
         Route::post('/shop-keyword/{analysis}/check-html', [ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1');
 
