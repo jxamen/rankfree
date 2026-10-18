@@ -760,6 +760,24 @@ window.__SK = {
     @endif
     let serverFallback = cfg.serverFallback;
     let captchaWaiting = false;
+    let dualLane = cfg.serverFallback || cfg.method !== 'api';
+    let recoveryProbeActive = false;
+    // Passive document checks continue while a server batch is running.
+    setInterval(async () => {
+        if (stopped || !extMode || !serverFallback || recoveryProbeActive) return;
+        recoveryProbeActive = true;
+        try {
+            const recovered = await extCall('fetchShopSerp', { probeOnly: true }, 5000);
+            if (recovered?.ok && !stopped) {
+                const event = await post(cfg.urls.collectorEvent, { kind: 'success' });
+                if (event.ok) {
+                    serverFallback = !!(await event.json()).server_fallback;
+                    captchaWaiting = false;
+                }
+            }
+        } catch (_) { /* Keep the held tab intact and retry passive inspection. */ }
+        finally { recoveryProbeActive = false; }
+    }, 1500);
     let currentIntervalMs = 2000;
     let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
     const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 10초)';
@@ -791,7 +809,7 @@ window.__SK = {
                 continue;
             }
             errCount = 0;
-            if (d.server_fallback) { serverFallback = true; poll(); return; }
+            if (d.server_fallback) { dualLane = true; serverFallback = true; poll(); return; }
             renderProgress(d);
             currentIntervalMs = d.interval_ms || currentIntervalMs;
             if (label) label.textContent += intervalLabel();
@@ -859,19 +877,15 @@ window.__SK = {
     }
     async function poll() {
         if (stopped) return;
-        if (extMode && serverFallback) {
-            const recovered = await extCall('fetchShopSerp', { probeOnly: true }, 5000);
-            if (recovered?.ok) {
-                const event = await post(cfg.urls.collectorEvent, { kind: 'success' });
-                if (event.ok) serverFallback = !!(await event.json()).server_fallback;
-            }
-        }
         let r;
         try {
             r = await fetch(cfg.urls.check, { method: 'POST', headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ runner: RUNNER }) });
         } catch (e) { retry(); return; }
         if (r.status === 409) { stopped = true; location.reload(); return; }
-        if (r.status === 423) { await waitBusy(r); if (!stopped) poll(); return; }
+        if (r.status === 423) {
+            if (extMode && !serverFallback) { runExtLoop(); return; }
+            await waitBusy(r); if (!stopped) poll(); return;
+        }
         if (r.status === 419 || r.status === 401 || r.status === 403 || r.status === 404) {
             halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false);
             return;
@@ -885,13 +899,14 @@ window.__SK = {
         // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
         (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
         serverFallback = !!d.server_fallback;
+        dualLane = dualLane || !!d.mobile_mode || serverFallback;
         captchaWaiting = !!d.captcha_wait;
         collectorIp = d.collector_ip || collectorIp;
         renderProgress(d);
         currentIntervalMs = d.interval_ms || currentIntervalMs;
         if (label) label.textContent += intervalLabel();
         if (d.remaining <= 0) { location.reload(); return; }
-        if (extMode && !serverFallback) { runExtLoop(); return; }
+        if (extMode && !serverFallback && (dualLane || d.blocked)) { runExtLoop(); return; }
         if (d.blocked) {
             if (d.retry_at) {
                 // Recheck lane eligibility/passive captcha recovery frequently; server policy prevents network retries.

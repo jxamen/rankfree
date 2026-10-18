@@ -2,10 +2,13 @@
 
 namespace App\Services;
 
+use App\Domain\Shopping\ShopExposureRunLock;
+use App\Jobs\ShopKeywordCheckJob;
 use App\Models\ShopKeywordAnalysis;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class ShopExposureBlockAlert
@@ -25,7 +28,7 @@ class ShopExposureBlockAlert
         Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($ip) {
             $day = now('Asia/Seoul')->format('Y-m-d');
             Cache::put('shop-interval-offset:'.$ip.':'.$day, (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.$day, 0), now('Asia/Seoul')->endOfDay());
-            Cache::put('shop-interval-revision:'.$ip, (string) \Illuminate\Support\Str::uuid(), now()->addDays(2));
+            Cache::put('shop-interval-revision:'.$ip, (string) Str::uuid(), now()->addDays(2));
         });
     }
 
@@ -34,18 +37,27 @@ class ShopExposureBlockAlert
         if ($collector === 'browser' && in_array($kind, ['403', '429', '보안문자', 'captcha_wait'], true)) {
             Cache::forever('shop-exposure:mobile-mode:'.$analysis->id, true);
             Cache::put('shop-exposure:browser-retry:'.$analysis->id, now()->addMinutes(3)->timestamp, now()->addDays(2));
-            if (in_array($kind, ['보안문자', 'captcha_wait'], true)) Cache::forever('shop-exposure:captcha-wait:'.$analysis->id, true);
+            if (in_array($kind, ['보안문자', 'captcha_wait'], true)) {
+                Cache::forever('shop-exposure:captcha-wait:'.$analysis->id, true);
+            }
             $new = Cache::lock('shop-exposure:fallback-lock:'.$analysis->id, 5)->block(3, function () use ($analysis, $kind) {
                 $key = 'shop-exposure:server-fallback:'.$analysis->id;
-                if (Cache::has($key)) return false;
-                if (in_array($kind, ['보안문자', 'captcha_wait'], true)) Cache::forever($key, true);
-                else Cache::put($key, true, now()->addMinutes(3));
+                if (Cache::has($key)) {
+                    return false;
+                }
+                if (in_array($kind, ['보안문자', 'captcha_wait'], true)) {
+                    Cache::forever($key, true);
+                } else {
+                    Cache::put($key, true, now()->addMinutes(3));
+                }
+
                 return true;
             });
-            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release('ip:'.$ip, (int) $analysis->id);
+            app(ShopExposureRunLock::class)->release('ip:'.$ip, (int) $analysis->id);
             // Sync is used by local/tests; production's existing worker continues without an open page.
-            if ($new && $analysis->created_via === 'api' && config('queue.default') !== 'sync') {
-                \App\Jobs\ShopKeywordCheckJob::dispatch((int) $analysis->id);
+            if ($new && $analysis->created_via === 'api' && config('queue.default') !== 'sync'
+                && Cache::add('shop-exposure:worker:'.$analysis->id, true, now()->addMinutes(10))) {
+                ShopKeywordCheckJob::dispatch((int) $analysis->id);
             }
         }
         if ($kind === 'success') {
@@ -65,7 +77,9 @@ class ShopExposureBlockAlert
                 $now = now('Asia/Seoul');
                 $key = 'shop-block:'.hash('sha256', $ip);
                 $state = Cache::get($key, []);
-                if ($kind === 'success' && empty($state['active'])) return;
+                if ($kind === 'success' && empty($state['active'])) {
+                    return;
+                }
                 $countKey = $key.':'.$now->format('Y-m-d');
                 $count = (int) Cache::get($countKey, 0);
                 if ($kind !== 'success') {
@@ -78,7 +92,7 @@ class ShopExposureBlockAlert
                 Log::info('shop_exposure_block_event', $event);
                 $token = config('services.slack.notifications.bot_user_oauth_token');
                 $channel = config('services.slack.shop_exposure_block_channel');
-                $grouped = $kind !== 'success' && !empty($state['ts']) && ($state['last_block'] ?? 0) > $now->timestamp - 600;
+                $grouped = $kind !== 'success' && ! empty($state['ts']) && ($state['last_block'] ?? 0) > $now->timestamp - 600;
                 $keyword = str_replace(["\n", "\r", '<', '>', '&'], [' ', ' ', '〈', '〉', '＆'], (string) $analysis->core_keyword);
                 $text = '<!channel> '.$now->format('Y-m-d H:i:s').' KST · '.$ip.'/'.$collector.' · 분석 #'.$analysis->id.' '.$keyword.' · '.($kind === 'success' ? '재개' : $kind).' · 같은 IP 오늘 '.$count.'번째 · 다음 재시도 '.($kind === 'success' ? '—' : $now->copy()->addMinutes(3)->format('H:i:s').' KST');
                 $text .= ' · interval_ms '.$event['interval_ms'];
@@ -86,19 +100,25 @@ class ShopExposureBlockAlert
                 if ($token) {
                     try {
                         $payload = ['channel' => $channel, 'text' => $text];
-                        if ($grouped) $payload['ts'] = $state['ts'];
+                        if ($grouped) {
+                            $payload['ts'] = $state['ts'];
+                        }
                         $response = Http::withToken($token)->timeout(5)->post('https://slack.com/api/'.($grouped ? 'chat.update' : 'chat.postMessage'), $payload);
                         if ($response->successful() && $response->json('ok')) {
                             $next['ts'] = $response->json('ts');
                         } else {
                             Log::warning('shop_exposure_slack_failed', ['status' => $response->status()]);
                         }
-                    } catch (Throwable) { Log::warning('shop_exposure_slack_failed'); }
+                    } catch (Throwable) {
+                        Log::warning('shop_exposure_slack_failed');
+                    }
                 } else {
                     Log::notice('shop_exposure_slack_configuration_required');
                 }
                 Cache::put($key, $next, $now->copy()->addDays(2));
             });
-        } catch (Throwable) { Log::warning('shop_exposure_block_event_failed'); }
+        } catch (Throwable) {
+            Log::warning('shop_exposure_block_event_failed');
+        }
     }
 }

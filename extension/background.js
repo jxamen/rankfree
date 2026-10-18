@@ -1026,7 +1026,6 @@ Object.assign(handlers, {
       const saved = await chrome.storage.session.get(['rfSerpTabKeyword', 'rfSerpCaptchaWait']);
       if (!saved.rfSerpCaptchaWait) return { ok: false };
       const recovered = await shopSerpTab.peek(saved.rfSerpTabKeyword);
-      if (recovered?.ok) await chrome.storage.session.set({ rfSerpCaptchaWait: false });
       return recovered || { ok: false, captcha: true };
     }
     const kw = String(keyword || '').trim();

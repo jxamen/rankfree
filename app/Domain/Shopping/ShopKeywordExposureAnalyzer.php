@@ -10,6 +10,7 @@ use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordAnalysisItem;
 use App\Models\ShopProductInfo;
 use App\Models\User;
+use App\Services\ShopExposureBlockAlert;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -141,8 +142,15 @@ class ShopKeywordExposureAnalyzer
     public static function usesServerFallback(ShopKeywordAnalysis $analysis): bool
     {
         $fallback = (bool) Cache::get('shop-exposure:server-fallback:'.$analysis->id, false);
-        if (! $fallback) return false;
-        if (Cache::get('shop-exposure:captcha-wait:'.$analysis->id, false)) return true;
+        if (! $fallback) {
+            return false;
+        }
+        Cache::forever('shop-exposure:mobile-mode:'.$analysis->id, true);
+        Cache::add('shop-exposure:browser-retry:'.$analysis->id, now()->addMinutes(3)->timestamp, now()->addDays(2));
+        if (Cache::get('shop-exposure:captcha-wait:'.$analysis->id, false)) {
+            return true;
+        }
+
         return now()->timestamp < (int) Cache::get('shop-exposure:browser-retry:'.$analysis->id, PHP_INT_MAX);
     }
 
@@ -220,7 +228,7 @@ class ShopKeywordExposureAnalyzer
                     default => empty($res['error']) && empty($res['blocked']) ? 'success' : null,
                 };
                 if ($alertKind) {
-                    app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false), $res['interval_ms'] ?? null);
+                    app(ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false), $res['interval_ms'] ?? null);
                 }
                 // fetch 실패/차단 → rank 저장 안 함(미확인 유지, 재시도 가능)
                 if (! empty($res['error']) || ! empty($res['blocked'])) {
@@ -232,11 +240,17 @@ class ShopKeywordExposureAnalyzer
                     if ($fresh->collectionStopped()) {
                         return false;
                     }
+                    $item->refresh();
+                    if ($item->rank !== null) {
+                        return true;
+                    } // Other lane already saved this item.
                     $item->rank = (int) ($res['rank'] ?? 0);
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
                     $item->save();
-                    if (in_array($fresh->status, ['blocked', 'error'], true)) $fresh->update(['status' => 'checking']);
+                    if (in_array($fresh->status, ['blocked', 'error'], true)) {
+                        $fresh->update(['status' => 'checking']);
+                    }
                     Cache::forget('shop-exposure:error:'.$analysis->id);
 
                     return true;
@@ -263,8 +277,11 @@ class ShopKeywordExposureAnalyzer
             $paused = $analysis->status === 'paused';
             $actualBlock = in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true);
             $error = $stopped ? ($res['error'] ?? 'unknown_error') : null;
-            if ($error) Cache::put('shop-exposure:error:'.$analysis->id, $error, now()->addDay());
-            else Cache::forget('shop-exposure:error:'.$analysis->id);
+            if ($error) {
+                Cache::put('shop-exposure:error:'.$analysis->id, $error, now()->addDay());
+            } else {
+                Cache::forget('shop-exposure:error:'.$analysis->id);
+            }
             $status = $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? ($stopped ? ($actualBlock ? 'blocked' : 'error') : ($paused ? 'paused' : 'checking')) : 'done');
             if ($status === 'target_reached') {
                 $remaining = 0;

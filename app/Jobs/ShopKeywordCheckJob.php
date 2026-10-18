@@ -7,6 +7,7 @@ use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Models\ShopKeywordAnalysis;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * 쇼핑 유입키워드 순위 확인 자동 완주(2026-07-26) — 외부 API(28·25)로 만든 분석을 사람 없이 끝까지 확인한다.
@@ -34,12 +35,15 @@ class ShopKeywordCheckJob implements ShouldQueue
             return;
         }
         // 사용자가 화면에서 중단(paused)했으면 자동 확인도 멈춘다 — 재개는 화면/API 로.
-        $fallback = ShopKeywordExposureAnalyzer::usesServerFallback($analysis);
+        $fallback = ShopKeywordExposureAnalyzer::usesServerFallback($analysis) || Cache::has('shop-exposure:mobile-mode:'.$analysis->id);
         if (in_array($analysis->status, ['paused', 'target_reached', 'ad_ended'], true) || (! $fallback && $this->round > self::MAX_ROUNDS)) {
+            Cache::forget('shop-exposure:worker:'.$analysis->id);
+
             return;
         }
 
         if ($fallback) {
+            Cache::put('shop-exposure:worker:'.$analysis->id, true, now()->addMinutes(10));
             $lock = app(ShopExposureRunLock::class);
             $lane = $lock->acquire('server', 'fallback:'.$analysis->id, (int) $analysis->id, (string) $analysis->core_keyword);
             if (! $lane['ok']) {
@@ -53,6 +57,9 @@ class ShopKeywordCheckJob implements ShouldQueue
         $p = $analyzer->checkBatch($analysis);
         if ($fallback && ($analysis->refresh()->collectionStopped() || (int) ($p['remaining'] ?? 0) === 0 || ! empty($p['blocked']))) {
             $lock->release('server', (int) $analysis->id);
+            if ($analysis->collectionStopped() || (int) ($p['remaining'] ?? 0) === 0) {
+                Cache::forget('shop-exposure:worker:'.$analysis->id);
+            }
         }
 
         // sync 커넥션(테스트·로컬)에서는 재큐가 곧 재귀 실행이라 요청을 붙잡는다 — 한 배치만 처리하고 끝낸다.

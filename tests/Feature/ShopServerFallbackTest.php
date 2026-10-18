@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -96,5 +97,58 @@ class ShopServerFallbackTest extends TestCase
         $this->getJson('/api/ext/shop-keyword/check-queue')->assertJsonPath('data.server_fallback', true)->assertJsonPath('data.items', []);
         $this->postJson('/api/ext/shop-keyword/'.$a->id.'/check-html', ['item_id' => $item->id, 'html' => ''])->assertJsonPath('skipped', true);
         $this->assertNull($item->fresh()->rank);
+    }
+
+    public function test_browser_retries_after_three_minutes_without_releasing_server_cooldown(): void
+    {
+        Cache::flush();
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '양방향', 'status' => 'checking', 'combo_count' => 1]);
+        $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => '남은 검색']);
+        $this->actingAs($u);
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '403'])->assertJsonPath('server_fallback', true);
+        $server = ['until' => microtime(true) + 180, 'gap' => 2600];
+        Cache::put(NaverShopExposureService::policyKey(), $server);
+        $this->travel(181)->seconds();
+        $this->assertFalse(ShopKeywordExposureAnalyzer::usesServerFallback($a));
+        $this->getJson(route('admin.shop-keyword.pending', $a))->assertJsonCount(1, 'data.items');
+        $this->assertSame($server, Cache::get(NaverShopExposureService::policyKey()));
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '429'])->assertJsonPath('server_fallback', true);
+        $this->assertTrue(Cache::has('shop-exposure:mobile-mode:'.$a->id));
+        $this->travelBack();
+    }
+
+    public function test_captcha_wait_logs_and_stays_on_server_until_human_success_even_after_three_minutes(): void
+    {
+        Cache::flush();
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        Log::spy();
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '사람 해제', 'status' => 'checking']);
+        $this->actingAs($u);
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'captcha_wait'])->assertJsonPath('server_fallback', true);
+        Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($e) => $e['kind'] === 'captcha_wait' && $e['analysis_id'] === $a->id))->once();
+        $this->travel(181)->seconds();
+        $this->assertTrue(ShopKeywordExposureAnalyzer::usesServerFallback($a));
+        $this->getJson(route('admin.shop-keyword.pending', $a))->assertJsonPath('data.items', []);
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success'])->assertJsonPath('server_fallback', false);
+        $this->assertFalse(Cache::has('shop-exposure:captcha-wait:'.$a->id));
+        $this->travelBack();
+    }
+
+    public function test_server_worker_keeps_retrying_after_browser_rejoins_and_round_limit(): void
+    {
+        Cache::flush();
+        Queue::fake();
+        config(['queue.default' => 'database']);
+        $u = User::factory()->create();
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '계속 수집', 'status' => 'checking']);
+        Cache::forever('shop-exposure:mobile-mode:'.$a->id, true);
+        $analyzer = \Mockery::mock(ShopKeywordExposureAnalyzer::class);
+        $analyzer->shouldReceive('checkBatch')->once()->andReturn(['remaining' => 1, 'blocked' => true, 'retry_at' => (time() + 180) * 1000]);
+        (new ShopKeywordCheckJob($a->id, 401))->handle($analyzer);
+        Queue::assertPushed(ShopKeywordCheckJob::class, fn ($job) => $job->round === 402 && $job->delay->timestamp >= time() + 179);
+        $this->assertFalse(ShopKeywordExposureAnalyzer::usesServerFallback($a));
     }
 }

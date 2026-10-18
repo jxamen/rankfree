@@ -142,6 +142,7 @@ class ShopKeywordExposureController extends Controller
             $progress['retry_at'] = (int) ceil(max(microtime(true) + 2, $until) * 1000);
         }
         return response()->json($progress + [
+            'mobile_mode' => Cache::has('shop-exposure:mobile-mode:'.$analysis->id),
             'captcha_wait' => (bool) Cache::get('shop-exposure:captcha-wait:'.$analysis->id, false),
             'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis),
             'collector_ip' => (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'),
