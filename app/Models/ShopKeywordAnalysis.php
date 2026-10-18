@@ -36,6 +36,24 @@ class ShopKeywordAnalysis extends Model
         'keyword_target' => 'integer',
     ];
 
+    public function collectionStopped(): bool
+    {
+        return in_array($this->status, ['paused', 'target_reached', 'ad_ended'], true);
+    }
+
+    protected static function booted(): void
+    {
+        // A result already in flight must never revive an automatically ended analysis.
+        static::updating(function (self $analysis) {
+            if ($analysis->isDirty('status') && $analysis->status !== 'ad_ended'
+                && static::whereKey($analysis->id)->value('status') === 'ad_ended') {
+                $analysis->refresh();
+
+                return false;
+            }
+        });
+    }
+
     /** Count only organic top-five keywords, independently of the display threshold. */
     public function topFiveCount(): int
     {
@@ -49,6 +67,10 @@ class ShopKeywordAnalysis extends Model
 
     public function collectionLabel(): string
     {
+        if ($this->status === 'ad_ended') {
+            return '종료(광고 끝남)';
+        }
+
         if ($this->status === 'target_reached' || $this->targetReached()) {
             return '목표 도달로 멈춤';
         }

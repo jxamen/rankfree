@@ -33,7 +33,7 @@ class ShopKeywordCheckJob implements ShouldQueue
             return;
         }
         // 사용자가 화면에서 중단(paused)했으면 자동 확인도 멈춘다 — 재개는 화면/API 로.
-        if (in_array($analysis->status, ['paused', 'target_reached'], true) || $this->round > self::MAX_ROUNDS) {
+        if (in_array($analysis->status, ['paused', 'target_reached', 'ad_ended'], true) || $this->round > self::MAX_ROUNDS) {
             return;
         }
 
@@ -46,7 +46,7 @@ class ShopKeywordCheckJob implements ShouldQueue
 
         // 남은 조합이 있고 차단되지 않았으면 이어서 — 차단(429·보안문자)이면 여기서 멈추고
         // 상태(blocked)로 남겨 외부가 조회로 알 수 있게 한다.
-        if ((int) ($p['remaining'] ?? 0) > 0 && empty($p['blocked'])) {
+        if (! $analysis->refresh()->collectionStopped() && (int) ($p['remaining'] ?? 0) > 0 && empty($p['blocked'])) {
             self::dispatch($this->analysisId, $this->round + 1)->delay(now()->addSeconds(self::GAP_SEC));
         }
     }

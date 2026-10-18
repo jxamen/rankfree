@@ -49,7 +49,7 @@ class ExtShopKeywordController extends Controller
         $limit = min(20, max(1, (int) $request->query('limit', 5)));
 
         $base = ShopKeywordAnalysis::where('user_id', $request->user()->id)
-            ->whereNotIn('status', ['paused', 'target_reached'])
+            ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
             ->whereNotNull('product_id')->where('product_id', '!=', '')
             ->whereNotNull('product_url')->where('product_url', '!=', '')
             ->where(function ($q) {
@@ -91,6 +91,7 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $data = $request->validate([
             'info' => 'required|array',
@@ -150,7 +151,7 @@ class ExtShopKeywordController extends Controller
         // 확장이 check-queue 를 폴링해 이어서 확인한다. status 는 큐 선별 조건이라 반드시 갱신한다.
         $fresh = $analysis->fresh();
         $pending = false;
-        if (! $fresh->targetReached() && $fresh->status !== 'paused' && $fresh->combos()->whereNull('rank')->exists()) {
+        if (! $fresh->targetReached() && ! $fresh->collectionStopped() && $fresh->combos()->whereNull('rank')->exists()) {
             if ($fresh->status !== 'checking') {
                 $fresh->update(['status' => 'checking']);
                 $fresh = $fresh->fresh();
@@ -179,7 +180,7 @@ class ExtShopKeywordController extends Controller
 
         $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->where('created_via', 'api')
-            ->whereNotIn('status', ['paused', 'target_reached'])       // 사용자가 중단한 분석은 건드리지 않는다
+            ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
             ->whereHas('combos', fn ($q) => $q->whereNull('rank'))
             ->orderBy('id')->first();
 
@@ -213,6 +214,7 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $data = $request->validate([
             'item_id' => ['required', 'integer'],

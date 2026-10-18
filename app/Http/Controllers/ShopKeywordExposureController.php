@@ -98,6 +98,7 @@ class ShopKeywordExposureController extends Controller
     public function check(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
         // 서버가 직접 네이버를 부른다 — 서버 IP 하나로 잠근다
         if ($busy = $this->runBusy($request, $analysis, 'server')) {
             return $busy;
@@ -129,11 +130,12 @@ class ShopKeywordExposureController extends Controller
     public function pending(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
         if ($busy = $this->runBusy($request, $analysis)) {
             return $busy;
         }
 
-        if ($analysis->targetReached()) {
+        if ($analysis->status === 'ad_ended' || $analysis->targetReached()) {
             return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
         }
         $limit = $analysis->keyword_target ? min(40, max(1, $analysis->keyword_target - $analysis->topFiveCount())) : 40;
@@ -151,6 +153,7 @@ class ShopKeywordExposureController extends Controller
     public function checkHtml(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $data = $request->validate([
             'item_id' => 'required|integer',
@@ -173,6 +176,7 @@ class ShopKeywordExposureController extends Controller
     public function supplement(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $data = $request->validate([
             'mshop_html' => 'nullable|string|max:4000000',
@@ -198,6 +202,7 @@ class ShopKeywordExposureController extends Controller
     public function refreshProductInfo(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $data = $request->validate([
             'info' => 'nullable|array',
@@ -262,6 +267,7 @@ class ShopKeywordExposureController extends Controller
     public function pause(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $paused = $request->boolean('paused', true);
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
@@ -287,6 +293,7 @@ class ShopKeywordExposureController extends Controller
     public function recheckExposed(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $reset = $analysis->combos()->whereBetween('rank', [1, (int) $analysis->threshold])
             ->update(['rank' => null, 'ad_exposed' => false, 'checked_at' => null]);
@@ -304,6 +311,7 @@ class ShopKeywordExposureController extends Controller
     public function regenerate(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         return response()->json($this->analyzer->regenerate($analysis));
     }

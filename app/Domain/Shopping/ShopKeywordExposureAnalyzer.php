@@ -140,7 +140,10 @@ class ShopKeywordExposureAnalyzer
      */
     public function checkBatch(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
-        if ($analysis->refresh()->targetReached()) {
+        if ($analysis->refresh()->collectionStopped()) {
+            return $this->progress($analysis);
+        }
+        if ($analysis->targetReached()) {
             return $this->finishTarget($analysis);
         }
         $cfg = (array) config('rankfree.shopping.exposure');
@@ -171,7 +174,7 @@ class ShopKeywordExposureAnalyzer
             $batchResults = [];   // 이번 배치 건별 결과 — 화면이 노출 테이블·배지를 리로드 없이 갱신(요약 숫자와 불일치 방지)
 
             foreach ($pending as $item) {
-                if ($analysis->refresh()->targetReached()) {
+                if ($analysis->refresh()->collectionStopped() || $analysis->targetReached()) {
                     break;
                 }
                 $elapsed = microtime(true) - $t0;
@@ -208,10 +211,21 @@ class ShopKeywordExposureAnalyzer
                     $stopped = true;
                     break;
                 }
-                $item->rank = (int) ($res['rank'] ?? 0);
-                $item->ad_exposed = ! empty($res['ad']);
-                $item->checked_at = now();
-                $item->save();
+                $saved = DB::transaction(function () use ($analysis, $item, $res) {
+                    $fresh = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+                    if ($fresh->collectionStopped()) {
+                        return false;
+                    }
+                    $item->rank = (int) ($res['rank'] ?? 0);
+                    $item->ad_exposed = ! empty($res['ad']);
+                    $item->checked_at = now();
+                    $item->save();
+
+                    return true;
+                });
+                if (! $saved) {
+                    break;
+                }
                 $batchResults[] = ['id' => $item->id, 'keyword' => $item->keyword, 'rank' => (int) $item->rank,
                     'ad' => (bool) $item->ad_exposed, 'combo_tag' => $item->combo_tag];
                 // search: m.search 연속 호출 IP rate-limit 완화 간격. api: 키 로테이션이 있어 짧게만.
@@ -225,7 +239,10 @@ class ShopKeywordExposureAnalyzer
             $exposed = (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count();
             $remaining = (int) $analysis->combos()->whereNull('rank')->count();
             // 사용자가 "중단"을 누른 뒤 진행 중이던 배치가 늦게 끝나도 paused 를 덮어쓰지 않는다
-            $paused = $analysis->refresh()->status === 'paused';
+            if ($analysis->refresh()->status === 'ad_ended') {
+                return $this->progress($analysis);
+            }
+            $paused = $analysis->status === 'paused';
             $status = $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? ($stopped ? 'blocked' : ($paused ? 'paused' : 'checking')) : 'done');
             if ($status === 'target_reached') {
                 $remaining = 0;
@@ -250,6 +267,9 @@ class ShopKeywordExposureAnalyzer
     {
         return DB::transaction(function () use ($analysis, $item, $html) {
             $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            if ($analysis->status === 'ad_ended') {
+                return $this->progress($analysis) + ['skipped' => true];
+            }
             if ($analysis->targetReached()) {
                 return $this->finishTarget($analysis) + ['skipped' => true];
             }
@@ -296,6 +316,9 @@ class ShopKeywordExposureAnalyzer
      */
     public function supplement(ShopKeywordAnalysis $analysis, string $mshopHtml, array $related): array
     {
+        if ($analysis->refresh()->status === 'ad_ended') {
+            return ['added' => 0];
+        }
         $core = (string) $analysis->core_keyword;
         $add = [];
 
@@ -326,6 +349,9 @@ class ShopKeywordExposureAnalyzer
      */
     public function refreshProductInfo(ShopKeywordAnalysis $analysis): array
     {
+        if ($analysis->refresh()->status === 'ad_ended') {
+            return ['added' => 0];
+        }
         $pi = ShopProductInfo::where('user_id', $analysis->user_id)
             ->where('channel_product_id', (string) $analysis->product_id)->first();
         if (! $pi) {
@@ -442,6 +468,9 @@ class ShopKeywordExposureAnalyzer
      */
     public function regenerate(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
+        if ($analysis->refresh()->status === 'ad_ended') {
+            return ['added' => 0];
+        }
         if ($analysis->refresh()->targetReached()) {
             return $this->finishTarget($analysis);
         }
@@ -517,7 +546,7 @@ class ShopKeywordExposureAnalyzer
             'status' => $analysis->combos()->whereNull('rank')->exists() ? 'checking' : 'done',
         ]);
 
-        return ['added' => count($new), 'remaining' => $analysis->targetReached() ? 0 : (int) $analysis->combos()->whereNull('rank')->count(), 'total' => (int) $analysis->combo_count];
+        return ['added' => count($new), 'remaining' => $analysis->status === 'ad_ended' || $analysis->targetReached() ? 0 : (int) $analysis->combos()->whereNull('rank')->count(), 'total' => (int) $analysis->combo_count];
     }
 
     private function containsBanned(string $kw, array $banned): bool
@@ -546,7 +575,7 @@ class ShopKeywordExposureAnalyzer
         $threshold = (int) $analysis->threshold;
 
         return [
-            'remaining' => $analysis->targetReached() ? 0 : (int) $analysis->combos()->whereNull('rank')->count(),
+            'remaining' => $analysis->status === 'ad_ended' || $analysis->targetReached() ? 0 : (int) $analysis->combos()->whereNull('rank')->count(),
             'checked' => (int) $analysis->combos()->whereNotNull('rank')->count(),
             'exposed' => (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count(),
             'total' => (int) $analysis->combo_count,
