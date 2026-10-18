@@ -409,6 +409,7 @@ $__admin->group(function () {
     // 주문 관리 (목록·상세·상태 변경 · 승인=외부 발주)
     Route::get('/topups', [\App\Http\Controllers\Admin\TopupController::class, 'index'])->name('topups');
     Route::post('/topups/{topup}/review', [\App\Http\Controllers\Admin\TopupController::class, 'review'])->name('topups.review');
+        Route::post('topups/{topup}/manage', [\App\Http\Controllers\Admin\TopupController::class, 'update'])->name('topups.manage');
     Route::get('/orders', [MarketingOrderController::class, 'index'])->name('orders');
     Route::get('/orders/{order}', [MarketingOrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{order}/status', [MarketingOrderController::class, 'updateStatus'])->name('orders.status');
