@@ -64,7 +64,7 @@ class ShopKeywordApiController extends Controller
             $orderMeta = [
                 'order_start_date' => $data['order_start_date'], 'order_end_date' => $data['order_end_date'],
                 'order_days' => $days,
-                'keyword_target' => $days * max(1, (int) config('rankfree.shopping.exposure.keywords_per_day', 50)),
+                'keyword_target' => $days * \App\Services\ShopExposureBlockAlert::keywordsPerDay(),
             ];
         }
 

@@ -127,8 +127,10 @@ class ShopExposureRunLockTest extends TestCase
 
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $page).'?runner=pageA')->assertOk();
 
+        $this->withHeader('Authorization', 'Bearer '.$plain)->getJson('/api/ext/shop-keyword/check-queue')->assertOk();
+        $this->travel(121)->seconds(); // abandoned reservation expires after takeover
         // 같은 분석은 확장이 넘겨받고 이전 페이지는 조용히 멈춘다.
-        $this->withHeader('Authorization', 'Bearer '.$plain)->getJson('/api/ext/shop-keyword/check-queue')
+        $queue = $this->withHeader('Authorization', 'Bearer '.$plain)->getJson('/api/ext/shop-keyword/check-queue')
             ->assertOk()->assertJsonPath('data.analysis_id', $api->id);
         $this->actingAs($u)->getJson(route('admin.shop-keyword.pending', $page).'?runner=pageA')
             ->assertStatus(423)->assertJson(['taken_over' => true, 'message' => '다른 창/확장이 이어 받았어요']);
@@ -136,7 +138,7 @@ class ShopExposureRunLockTest extends TestCase
         $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $page), ['item_id' => $item->id, 'html' => '', 'runner' => 'pageA'])
             ->assertStatus(423)->assertJson(['taken_over' => true]);
         $this->assertNull($item->refresh()->rank);
-        $this->withHeader('Authorization', 'Bearer '.$plain)->postJson("/api/ext/shop-keyword/{$api->id}/check-html", ['item_id' => 1, 'html' => ''])
+        $this->withHeader('Authorization', 'Bearer '.$plain)->postJson("/api/ext/shop-keyword/{$api->id}/check-html", ['item_id' => $queue->json('data.items.0.item_id'), 'claim_token' => $queue->json('data.items.0.claim_token'), 'html' => ''])
             ->assertOk();
     }
     public function test_watchdog_uses_saves_not_screen_heartbeats_and_only_own_checking_analysis(): void

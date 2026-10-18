@@ -10,6 +10,21 @@ use Throwable;
 
 class ShopExposureBlockAlert
 {
+    public static function parallelSettings(?int $analysisId = null): array
+    {
+        $reduced = $analysisId !== null && Cache::has('shop-parallel-reduced:'.$analysisId);
+        return [
+            'parallel_reduced' => $reduced,
+            'parallel_tabs' => $reduced ? 1 : min(4, max(1, (int) \App\Models\AppSetting::read('shop.exposure.parallel_tabs', '1'))),
+            'tab_open_interval_ms' => min(60000, max(0, (int) \App\Models\AppSetting::read('shop.exposure.tab_open_interval_ms', '3000'))),
+        ];
+    }
+
+    public static function keywordsPerDay(): int
+    {
+        return min(500, max(10, (int) \App\Models\AppSetting::read('shop.exposure.keywords_per_day', (string) config('rankfree.shopping.exposure.keywords_per_day', 50))));
+    }
+
     public static function collectionMode(): string
     {
         return \App\Models\AppSetting::read('shop.exposure.collection_mode', 'tab') === 'fetch' ? 'fetch' : 'tab';
@@ -61,6 +76,7 @@ class ShopExposureBlockAlert
 
     public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
     {
+        if ($collector === 'browser' && in_array($kind, ['403', '429', '보안문자'], true)) Cache::forever('shop-parallel-reduced:'.$analysis->id, true);
         if ($kind === 'success') {
             self::clearWait($analysis, $collector === 'browser');
         }

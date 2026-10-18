@@ -36,7 +36,7 @@ for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])te
  chrome:{storage:{local:{get:async()=>({rfSerpMode:mode,rfSerpPolicy:store.rfSerpPolicy})}},action:{setBadgeText(){}},alarms:{clear(){}}},
  fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:(f,ms)=>{waits.push(ms);f();},
  getStore:async()=>({}),apiFetch:async(path,v)=>path.endsWith('interval-policy') ? {ok:true,json:{data:{interval_ms:4000}}} : events.push(v.body)});
- const r=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"same",analysisId:70});',context);
+ const r=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:typeof shopSerpTab === \"undefined\" ? {} : shopSerpTab,policy:shopSerpPolicy})}; const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"same",analysisId:70});',context);
  assert.equal(r.ok,tabOK);assert.equal(tabs,1);assert.equal(fetches,0);assert.equal(waits.length,0);
  assert.equal(events[0].kind,tabOK?'success':'보안문자');assert.equal(!!store.rfSerpPolicy.until,!tabOK);assert.equal(store.rfSerpPolicy.http403,0);
 });

@@ -17,7 +17,7 @@
 
   // 페이지 요청 타입 → 확장 핸들러
   const ROUTES = {
-    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), target: m.target || {}, collection_mode: m.collection_mode === 'fetch' ? 'fetch' : 'tab', analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser'), interval_revision: m.interval_revision ?? null, interval_ms: Math.min(30000, Math.max(1000, Number(m.interval_ms) || 4000)) }],
+    fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), target: m.target || {}, parallel_tabs: Math.min(4, Math.max(1, Number(m.parallel_tabs) || 1)), tab_open_interval_ms: Math.min(60000, Math.max(0, Number(m.tab_open_interval_ms ?? 3000))), collection_mode: m.collection_mode === 'fetch' ? 'fetch' : 'tab', analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser'), interval_revision: m.interval_revision ?? null, interval_ms: Math.min(30000, Math.max(1000, Number(m.interval_ms) || 4000)) }],
     shopSerpStatus: () => ['shopSerpStatus', {}],
     resumeShopSerp: (m) => ['resumeShopSerp', { collectorIp: String(m.collectorIp || 'browser') }],
     fetchKeywordSignals: (m) => ['fetchKeywordSignals', { keyword: String(m.keyword || '') }],
@@ -30,7 +30,7 @@
     if (!m || m.source !== 'rankfree-console' || !ROUTES[m.type]) return;
 
     const reply = (payload) => window.postMessage(
-      Object.assign({ source: 'rankfree-ext', type: m.type + 'Result' }, payload), '*'
+      Object.assign({ source: 'rankfree-ext', type: m.type + 'Result' }, payload, {requestId:m.requestId}), '*'
     );
 
     try {
