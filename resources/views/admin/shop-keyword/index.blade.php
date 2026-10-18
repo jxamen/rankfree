@@ -69,6 +69,7 @@
                 @if ($a->status === 'blocked')<span class="text-error">· 일부 미확인(열면 이어서 확인)</span>
                 @elseif ($a->status === 'paused')<span class="text-muted">· 중단됨("이어서 확인"으로 재개)</span>@endif
             </div>
+            @include('admin.shop-keyword.collection', ['a' => $a])
         </a>
         <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $a->created_at->timezone('Asia/Seoul')->format('m-d H:i') }}</span>
         <form method="POST" action="{{ route('admin.shop-keyword.destroy', $a) }}"

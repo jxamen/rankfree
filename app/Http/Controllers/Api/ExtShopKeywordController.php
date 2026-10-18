@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Shopping\ShopExposureRunLock;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Http\Controllers\Controller;
 use App\Models\ShopKeywordAnalysis;
@@ -48,6 +49,7 @@ class ExtShopKeywordController extends Controller
         $limit = min(20, max(1, (int) $request->query('limit', 5)));
 
         $base = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+            ->whereNotIn('status', ['paused', 'target_reached'])
             ->whereNotNull('product_id')->where('product_id', '!=', '')
             ->whereNotNull('product_url')->where('product_url', '!=', '')
             ->where(function ($q) {
@@ -62,7 +64,7 @@ class ExtShopKeywordController extends Controller
                         $s->selectRaw('1')->from('shop_product_infos')
                             ->whereColumn('shop_product_infos.user_id', 'shop_keyword_analyses.user_id')
                             ->whereColumn('shop_product_infos.channel_product_id', 'shop_keyword_analyses.product_id')
-                            ->where(fn ($w) => $w->whereRaw('LENGTH(shop_product_infos.seller_tags) > 2')
+                            ->where(fn ($w) => $w->where(fn ($complete) => $complete->whereRaw('LENGTH(shop_product_infos.seller_tags) > 2')->whereNotNull('shop_product_infos.delivery_fee'))
                                 ->orWhere('shop_product_infos.collected_at', '>=', now()->subDay()));
                     });
             });
@@ -148,7 +150,7 @@ class ExtShopKeywordController extends Controller
         // 확장이 check-queue 를 폴링해 이어서 확인한다. status 는 큐 선별 조건이라 반드시 갱신한다.
         $fresh = $analysis->fresh();
         $pending = false;
-        if ($fresh->combos()->whereNull('rank')->exists()) {
+        if (! $fresh->targetReached() && $fresh->status !== 'paused' && $fresh->combos()->whereNull('rank')->exists()) {
             if ($fresh->status !== 'checking') {
                 $fresh->update(['status' => 'checking']);
                 $fresh = $fresh->fresh();
@@ -177,7 +179,7 @@ class ExtShopKeywordController extends Controller
 
         $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->where('created_via', 'api')
-            ->where('status', '!=', 'paused')       // 사용자가 중단한 분석은 건드리지 않는다
+            ->whereNotIn('status', ['paused', 'target_reached'])       // 사용자가 중단한 분석은 건드리지 않는다
             ->whereHas('combos', fn ($q) => $q->whereNull('rank'))
             ->orderBy('id')->first();
 
@@ -185,12 +187,16 @@ class ExtShopKeywordController extends Controller
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
         }
         // IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
-        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
             return response()->json(['data' => ['items' => [], 'busy' => true, 'message' => $lock->busyMessage($r['holder'])]]);
         }
 
+        // Never hand the extension more work than the remaining top-five quota.
+        if ($analysis->keyword_target) {
+            $limit = min($limit, max(1, $analysis->keyword_target - $analysis->topFiveCount()));
+        }
         $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get(['id', 'keyword']);
 
         return response()->json(['data' => [
@@ -214,7 +220,7 @@ class ExtShopKeywordController extends Controller
         ]);
 
         // IP별 수집 잠금 — 같은 IP 에서 다른 곳이 수집 중이면 403(현 확장은 403 에서 그 루프를 즉시 멈춘다)
-        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
         if (! $r['ok']) {
             return response()->json(['busy' => true, 'message' => $lock->busyMessage($r['holder'])], 403);
