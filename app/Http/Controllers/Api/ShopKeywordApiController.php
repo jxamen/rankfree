@@ -171,7 +171,8 @@ class ShopKeywordApiController extends Controller
 
         return ShopKeywordAnalysis::where('user_id', $userId)
             ->where('core_keyword', $coreKeyword)
-            ->where('created_at', '>=', now('Asia/Seoul')->startOfDay()->setTimezone(config('app.timezone')))
+            // 오늘·어제(한국 시간) 만든 분석까지 이어서 쓴다(대표님 10/18 21:53 「이미 오늘 이나 어제 만든게 있으면 새로 안만드는거」)
+            ->where('created_at', '>=', now('Asia/Seoul')->subDay()->startOfDay()->setTimezone(config('app.timezone')))
             ->where('created_at', '<', now('Asia/Seoul')->addDay()->startOfDay()->setTimezone(config('app.timezone')))
             ->when($pid !== '',
                 fn ($q) => $q->where('product_id', $pid),
