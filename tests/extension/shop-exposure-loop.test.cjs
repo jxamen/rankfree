@@ -51,7 +51,7 @@ test('admin extension loop repeats three-minute waits until success without savi
  const start=blade.indexOf('    async function runExtLoop()');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
  let calls=0,saves=0;const waits=[],events=[];
- const context=vm.createContext({stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
+ const context=vm.createContext({currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
   extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,html:'raw'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},

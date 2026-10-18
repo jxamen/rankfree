@@ -36,9 +36,10 @@ class ShopKeywordExposureController extends Controller
         $data = $request->validate([
             'kind' => 'required|in:403,429,보안문자,success',
             'blocked_on_resume' => 'sometimes|boolean',
+            'interval_ms' => 'sometimes|nullable|integer|min:3000|max:10000',
         ]);
         app(\App\Services\ShopExposureBlockAlert::class)->record(
-            $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false
+            $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
         );
         return response()->json(['ok' => true]);
     }
@@ -160,7 +161,7 @@ class ShopKeywordExposureController extends Controller
             app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
         }
 
-        return response()->json(['data' => ['items' => $items] + $this->analyzer->progress($analysis)]);
+        return response()->json(['data' => ['collector_ip' => $request->ip(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
     }
 
     /** 확장(브라우저)이 가져온 m.search HTML 로 조합 1건 순위 저장 — 서버 IP 한도와 무관한 기본 경로. */

@@ -740,11 +740,14 @@ window.__SK = {
         });
     }
 
+    let currentIntervalMs = 3000;
+    const intervalLabel = () => ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 + 무작위 0~1초(최대 10초)';
+
     async function waitRestriction(until, source) {
         while (!stopped) {
             const left = Math.max(0, until - Date.now());
             if (!left) break;
-            if (label) label.textContent = source + ' 확인 제한 — ' + Math.ceil(left / 1000) + '초 남음';
+            if (label) label.textContent = source + ' 확인 제한 — ' + Math.ceil(left / 1000) + '초 남음' + intervalLabel();
             await sleep(Math.min(1000, left));
         }
         if (!stopped && label) label.textContent = '순위 다시 확인 중…';
@@ -768,16 +771,19 @@ window.__SK = {
             }
             errCount = 0;
             renderProgress(d);
+            currentIntervalMs = d.interval_ms || currentIntervalMs;
+            if (label) label.textContent += intervalLabel();
             if (!d.items || !d.items.length) { location.reload(); return; }
 
             for (const it of d.items) {
                 if (stopped) return;
-                const res = await extCall('fetchShopSerp', { keyword: it.keyword, analysisId: {{ (int) $analysis->id }} }, 30000);
+                const res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, analysisId: {{ (int) $analysis->id }} }, 90000);
+                if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                 // Only actual network results generate events; cached/cooldown replies do not.
                 if (res && !res.cached && !res.cooldown) {
                     const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                     if (kind) {
-                        try { await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume }); }
+                        try { await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms }); }
                         catch (e) { /* collection can continue if event delivery fails */ }
                     }
                 }
@@ -791,7 +797,7 @@ window.__SK = {
                     halt('네이버 응답 오류(' + (res.status || res.message || '통신') + ') — 잠시 후 "이어서 확인"을 눌러주세요', true);
                     return;
                 }
-                if (label) label.textContent = '순위 확인 중(확장)…';
+                if (label) label.textContent = '순위 확인 중(확장)…' + intervalLabel();
                 const oldNotice = document.getElementById('sk-collection-error');
                 if (oldNotice) oldNotice.remove();
                 try {
@@ -802,6 +808,7 @@ window.__SK = {
                     if (cr.ok) {
                         const p = await cr.json();
                         renderProgress(p);
+                        if (label) label.textContent += intervalLabel();
                         if (['target_reached', 'ad_ended'].includes(p.status)) { stopped = true; return; }
                         if (p.rank !== undefined) applyItemResult(it, p);   // 배지·노출/광고·패턴 실시간 갱신
                     }
@@ -837,6 +844,8 @@ window.__SK = {
         // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
         (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
         renderProgress(d);
+        currentIntervalMs = d.interval_ms || currentIntervalMs;
+        if (label) label.textContent += intervalLabel();
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
             if (d.retry_at) {

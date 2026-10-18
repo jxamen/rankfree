@@ -48,7 +48,7 @@ class ShopBrowserCollectorEventTest extends TestCase
     private function assertEvent(ShopKeywordAnalysis $a, string $kind): void
     {
         Log::shouldHaveReceived('info')->with('shop_exposure_block_event', \Mockery::on(fn ($e) =>
-            array_keys($e) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at']
+            array_keys($e) === ['ip', 'collector', 'analysis_id', 'core_keyword', 'kind', 'today_count', 'blocked_on_resume', 'retry_at', 'interval_ms']
             && $e['ip'] === '125.186.176.132' && $e['collector'] === 'browser' && $e['analysis_id'] === $a->id && $e['kind'] === $kind
             && ($kind === 'success' ? $e['retry_at'] === null : $e['retry_at'] === now('Asia/Seoul')->addMinutes(3)->toIso8601String())
         ))->once();

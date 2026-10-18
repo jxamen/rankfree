@@ -10,7 +10,12 @@ use Throwable;
 
 class ShopExposureBlockAlert
 {
-    public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false): void
+    public static function interval(string $ip): int
+    {
+        return min(10000, 3000 + 300 * (int) Cache::get('shop-block:'.hash('sha256', $ip).':'.now('Asia/Seoul')->format('Y-m-d'), 0));
+    }
+
+    public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
     {
         if ($kind === 'success') {
             Cache::forget('shop-exposure:error:'.$analysis->id);
@@ -19,7 +24,7 @@ class ShopExposureBlockAlert
             }
         }
         try {
-            Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($analysis, $ip, $collector, $kind, $blockedOnResume) {
+            Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($analysis, $ip, $collector, $kind, $blockedOnResume, $intervalMs) {
                 $now = now('Asia/Seoul');
                 $key = 'shop-block:'.hash('sha256', $ip);
                 $state = Cache::get($key, []);
@@ -31,13 +36,15 @@ class ShopExposureBlockAlert
                 }
                 $event = ['ip' => $ip, 'collector' => $collector, 'analysis_id' => $analysis->id,
                     'core_keyword' => $analysis->core_keyword, 'kind' => $kind, 'today_count' => $count,
-                    'blocked_on_resume' => $blockedOnResume, 'retry_at' => $kind === 'success' ? null : $now->copy()->addMinutes(3)->toIso8601String()];
+                    'blocked_on_resume' => $blockedOnResume, 'retry_at' => $kind === 'success' ? null : $now->copy()->addMinutes(3)->toIso8601String(),
+                    'interval_ms' => max(self::interval($ip), min(10000, $intervalMs ?? 3000))];
                 Log::info('shop_exposure_block_event', $event);
                 $token = config('services.slack.notifications.bot_user_oauth_token');
                 $channel = config('services.slack.shop_exposure_block_channel');
                 $grouped = $kind !== 'success' && !empty($state['ts']) && ($state['last_block'] ?? 0) > $now->timestamp - 600;
                 $keyword = str_replace(["\n", "\r", '<', '>', '&'], [' ', ' ', '〈', '〉', '＆'], (string) $analysis->core_keyword);
                 $text = '<!channel> '.$now->format('Y-m-d H:i:s').' KST · '.$ip.'/'.$collector.' · 분석 #'.$analysis->id.' '.$keyword.' · '.($kind === 'success' ? '재개' : $kind).' · 같은 IP 오늘 '.$count.'번째 · 다음 재시도 '.($kind === 'success' ? '—' : $now->copy()->addMinutes(3)->format('H:i:s').' KST');
+                $text .= ' · interval_ms '.$event['interval_ms'];
                 $next = ['active' => $kind !== 'success', 'last_block' => $kind === 'success' ? 0 : $now->timestamp];
                 if ($token) {
                     try {

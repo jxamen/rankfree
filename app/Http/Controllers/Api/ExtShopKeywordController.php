@@ -34,8 +34,9 @@ class ExtShopKeywordController extends Controller
             'kind' => 'required|in:403,429,보안문자,success',
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
+            'interval_ms' => 'sometimes|nullable|integer|min:3000|max:10000',
         ]);
-        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false);
+        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
         return response()->json(['ok' => true]);
     }
 
@@ -214,6 +215,8 @@ class ExtShopKeywordController extends Controller
         $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get(['id', 'keyword']);
 
         return response()->json(['data' => [
+            'collector_ip' => $request->ip(),
+            'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'analysis_id' => (int) $analysis->id,
             'items' => $items->map(fn ($i) => ['item_id' => (int) $i->id, 'keyword' => (string) $i->keyword])->all(),
         ] + $this->analyzer->progress($analysis)]);

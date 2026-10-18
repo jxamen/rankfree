@@ -33,7 +33,7 @@ for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])te
  const policy=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},cache:{get:async()=>null,put:async()=>{}}});
  const context=vm.createContext({shopSerpPolicy:policy,shopSerpTab:{read:async kw=>{tabs++;assert.equal(kw,'same');return tabOK?{ok:true,status:200,html:'data'}:{ok:false,captcha:true,status:200};}},
  chrome:{storage:{local:{get:async()=>({rfSerpMode:mode,rfSerpPolicy:store.rfSerpPolicy})}},action:{setBadgeText(){}},alarms:{clear(){}}},
- fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:f=>{waits.push(1600);f();},
+ fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:(f,ms)=>{waits.push(ms);f();},
  getStore:async()=>({}),apiFetch:async(_,v)=>events.push(v.body)});
  const r=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"same",analysisId:70});',context);
  assert.equal(r.ok,tabOK);assert.equal(tabs,1);assert.equal(fetches,mode==='request'?1:0);assert.equal(waits.length,mode==='request'?1:0);

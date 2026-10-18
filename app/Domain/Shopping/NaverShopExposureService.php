@@ -24,6 +24,12 @@ class NaverShopExposureService
     /** slot API 가 실제로 돌려주는 상한(실측) — 더 크게 요청해도 20위까지만 온다. */
     public const SLOT_MAX = 20;
 
+    public static function policyKey(): string
+    {
+        $ip = (string) config('rankfree.shopping.exposure.collector_ip', '');
+        return 'shop-serp:server-policy'.($ip ? ':'.hash('sha256', $ip) : '');
+    }
+
     /**
      * @param  array  $target  resolveTarget() 결과(type/product_id/mall_name)
      * @return array{found:bool, rank:int, ad:bool, total:int, blocked:bool, error?:string}
@@ -47,24 +53,29 @@ class NaverShopExposureService
             if (Cache::has($cacheKey)) {
                 return $this->rankFromHtml(Cache::get($cacheKey), $target) + $out;
             }
-            $state = Cache::get('shop-serp:server-policy', []);
+            $state = Cache::get(self::policyKey(), []);
+            $day = now('Asia/Seoul')->format('Y-m-d');
+            if (isset($state['day']) && $state['day'] !== $day) { $state['gap'] = 3000; }
+            $state['day'] = $day;
             if (($state['until'] ?? 0) > microtime(true) + 180) {
                 $state['until'] = microtime(true) + 180;
-                Cache::put('shop-serp:server-policy', $state, now()->addDay());
+                Cache::put(self::policyKey(), $state, now()->addDay());
             }
             if (microtime(true) < ($state['until'] ?? 0)) {
                 return ['blocked' => true, 'error' => 'collector_cooldown'] + $out;
             }
-            $floor = max(1600, (int) config('rankfree.shopping.exposure.min_interval_ms', 1600));
-            $gap = max($floor, (int) ($state['gap'] ?? $floor));
-            $wait = max(0, ($state['last'] ?? 0) + $gap / 1000 - microtime(true));
+            $floor = min(10000, max(3000, (int) config('rankfree.shopping.exposure.min_interval_ms', 3000)));
+            $gap = min(10000, max($floor, (int) ($state['gap'] ?? $floor)));
+            $state['gap'] = $gap;
+            $interval = min(10000, $gap + random_int(0, 1000));
+            $wait = max(0, ($state['last'] ?? 0) + $interval / 1000 - microtime(true));
             if ($wait > 0) {
                 usleep((int) ($wait * 1000000));
             }
             $resumedAfterBlock = ! empty($state['until']);
             $previous = $state['last'] ?? null;
             $state['last'] = microtime(true);
-            Cache::put('shop-serp:server-policy', $state, now()->addDay());
+            Cache::put(self::policyKey(), $state, now()->addDay());
             $r = Http::withHeaders([
                 'user-agent' => self::MO_UA,
                 'accept' => 'text/html,application/xhtml+xml',
@@ -74,21 +85,21 @@ class NaverShopExposureService
             $captcha = strlen($html) < 150000 && preg_match('/비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한/u', $html);
             $blocked = in_array($r->status(), [403, 429], true) || $captcha;
             if ($blocked) {
-                $state['gap'] = $gap;
+                $state['gap'] = min(10000, $gap + 300);
                 $state['until'] = microtime(true) + 180;
                 $state['successes'] = 0;
             } elseif ($r->ok()) {
                 $state['until'] = 0;
             }
-            Cache::put('shop-serp:server-policy', $state, now()->addDay());
+            Cache::put(self::policyKey(), $state, now()->addDay());
             Log::info('shop_serp_request', ['collector' => 'server', 'status' => $r->status(), 'captcha' => (bool) $captcha,
                 'interval_ms' => $previous === null ? null : round(($state['last'] - $previous) * 1000),
                 'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked, 'slow_entry' => (bool) $blocked, 'gap_ms' => $state['gap'] ?? $gap]);
             if (! $r->ok() || $captcha) {
-                return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status(), 'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked] + $out;
+                return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status(), 'interval_ms' => $state['gap'], 'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked] + $out;
             }
             Cache::put($cacheKey, $html, now('Asia/Seoul')->endOfDay());
-            return $this->rankFromHtml($html, $target) + $out;
+            return ['interval_ms' => $state['gap']] + $this->rankFromHtml($html, $target) + $out;
         } catch (Throwable) {
             return ['blocked' => true, 'error' => 'http_exception'] + $out;
         } finally {

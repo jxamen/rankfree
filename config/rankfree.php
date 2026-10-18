@@ -205,7 +205,7 @@ return [
             'batch_size' => (int) env('SHOP_EXPOSURE_BATCH_SIZE', 15), // 폴링 1회에 순위체크할 조합 수
             'batch_sec' => (int) env('SHOP_EXPOSURE_BATCH_SEC', 12),   // 폴링 1회 시간예산(초) — 게이트웨이 타임아웃 방지
             // Provisional floor; historical outbound telemetry is unavailable.
-            'min_interval_ms' => (int) env('SHOP_EXPOSURE_MIN_INTERVAL_MS', 1600),
+            'min_interval_ms' => (int) env('SHOP_EXPOSURE_MIN_INTERVAL_MS', 3000),
             'fetch_delay_ms' => (int) env('SHOP_EXPOSURE_FETCH_DELAY_MS', 250), // 순위체크 fetch 간 간격(m.search IP rate-limit 완화)
             // 어미/수식어 — "{핵심} {어미}" 조합을 대량 생성한다. 관리자·사용자가 추가 가능(입력창).
             'suffixes' => [
