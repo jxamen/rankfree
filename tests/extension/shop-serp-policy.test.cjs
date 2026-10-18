@@ -194,3 +194,13 @@ test('source-less same-day cache is refetched, and shopping source survives cach
  const cached=await policy.run('legacy',fetcher);
  assert.equal(cached.cached,true);assert.equal(cached.result_source,'shopping');assert.equal(calls,1);
 });
+
+test('resume preserves last completion and waits the remaining configured gap',async()=>{
+ const f=fixture();await f.policy.run('A',async()=>({ok:true,result_source:'shopping'}));
+ const last=f.data.rfSerpPolicy.last;f.advance(500);
+ await f.policy.resume('browser');assert.equal(f.data.rfSerpPolicy.last,last);
+ let started;await f.policy.run('B',async()=>{started=f.now();return {ok:true,result_source:'shopping'};});
+ assert.equal(started-last,4000);
+ f.advance(60000);await f.policy.resume('browser');const now=f.now();
+ await f.policy.run('C',async()=>({ok:true,result_source:'shopping'}));assert.equal(f.now(),now);
+});
