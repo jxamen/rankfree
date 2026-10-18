@@ -85,7 +85,7 @@ class ShopKeywordCollectionTargetTest extends TestCase
         $this->postJson('/api/v1/shop-keywords', $data)->assertUnprocessable();
     }
 
-    public function test_kst_same_day_reuses_pending_and_completed_but_next_day_creates_new(): void
+    public function test_kst_today_and_yesterday_reuse_but_two_days_later_creates_new(): void
     {
         Http::fake();
         $this->travelTo(\Carbon\Carbon::parse('2026-10-18 23:59:00', 'Asia/Seoul'));
@@ -107,7 +107,9 @@ class ShopKeywordCollectionTargetTest extends TestCase
         }
         $other = $data; $other['product'] = 'https://smartstore.naver.com/x/products/222';
         $this->postJson('/api/v1/shop-keywords', $other)->assertCreated()->assertJsonPath('reused', false);
-        $this->travel(2)->minutes();
+        $this->travel(2)->minutes();   // 다음 날(어제 만든 것) — 이어서 쓴다
+        $this->postJson('/api/v1/shop-keywords', $data)->assertOk()->assertJsonPath('analysis.id', $a->id)->assertJsonPath('reused', true);
+        $this->travel(1)->days();      // 그다음 날(그저께 만든 것) — 새로 만든다
         $new = $this->postJson('/api/v1/shop-keywords', $data)->assertCreated()->assertJsonPath('reused', false);
         $this->assertNotSame($a->id, $new->json('analysis.id'));
         $this->travelBack();
