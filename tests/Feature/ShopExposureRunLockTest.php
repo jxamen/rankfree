@@ -25,6 +25,37 @@ class ShopExposureRunLockTest extends TestCase
         return $a;
     }
 
+    public function test_same_analysis_can_refresh_after_page_or_worker_restart(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'page:old', $a->id)['ok']);
+        $this->travel(30)->seconds();
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'ext:new', $a->id)['ok']);
+        $holder = \Illuminate\Support\Facades\Cache::get('shop-exposure:runner:ip:192.0.2.1');
+        $this->assertSame('ext:new', $holder['owner']);
+        $this->assertSame(now()->timestamp, $holder['at']);
+    }
+
+    public function test_stopped_or_stale_holder_yields_but_active_other_analysis_does_not(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = $this->analysis($u);
+        $b = $this->analysis($u);
+        $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+        $key = 'shop-exposure:runner:ip:192.0.2.1';
+        foreach (['done', 'target_reached', 'ad_ended', 'paused', 'checking'] as $status) {
+            ShopKeywordAnalysis::whereKey($a->id)->update(['status' => $status, 'collection_seen_at' => now()]);
+            \Illuminate\Support\Facades\Cache::put($key, ['owner' => 'same-token', 'analysis_id' => $a->id, 'at' => now()->timestamp], 600);
+            $r = $lock->acquire('ip:192.0.2.1', 'same-token', $b->id);
+            $this->assertSame($status !== 'checking', $r['ok'], $status);
+        }
+        ShopKeywordAnalysis::whereKey($a->id)->update(['collection_seen_at' => now()->subSeconds(91)]);
+        \Illuminate\Support\Facades\Cache::put($key, ['owner' => 'old-worker', 'analysis_id' => $a->id, 'at' => now()->subSeconds(91)->timestamp], 600);
+        $this->assertTrue($lock->acquire('ip:192.0.2.1', 'new-worker', $b->id)['ok']);
+    }
+
     public function test_second_runner_waits_until_first_releases_or_expires(): void
     {
         $u = User::factory()->create(['role' => 'operator']);

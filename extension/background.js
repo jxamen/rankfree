@@ -1032,7 +1032,7 @@ Object.assign(handlers, {
     }
     return { ok: true, status: res.status, html: picked };
     });
-    if (analysisId && !result.cached && !result.cooldown) {
+    if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
       const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
       if (kind) {
         try {
@@ -1040,7 +1040,7 @@ Object.assign(handlers, {
           const policy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
           await apiFetch('/api/ext/shop-keyword/' + Number(analysisId) + '/collector-event', {
             method: 'POST', token, apiBase,
-            body: { kind, collector: sender && sender.tab ? 'screen' : 'extension', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume },
+            body: { kind, collector: 'browser', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume },
           });
         } catch (e) { /* reporting must not interrupt collection */ }
       }

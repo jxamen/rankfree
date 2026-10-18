@@ -21,7 +21,8 @@ class ShopCollectionIpTest extends TestCase
         $this->assertSame('203.0.113.18', $a->collection_ip);
         $this->assertSame('확장 수집기', $a->collection_source);
         $this->assertArrayNotHasKey('collection_ip', $a->toArray());
-        $busy = $lock->acquire('ip:203.0.113.18', 'page:other', $a->id);
+        $b = ShopKeywordAnalysis::create(['user_id' => $a->user_id, 'core_keyword' => '다른 분석', 'status' => 'checking']);
+        $busy = $lock->acquire('ip:203.0.113.18', 'page:other', $b->id);
         $this->assertFalse($busy['ok']);
         $this->assertStringContainsString('203.0.113.18', $lock->busyMessage($busy['holder'], true));
         $this->assertStringNotContainsString('203.0.113.18', $lock->busyMessage($busy['holder']));

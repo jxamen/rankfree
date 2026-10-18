@@ -39,7 +39,8 @@ test('first request after cooldown blocked again renews wait and records resume'
  const f=fixture(); let calls=0;
  const block=async()=>{calls++;return {ok:false,status:403};};
  await f.policy.run('a',block); assert.equal(f.data.rfSerpPolicy.blockedOnResume,false);
- f.advance(180000); await f.policy.run('b',block);
+ f.advance(180000); const repeated = await f.policy.run('b',block);
+ assert.equal(repeated.blockedOnResume,true);
  assert.equal(f.data.rfSerpPolicy.blockedOnResume,true);
  assert.equal(f.data.rfSerpPolicy.http403,2); assert.equal(f.data.rfSerpPolicy.gap,1600);
  assert.equal(f.data.rfSerpPolicy.until,f.now()+180000);

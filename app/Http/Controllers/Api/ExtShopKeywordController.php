@@ -32,10 +32,10 @@ class ExtShopKeywordController extends Controller
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
             'kind' => 'required|in:403,429,보안문자,success',
-            'collector' => 'required|in:extension,screen',
+            'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
         ]);
-        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), $data['collector'], $data['kind'], $data['blocked_on_resume'] ?? false);
+        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false);
         return response()->json(['ok' => true]);
     }
 

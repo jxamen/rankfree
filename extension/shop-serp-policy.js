@@ -77,7 +77,7 @@ class ShopSerpPolicy {
       s.http429 = (s.http429 || 0) + (res.status === 429 ? 1 : 0);
       s.captchas = (s.captchas || 0) + (res.captcha ? 1 : 0);
       await this.storage.set({ rfSerpPolicy: s });
-      return res;
+      return { ...res, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
     } catch (e) { return { ok: false, message: '속도·당일 캐시 저장소 오류 — 수집을 멈췄습니다.' }; }
   }
 }
