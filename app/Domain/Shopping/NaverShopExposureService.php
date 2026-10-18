@@ -84,7 +84,7 @@ class NaverShopExposureService
                 'referer' => 'https://m.search.naver.com/',
             ])->timeout($timeout)->get('https://m.search.naver.com/search.naver', ['where' => 'm', 'query' => $kw]);
             $html = $r->body();
-            $captcha = strlen($html) < 150000 && preg_match('/비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한/u', $html);
+            $captcha = strlen($html) < 150000 && preg_match('/비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/u', $html);
             $blocked = in_array($r->status(), [403, 429], true) || $captcha;
             if ($blocked) {
                 $state['gap'] = min(30000, $gap + 300);
