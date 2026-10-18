@@ -24,11 +24,12 @@ const html = (slots, hidden=false) => `<nav><a role="tab" href="https://msearch.
   for(const [name,slots,integrated,hidden] of [
    ['rank one',[slot('ad',1,'AD'),slot('mine',1)],true],
    ['rank five',[slot('other',1),slot('mine',5)],true],
-   ['rank six',[slot('mine',6)],false],
-   ['ad only',[slot('mine',1,'AD'),slot('other',1)],false],
-   ['super point',[slot('mine',1,'SUPER_POINT')],false],
+   ['rank six',[slot('mine',6)],true],
+   ['ad only',[slot('mine',1,'AD'),slot('other',1)],true],
+   ['super point',[slot('mine',1,'SUPER_POINT')],true],
    ['hidden block',[slot('mine',1)],false,true],
-   ['no block',[],false],
+   ['no block',[],false,true],
+   ['empty block',[],true],
   ]) {
    await p.route('https://m.search.naver.com/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:html(slots,hidden)}));
    await p.goto('https://m.search.naver.com/search.naver?where=m&query=cup&case='+encodeURIComponent(name)+'#rfnav');
@@ -39,14 +40,15 @@ const html = (slots, hidden=false) => `<nav><a role="tab" href="https://msearch.
     setTimeout(()=>{window.ready='complete';a.style.display='';window.readyAt=Date.now();},350);
     Math.random=()=>0;
    });
+   const began=Date.now();
    await p.evaluate(nav);
    if(integrated) {
     assert.match(p.url(),/#rfnav$/);
     const state=await p.evaluate(()=>({r:window.navResult,events:window.events,at:window.readyAt}));
     assert.equal(state.r.result_source,'integrated');
-    assert.ok(state.events.at(-1).at-state.at>=1500);
+    assert.equal(state.at,undefined); // decision while still loading, without dwell
     assert.equal(state.events.some(e=>e.type==='scroll'||e.type==='click'),false);
-    evidence.push({name,screen:'integrated',dwellMs:state.events.at(-1).at-state.at});
+    evidence.push({name,screen:'integrated',elapsedMs:Date.now()-began, decidedBeforeComplete:state.at===undefined});
    } else {
     await p.waitForURL('**/search/all?query=cup#rfserp');
     evidence.push({name,screen:'shopping'});

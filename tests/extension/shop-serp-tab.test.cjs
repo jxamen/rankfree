@@ -123,3 +123,15 @@ test('target request reaches only its active collection reader, without generic 
  f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[{channelProductId:'111',rank:1}],result_source:'integrated'}},{tab:{id:7}});
  assert.equal((await p).result_source,'integrated');
 });
+
+test('tabless shopping HTML normalizes embedded list, identity and advertisements for server ranking', () => {
+ const root={props:{pageProps:{shoppingResult:{products:[
+  {item:{channelProductId:'ad',productTitle:'advertisement',rank:1,mallName:'mall',adType:'1'}},
+  {item:{channelProductId:'mine',nvMid:'catalog',productTitle:'organic',rank:3,mallName:'mall'}},
+ ]}}}};
+ const html=ShopSerpTab.fetchedHtml('<script id="__NEXT_DATA__" type="application/json">'+JSON.stringify(root)+'</script>');
+ const state=JSON.parse(html.match(/= ([\s\S]*);<\/script>/)[1]);
+ const slots=state.initProps.pagedSlot[0].slots;
+ assert.equal(slots[0].data.sourceType,'AD');assert.equal(slots[1].data.channelProductId,'mine');
+ assert.equal(slots[1].data.nvMid,'catalog');assert.equal(slots[1].data.rank,3);
+});

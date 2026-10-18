@@ -94,7 +94,7 @@ class ShopSerpPolicy {
       const previous = s.last;
       s.last = this.now();
       await save();
-      const res = await fetcher();
+      const res = await fetcher(s.gap);
       // Include the 403 tab recheck in spacing: next navigation waits after completion.
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {

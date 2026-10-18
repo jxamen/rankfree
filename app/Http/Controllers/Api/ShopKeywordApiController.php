@@ -34,6 +34,12 @@ class ShopKeywordApiController extends Controller
     /** 분석 생성 + 순위 확인 자동 시작. */
     public function store(Request $request)
     {
+        return \Illuminate\Support\Facades\Cache::lock('shop-keyword:create:'.$request->user()->id, 120)
+            ->block(15, fn () => $this->storeLocked($request));
+    }
+
+    private function storeLocked(Request $request)
+    {
         $data = $request->validate([
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
@@ -65,18 +71,20 @@ class ShopKeywordApiController extends Controller
         // 같은 회원이 같은 키워드 + 같은 상품을 다시 요청하면 새로 만들지 않고 기존 분석을 돌려준다(2026-07-29).
         // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
         if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
-            if ($orderMeta) {
+            if ($existing->status === 'paused' && ! $existing->targetReached()) {
+                $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
+            }
+            if ($orderMeta && ! in_array($existing->status, ['done', 'target_reached', 'ad_ended'])) {
                 $existing->update($orderMeta);
                 if ($existing->targetReached()) {
                     $existing->update(['status' => 'target_reached']);
-                } elseif ($existing->status === 'target_reached') {
-                    // A longer order can resume the still-unchecked combinations.
-                    $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
                 }
             }
 
             return response()->json([
                 'analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
+                'reuse_mode' => 'reused',
+                'reuse_label' => '재사용(이어서)',
                 'reused' => true,   // 새로 만들지 않고 기존 분석을 돌려줬다
             ]);
         }
@@ -113,6 +121,9 @@ class ShopKeywordApiController extends Controller
 
         return response()->json([
             'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis, $this->oneProductInfo($analysis))],
+            'reused' => false,
+            'reuse_mode' => 'new',
+            'reuse_label' => '새로',
         ], 201);
     }
 
@@ -160,6 +171,8 @@ class ShopKeywordApiController extends Controller
 
         return ShopKeywordAnalysis::where('user_id', $userId)
             ->where('core_keyword', $coreKeyword)
+            ->where('created_at', '>=', now('Asia/Seoul')->startOfDay()->setTimezone(config('app.timezone')))
+            ->where('created_at', '<', now('Asia/Seoul')->addDay()->startOfDay()->setTimezone(config('app.timezone')))
             ->when($pid !== '',
                 fn ($q) => $q->where('product_id', $pid),
                 // ⚠️ orWhere 는 반드시 그룹으로 — 안 묶으면 user_id·core_keyword 조건을 빠져나간다

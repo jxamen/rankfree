@@ -1,0 +1,352 @@
+TAP version 13
+# Subtest: background reports actual browser result {"ok":false,"status":403}
+ok 1 - background reports actual browser result {"ok":false,"status":403}
+  ---
+  duration_ms: 1.012292
+  type: 'test'
+  ...
+# Subtest: background reports actual browser result {"ok":false,"status":429}
+ok 2 - background reports actual browser result {"ok":false,"status":429}
+  ---
+  duration_ms: 0.273208
+  type: 'test'
+  ...
+# Subtest: background reports actual browser result {"ok":false,"status":200,"captcha":true}
+ok 3 - background reports actual browser result {"ok":false,"status":200,"captcha":true}
+  ---
+  duration_ms: 0.21525
+  type: 'test'
+  ...
+# Subtest: background reports actual browser result {"ok":true,"status":200}
+ok 4 - background reports actual browser result {"ok":true,"status":200}
+  ---
+  duration_ms: 0.347041
+  type: 'test'
+  ...
+# Subtest: screen delegates delivery to page session; cached and cooldown replies emit no extra events
+ok 5 - screen delegates delivery to page session; cached and cooldown replies emit no extra events
+  ---
+  duration_ms: 1.146334
+  type: 'test'
+  ...
+# Subtest: console bridge forwards IP and interval to the shared collection policy
+ok 6 - console bridge forwards IP and interval to the shared collection policy
+  ---
+  duration_ms: 0.566167
+  type: 'test'
+  ...
+# Subtest: tabless checks integrated first, falls back only without shopping block and never opens a tab
+ok 7 - tabless checks integrated first, falls back only without shopping block and never opens a tab
+  ---
+  duration_ms: 2.138959
+  type: 'test'
+  ...
+# Subtest: background drains beyond alarm budget with no success sleeps, and proceeds after a reached target
+ok 8 - background drains beyond alarm budget with no success sleeps, and proceeds after a reached target
+  ---
+  duration_ms: 3.89125
+  type: 'test'
+  ...
+# Subtest: background inspects the same keyword every 1.5 seconds until human recovery, then saves
+ok 9 - background inspects the same keyword every 1.5 seconds until human recovery, then saves
+  ---
+  duration_ms: 0.879417
+  type: 'test'
+  ...
+# Subtest: admin extension loop keeps browser work until human recovery even with stale fallback replies
+ok 10 - admin extension loop keeps browser work until human recovery even with stale fallback replies
+  ---
+  duration_ms: 1.193417
+  type: 'test'
+  ...
+# Subtest: admin clears the old failure notice on the next successful progress response
+ok 11 - admin clears the old failure notice on the next successful progress response
+  ---
+  duration_ms: 0.438917
+  type: 'test'
+  ...
+# Subtest: legacy queue wait migrates before early return; permission pause is preserved
+ok 12 - legacy queue wait migrates before early return; permission pause is preserved
+  ---
+  duration_ms: 0.435916
+  type: 'test'
+  ...
+# Subtest: continue now releases server and extension waits, then reloads without supplement collection
+ok 13 - continue now releases server and extension waits, then reloads without supplement collection
+  ---
+  duration_ms: 0.496417
+  type: 'test'
+  ...
+# Subtest: screen and queue calls serialize and share same-day raw HTML cache; tomorrow refetches
+ok 14 - screen and queue calls serialize and share same-day raw HTML cache; tomorrow refetches
+  ---
+  duration_ms: 10.584458
+  type: 'test'
+  ...
+# Subtest: block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":403}
+ok 15 - block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":403}
+  ---
+  duration_ms: 0.3595
+  type: 'test'
+  ...
+# Subtest: block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":429}
+ok 16 - block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":429}
+  ---
+  duration_ms: 0.307125
+  type: 'test'
+  ...
+# Subtest: block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":200,"captcha":true}
+ok 17 - block pauses 3 minutes and adds 300ms spacing: {"ok":false,"status":200,"captcha":true}
+  ---
+  duration_ms: 0.467833
+  type: 'test'
+  ...
+# Subtest: 165 successes retain interval without periodic rests
+ok 18 - 165 successes retain interval without periodic rests
+  ---
+  duration_ms: 24.72575
+  type: 'test'
+  ...
+# Subtest: first request after cooldown blocked again renews wait and records resume
+ok 19 - first request after cooldown blocked again renews wait and records resume
+  ---
+  duration_ms: 0.302583
+  type: 'test'
+  ...
+# Subtest: storage failure stops before network
+ok 20 - storage failure stops before network
+  ---
+  duration_ms: 0.207792
+  type: 'test'
+  ...
+# Subtest: repeated blocks always wait exactly three minutes without a retry limit
+ok 21 - repeated blocks always wait exactly three minutes without a retry limit
+  ---
+  duration_ms: 1.516125
+  type: 'test'
+  ...
+# Subtest: legacy thirty minute policy is capped once, expires and clears queue state on success
+ok 22 - legacy thirty minute policy is capped once, expires and clears queue state on success
+  ---
+  duration_ms: 0.368
+  type: 'test'
+  ...
+# Subtest: network failure preserves restriction history and permission pause survives SERP success
+ok 23 - network failure preserves restriction history and permission pause survives SERP success
+  ---
+  duration_ms: 0.363375
+  type: 'test'
+  ...
+# Subtest: next request waits 4000ms after a long tab read or 403 fallback completes
+ok 24 - next request waits 4000ms after a long tab read or 403 fallback completes
+  ---
+  duration_ms: 0.2825
+  type: 'test'
+  ...
+# Subtest: IP gaps persist on success, cap at 30 seconds, and reset next KST day
+ok 25 - IP gaps persist on success, cap at 30 seconds, and reset next KST day
+  ---
+  duration_ms: 7.216584
+  type: 'test'
+  ...
+# Subtest: spacing has no jitter even when random returns one
+ok 26 - spacing has no jitter even when random returns one
+  ---
+  duration_ms: 0.192125
+  type: 'test'
+  ...
+# Subtest: server revision resets persisted interval on next request, including cache and cooldown
+ok 27 - server revision resets persisted interval on next request, including cache and cooldown
+  ---
+  duration_ms: 0.296584
+  type: 'test'
+  ...
+# Subtest: human recovery clears only cooldown and preserves IP increments, counters and next spacing
+ok 28 - human recovery clears only cooldown and preserves IP increments, counters and next spacing
+  ---
+  duration_ms: 0.2755
+  type: 'test'
+  ...
+# Subtest: explicit continue clears waits and preserves block counts, then retries same keyword
+ok 29 - explicit continue clears waits and preserves block counts, then retries same keyword
+  ---
+  duration_ms: 0.193667
+  type: 'test'
+  ...
+# Subtest: saved 1 second interval supports 300ms increments and date reset to saved base
+ok 30 - saved 1 second interval supports 300ms increments and date reset to saved base
+  ---
+  duration_ms: 0.162917
+  type: 'test'
+  ...
+# Subtest: integrated top-five cache is scoped to the product target
+ok 31 - integrated top-five cache is scoped to the product target
+  ---
+  duration_ms: 0.215
+  type: 'test'
+  ...
+# Subtest: tab collection waits the configured interval after each completed result
+ok 32 - tab collection waits the configured interval after each completed result
+  ---
+  duration_ms: 0.484833
+  type: 'test'
+  ...
+# Subtest: tab reads trusted sender only, preserves product identity and cleans all listeners
+ok 33 - tab reads trusted sender only, preserves product identity and cleans all listeners
+  ---
+  duration_ms: 3.102041
+  type: 'test'
+  ...
+# Subtest: tab captcha returns without closing tab
+ok 34 - tab captcha returns without closing tab
+  ---
+  duration_ms: 0.385792
+  type: 'test'
+  ...
+# Subtest: tab timeout returns without closing tab
+ok 35 - tab timeout returns without closing tab
+  ---
+  duration_ms: 22.122958
+  type: 'test'
+  ...
+# Subtest: tab closed returns without closing tab
+ok 36 - tab closed returns without closing tab
+  ---
+  duration_ms: 0.247167
+  type: 'test'
+  ...
+# Subtest: mode undefined, tab success true applies only final result to block policy
+ok 37 - mode undefined, tab success true applies only final result to block policy
+  ---
+  duration_ms: 9.185166
+  type: 'test'
+  ...
+# Subtest: mode undefined, tab success false applies only final result to block policy
+ok 38 - mode undefined, tab success false applies only final result to block policy
+  ---
+  duration_ms: 0.417958
+  type: 'test'
+  ...
+# Subtest: mode tab, tab success true applies only final result to block policy
+ok 39 - mode tab, tab success true applies only final result to block policy
+  ---
+  duration_ms: 0.379292
+  type: 'test'
+  ...
+# Subtest: mode tab, tab success false applies only final result to block policy
+ok 40 - mode tab, tab success false applies only final result to block policy
+  ---
+  duration_ms: 0.280375
+  type: 'test'
+  ...
+# Subtest: mode request, tab success true applies only final result to block policy
+ok 41 - mode request, tab success true applies only final result to block policy
+  ---
+  duration_ms: 0.431584
+  type: 'test'
+  ...
+# Subtest: mode request, tab success false applies only final result to block policy
+ok 42 - mode request, tab success false applies only final result to block policy
+  ---
+  duration_ms: 0.44525
+  type: 'test'
+  ...
+# Subtest: document-only reader products
+ok 43 - document-only reader products
+  ---
+  duration_ms: 0.439208
+  type: 'test'
+  ...
+# Subtest: document-only reader empty
+ok 44 - document-only reader empty
+  ---
+  duration_ms: 0.239958
+  type: 'test'
+  ...
+# Subtest: document-only reader captcha
+ok 45 - document-only reader captcha
+  ---
+  duration_ms: 0.205958
+  type: 'test'
+  ...
+# Subtest: document-only reader unknown
+ok 46 - document-only reader unknown
+  ---
+  duration_ms: 0.35775
+  type: 'test'
+  ...
+# Subtest: reuses one tab across keywords and worker instances; recreates only after user closes it
+ok 47 - reuses one tab across keywords and worker instances; recreates only after user closes it
+  ---
+  duration_ms: 2.02075
+  type: 'test'
+  ...
+# Subtest: reuses tab after captcha
+ok 48 - reuses tab after captcha
+  ---
+  duration_ms: 0.341875
+  type: 'test'
+  ...
+# Subtest: reuses tab after timeout
+ok 49 - reuses tab after timeout
+  ---
+  duration_ms: 22.339916
+  type: 'test'
+  ...
+# Subtest: passive peek survives reader restart, reads only matching keyword and never navigates a gate
+ok 50 - passive peek survives reader restart, reads only matching keyword and never navigates a gate
+  ---
+  duration_ms: 1.215
+  type: 'test'
+  ...
+# Subtest: passive document probe only accepts normal results: captcha
+ok 51 - passive document probe only accepts normal results: captcha
+  ---
+  duration_ms: 0.40025
+  type: 'test'
+  ...
+# Subtest: passive document probe only accepts normal results: unknown
+ok 52 - passive document probe only accepts normal results: unknown
+  ---
+  duration_ms: 0.361
+  type: 'test'
+  ...
+# Subtest: passive document probe only accepts normal results: products
+ok 53 - passive document probe only accepts normal results: products
+  ---
+  duration_ms: 0.252
+  type: 'test'
+  ...
+# Subtest: passive document probe only accepts normal results: empty
+ok 54 - passive document probe only accepts normal results: empty
+  ---
+  duration_ms: 0.213958
+  type: 'test'
+  ...
+# Subtest: loaded document scrolls once and settles before reading rank
+ok 55 - loaded document scrolls once and settles before reading rank
+  ---
+  duration_ms: 0.232834
+  type: 'test'
+  ...
+# Subtest: target request reaches only its active collection reader, without generic reply racing it
+ok 56 - target request reaches only its active collection reader, without generic reply racing it
+  ---
+  duration_ms: 0.835208
+  type: 'test'
+  ...
+# Subtest: tabless shopping HTML normalizes embedded list, identity and advertisements for server ranking
+ok 57 - tabless shopping HTML normalizes embedded list, identity and advertisements for server ranking
+  ---
+  duration_ms: 0.376167
+  type: 'test'
+  ...
+1..57
+# tests 57
+# suites 0
+# pass 57
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 127.4645

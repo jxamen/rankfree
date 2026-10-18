@@ -13,6 +13,34 @@ class ShopSerpTab {
     } }));
     return '<script>var _INITIAL_STATE = ' + JSON.stringify({ initProps: { pagedSlot: [{ slots }] } }).replace(/</g, '\\u003c') + ';</script>';
   }
+  // The fetch option uses the same embedded shopping list and ad fields as the tab reader.
+  static fetchedHtml(html) {
+    const match = html.match(/<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (!match) return html;
+    const candidates = [];
+    function walk(node, key = '', depth = 0) {
+      if (!node || typeof node !== 'object' || depth > 12) return;
+      if (Array.isArray(node)) {
+        const sample = node[0]?.item || node[0];
+        if (sample && typeof sample === 'object' && ['productTitle','productName','lowPrice','reviewCount','mallName','rank'].filter(k => k in sample).length >= 2) {
+          candidates.push({list: node, promo: /superSaving|adProduct|\bads?\b/i.test(key), wrapped: !!node[0].item});
+        } else if (node.length) walk(node[0], key, depth + 1);
+      } else for (const k of Object.keys(node)) walk(node[k], k, depth + 1);
+    }
+    walk(JSON.parse(match[1]));
+    const wrapped = candidates.filter(c => !c.promo && c.wrapped && c.list.length >= 10);
+    const main = candidates.filter(c => !c.promo);
+    const best = (wrapped.length ? wrapped : main.length ? main : candidates).sort((a,b) => b.list.length - a.list.length)[0];
+    if (!best) return html;
+    return ShopSerpTab.html(best.list.map((raw, i) => {
+      const p = raw.item || raw;
+      return {channelProductId: p.channelProductId || p.channel?.channelProductId || p.mallProductId,
+        nvMid: p.nvMid || p.id, rank: Number(p.rank) || i + 1,
+        isAd: !!(p.adId || raw.adId || p.adcrUrl || raw.adcrUrl || String(p.adType) === '1' || String(p.type || raw.type).toLowerCase() === 'supersaving' || best.promo),
+        title: p.productTitle || p.productName || p.title, mallName: p.mallName || p.lowMallList?.[0]?.name,
+        price: p.price || p.lowPrice || p.mobileLowPrice, link: p.mallProductUrl || p.crUrl || ''};
+    }));
+  }
   // Passive document inspection: never navigate, reload, solve, or change the active tab.
   async peek(keyword) {
     try {
@@ -46,6 +74,7 @@ class ShopSerpTab {
       else if (r && !r.ok) finish(r);
     };
     const onUpdated = (id, info) => {
+      if (id === tab?.id && /shopping\.naver\.com/.test(info.url || '')) globalThis.rfSerpCurrent = {keyword, screen: '쇼핑'};
       if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
     };
     const onRemoved = id => {

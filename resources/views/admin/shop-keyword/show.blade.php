@@ -10,6 +10,10 @@
 <div class="flex flex-wrap items-center gap-2 mb-3">
     <label for="sk-interval">간격(초)</label>
     <input id="sk-interval" class="input" style="width:90px" type="number" min="1" max="30" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::baseInterval() / 1000, 1, '.', '') }}">
+    <select id="sk-collection-mode" class="input" style="width:auto">
+      <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'tab')>브라우저 탭으로 열기</option>
+      <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
+    </select>
     <button id="sk-interval-save" type="button" class="btn btn-secondary btn-sm">저장</button>
     <button id="sk-interval-reset" type="button" class="btn btn-ghost btn-sm">간격 초기화</button>
     <button id="sk-continue-now" type="button" class="btn btn-secondary btn-sm" @disabled(in_array($analysis->status, ['ad_ended', 'target_reached']))>바로 이어서</button>
@@ -136,6 +140,8 @@
                 <button type="button" id="sk-resume" class="btn btn-secondary btn-sm {{ $isPaused ? '' : 'hidden' }}">이어서 확인</button>
             </div>
         </div>
+        <div id="sk-current" role="status" style="font-size:var(--fs-sm);"></div>
+        <div id="sk-last-result" style="font-size:var(--fs-sm);"></div>
         <div style="height:8px;background:var(--color-surface-soft);border-radius:var(--radius-pill);overflow:hidden;">
             <div id="sk-prog-fill" style="height:100%;background:var(--color-primary);border-radius:var(--radius-pill);transition:width .3s;width:{{ $analysis->combo_count ? round($analysis->checked_count / $analysis->combo_count * 100) : 0 }}%;"></div>
         </div>
@@ -790,7 +796,7 @@ window.__SK = {
         finally { button.disabled = false; }
     }
     document.getElementById('sk-interval-save').onclick = function () {
-        if (intervalInput.reportValidity()) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value });
+        if (intervalInput.reportValidity()) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value, collection_mode: document.getElementById('sk-collection-mode').value });
     };
     document.getElementById('sk-interval-reset').onclick = function () {
         saveGap(this, '{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
@@ -798,13 +804,13 @@ window.__SK = {
     document.getElementById('sk-continue-now').onclick = async function () {
         this.disabled = true;
         try {
-            if (!await waitExt(1500)) throw new Error('확장 0.6.1을 설치하고 새로고침해 주세요.');
+            if (!await waitExt(1500)) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
             stopped = true;
             const r = await post('{{ route('admin.shop-keyword.continue-now', $analysis) }}');
             if (!r.ok) throw new Error('재개할 수 없습니다.');
             const data = await r.json();
             const result = await extCall('resumeShopSerp', { collectorIp: data.collector_ip }, 90000);
-            if (!result?.ok) throw new Error('확장 0.6.1을 설치하고 새로고침해 주세요.');
+            if (!result?.ok) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
             sessionStorage.setItem('rf-continue-now-{{ (int) $analysis->id }}', '1');
             location.reload();
         } catch (e) { notice.textContent = e.message; this.disabled = false; }
@@ -820,6 +826,17 @@ window.__SK = {
         }
         if (!stopped && label) label.textContent = '순위 다시 확인 중…';
     }
+
+    let statusPending = false;
+    setInterval(async () => {
+        if (stopped || !extMode || statusPending) return;
+        statusPending = true;
+        try {
+            const state = await extCall('shopSerpStatus', {}, 1800);
+            const current = document.getElementById('sk-current');
+            if (current && state?.keyword) current.textContent = '지금: ' + state.keyword + ' · ' + state.screen;
+        } finally { statusPending = false; }
+    }, 1000);
 
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     async function runExtLoop() {
@@ -852,9 +869,10 @@ window.__SK = {
                         const policyResponse = await fetch(cfg.urls.pending + '?runner=' + RUNNER, { headers: { Accept: 'application/json' } });
                         if (!policyResponse.ok) { stopped = true; location.reload(); return; }
                         const fresh = (await policyResponse.json()).data;
-                        d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
+                        renderProgress(fresh); d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
-                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
+                    if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Only actual network results generate events; cached/cooldown replies do not.
                     if (res && !res.cached && !res.cooldown) {
@@ -869,7 +887,7 @@ window.__SK = {
                     if (stopped) return;
                     if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
+                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
                         await sleep(1500);
                         continue; // Keep the blocked tab for human recovery; retry after three minutes.
                     }
@@ -892,7 +910,7 @@ window.__SK = {
                         const p = await cr.json();
                         renderProgress(p);
                         if (label) label.textContent += intervalLabel();
-                        if (p.rank !== undefined && !p.skipped) applyItemResult(it, p);
+                        if (p.rank !== undefined && !p.skipped) { applyItemResult(it, p); const lastResult = document.getElementById('sk-last-result'); if (lastResult) lastResult.textContent = '직전: ' + it.keyword + ' · ' + (res.result_source === 'integrated' ? '통합검색' : '쇼핑') + ' → ' + (p.rank > 0 ? p.rank + '위' : '미노출'); if (label) label.textContent += ' · 직전: ' + it.keyword + ' · ' + (res.result_source === 'integrated' ? '통합검색' : '쇼핑') + ' → ' + (p.rank > 0 ? p.rank + '위' : '미노출'); }
                         if (['target_reached', 'ad_ended'].includes(p.status)) { stopped = true; return; }
                     }
                 } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }

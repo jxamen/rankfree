@@ -162,3 +162,13 @@ test('integrated top-five cache is scoped to the product target', async () => {
  const cached=await p.run('same',fetcher,'ip',1000,null,null,'product-a');
  assert.equal(a.html,'1');assert.equal(b.html,'2');assert.equal(cached.html,'1');assert.equal(cached.cached,true);
 });
+
+test('tab collection waits the configured interval after each completed result', async()=>{
+ for (const gap of [3500,4000,12500]) {
+  const f=fixture(); const ends=[],starts=[];
+  const fetcher=async()=>{starts.push(f.now());f.advance(2300);ends.push(f.now());return {ok:true,html:'tab'};};
+  await f.policy.run('first',fetcher,'browser',gap,'saved-'+gap);
+  await f.policy.run('second',fetcher,'browser',gap,'saved-'+gap);
+  assert.ok(starts[1]-ends[0]>=gap);
+ }
+});

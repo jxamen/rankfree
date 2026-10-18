@@ -29,7 +29,7 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         return response()->json(['data' => [
             'collector_ip' => $request->ip(),
-            'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
+            'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
         ]]);
     }
@@ -229,7 +229,7 @@ class ExtShopKeywordController extends Controller
 
         return response()->json(['data' => [
             'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
-            'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
+            'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'target' => $this->analyzer->targetOf($analysis),
             'analysis_id' => (int) $analysis->id,
             'items' => $items->map(fn ($i) => ['item_id' => (int) $i->id, 'keyword' => (string) $i->keyword])->all(),

@@ -64,8 +64,9 @@ class ShopKeywordExposureController extends Controller
     public function saveInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
     {
         abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
-        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1']);
+        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch']);
         \App\Models\AppSetting::write('shop.exposure.interval_ms', (string) round($data['seconds'] * 1000));
+        if (isset($data['collection_mode'])) \App\Models\AppSetting::write('shop.exposure.collection_mode', $data['collection_mode']);
         $response = $this->resetInterval($request, $analysis);
         \Illuminate\Support\Facades\Log::info('shop_exposure_interval_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
         return $response;
@@ -216,7 +217,7 @@ class ShopKeywordExposureController extends Controller
             app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
         }
 
-        return response()->json(['data' => ['target' => $this->analyzer->targetOf($analysis), 'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
+        return response()->json(['data' => ['target' => $this->analyzer->targetOf($analysis), 'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
     }
 
     /** 확장(브라우저)이 가져온 m.search HTML 로 조합 1건 순위 저장 — 서버 IP 한도와 무관한 기본 경로. */

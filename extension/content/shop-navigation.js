@@ -9,7 +9,7 @@
   function shoppingProducts() {
     const block = [...document.querySelectorAll('section, [data-shopping-block]')].find(el =>
       visible(el) && (el.matches('[data-slog-container="shp_lis"], [data-shopping-block]') || /네이버 쇼핑 인기상품/.test(el.querySelector('h2,h3')?.textContent || '')));
-    if (!block) return [];
+    if (!block) return null;
     for (const script of document.querySelectorAll('script')) {
       const text = script.textContent;
       const marker = /newshopping[\s\S]*?_INITIAL_STATE\s*=\s*/.exec(text);
@@ -38,20 +38,7 @@
         }
       }
     }
-    return [];
-  }
-  function topFive(products, target) {
-    const norm = s => String(s || '').trim().replace(/ /g, '').toLowerCase();
-    let organic = 0;
-    for (const p of products) {
-      if (p.isAd) continue;
-      organic++;
-      const matches = target.product_id
-        ? String(target.product_id) === (target.id_kind === 'nvmid' ? p.nvMid : p.channelProductId)
-        : !!norm(target.mall_name) && norm(p.mallName).includes(norm(target.mall_name));
-      if (matches) return (p.rank || organic) <= 5;
-    }
-    return false;
+    return document.readyState === 'loading' ? undefined : [];
   }
   let running = false, finished = false;
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -66,18 +53,13 @@
         if (blocked()) { await send({ok:false,captcha:true,status:200}); return; }
         const menu = [...document.querySelectorAll('a[href]')].find(a => visible(a) &&
           (a.getAttribute('role') === 'tab' || a.closest('nav, [role=tablist]')) && a.textContent.trim() === '쇼핑' && new URL(a.href, location.href).hostname.endsWith('.naver.com'));
-        if (document.readyState === 'complete' && menu) {
-          // No scrolling on integrated search. Recheck after the full dwell time.
-          await sleep(1500 + Math.floor(Math.random() * 1001));
-          if (blocked()) { await send({ok:false,captcha:true,status:200}); return; }
-          if (document.readyState !== 'complete' || !visible(menu)) continue;
-          const target = await chrome.runtime.sendMessage({type: '__rfSerpTarget'}) || {};
-          const products = shoppingProducts();
-          if (topFive(products, target)) {
-            finished = true;
-            await send({ok:true,status:200,products,result_source:'integrated'});
-            return;
-          }
+        const products = shoppingProducts();
+        if (Array.isArray(products)) {
+          finished = true;
+          await send({ok:true,status:200,products,result_source:'integrated'});
+          return;
+        }
+        if (menu && products === null) {
           const url = new URL(menu.href, location.href);
           url.hash = 'rfserp';
           menu.href = url.href;
