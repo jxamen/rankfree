@@ -19,7 +19,7 @@
   const ROUTES = {
     fetchShopSerp: (m) => ['fetchShopSerp', { keyword: String(m.keyword || ''), target: m.target || {}, parallel_tabs: Math.min(4, Math.max(1, Number(m.parallel_tabs) || 1)), tab_open_interval_ms: Math.min(60000, Math.max(0, Number(m.tab_open_interval_ms ?? 3000))), collection_mode: m.collection_mode === 'fetch' ? 'fetch' : 'tab', analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser'), interval_revision: m.interval_revision ?? null, interval_ms: Math.min(30000, Math.max(1000, Number(m.interval_ms) || 4000)) }],
     shopSerpStatus: () => ['shopSerpStatus', {}],
-    resumeShopSerp: (m) => ['resumeShopSerp', { collectorIp: String(m.collectorIp || 'browser') }],
+    resumeShopSerp: (m) => ['resumeShopSerp', { analysisId: Number(m.analysisId) || 0, collectorIp: String(m.collectorIp || 'browser') }],
     fetchKeywordSignals: (m) => ['fetchKeywordSignals', { keyword: String(m.keyword || '') }],
     collectProductPage: (m) => ['collectProductPage', { url: String(m.url || '') }],
   };

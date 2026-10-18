@@ -39,6 +39,18 @@ chrome.tabs.onRemoved.addListener(id => {
   }).catch(console.error);
 });
 
+// Serialize explicit resume and server-driven boosting-shop restart requests.
+let rfRestartWork = Promise.resolve();
+function restartShopSerp(analysisId, ip, onlyClosed = false) {
+  const job = rfRestartWork.then(async () => {
+    await rfCloseWork;
+    if (onlyClosed && (await shopSerpPool.closedSlots(String(analysisId))).length !== 4) return {ok:true};
+    return shopSerpPool.restart(analysisId, ip || 'browser');
+  });
+  rfRestartWork = job.catch(() => {});
+  return job;
+}
+
 const DEFAULT_API_BASE = 'https://rankfree.kr';
 
 
@@ -1103,9 +1115,7 @@ Object.assign(handlers, {
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
   async resumeShopSerp({ collectorIp, analysisId }) {
-    await rfCloseWork;
-    if (analysisId) await chrome.storage.local.set({['rfSerpClosed:' + analysisId]:[]});
-    return shopSerpPolicy.resume(collectorIp || 'browser');
+    return restartShopSerp(analysisId, collectorIp);
   },
   async __rfCollectionContext(_, sender) {
     const data = await chrome.storage.session.get(null);
@@ -1136,7 +1146,7 @@ Object.assign(handlers, {
           await apiFetch('/api/ext/shop-keyword/' + analysisId + '/collector-event', {method:'POST',token,apiBase,body:{kind:'tab_closed'}});
           return {ok:false,paused:true,tab_closed:true};
         }
-        await chrome.storage.local.set({[key]:[]});
+        await restartShopSerp(analysisId, collectorIp, true);
       }
     }
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지

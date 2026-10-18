@@ -6,6 +6,25 @@ class ShopSerpPool {
     this.lanes = new Map(); this.active = new Set(); this.affinity = new Map(); this.gates = new Map();
     this.admission = Promise.resolve(); this.startLane = Promise.resolve(); this.started = new Set();
   }
+  async restart(analysisId, ip = 'browser') {
+    const key = String(analysisId || 'legacy');
+    // Forget every document, including lanes not instantiated since SW suspension.
+    const session = {};
+    for (let slot = 0; slot < 4; slot++) {
+      const tail = slot ? ':lane:' + slot : '';
+      for (const name of ['rfSerpTabId', 'rfSerpTabKeyword', 'rfSerpAnalysisId', 'rfSerpRecovery']) session[name + tail] = null;
+      const lane = this.lanes.get(slot);
+      if (lane) { lane.tab.tabId = null; lane.tab.target = null; lane.tab.alternativeKeywords = []; }
+      await (lane?.policy || this.policyFactory(slot)).resume(ip);
+    }
+    await chrome.storage.session.set({...session, rfSerpLastOpened:0});
+    await this.storage.set({['rfSerpClosed:' + key]:[], ['rfSerpCloseAck:' + key]:false, ['rfSerpReduced:' + key]:null, rfSerpLastLaneStarted:0});
+    this.gates.delete(key);
+    this.affinity.clear();
+    this.started.clear();
+    globalThis.rfSerpCurrent = {};
+    return {ok:true};
+  }
   laneStorage(slot) {
     const keys = ['rfSerpPolicy', 'rfSerpPolicyByIp'];
     const name = key => keys.includes(key) && slot ? key + ':lane:' + slot : key;
