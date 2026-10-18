@@ -45,6 +45,21 @@ class ShopBrowserCollectorEventTest extends TestCase
         }
     }
 
+    public function test_browser_success_releases_server_retry_without_changing_gap_or_block_count(): void
+    {
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '사람 재개', 'status' => 'blocked']);
+        $this->actingAs($u)->withServerVariables(['REMOTE_ADDR' => '192.0.2.25']);
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '403'])->assertOk();
+        $key = \App\Domain\Shopping\NaverShopExposureService::policyKey();
+        \Illuminate\Support\Facades\Cache::put($key, ['until' => microtime(true) + 180, 'gap' => 5300, 'http403' => 11]);
+        $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success', 'interval_ms' => 2300])->assertOk();
+        $this->assertSame(['until' => 0, 'gap' => 5300, 'http403' => 11], \Illuminate\Support\Facades\Cache::get($key));
+        $this->assertSame(2300, \App\Services\ShopExposureBlockAlert::interval('192.0.2.25'));
+        $this->assertSame('checking', $a->fresh()->status);
+    }
+
     public function test_admin_reset_preserves_counts_and_cooldown_and_denies_member(): void
     {
         $u = User::factory()->create(['role' => 'member']);

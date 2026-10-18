@@ -116,3 +116,18 @@ test('server revision resets persisted interval on next request, including cache
  await f.policy.run('d',async()=>({ok:false,status:429}),'ip',2000,'new');
  assert.equal(f.data.rfSerpPolicy.gap,2300);
 });
+
+test('human recovery clears only cooldown and preserves IP increments, counters and next spacing', async () => {
+ const f=fixture();let navigations=0,solved=false,probes=0;
+ const fetcher=async()=>{navigations++;return {ok:false,status:403};};
+ const probe=async()=>{probes++;return solved?{ok:true,status:200,html:'human solved'}:null;};
+ await f.policy.run('same',fetcher,'ip-a',2000,null,probe);
+ const until=f.data.rfSerpPolicy.until;
+ for(let i=0;i<3;i++){f.advance(1500);const r=await f.policy.run('same',fetcher,'ip-a',2000,null,probe);assert.equal(r.cooldown,true);assert.equal(r.retryAt,until);}
+ solved=true;f.advance(1500);
+ const r=await f.policy.run('same',fetcher,'ip-a',2000,null,probe);
+ assert.equal(r.ok,true);assert.equal(r.retryAt,null);assert.equal(r.interval_ms,2300);
+ assert.equal(navigations,1);assert.equal(probes,4);assert.equal(f.data.rfSerpPolicy.http403,1);
+ assert.equal(f.data.rfSerpPolicyByIp['ip-a'].gap,2300);assert.equal(f.data.rfSkwCheckSkipUntil,0);
+ assert.equal((await f.policy.run('same',fetcher,'ip-a')).cached,true);
+});

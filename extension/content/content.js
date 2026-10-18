@@ -3699,6 +3699,17 @@
     } catch (e) { /* noop */ }
   }
 
+  chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+    if (msg?.type !== '__rfSerpPeek') return;
+    const text = document.body?.innerText || '';
+    if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {
+      reply({ ok: false }); return;
+    }
+    const data = domNextData();
+    const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
+    reply({ ok: normal, products: normal ? (data?.products || []) : undefined });
+  });
+
   // Only read the loaded document; no API requests or captcha interaction.
   async function runSerpRead() {
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
