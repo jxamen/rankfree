@@ -71,3 +71,19 @@ test('legacy queue wait migrates before early return; permission pause is preser
   else {assert.equal(written.rfSkwCheckSkipUntil,1180000);assert.equal(written.rfSerpPolicy.http403,8);assert.equal(alarm.when,1180000);}
  }
 });
+
+test('continue now releases server and extension waits, then reloads without supplement collection', async () => {
+ const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
+ const start=blade.indexOf("    document.getElementById('sk-continue-now').onclick");
+ const code=blade.slice(start,blade.indexOf('    @endif',start)).replace(/\{\{.*?\}\}/g,'71');
+ const button={};const actions=[];
+ const context=vm.createContext({document:{getElementById:()=>button},stopped:false,notice:{},
+  waitExt:async()=>true,
+  post:async()=>{actions.push('server');return {ok:true,json:async()=>({collector_ip:'ip'})};},
+  extCall:async(type,args)=>{assert.equal(type,'resumeShopSerp');assert.equal(args.collectorIp,'ip');actions.push('extension');return {ok:true};},
+  sessionStorage:{setItem:(key,value)=>actions.push([key,value])},location:{reload:()=>actions.push('reload')},
+ });
+ vm.runInContext(code,context);await button.onclick();
+ assert.equal(context.stopped,true);
+ assert.deepEqual(actions,['server','extension',['rf-continue-now-71','1'],'reload']);
+});

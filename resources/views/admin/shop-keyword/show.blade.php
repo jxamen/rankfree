@@ -2,7 +2,21 @@
 @section('page-title', '쇼핑 노출 키워드 — '.$analysis->core_keyword)
 
 @section('admin-content')
+<div class="flex flex-wrap items-center gap-3 mb-3">
+<div>
 @include('admin.shop-keyword.collection', ['a' => $analysis])
+</div>
+@if(auth()->user()->isAdmin())
+<div class="flex flex-wrap items-center gap-2 mb-3">
+    <label for="sk-interval">간격(초)</label>
+    <input id="sk-interval" class="input" style="width:90px" type="number" min="1" max="30" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::baseInterval() / 1000, 1, '.', '') }}">
+    <button id="sk-interval-save" type="button" class="btn btn-secondary btn-sm">저장</button>
+    <button id="sk-interval-reset" type="button" class="btn btn-ghost btn-sm">간격 초기화</button>
+    <button id="sk-continue-now" type="button" class="btn btn-secondary btn-sm" @disabled(in_array($analysis->status, ['ad_ended', 'target_reached']))>바로 이어서</button>
+    <span id="sk-interval-notice" role="status"></span>
+</div>
+@endif
+</div>
 @php
     // 조합 재료 소스 + 참고(조합 X) 소스 라벨
     $srcLabel = [
@@ -741,26 +755,43 @@ window.__SK = {
         });
     }
 
-    @if(auth()->user()->isAdmin())
-    if (label) {
-        const reset = document.createElement('button');
-        reset.type = 'button'; reset.textContent = '간격 초기화'; reset.style.marginLeft = '8px';
-        label.after(reset);
-        reset.addEventListener('click', async () => {
-            reset.disabled = true;
-            try {
-                const r = await post('{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
-                if (!r.ok) throw new Error();
-                currentIntervalMs = 2000;
-                reset.textContent = '2초로 초기화됨';
-            } catch (_) { reset.textContent = '초기화 실패 — 재시도'; }
-            finally { reset.disabled = false; }
-        });
-    }
-    @endif
-    let currentIntervalMs = 2000;
+    let currentIntervalMs = {{ \App\Services\ShopExposureBlockAlert::baseInterval() }};
     let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
-    const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 10초)';
+    const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 30초)';
+    @if(auth()->user()->isAdmin())
+    const intervalInput = document.getElementById('sk-interval');
+    const notice = document.getElementById('sk-interval-notice');
+    async function saveGap(button, url, body) {
+        button.disabled = true;
+        try {
+            const r = await post(url, body);
+            if (!r.ok) throw new Error('간격은 1.0~30.0초, 소수 1자리까지 입력하세요.');
+            currentIntervalMs = (await r.json()).interval_ms;
+            notice.textContent = (currentIntervalMs / 1000).toFixed(1) + '초로 저장됨';
+        } catch (e) { notice.textContent = e.message; }
+        finally { button.disabled = false; }
+    }
+    document.getElementById('sk-interval-save').onclick = function () {
+        if (intervalInput.reportValidity()) saveGap(this, '{{ route('admin.shop-keyword.interval', $analysis) }}', { seconds: intervalInput.value });
+    };
+    document.getElementById('sk-interval-reset').onclick = function () {
+        saveGap(this, '{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
+    };
+    document.getElementById('sk-continue-now').onclick = async function () {
+        this.disabled = true;
+        try {
+            if (!await waitExt(1500)) throw new Error('확장 0.6.1을 설치하고 새로고침해 주세요.');
+            stopped = true;
+            const r = await post('{{ route('admin.shop-keyword.continue-now', $analysis) }}');
+            if (!r.ok) throw new Error('재개할 수 없습니다.');
+            const data = await r.json();
+            const result = await extCall('resumeShopSerp', { collectorIp: data.collector_ip }, 90000);
+            if (!result?.ok) throw new Error('확장 0.6.1을 설치하고 새로고침해 주세요.');
+            sessionStorage.setItem('rf-continue-now-{{ (int) $analysis->id }}', '1');
+            location.reload();
+        } catch (e) { notice.textContent = e.message; this.disabled = false; }
+    };
+    @endif
 
     async function waitRestriction(until, source) {
         while (!stopped) {
@@ -798,6 +829,13 @@ window.__SK = {
                 if (stopped) return;
                 let res;
                 while (!stopped) {
+                    // Refresh pacing before each request, including retries of the same keyword.
+                    try {
+                        const policyResponse = await fetch(cfg.urls.pending + '?runner=' + RUNNER, { headers: { Accept: 'application/json' } });
+                        if (!policyResponse.ok) { stopped = true; location.reload(); return; }
+                        const fresh = (await policyResponse.json()).data;
+                        d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
+                    } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Only actual network results generate events; cached/cooldown replies do not.
@@ -962,7 +1000,9 @@ window.__SK = {
     (async function boot() {
         if (cfg.ended) return;
         extMode = await waitExt(1500);
-        if (extMode && !stopped) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다
+        const immediate = sessionStorage.getItem('rf-continue-now-{{ (int) $analysis->id }}');
+        sessionStorage.removeItem('rf-continue-now-{{ (int) $analysis->id }}');
+        if (extMode && !stopped && !immediate) enrich();   // 중단 상태에선 보충 수집(조합 재편성→reload)도 하지 않는다
         if (!box) return;   // 미확인 조합 없음 — 보충만 수행
         if (stopped) return;   // 서버 저장된 중단 — "이어서 확인" 클릭 전까지 시작하지 않는다
         // api 방식은 서버 slot API 폴링으로 처리(빠름·차단 없음, 상위 20위) — 확장 크롤링 루프는 통합검색 방식 전용

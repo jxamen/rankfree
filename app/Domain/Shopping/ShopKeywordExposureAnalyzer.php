@@ -280,7 +280,7 @@ class ShopKeywordExposureAnalyzer
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
-                'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? 2000), 'retry_at' => $retryAt, 'error' => $error,
+                'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? \App\Services\ShopExposureBlockAlert::baseInterval()), 'retry_at' => $retryAt, 'error' => $error,
                 'items' => $batchResults];
         } finally {
             $lock->release();

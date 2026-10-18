@@ -24,6 +24,16 @@ use Illuminate\Http\Request;
  */
 class ExtShopKeywordController extends Controller
 {
+    public function intervalPolicy(Request $request): JsonResponse
+    {
+        $this->authorizeScope($request);
+        return response()->json(['data' => [
+            'collector_ip' => $request->ip(),
+            'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
+            'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
+        ]]);
+    }
+
     public function __construct(private ShopKeywordExposureAnalyzer $analyzer) {}
 
     public function collectorEvent(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
@@ -34,7 +44,7 @@ class ExtShopKeywordController extends Controller
             'kind' => 'required|in:403,429,보안문자,success',
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
-            'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
+            'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
         app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
