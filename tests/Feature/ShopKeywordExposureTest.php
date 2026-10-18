@@ -727,28 +727,45 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertSame(0, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
     }
 
-    public function test_recheck_exposed_resets_only_exposed(): void
+    public function test_recheck_preserves_every_saved_item_and_resumes_only_pending(): void
     {
-        // 광고 판별 개선(슈퍼적립) 전에 오가닉으로 오판된 노출 기록 정정 — 노출분만 미확인으로 리셋
         $u = User::factory()->create(['role' => 'operator']);
-        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done', 'combo_count' => 3]);
-        $mk = fn ($kw, $rank, $ad = false) => ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo',
-            'source' => 'combo', 'keyword' => $kw, 'rank' => $rank, 'ad_exposed' => $ad, 'checked_at' => now()]);
-        $exposedItem = $mk('비타민c 고함량', 1, true);
-        $outItem = $mk('비타민c 분말', 0);
-        $farItem = $mk('비타민c 고용량', 9);
-
-        $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertOk();
-
-        $this->assertSame(1, (int) $r->json('data.reset'));
-        $this->assertNull($exposedItem->fresh()->rank);            // 노출분만 리셋
-        $this->assertFalse((bool) $exposedItem->fresh()->ad_exposed);
-        $this->assertSame(0, $outItem->fresh()->rank);             // 미노출 유지
-        $this->assertSame(9, $farItem->fresh()->rank);             // 순위 밖 유지
-        $this->assertSame('checking', $a->fresh()->status);
-
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'blocked', 'combo_count' => 4]);
+        foreach ([1, 0, 9, null] as $i => $rank) {
+            ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo',
+                'keyword' => '비타민c '.$i, 'rank' => $rank, 'ad_exposed' => $rank === 1,
+                'checked_at' => $rank === null ? null : now()->subHour()]);
+        }
+        $before = $a->items()->orderBy('id')->get()->toArray();
+        foreach (range(1, 2) as $_) {
+            $this->actingAs($u)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertOk()
+                ->assertJsonPath('data.reset', 0)->assertJsonPath('data.remaining', 1);
+            $this->assertSame($before, $a->items()->orderBy('id')->get()->toArray());
+            $this->assertSame('checking', $a->fresh()->status);
+            $this->assertSame(3, $a->fresh()->checked_count);
+            $this->assertSame(1, $a->fresh()->exposed_count);
+        }
         $other = User::factory()->create(['role' => 'operator']);
         $this->actingAs($other)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertForbidden();
+        $a->update(['status' => 'ad_ended']);
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertStatus(409);
+        $this->assertSame($before, $a->items()->orderBy('id')->get()->toArray());
+    }
+
+    public function test_recheck_keeps_completed_and_target_reached_results(): void
+    {
+        $u = User::factory()->create(['role' => 'operator']);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '비타민c', 'threshold' => 5, 'status' => 'done', 'combo_count' => 1]);
+        $item = ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo',
+            'keyword' => '비타민c', 'rank' => 1, 'checked_at' => now()->subHour()]);
+        $before = $item->fresh()->toArray();
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertOk()
+            ->assertJsonPath('data.remaining', 0)->assertJsonPath('data.status', 'done');
+        $a->update(['keyword_target' => 1]);
+        ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => '미확인']);
+        $this->postJson(route('admin.shop-keyword.recheck-exposed', $a))->assertOk()
+            ->assertJsonPath('data.status', 'target_reached');
+        $this->assertSame($before, $item->fresh()->toArray());
     }
 
     public function test_ownership_enforced(): void
