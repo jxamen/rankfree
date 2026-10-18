@@ -327,7 +327,7 @@ class ShopKeywordExposureTest extends TestCase
 
         // 확장(브라우저)이 가져온 HTML 로 판정 — 111 포함 → 오가닉 1위(광고 제외)
         $r = $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
-            'item_id' => $item['id'], 'html' => $this->htmlWith,
+            'item_id' => $item['id'], 'claim_token' => $item['claim_token'], 'html' => $this->htmlWith,
         ])->assertOk();
         $this->assertSame(1, (int) $r->json('rank'));
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['id' => $item['id'], 'rank' => 1]);
@@ -337,7 +337,7 @@ class ShopKeywordExposureTest extends TestCase
         $p2 = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
         if (! empty($p2['items'])) {
             $r2 = $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
-                'item_id' => $p2['items'][0]['id'], 'html' => '',
+                'item_id' => $p2['items'][0]['id'], 'claim_token' => $p2['items'][0]['claim_token'], 'html' => '',
             ])->assertOk();
             $this->assertSame(0, (int) $r2->json('rank'));
         }
@@ -362,7 +362,7 @@ class ShopKeywordExposureTest extends TestCase
         // 중단 직후 늦게 도착한 확장 판정 1건이 paused 를 checking 으로 덮어쓰지 않는다
         $p = $this->actingAs($u)->get(route('admin.shop-keyword.pending', $a))->json('data');
         $this->actingAs($u)->postJson(route('admin.shop-keyword.check-html', $a), [
-            'item_id' => $p['items'][0]['id'], 'html' => $this->htmlWith,
+            'item_id' => $p['items'][0]['id'], 'claim_token' => $p['items'][0]['claim_token'], 'html' => $this->htmlWith,
         ])->assertOk();
         $this->assertSame('paused', $a->refresh()->status);
 

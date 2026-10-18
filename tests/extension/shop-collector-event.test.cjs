@@ -16,7 +16,7 @@ for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,st
       chrome:{storage:{local:{get:async()=>({rfSerpPolicy:{blockedOnResume:true}})}}},
       apiFetch:async(path,options)=>path.endsWith('interval-policy') ? {ok:true,json:{data:{interval_ms:4000,interval_revision:'v1',collector_ip:'ip'}}} : events.push({path,...options}),
     });
-    await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69});',context);
+    await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:typeof shopSerpTab === \"undefined\" ? {} : shopSerpTab,policy:shopSerpPolicy})}; const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69});',context);
     assert.equal(events.length,1);
     assert.equal(events[0].path,'/api/ext/shop-keyword/69/collector-event');
     assert.equal(events[0].body.collector,'browser');
@@ -28,7 +28,7 @@ test('screen delegates delivery to page session; cached and cooldown replies emi
   for(const [result,sender] of [[{ok:false,status:403},{tab:{id:1}}],[{ok:true,cached:true},null],[{ok:false,cooldown:true},null]]) {
     const context=vm.createContext({lastScreenSerpAt:0,shopSerpPolicy:{run:async()=>result},...(sender ? {} : {getStore:async()=>({})}),apiFetch:async(path)=>{if(path.endsWith('interval-policy'))return {ok:true,json:{data:{interval_ms:4000}}};throw Error('unexpected API request');}});
     // No getStore is available: the screen path must work without an API token.
-    const actual=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69},'+JSON.stringify(sender)+');',context);
+    const actual=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:typeof shopSerpTab === \"undefined\" ? {} : shopSerpTab,policy:shopSerpPolicy})}; const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69},'+JSON.stringify(sender)+');',context);
     assert.equal(actual,result);
   }
 });
@@ -50,7 +50,7 @@ test('tabless checks integrated first, falls back only without shopping block an
    shopSerpTab:{read:()=>{throw Error('must not open tab');}},
    sleep:async ms=>waits.push(ms),
   });
-  const result=await vm.runInContext('const handlers={spFetchHtml:async ({url})=>{calls.push(url);return {ok:true,status:200,text:calls.length===1?html:"shopping"};},'+handler+'};handlers.fetchShopSerp({keyword:"테스트",collection_mode:"fetch",interval_ms:3500},{tab:{id:1}})',Object.assign(context,{calls,html}));
+  const result=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:shopSerpTab,policy:shopSerpPolicy})}; const handlers={spFetchHtml:async ({url})=>{calls.push(url);return {ok:true,status:200,text:calls.length===1?html:"shopping"};},'+handler+'};handlers.fetchShopSerp({keyword:"테스트",collection_mode:"fetch",interval_ms:3500},{tab:{id:1}})',Object.assign(context,{calls,html}));
   assert.equal(calls.length,expected);assert.equal(result.captcha,blocked);
   assert.equal(result.result_source,expected===2?'shopping':'integrated');
   assert.deepEqual(waits,expected===2?[3500]:[]);

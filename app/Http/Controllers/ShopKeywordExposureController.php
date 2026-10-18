@@ -87,9 +87,25 @@ class ShopKeywordExposureController extends Controller
     public function saveInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
     {
         abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
-        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch']);
+        $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch', 'parallel_tabs' => 'sometimes|integer|min:1|max:4', 'tab_open_seconds' => 'sometimes|numeric|min:0|max:60|decimal:0,1', 'keywords_per_day' => 'sometimes|integer|min:10|max:500']);
         \App\Models\AppSetting::write('shop.exposure.interval_ms', (string) round($data['seconds'] * 1000));
         if (isset($data['collection_mode'])) \App\Models\AppSetting::write('shop.exposure.collection_mode', $data['collection_mode']);
+        foreach (['parallel_tabs', 'keywords_per_day'] as $key) {
+            if (isset($data[$key])) \App\Models\AppSetting::write('shop.exposure.'.$key, (string) $data[$key]);
+        }
+        if (isset($data['tab_open_seconds'])) \App\Models\AppSetting::write('shop.exposure.tab_open_interval_ms', (string) round($data['tab_open_seconds'] * 1000));
+        if (isset($data['keywords_per_day'])) {
+            DB::transaction(function () use ($analysis, $data) {
+                $current = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+                if ($current->order_days <= 0) return;
+                $current->keyword_target = $current->order_days * (int) $data['keywords_per_day'];
+                if ($current->status !== 'ad_ended') {
+                    if ($current->targetReached()) $current->status = 'target_reached';
+                    elseif ($current->status === 'target_reached') $current->status = 'checking';
+                }
+                $current->save();
+            });
+        }
         $response = $this->resetInterval($request, $analysis);
         \Illuminate\Support\Facades\Log::info('shop_exposure_interval_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
         return $response;
@@ -233,15 +249,15 @@ class ShopKeywordExposureController extends Controller
             return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
         }
         $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
-        $limit = 1; // Refresh IP policy before every browser request.
-        $items = $analysis->combos()->whereNull('rank')->whereNotIn('id', $request->input('exclude', []))->orderBy('id')->limit($limit)
-            ->get(['id', 'keyword'])
-            ->map(fn ($i) => ['id' => $i->id, 'keyword' => $i->keyword])->values();
-        if ($items->isEmpty()) {
-            app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);   // 다 끝남 — 다음 차례에 바로 넘긴다
+        if ($request->boolean('policy_only')) app(\App\Domain\Shopping\ShopKeywordClaims::class)->renew($analysis, (string) $request->input('runner', ''));
+        $items = $request->boolean('policy_only') ? collect() : app(\App\Domain\Shopping\ShopKeywordClaims::class)->claim(
+            $analysis, (string) $request->input('runner', ''), min(\App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs'], max(1, (int) $request->input('limit', \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs']))), $request->input('exclude', [])
+        );
+        if ($items->isEmpty() && ! $analysis->combos()->whereNull('rank')->exists()) {
+            app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);
         }
 
-        return response()->json(['data' => ['target' => $this->analyzer->targetOf($analysis), 'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + $this->analyzer->progress($analysis)]);
+        return response()->json(['data' => ['target' => $this->analyzer->targetOf($analysis), 'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()), 'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()), 'items' => $items] + \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id) + $this->analyzer->progress($analysis)]);
     }
 
     /** 확장(브라우저)이 가져온 m.search HTML 로 조합 1건 순위 저장 — 서버 IP 한도와 무관한 기본 경로. */
@@ -269,7 +285,7 @@ class ShopKeywordExposureController extends Controller
             return response()->json($this->analyzer->progress($analysis) + ['skipped' => true]);
         }
 
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated'));
+        return app(\App\Domain\Shopping\ShopKeywordClaims::class)->save($analysis, $item, (string) $request->input('runner', ''), (string) $request->input('claim_token', ''), fn () => response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated')));
     }
 
     /** 확장이 수집한 코어 키워드 신호(가격비교 HTML·함께많이찾는)를 참고/재료 토큰으로 병합. */

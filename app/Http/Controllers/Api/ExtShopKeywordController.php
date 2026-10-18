@@ -31,7 +31,7 @@ class ExtShopKeywordController extends Controller
             'collector_ip' => $request->ip(),
             'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
-        ]]);
+        ] + \App\Services\ShopExposureBlockAlert::parallelSettings()]);
     }
 
     public function __construct(private ShopKeywordExposureAnalyzer $analyzer) {}
@@ -218,7 +218,7 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
 
         $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
-        $limit = min(40, max(1, (int) $request->query('limit', 40)));
+        $limit = min(\App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'], max(1, (int) $request->query('limit', \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'])));
 
         // Failed reads remain unknown. Once this runner has skipped every remaining item,
         // release its own lease so the next analysis can start immediately.
@@ -252,7 +252,7 @@ class ExtShopKeywordController extends Controller
             }
         }
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
-            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
+            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + \App\Services\ShopExposureBlockAlert::parallelSettings() + $this->analyzer->progress($analysis)]);
         }
         // IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
         $lock = app(ShopExposureRunLock::class);
@@ -261,19 +261,21 @@ class ExtShopKeywordController extends Controller
             return response()->json(['data' => ['items' => [], 'busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
         }
 
+        $limit = min($limit, \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs']);
         // Never hand the extension more work than the remaining top-five quota.
         if ($analysis->keyword_target) {
             $limit = min($limit, max(1, $analysis->keyword_target - $analysis->topFiveCount()));
         }
-        $items = $analysis->combos()->whereNull('rank')->whereNotIn('id', $request->input('exclude', []))->orderBy('id')->limit($limit)->get(['id', 'keyword']);
+        if ($request->boolean('policy_only')) app(\App\Domain\Shopping\ShopKeywordClaims::class)->renew($analysis, (string) $request->input('runner', ''));
+        $items = $request->boolean('policy_only') ? collect() : app(\App\Domain\Shopping\ShopKeywordClaims::class)->claim($analysis, (string) $request->input('runner', ''), $limit, $request->input('exclude', []));
 
         return response()->json(['data' => [
             'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
             'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
             'target' => $this->analyzer->targetOf($analysis),
             'analysis_id' => (int) $analysis->id,
-            'items' => $items->map(fn ($i) => ['item_id' => (int) $i->id, 'keyword' => (string) $i->keyword])->all(),
-        ] + $this->analyzer->progress($analysis)]);
+            'items' => $items->map(fn ($i) => ['item_id' => $i['id'], 'keyword' => $i['keyword'], 'claim_token' => $i['claim_token']])->all(),
+        ] + \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id) + $this->analyzer->progress($analysis)]);
     }
 
     /**
@@ -309,6 +311,6 @@ class ExtShopKeywordController extends Controller
         }
 
         // html 이 비어 있어도 정상 입력 — 가격비교 슬롯을 못 찾은 것으로 보고 순위 없음으로 기록한다.
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated'));
+        return app(\App\Domain\Shopping\ShopKeywordClaims::class)->save($analysis, $item, (string) $request->input('runner', ''), (string) $request->input('claim_token', ''), fn () => response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated')));
     }
 }
