@@ -41,7 +41,7 @@ class ShopKeywordExposureController extends Controller
         app(\App\Services\ShopExposureBlockAlert::class)->record(
             $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
         );
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }
 
     public function resetInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
@@ -136,7 +136,15 @@ class ShopKeywordExposureController extends Controller
             return $busy;
         }
 
-        return response()->json($this->analyzer->checkBatch($analysis));
+        $progress = $this->analyzer->checkBatch($analysis);
+        if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis) && !empty($progress['blocked']) && empty($progress['retry_at'])) {
+            $until = (float) (Cache::get(NaverShopExposureService::policyKey(), [])['until'] ?? 0);
+            $progress['retry_at'] = (int) ceil(max(microtime(true) + 2, $until) * 1000);
+        }
+        return response()->json($progress + [
+            'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis),
+            'collector_ip' => (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'),
+        ]);
     }
 
     /**
@@ -163,6 +171,9 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+        if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
+            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
+        }
         if ($busy = $this->runBusy($request, $analysis)) {
             return $busy;
         }
@@ -186,6 +197,10 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+
+        if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
+            return response()->json($this->analyzer->progress($analysis) + ['server_fallback' => true, 'skipped' => true]);
+        }
 
         $data = $request->validate([
             'item_id' => 'required|integer',

@@ -31,7 +31,20 @@ class ShopExposureBlockAlert
 
     public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
     {
-        if ($kind === 'success') {
+        if ($collector === 'browser' && in_array($kind, ['403', '429', '보안문자'], true)) {
+            $new = Cache::lock('shop-exposure:fallback-lock:'.$analysis->id, 5)->block(3, function () use ($analysis) {
+                $key = 'shop-exposure:server-fallback:'.$analysis->id;
+                if (Cache::has($key)) return false;
+                Cache::forever($key, true);
+                return true;
+            });
+            app(\App\Domain\Shopping\ShopExposureRunLock::class)->release('ip:'.$ip, (int) $analysis->id);
+            // Sync is used by local/tests; production's existing worker continues without an open page.
+            if ($new && $analysis->created_via === 'api' && config('queue.default') !== 'sync') {
+                \App\Jobs\ShopKeywordCheckJob::dispatch((int) $analysis->id);
+            }
+        }
+        if ($kind === 'success' && ! ($collector === 'browser' && \App\Domain\Shopping\ShopKeywordExposureAnalyzer::usesServerFallback($analysis))) {
             Cache::forget('shop-exposure:error:'.$analysis->id);
             // Human-confirmed browser recovery releases retry_at without resetting pacing.
             if ($collector === 'browser') {

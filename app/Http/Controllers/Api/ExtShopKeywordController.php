@@ -37,7 +37,7 @@ class ExtShopKeywordController extends Controller
             'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
         ]);
         app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }
 
     /** shop_keyword 권한 없으면 403 — 이 자동 수집은 허용된 회원 전용. */
@@ -201,6 +201,9 @@ class ExtShopKeywordController extends Controller
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
         }
+        if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
+            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
+        }
         // IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
         $lock = app(ShopExposureRunLock::class);
         $r = $lock->acquire('ip:'.$request->ip(), $this->extRunner($request), (int) $analysis->id, (string) $analysis->core_keyword);
@@ -231,6 +234,10 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+
+        if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
+            return response()->json($this->analyzer->progress($analysis) + ['server_fallback' => true, 'skipped' => true]);
+        }
 
         $data = $request->validate([
             'item_id' => ['required', 'integer'],

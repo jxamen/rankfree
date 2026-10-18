@@ -420,6 +420,7 @@ window.__SK = {
     needSupplement: @json($needSupplement),
     paused: @json($analysis->collectionStopped()),
     ended: @json($analysis->status === 'ad_ended'),
+    serverFallback: @json(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::usesServerFallback($analysis)),
     method: @json($analysis->check_method ?? 'api'),   // api=서버 slot API 폴링(상위 20위) | search=확장 통합검색 크롤링
 
     urls: {
@@ -587,7 +588,7 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (serverFallback ? '브라우저 막힘 → 서버로 진행 중 ' : extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
@@ -757,6 +758,7 @@ window.__SK = {
         });
     }
     @endif
+    let serverFallback = cfg.serverFallback;
     let currentIntervalMs = 2000;
     let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
     const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 10초)';
@@ -788,6 +790,7 @@ window.__SK = {
                 continue;
             }
             errCount = 0;
+            if (d.server_fallback) { serverFallback = true; poll(); return; }
             renderProgress(d);
             currentIntervalMs = d.interval_ms || currentIntervalMs;
             if (label) label.textContent += intervalLabel();
@@ -803,16 +806,20 @@ window.__SK = {
                     if (res && !res.cached && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
-                            try { await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms }); }
+                            try {
+                                const event = await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
+                                if (event.ok && (await event.json()).server_fallback) serverFallback = true;
+                            }
                             catch (e) { /* collection can continue if event delivery fails */ }
                         }
                     }
-                    if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
+                    if (stopped) return;
                     if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
+                    if (serverFallback) { poll(); return; }
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
                         if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
                         await sleep(1500);
-                        continue; // Same keyword; cooldown probes only read the existing tab.
+                        continue; // Existing-tab recovery only; an actual block above transfers to server.
                     }
                     break;
                 }
@@ -867,18 +874,20 @@ window.__SK = {
         // 서버 배치의 건별 결과를 확장 모드와 동일하게 실시간 반영 — 요약 숫자만 늘고
         // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
         (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
+        serverFallback = serverFallback || !!d.server_fallback;
+        collectorIp = d.collector_ip || collectorIp;
         renderProgress(d);
         currentIntervalMs = d.interval_ms || currentIntervalMs;
         if (label) label.textContent += intervalLabel();
         if (d.remaining <= 0) { location.reload(); return; }
         if (d.blocked) {
             if (d.retry_at) {
-                await waitRestriction(d.retry_at, '서버');
+                await waitRestriction(d.retry_at, serverFallback ? '브라우저·서버 모두 막힘 — 3분 대기' : '서버');
                 if (!stopped) poll();
                 return;
             }
             // 서버(slot API)가 막히면 확장이 있을 때 브라우저 m.search 경로로 이어서 확인(2026-09-28 — slot API 가 빈 {} 응답)
-            if (extMode) { runExtLoop(); return; }
+            if (extMode && !serverFallback) { runExtLoop(); return; }
             halt(`서버 확인 실패: ${d.error || '사유 미확인'} (${d.checked}/${d.total}) — 이어서 확인으로 재시도`, true);
             return;
         }
@@ -926,7 +935,7 @@ window.__SK = {
         if (stopBtn) stopBtn.classList.remove('hidden');
         if (label) label.textContent = '순위 확인 재개 중…';
         post(cfg.urls.pause, { paused: false }).catch(() => {});
-        if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
+        if (extMode && cfg.method !== 'api' && !serverFallback) runExtLoop(); else poll();
     });
 
     // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)
@@ -962,7 +971,7 @@ window.__SK = {
         if (!box) return;   // 미확인 조합 없음 — 보충만 수행
         if (stopped) return;   // 서버 저장된 중단 — "이어서 확인" 클릭 전까지 시작하지 않는다
         // api 방식은 서버 slot API 폴링으로 처리(빠름·차단 없음, 상위 20위) — 확장 크롤링 루프는 통합검색 방식 전용
-        if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
+        if (extMode && cfg.method !== 'api' && !serverFallback) runExtLoop(); else poll();
     })();
 })();
 </script>

@@ -138,6 +138,11 @@ class ShopKeywordExposureAnalyzer
      *
      * @return array{remaining:int, checked:int, exposed:int, total:int, blocked:bool, status:string}
      */
+    public static function usesServerFallback(ShopKeywordAnalysis $analysis): bool
+    {
+        return (bool) Cache::get('shop-exposure:server-fallback:'.$analysis->id, false);
+    }
+
     public function checkBatch(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
         if ($analysis->refresh()->collectionStopped()) {
@@ -165,7 +170,7 @@ class ShopKeywordExposureAnalyzer
             $target = $this->targetOf($analysis);
             // 방식(2026-07-22): api = shop.json 1콜/조합(빠름·차단 없음, 쇼핑 순위추적과 동일 기준·광고 판별 없음)
             //                  search = 통합검색 크롤링(실화면 오가닉·광고 판별, IP rate-limit 가능)
-            $useApi = $analysis->check_method !== 'search';
+            $useApi = $analysis->check_method !== 'search' && ! self::usesServerFallback($analysis);
 
             $pending = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)->get();
             $t0 = microtime(true);
