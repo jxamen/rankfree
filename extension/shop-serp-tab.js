@@ -1,7 +1,8 @@
-/* Called inside ShopSerpPolicy's single lane. Each job owns one inactive tab. */
+/* Called inside ShopSerpPolicy's single lane. Reuse one inactive, unpinned collection tab across jobs. */
 class ShopSerpTab {
   constructor({ browser = chrome, timeoutMs = 45000 } = {}) {
     this.browser = browser; this.timeoutMs = timeoutMs;
+    this.tabId = null;
   }
   static html(products) {
     const slots = products.map((p, i) => ({ data: {
@@ -27,16 +28,33 @@ class ShopSerpTab {
     const onUpdated = (id, info) => {
       if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
     };
-    const onRemoved = id => { if (id === tab?.id) finish({ ok: false, status: 0, message: '수집 탭이 닫혔습니다.' }); };
+    const onRemoved = id => {
+      if (id !== tab?.id) return;
+      this.tabId = null;
+      finish({ ok: false, status: 0, message: '수집 탭이 닫혔습니다.' });
+    };
     c.runtime.onMessage.addListener(onMessage);
     c.tabs.onUpdated.addListener(onUpdated);
     c.tabs.onRemoved.addListener(onRemoved);
     const timer = setTimeout(() => finish({ ok: false, status: 0, message: '쇼핑 탭 응답 시간이 초과되었습니다.' }), this.timeoutMs);
     try {
-      // Remove only our marked tabs left behind by a terminated service worker.
-      const stale = await c.tabs.query({ url: 'https://search.shopping.naver.com/search/*' });
-      for (const t of stale) { if ((t.url || t.pendingUrl || '').endsWith('#rfserp')) await c.tabs.remove(t.id); }
-      tab = await c.tabs.create({ url: 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp', active: false });
+      const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp';
+      const storage = c.storage.session;
+      if (this.tabId === null) {
+        const saved = await storage.get('rfSerpTabId');
+        this.tabId = saved.rfSerpTabId ?? null;
+      }
+      if (this.tabId !== null) {
+        try { tab = await c.tabs.get(this.tabId); }
+        catch (_) { this.tabId = null; }
+      }
+      if (tab) {
+        await c.tabs.update(tab.id, { url, active: false });
+      } else {
+        tab = await c.tabs.create({ url, active: false, pinned: false });
+        this.tabId = tab.id;
+        await storage.set({ rfSerpTabId: tab.id });
+      }
       const current = await c.tabs.get(tab.id);
       onUpdated(tab.id, { url: current.url || current.pendingUrl });
       return await result;
@@ -46,7 +64,6 @@ class ShopSerpTab {
       c.runtime.onMessage.removeListener(onMessage);
       c.tabs.onUpdated.removeListener(onUpdated);
       c.tabs.onRemoved.removeListener(onRemoved);
-      if (tab) { try { await c.tabs.remove(tab.id); } catch (_) {} }
     }
   }
 }
