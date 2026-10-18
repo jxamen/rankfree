@@ -77,7 +77,7 @@ class ShopSerpPolicy {
       s.gap = Math.max(1000, Math.min(30000, Math.max(Number(s.gap) || 4000, Number(serverGap) || 4000)));
       await save();
       const hit = await this.cache.get(key);
-      if (hit?.ok) {
+      if (hit?.ok && ['integrated', 'shopping'].includes(hit.result_source)) {
         s.until = 0; s.blockedOnResume = false;
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');

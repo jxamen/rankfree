@@ -207,6 +207,9 @@ class ShopKeywordExposureAnalyzer
                             $res = null;
                         }
                     }
+                    if ($res !== null) {
+                        $res['result_source'] = 'shopping';
+                    }
                     if ($res === null) {
                         // 모바일 검색 가격비교 오가닉 노출 위치(광고 제외) + 광고 노출 여부
                         $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
@@ -233,7 +236,7 @@ class ShopKeywordExposureAnalyzer
                     if ($fresh->collectionStopped()) {
                         return false;
                     }
-                    $item->result_source = null;
+                    $item->result_source = $res['result_source'] ?? 'integrated';
                     $item->rank = (int) ($res['rank'] ?? 0);
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
@@ -247,7 +250,7 @@ class ShopKeywordExposureAnalyzer
                     break;
                 }
                 $batchResults[] = ['id' => $item->id, 'keyword' => $item->keyword, 'rank' => (int) $item->rank,
-                    'ad' => (bool) $item->ad_exposed, 'combo_tag' => $item->combo_tag];
+                    'ad' => (bool) $item->ad_exposed, 'combo_tag' => $item->combo_tag, 'result_source' => $item->result_source];
                 // search: m.search 연속 호출 IP rate-limit 완화 간격. api: 키 로테이션이 있어 짧게만.
                 $gap = ($useApi && ! $slotDead) ? min(120, $delayMs) : $delayMs;
                 if ($gap > 0) {
@@ -314,7 +317,7 @@ class ShopKeywordExposureAnalyzer
             $threshold = (int) $analysis->threshold;
 
             $res = $this->exposure->rankFromHtml($html, $this->targetOf($analysis));
-            $item->result_source = $resultSource;
+            $item->result_source = $resultSource ?? 'integrated';
             $item->rank = (int) ($res['rank'] ?? 0);
             $item->ad_exposed = ! empty($res['ad']);
             $item->checked_at = now();

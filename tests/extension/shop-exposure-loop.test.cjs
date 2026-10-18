@@ -10,9 +10,10 @@ test('background drains beyond alarm budget with no success sleeps, and proceeds
   crypto:require('node:crypto').webcrypto,skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
   getStore:async()=>({token:'test',apiBase:'test'}),
   chrome:{storage:{local:{get:async()=>({})}}},
-  handlers:{fetchShopSerp:async()=>{clock+=1600;checks++;return {ok:true,html:'raw'};}},
-  apiFetch:async(path)=>{
+  handlers:{fetchShopSerp:async()=>{clock+=1600;checks++;return {ok:true,html:'raw',result_source:checks%2?'integrated':'shopping'};}},
+  apiFetch:async(path,options)=>{
    if(path.includes('check-queue')) {batches++;return {ok:true,json:{data:{analysis_id:batches,items:batches<=6?Array.from({length:40},(_,i)=>({item_id:i,keyword:String(i)})):[]}}};}
+   assert.equal(options.body.result_source,checks%2?'integrated':'shopping');
    saves++; return {status:200,json:{status:saves===1?'target_reached':'checking'}};
   },
  });
@@ -39,9 +40,9 @@ test('admin extension loop keeps browser work until human recovery even with sta
  let calls=0,saves=0,serverCalls=0;const waits=[],events=[];
  const context=vm.createContext({URL,location:{href:'http://localhost/admin'},loopActive:false,serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
-  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw'},
+  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw',result_source:'shopping'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
-  post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
+  post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}assert.equal(body.result_source,'shopping');saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
  await vm.runInContext(code+';runExtLoop()',context);
  assert.equal(calls,5);assert.equal(saves,1);assert.equal(serverCalls,0);assert.equal(context.serverFallback,false);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[1500,1500,1500,1500]);
@@ -126,4 +127,13 @@ test('background excludes unread keyword and immediately drains the next analysi
  });
  await vm.runInContext(loop+';drainShopKeywordCheckQueue()',context);
  assert.deepEqual(calls,['bad','next']);assert.deepEqual(saves,[2]);assert.match(queries[1],/exclude\[\]=1/);
+});
+
+test('rank labels cover both screens, non-exposure and old rows without source', () => {
+ const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
+ const start=blade.indexOf('    const sourceLabel =');
+ const code=blade.slice(start,blade.indexOf('    function applyItemResult',start));
+ for(const [rank,source,label] of [[1,'integrated','1위 · 통합'],[7,'shopping','7위 · 쇼핑'],[0,'shopping','미노출 · 쇼핑'],[2,null,'2위</span>']]) {
+  assert.ok(vm.runInContext(code+`;rankSpan(${rank},${JSON.stringify(source)})`,vm.createContext({cfg:{th:5}})).includes(label));
+ }
 });

@@ -281,6 +281,6 @@ class ExtShopKeywordController extends Controller
         }
 
         // html 이 비어 있어도 정상 입력 — 가격비교 슬롯을 못 찾은 것으로 보고 순위 없음으로 기록한다.
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? null));
+        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated'));
     }
 }
