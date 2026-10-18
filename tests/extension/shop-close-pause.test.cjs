@@ -43,7 +43,7 @@ test('only explicit server restart releases fully closed analysis; failed close 
  const start=source.indexOf('  async fetchShopSerp({');const handler=source.slice(start,source.indexOf('\n  /**',start));
  for(const [status,ack,expected] of [['paused',true,0],['checking',true,1],['checking',false,0]]) {
   const local=storage({'rfSerpClosed:42':[0,1,2,3],'rfSerpCloseAck:42':ack});let runs=0;
-  const ctx=vm.createContext({rfCloseWork:Promise.resolve(),lastScreenSerpAt:0,chrome:{storage:{local}},getStore:async()=>({token:'t'}),apiFetch:async()=>({ok:true,json:{data:{status}}}),shopSerpPool:{run:async()=>{runs++;return {ok:false};}}});
+  const ctx=vm.createContext({rfCloseWork:Promise.resolve(),lastScreenSerpAt:0,chrome:{storage:{local}},getStore:async()=>({token:'t'}),apiFetch:async()=>({ok:true,json:{data:{status}}}),restartShopSerp:async()=>local.set({'rfSerpClosed:42':[]}),shopSerpPool:{run:async()=>{runs++;return {ok:false};}}});
   await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({analysisId:42,keyword:"resume"},{tab:{id:1}})',ctx);
   assert.equal(runs,expected);
  }
