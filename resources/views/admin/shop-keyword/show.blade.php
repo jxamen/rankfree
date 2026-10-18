@@ -798,26 +798,32 @@ window.__SK = {
 
             for (const it of d.items) {
                 if (stopped) return;
-                const res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
-                if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
-                // Only actual network results generate events; cached/cooldown replies do not.
-                if (res && !res.cached && !res.cooldown) {
-                    const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
-                    if (kind) {
-                        try {
-                            const event = await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
-                            if (event.ok && (await event.json()).server_fallback) serverFallback = true;
+                let res;
+                while (!stopped) {
+                    res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
+                    if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
+                    // Only actual network results generate events; cached/cooldown replies do not.
+                    if (res && !res.cached && !res.cooldown) {
+                        const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
+                        if (kind) {
+                            try {
+                                const event = await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
+                                if (event.ok && (await event.json()).server_fallback) serverFallback = true;
+                            }
+                            catch (e) { /* collection can continue if event delivery fails */ }
                         }
-                        catch (e) { /* collection can continue if event delivery fails */ }
                     }
+                    if (stopped) return;
+                    if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
+                    if (serverFallback) { poll(); return; }
+                    if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
+                        if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
+                        await sleep(1500);
+                        continue; // Existing-tab recovery only; an actual block above transfers to server.
+                    }
+                    break;
                 }
-                if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
-                if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
-                if (serverFallback) { poll(); return; }
-                if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                    await waitRestriction(res.retryAt || Date.now() + 180000, '네이버');
-                    break; // 미확인 항목을 다시 조회한다. 재차단이면 같은 대기를 반복한다.
-                }
+                if (stopped) return;
                 if (!res.ok) {
                     halt('네이버 응답 오류(' + (res.status || res.message || '통신') + ') — 잠시 후 "이어서 확인"을 눌러주세요', true);
                     return;
