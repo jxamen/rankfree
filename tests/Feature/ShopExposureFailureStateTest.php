@@ -14,6 +14,24 @@ class ShopExposureFailureStateTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_html_success_clears_server_wait_without_collector_event(): void
+    {
+        $a = ShopKeywordAnalysis::create(['user_id' => User::factory()->create()->id,
+            'core_keyword' => '테스트', 'status' => 'blocked', 'check_method' => 'search', 'threshold' => 5, 'combo_count' => 2]);
+        $item = ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => 'a']);
+        ShopKeywordAnalysisItem::create(['analysis_id' => $a->id, 'kind' => 'combo', 'source' => 'combo', 'keyword' => 'b']);
+        Cache::put('shop-exposure:error:'.$a->id, 'captcha');
+        $key = NaverShopExposureService::policyKey();
+        Cache::put($key, ['until' => 9999999999999, 'gap' => 7300]);
+        $r = app(ShopKeywordExposureAnalyzer::class)->applyHtml($a, $item, '');
+        $this->assertSame('checking', $r['status']);
+        $this->assertFalse($r['blocked']);
+        $this->assertNull(Cache::get('shop-exposure:error:'.$a->id));
+        $this->assertSame(0, Cache::get($key)['until']);
+        $this->assertSame(7300, Cache::get($key)['gap']);
+        $this->assertFalse(app(ShopKeywordExposureAnalyzer::class)->progress($a->refresh())['blocked']);
+    }
+
     public function test_non_block_errors_keep_reason_and_success_clears_previous_failure(): void
     {
         config(['rankfree.shopping.exposure.fetch_delay_ms' => 0, 'services.slack.notifications.bot_user_oauth_token' => null]);

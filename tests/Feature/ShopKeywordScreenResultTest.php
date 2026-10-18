@@ -27,6 +27,18 @@ class ShopKeywordScreenResultTest extends TestCase
             'source' => 'combo', 'keyword' => $keyword]);
     }
 
+    public function test_read_failures_skip_to_next_keyword_without_recording_non_exposure(): void
+    {
+        $a = $this->analysis();
+        $one = $this->item($a, '실패');
+        $two = $this->item($a, '다음');
+        $url = route('admin.shop-keyword.pending', $a);
+        $this->getJson($url.'?runner=test&exclude[]='.$one->id)->assertOk()->assertJsonPath('data.items.0.id', $two->id);
+        $this->assertNull($one->fresh()->rank);
+        $this->getJson($url.'?runner=test&exclude[]='.$one->id.'&exclude[]='.$two->id)->assertOk()->assertJsonCount(0, 'data.items');
+        $this->getJson($url.'?runner=test')->assertOk()->assertJsonPath('data.items.0.id', $one->id);
+    }
+
     public function test_one_result_updates_one_combination_and_preserves_screen_on_retry(): void
     {
         $a = $this->analysis();

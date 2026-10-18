@@ -1,6 +1,6 @@
 /* One browser-wide lane for screen + background exposure checks.
  * The saved base defaults to 4000ms; accepted pacing is 1000–30000ms.
- * A blocked response is never retried automatically within its 3 minute cooldown.
+ * In tab mode, inspect the human recovery tab every 1.5s without navigating during a block.
  */
 class ShopSerpPolicy {
   constructor({ storage = chrome.storage.local, now = () => Date.now(), wait = ms => new Promise(r => setTimeout(r, ms)), cache = null, random = Math.random } = {}) {
@@ -77,8 +77,14 @@ class ShopSerpPolicy {
       s.gap = Math.max(1000, Math.min(30000, Math.max(Number(s.gap) || 4000, Number(serverGap) || 4000)));
       await save();
       const hit = await this.cache.get(key);
-      if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
-      if (this.now() < (s.until || 0)) {
+      if (hit?.ok) {
+        s.until = 0; s.blockedOnResume = false;
+        await save();
+        const queue = await this.storage.get('rfSkwCheckSkipReason');
+        if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
+        return { ...hit, captcha: false, cooldown: false, blocked: false, cached: true, interval_ms: s.gap, retryAt: null, blockedOnResume: false };
+      }
+      if (s.until && (probe || this.now() < s.until)) {
         const recovered = probe ? await probe() : null;
         if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
         s.until = 0; s.blockedOnResume = false; s.last = this.now();

@@ -16,7 +16,6 @@
     </select>
     <button id="sk-interval-save" type="button" class="btn btn-secondary btn-sm">저장</button>
     <button id="sk-interval-reset" type="button" class="btn btn-ghost btn-sm">간격 초기화</button>
-    <button id="sk-continue-now" type="button" class="btn btn-secondary btn-sm" @disabled(in_array($analysis->status, ['ad_ended', 'target_reached']))>바로 이어서</button>
     <span id="sk-interval-notice" role="status"></span>
 </div>
 @endif
@@ -130,18 +129,13 @@
     <div id="sk-prog" class="card p-4 mb-4" data-url="{{ route('admin.shop-keyword.check', $analysis) }}">
         <div class="flex items-center justify-between mb-2">
             <span id="sk-prog-label" class="text-ink" style="font-size:var(--fs-sm);">
-                @if ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서 확인"으로 재개합니다
+                @if ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서"로 재개합니다
                 @else순위 확인 중… {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 {{ $th }}위 노출 {{ $analysis->exposed_count }}@endif
             </span>
             <div class="flex items-center gap-2">
-                <button type="button" id="sk-stop" class="btn btn-ghost btn-sm {{ $isPaused ? 'hidden' : '' }}">중단</button>
-                <a id="sk-captcha" class="btn btn-secondary btn-sm hidden" target="_blank" rel="noopener nofollow"
-                    href="https://m.search.naver.com/search.naver?where=m&query={{ urlencode($analysis->core_keyword) }}">보안문자 풀기 ↗</a>
-                <button type="button" id="sk-resume" class="btn btn-secondary btn-sm {{ $isPaused ? '' : 'hidden' }}">이어서 확인</button>
+                <button type="button" id="sk-stop" class="btn btn-ghost btn-sm">{{ $isPaused ? '이어서' : '중단' }}</button>
             </div>
         </div>
-        <div id="sk-current" role="status" style="font-size:var(--fs-sm);"></div>
-        <div id="sk-last-result" style="font-size:var(--fs-sm);"></div>
         <div style="height:8px;background:var(--color-surface-soft);border-radius:var(--radius-pill);overflow:hidden;">
             <div id="sk-prog-fill" style="height:100%;background:var(--color-primary);border-radius:var(--radius-pill);transition:width .3s;width:{{ $analysis->combo_count ? round($analysis->checked_count / $analysis->combo_count * 100) : 0 }}%;"></div>
         </div>
@@ -154,9 +148,6 @@
     <div><div class="text-muted" style="font-size:var(--fs-xs);">상위 {{ $th }}위 노출</div><div class="font-mono text-ink" id="sk-sum-exposed" style="font-size:var(--fs-xl);">{{ $analysis->exposed_count }}</div></div>
     <div><div class="text-muted" style="font-size:var(--fs-xs);">순위 확인 조합</div><div class="font-mono text-ink" id="sk-sum-checked" style="font-size:var(--fs-xl);">{{ $analysis->checked_count }}</div></div>
     <div><div class="text-muted" style="font-size:var(--fs-xs);">추출 키워드</div><div class="font-mono text-ink" style="font-size:var(--fs-xl);">{{ $analysis->token_count }}</div></div>
-    @if (in_array($analysis->status, ['blocked', 'error'], true))
-        <div id="sk-collection-error" class="text-error" style="font-size:var(--fs-xs);align-self:center;">일부 조합 미확인 · {{ \Illuminate\Support\Facades\Cache::get('shop-exposure:error:'.$analysis->id) ?? '이전 실패 사유 미기록' }} — 이어서 확인하면 다시 시도합니다.</div>
-    @endif
 </div>
 
 @php
@@ -549,7 +540,7 @@ window.__SK = {
     const box = document.getElementById('sk-prog');
     const fill = document.getElementById('sk-prog-fill');
     const label = document.getElementById('sk-prog-label');
-    const resume = document.getElementById('sk-resume');
+    const resume = null;
     const stopBtn = document.getElementById('sk-stop');
     let stopped = !!cfg.paused;   // 서버에 저장된 중단 상태 — 새로고침해도 유지
     let errCount = 0;
@@ -598,12 +589,17 @@ window.__SK = {
     function halt(msg, showResume) {
         stopped = true;
         if (label) label.textContent = msg;
-        if (stopBtn) stopBtn.classList.add('hidden');
+        if (stopBtn) { stopBtn.classList.remove('hidden'); stopBtn.textContent = '이어서'; }
         if (showResume && resume) resume.classList.remove('hidden');
     }
     function renderProgress(d) {
         const notice = document.getElementById('sk-collection-error');
-        if (notice && !['blocked', 'error'].includes(d.status)) notice.remove();
+        if (d.status && !['blocked', 'error'].includes(d.status) && !d.blocked) {
+            if (notice) notice.remove();
+            const captcha = document.getElementById('sk-captcha');
+            if (captcha) captcha.classList.add('hidden');
+            if (!stopped && label) label.textContent = '진행 중 — 순위 확인 중…';
+        }
         if (d.total === undefined) return;
         lastD = d;
         if (Array.isArray(d.exposed_items)) { syncExposed(d.exposed_items); d.exposed = d.exposed_items.length; }
@@ -612,7 +608,7 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '진행 중 — 브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
@@ -801,20 +797,6 @@ window.__SK = {
     document.getElementById('sk-interval-reset').onclick = function () {
         saveGap(this, '{{ route('admin.shop-keyword.reset-interval', $analysis) }}');
     };
-    document.getElementById('sk-continue-now').onclick = async function () {
-        this.disabled = true;
-        try {
-            if (!await waitExt(1500)) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
-            stopped = true;
-            const r = await post('{{ route('admin.shop-keyword.continue-now', $analysis) }}');
-            if (!r.ok) throw new Error('재개할 수 없습니다.');
-            const data = await r.json();
-            const result = await extCall('resumeShopSerp', { collectorIp: data.collector_ip }, 90000);
-            if (!result?.ok) throw new Error('확장 0.6.2을 설치하고 새로고침해 주세요.');
-            sessionStorage.setItem('rf-continue-now-{{ (int) $analysis->id }}', '1');
-            location.reload();
-        } catch (e) { notice.textContent = e.message; this.disabled = false; }
-    };
     @endif
 
     async function waitRestriction(until, source) {
@@ -827,23 +809,24 @@ window.__SK = {
         if (!stopped && label) label.textContent = '순위 다시 확인 중…';
     }
 
-    let statusPending = false;
-    setInterval(async () => {
-        if (stopped || !extMode || statusPending) return;
-        statusPending = true;
-        try {
-            const state = await extCall('shopSerpStatus', {}, 1800);
-            const current = document.getElementById('sk-current');
-            if (current && state?.keyword) current.textContent = '지금: ' + state.keyword + ' · ' + state.screen;
-        } finally { statusPending = false; }
-    }, 1000);
-
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
+    const failedItems = new Map();
+    function pendingUrl() {
+        const url = new URL(cfg.urls.pending, location.href);
+        url.searchParams.set('runner', RUNNER);
+        for (const id of failedItems.keys()) url.searchParams.append('exclude[]', id);
+        return url;
+    }
     async function runExtLoop() {
+        if (loopActive) return;
+        loopActive = true;
+        try { await collectLoop(); } finally { loopActive = false; }
+    }
+    async function collectLoop() {
         while (!stopped) {
             let d;
             try {
-                const r = await fetch(cfg.urls.pending + (cfg.urls.pending.includes('?') ? '&' : '?') + 'runner=' + RUNNER, { headers: { Accept: 'application/json' } });
+                const r = await fetch(pendingUrl(), { headers: { Accept: 'application/json' } });
                 if (r.status === 409) { stopped = true; location.reload(); return; }
                 if (r.status === 423) { await waitBusy(r); continue; }
                 if (r.status === 401 || r.status === 403 || r.status === 404 || r.status === 419) { halt('세션이 만료됐거나 접근할 수 없습니다 — 새로고침 해주세요', false); return; }
@@ -858,15 +841,16 @@ window.__SK = {
             renderProgress(d);
             currentIntervalMs = d.interval_ms || currentIntervalMs;
             if (label) label.textContent += intervalLabel();
-            if (!d.items || !d.items.length) { location.reload(); return; }
+            if (!d.items || !d.items.length) { if (failedItems.size) { halt('멈춤 — 나머지 확인 완료 · 읽기 실패 ' + failedItems.size + '개 · ' + [...failedItems.values()].at(-1) + ' (이어서로 재시도)', true); return; } location.reload(); return; }
 
             for (const it of d.items) {
                 if (stopped) return;
                 let res;
+                let readRetries = 0;
                 while (!stopped) {
                     // Refresh pacing before each request, including retries of the same keyword.
                     try {
-                        const policyResponse = await fetch(cfg.urls.pending + '?runner=' + RUNNER, { headers: { Accept: 'application/json' } });
+                        const policyResponse = await fetch(pendingUrl(), { headers: { Accept: 'application/json' } });
                         if (!policyResponse.ok) { stopped = true; location.reload(); return; }
                         const fresh = (await policyResponse.json()).data;
                         renderProgress(fresh); d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision;
@@ -874,8 +858,8 @@ window.__SK = {
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
-                    // Only actual network results generate events; cached/cooldown replies do not.
-                    if (res && !res.cached && !res.cooldown) {
+                    // Successful cache results also release stale waits; cooldown replies do not.
+                    if (res && (!res.cached || res.ok) && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
                             try {
@@ -885,20 +869,26 @@ window.__SK = {
                         }
                     }
                     if (stopped) return;
-                    if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
+                    if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
+                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword;
                         await sleep(1500);
-                        continue; // Keep the blocked tab for human recovery; retry after three minutes.
+                        continue; // Inspect the same tab until the person clears the gate.
+                    }
+                    if (!res.ok && readRetries++ < 1) {
+                        if (label) label.textContent = '읽기 실패 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 1회 재시도';
+                        await sleep(1500);
+                        continue;
                     }
                     break;
                 }
                 if (stopped) return;
                 if (!res.ok) {
-                    halt('네이버 응답 오류(' + (res.status || res.message || '통신') + ') — 잠시 후 "이어서 확인"을 눌러주세요', true);
-                    return;
+                    failedItems.set(it.id, res.message || String(res.status));
+                    if (label) label.textContent = '읽기 실패 — ' + it.keyword + ' · ' + (res.message || res.status) + ' · 다음 키워드로 이동';
+                    continue;
                 }
-                if (label) label.textContent = '순위 확인 중(확장)…' + intervalLabel();
+                if (label) label.textContent = '진행 중 — ' + it.keyword + intervalLabel() + (failedItems.size ? ' · 읽기 실패 ' + failedItems.size + '개' : '');
                 const oldNotice = document.getElementById('sk-collection-error');
                 if (oldNotice) oldNotice.remove();
                 try {
@@ -990,21 +980,29 @@ window.__SK = {
     }
 
     // 중단/재개 — 서버에도 저장해 새로고침해도 중단 상태가 유지된다("이어서 확인"으로만 재개)
-    if (stopBtn) stopBtn.addEventListener('click', function () {
-        stopped = true;
-        stopBtn.classList.add('hidden');
-        if (resume) resume.classList.remove('hidden');
-        if (label) label.textContent = '순위 확인 중단됨' + (lastD ? ` — ${lastD.checked}/${lastD.total} · 상위 노출 ${lastD.exposed}` : '') + ' · "이어서 확인"으로 재개합니다';
-        post(cfg.urls.pause, { paused: true }).catch(() => {});
-    });
-    if (resume) resume.addEventListener('click', function () {
-        stopped = false; errCount = 0; resume.classList.add('hidden');
-        const cap = document.getElementById('sk-captcha');
-        if (cap) cap.classList.add('hidden');
-        if (stopBtn) stopBtn.classList.remove('hidden');
-        if (label) label.textContent = '순위 확인 재개 중…';
-        post(cfg.urls.pause, { paused: false }).catch(() => {});
-        if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
+    let loopActive = false;
+    if (stopBtn) stopBtn.addEventListener('click', async function () {
+        if (!stopped) {
+            stopped = true;
+            stopBtn.textContent = '이어서';
+            stopBtn.disabled = true;
+            if (label) label.textContent = '멈춤 — 진행 중이던 요청까지 마칩니다';
+            try { await post(cfg.urls.pause, {paused: true}); } catch (_) {}
+            while (loopActive) await sleep(100);
+            stopBtn.disabled = false;
+            return;
+        }
+        stopBtn.disabled = true;
+        try {
+            const r = await post(cfg.urls.pause, {paused: false});
+            if (!r.ok) throw new Error('재개할 수 없습니다');
+            failedItems.clear();
+            stopped = false; errCount = 0;
+            stopBtn.textContent = '중단';
+            if (label) label.textContent = '진행 중 — 이어서 확인합니다';
+            if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
+        } catch (e) { if (label) label.textContent = e.message; }
+        finally { stopBtn.disabled = false; }
     });
 
     // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)

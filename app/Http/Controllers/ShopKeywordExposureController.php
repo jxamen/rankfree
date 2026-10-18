@@ -209,8 +209,9 @@ class ShopKeywordExposureController extends Controller
         if ($analysis->status === 'ad_ended' || $analysis->targetReached()) {
             return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
         }
+        $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
         $limit = 1; // Refresh IP policy before every browser request.
-        $items = $analysis->combos()->whereNull('rank')->orderBy('id')->limit($limit)
+        $items = $analysis->combos()->whereNull('rank')->whereNotIn('id', $request->input('exclude', []))->orderBy('id')->limit($limit)
             ->get(['id', 'keyword'])
             ->map(fn ($i) => ['id' => $i->id, 'keyword' => $i->keyword])->values();
         if ($items->isEmpty()) {

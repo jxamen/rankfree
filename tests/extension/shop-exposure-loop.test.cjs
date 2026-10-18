@@ -34,12 +34,12 @@ test('background inspects the same keyword every 1.5 seconds until human recover
 
 test('admin extension loop keeps browser work until human recovery even with stale fallback replies', async()=>{
  const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
- const start=blade.indexOf('    async function runExtLoop()');
+ const start=blade.indexOf('    const failedItems = new Map();');
  const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
  let calls=0,saves=0,serverCalls=0;const waits=[],events=[];
- const context=vm.createContext({serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
+ const context=vm.createContext({URL,location:{href:'http://localhost/admin'},loopActive:false,serverFallback:false,poll:()=>{serverCalls++;},currentIntervalMs:3000,intervalLabel:()=> ' interval',stopped:false,errCount:0,cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/events'}},RUNNER:'test',label:{},Date:{now:()=>1000000},
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
-  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,html:'raw'},
+  extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
   post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
@@ -52,11 +52,12 @@ test('admin clears the old failure notice on the next successful progress respon
  const start=blade.indexOf('    function renderProgress(d)');
  const code=blade.slice(start,blade.indexOf('    // ── 상태 필터',start));
  let removed=0;
- const context=vm.createContext({document:{getElementById:()=>({remove:()=>removed++})}});
+ const context=vm.createContext({stopped:false,label:{textContent:'보안문자 대기'},document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
  vm.runInContext(code+`;renderProgress({status:'blocked'});renderProgress({status:'error'});`,context);
  assert.equal(removed,0);
  vm.runInContext(`renderProgress({status:'checking'});`,context);
  assert.equal(removed,1);
+ assert.match(context.label.textContent,/진행 중/);
 });
 
 test('legacy queue wait migrates before early return; permission pause is preserved',async()=>{
@@ -72,18 +73,31 @@ test('legacy queue wait migrates before early return; permission pause is preser
  }
 });
 
-test('continue now releases server and extension waits, then reloads without supplement collection', async () => {
+test('one lower toggle pauses and resumes; upper and captcha buttons removed', async () => {
  const blade=fs.readFileSync(require('node:path').join(__dirname,'../../resources/views/admin/shop-keyword/show.blade.php'),'utf8');
- const start=blade.indexOf("    document.getElementById('sk-continue-now').onclick");
- const code=blade.slice(start,blade.indexOf('    @endif',start)).replace(/\{\{.*?\}\}/g,'71');
- const button={};const actions=[];
- const context=vm.createContext({document:{getElementById:()=>button},stopped:false,notice:{},
-  waitExt:async()=>true,
-  post:async()=>{actions.push('server');return {ok:true,json:async()=>({collector_ip:'ip'})};},
-  extCall:async(type,args)=>{assert.equal(type,'resumeShopSerp');assert.equal(args.collectorIp,'ip');actions.push('extension');return {ok:true};},
-  sessionStorage:{setItem:(key,value)=>actions.push([key,value])},location:{reload:()=>actions.push('reload')},
- });
- vm.runInContext(code,context);await button.onclick();
- assert.equal(context.stopped,true);
- assert.deepEqual(actions,['server','extension',['rf-continue-now-71','1'],'reload']);
+ for (const id of ['sk-continue-now','id="sk-resume"','id="sk-captcha"']) assert.equal(blade.includes(id),false);
+ assert.equal((blade.match(/id="sk-stop"/g)||[]).length,1);
+ const start=blade.indexOf('    let loopActive = false;');
+ const code=blade.slice(start,blade.indexOf('    // 상품정보 다시 수집',start));
+ let click, runs=0;const actions=[];
+ const button={addEventListener:(type,fn)=>click=fn};
+ const context=vm.createContext({stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
+ post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
+ vm.runInContext(code,context);
+ await click(); assert.equal(context.stopped,true); assert.equal(button.textContent,'이어서');
+ await click(); assert.equal(context.stopped,false); assert.equal(button.textContent,'중단');assert.equal(runs,1); assert.deepEqual(actions,[true,false]);
+});
+
+test('ordinary read failure retries once then advances, retaining failed rank as unknown',async()=>{
+ const blade=fs.readFileSync('resources/views/admin/shop-keyword/show.blade.php','utf8');
+ const start=blade.indexOf('    const failedItems = new Map();');
+ const code=blade.slice(start,blade.indexOf('    // ── 폴백:',start)).replace(/\{\{.*?\}\}/g,'66');
+ const calls=[],saves=[];let halted='';
+ const context=vm.createContext({URL,location:{href:'http://localhost',reload:()=>{throw Error('unexpected reload');}},loopActive:false,stopped:false,errCount:0,currentIntervalMs:4000,intervalLabel:()=>'',cfg:{urls:{pending:'/pending',checkHtml:'/save',collectorEvent:'/event'}},RUNNER:'test',label:{},document:{getElementById:()=>null},renderProgress:()=>{},sleep:async()=>{},
+ fetch:async url=>{const excluded=url.searchParams.getAll('exclude[]');return {ok:true,json:async()=>({data:{items:excluded.includes('1')?(saves.length?[]:[{id:2,keyword:'next'}]):[{id:1,keyword:'bad'}]}})};},
+ extCall:async(type,args)=>{calls.push(args.keyword);return args.keyword==='bad'?{ok:false,message:'상품 목록 읽기 15초 초과'}:{ok:true,html:'valid'};},
+ post:async(url,body)=>{if(url==='/save')saves.push(body.item_id);return {ok:true,json:async()=>({status:'checking'})};},
+ halt:msg=>{halted=msg;context.stopped=true;}});
+ await vm.runInContext(code+';runExtLoop()',context);
+ assert.deepEqual(calls,['bad','bad','next']);assert.deepEqual(saves,[2]);assert.match(halted,/읽기 실패 1개/);
 });
