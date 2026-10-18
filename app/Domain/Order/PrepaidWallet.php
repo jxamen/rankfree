@@ -5,6 +5,7 @@ namespace App\Domain\Order;
 use App\Models\MarketingOrder;
 use App\Models\Topup;
 use App\Models\User;
+use App\Support\Aligo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -31,13 +32,27 @@ class PrepaidWallet
     {
         DB::transaction(function () use ($topup, $admin, $status) {
             $locked = Topup::whereKey($topup->id)->lockForUpdate()->firstOrFail();
-            if ($locked->status !== 'pending') {
+            if ($locked->deleted_at || $locked->status !== 'pending') {
                 throw ValidationException::withMessages(['topup' => '이미 처리된 충전 요청입니다.']);
             }
+            $before = $locked->getAttributes();
             if ($status === 'confirmed') {
-                $this->change($locked->user_id, (int) $locked->amount, 'topup:'.$locked->id, '충전 '.$locked->code);
+                $this->change($locked->user_id, (int) $locked->amount, 'topup:'.$locked->id.((int) $locked->approval_cycle > 0 ? ':'.$locked->approval_cycle : ''), '충전 '.$locked->code);
             }
-            $locked->update(['status' => $status, 'reviewed_by' => $admin->id, 'reviewed_at' => now()]);
+            $locked->update(['status' => $status, 'reviewed_by' => $admin->id, 'reviewed_at' => now(), 'bank_received' => $status === 'confirmed' ? true : $locked->bank_received]);
+            TopupAdmin::audit($locked, $admin, $status, $before);
+            if ($status === 'confirmed') {
+                $phone = (string) DB::table('users')->where('id', $locked->user_id)->value('phone');
+                if (preg_match('/^01[016789]\d{7,8}$/', preg_replace('/\D/', '', $phone))) {
+                    $notice = DB::table('topup_audits')->insertGetId(['topup_id' => $locked->id, 'actor' => (string) $admin->id, 'action' => 'confirmed_sms', 'before_state' => '{}', 'after_state' => '{"sms":"unknown"}', 'created_at' => now()]);
+                    $message = '[적립금 충전완료] '.number_format($locked->amount).' 원';
+                    DB::afterCommit(function () use ($notice, $phone, $message) {
+                        $ok = (Aligo::configured() && Aligo::sendSms($phone, $message));
+                        DB::table('topup_audits')->where('id', $notice)->update(['after_state' => json_encode(['sms' => $ok ? 'sent' : 'failed_or_unknown'])]);
+                    });
+                }
+            }
+
         });
     }
 
