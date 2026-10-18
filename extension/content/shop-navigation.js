@@ -1,7 +1,7 @@
 // Collection-only navigation: inspect the rendered shopping block before using the menu.
 (async () => {
   if (location.hash !== '#rfnav') return;
-  const blocked = () => /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한/.test(document.body?.innerText || '');
+  const blocked = () => /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(document.body?.innerText || '');
   const visible = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
   const send = result => chrome.runtime.sendMessage({type: '__rfSerpRead', result});
   // Parse JSON only. Never execute page scripts in the extension world.

@@ -3729,7 +3729,7 @@
     serpPreparing = (async () => {
       {
         const text = document.body?.innerText || '';
-        if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) return false;
+        if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(text)) return false;
         const empty = /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
         // Mobile class names differ from desktop. Embedded products are sufficient evidence.
         if (empty || serpProducts()?.products?.length) {
@@ -3760,7 +3760,7 @@
   async function runSerpRead() {
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
     if (!await prepareSerp()) {
-      const captcha = /HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(document.body?.innerText || '');
+      const captcha = /HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(document.body?.innerText || '');
       await send({ok:false,status:captcha ? 200 : 0,captcha,message:captcha ? '네이버 차단 화면 감지 — 수집 탭에서 풀어 주세요.' : '쇼핑 페이지 로딩 또는 상품 목록을 확인하지 못했습니다.'});
       return;
     }

@@ -1033,8 +1033,11 @@ window.__SK = {
         }
         stopBtn.disabled = true;
         try {
-            const r = await post(cfg.urls.pause, {paused: false});
-            if (!r.ok) throw new Error('재개할 수 없습니다');
+            const r = await post(cfg.urls.pause, {paused: false}).catch(() => null);
+            // 화면을 오래 열어 둬 보안 토큰이 만료되면(419) 새로고침으로 바로 풀고, 그 밖의 실패도 수집은 그대로 잇는다(대표님 10/18 22:18 「재개할 수 없습니다」)
+            if (r && r.status === 419) { location.reload(); return; }
+            if (r && (r.status === 403 || r.status === 404 || r.status === 409)) throw new Error('재개할 수 없습니다 (HTTP ' + r.status + ') — 새로고침 해주세요');
+            if (!r || !r.ok) reportClientError('resume', 'pause(false) HTTP ' + (r ? r.status : 'network'));
             RUNNER = Math.random().toString(36).slice(2) + Date.now().toString(36);
             failedItems.clear();
             stopped = false; errCount = 0;
