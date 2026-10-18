@@ -101,12 +101,8 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
         $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30|decimal:0,1', 'collection_mode' => 'sometimes|in:tab,fetch', 'parallel_tabs' => 'sometimes|integer|min:1|max:4', 'tab_open_seconds' => 'sometimes|numeric|min:0|max:60|decimal:0,1', 'keywords_per_day' => 'sometimes|integer|min:10|max:500']);
-        \App\Models\AppSetting::write('shop.exposure.interval_ms', (string) round($data['seconds'] * 1000));
-        if (isset($data['collection_mode'])) \App\Models\AppSetting::write('shop.exposure.collection_mode', $data['collection_mode']);
-        foreach (['parallel_tabs', 'keywords_per_day'] as $key) {
-            if (isset($data[$key])) \App\Models\AppSetting::write('shop.exposure.'.$key, (string) $data[$key]);
-        }
-        if (isset($data['tab_open_seconds'])) \App\Models\AppSetting::write('shop.exposure.tab_open_interval_ms', (string) round($data['tab_open_seconds'] * 1000));
+        // Collection preferences live in the browser; only the order target is shared.
+        if (isset($data['keywords_per_day'])) \App\Models\AppSetting::write('shop.exposure.keywords_per_day', (string) $data['keywords_per_day']);
         if (isset($data['keywords_per_day'])) {
             DB::transaction(function () use ($analysis, $data) {
                 $current = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
@@ -119,8 +115,8 @@ class ShopKeywordExposureController extends Controller
                 $current->save();
             });
         }
-        $response = $this->resetInterval($request, $analysis);
-        \Illuminate\Support\Facades\Log::info('shop_exposure_interval_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval()]);
+        $response = response()->json(['interval_ms' => (int) round($data['seconds'] * 1000)]);
+        \Illuminate\Support\Facades\Log::info('shop_exposure_order_target_saved', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String(), 'keywords_per_day' => $data['keywords_per_day'] ?? null]);
         return $response;
     }
 
@@ -267,7 +263,7 @@ class ShopKeywordExposureController extends Controller
         $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
         if ($request->boolean('policy_only')) app(\App\Domain\Shopping\ShopKeywordClaims::class)->renew($analysis, (string) $request->input('runner', ''));
         $items = $request->boolean('policy_only') ? collect() : app(\App\Domain\Shopping\ShopKeywordClaims::class)->claim(
-            $analysis, (string) $request->input('runner', ''), min(\App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs'], max(1, (int) $request->input('limit', \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs']))), $request->input('exclude', [])
+            $analysis, (string) $request->input('runner', ''), min(\App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_reduced'] ? 1 : 4, max(1, (int) $request->input('limit', \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_tabs']))), $request->input('exclude', [])
         );
         if ($items->isEmpty() && ! $analysis->combos()->whereNull('rank')->exists()) {
             app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);
