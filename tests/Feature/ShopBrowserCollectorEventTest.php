@@ -58,7 +58,7 @@ class ShopBrowserCollectorEventTest extends TestCase
         $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success', 'interval_ms' => 2300])->assertOk();
         $this->assertSame($policy, \Illuminate\Support\Facades\Cache::get($key));
         $this->assertSame(2300, \App\Services\ShopExposureBlockAlert::interval('192.0.2.25'));
-        $this->assertSame('blocked', $a->fresh()->status);
+        $this->assertSame('checking', $a->fresh()->status);
     }
 
     public function test_admin_reset_preserves_counts_and_cooldown_and_denies_member(): void

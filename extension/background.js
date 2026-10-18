@@ -920,6 +920,16 @@ async function drainShopKeywordCheckQueue() {
   if (Date.now() - lastScreenSerpAt < 60000) return;      // 화면이 돌고 있으면 양보
   const { token, apiBase } = await getStore();
   if (!token) return;
+  const held = await chrome.storage.session.get(['rfSerpCaptchaWait', 'rfSerpTabKeyword', 'rfSerpAnalysisId']);
+  if (held.rfSerpCaptchaWait && held.rfSerpAnalysisId) {
+    const recovered = await shopSerpTab.peek(held.rfSerpTabKeyword);
+    if (recovered?.ok) {
+      const event = await apiFetch('/api/ext/shop-keyword/' + held.rfSerpAnalysisId + '/collector-event', {
+        method: 'POST', token, apiBase, body: { kind: 'success' },
+      });
+      if (event.ok) await chrome.storage.session.set({ rfSerpCaptchaWait: false });
+    }
+  }
   const s = await chrome.storage.local.get(['rfSkwCheckSkipUntil', 'rfSkwCheckSkipReason', 'rfSerpPolicy']);
   const until = s.rfSerpPolicy && s.rfSerpPolicy.until;
   if (s.rfSkwCheckSkipReason !== 'permission' && s.rfSkwCheckSkipUntil > Date.now() + 180000
@@ -1009,9 +1019,16 @@ Object.assign(handlers, {
    * 요청 403은 같은 키워드 탭에서 1회 재확인한 최종 결과만 차단 정책에 전달한다.
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
-  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision }, sender) {
+  async fetchShopSerp({ keyword, analysisId, collectorIp, interval_ms, interval_revision, probeOnly = false }, sender) {
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
     if (sender && sender.tab) lastScreenSerpAt = Date.now();
+    if (probeOnly) {
+      const saved = await chrome.storage.session.get(['rfSerpTabKeyword', 'rfSerpCaptchaWait']);
+      if (!saved.rfSerpCaptchaWait) return { ok: false };
+      const recovered = await shopSerpTab.peek(saved.rfSerpTabKeyword);
+      if (recovered?.ok) await chrome.storage.session.set({ rfSerpCaptchaWait: false });
+      return recovered || { ok: false, captcha: true };
+    }
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     const result = await shopSerpPolicy.run(kw, async () => {
@@ -1045,12 +1062,13 @@ Object.assign(handlers, {
       }
     }
     return { ok: true, status: res.status, html: picked };
-    }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek(kw));
+    }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek());
+    if (result.captcha && analysisId) await chrome.storage.session.set({ rfSerpAnalysisId: Number(analysisId) });
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
     if (analysisId && !(sender && sender.tab) && !result.cached && !result.cooldown) {
-      const kind = result.captcha ? '보안문자' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
+      const kind = result.captcha ? 'captcha_wait' : [403, 429].includes(result.status) ? String(result.status) : result.ok ? 'success' : null;
       if (kind) {
         try {
           const { token, apiBase } = await getStore();

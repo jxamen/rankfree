@@ -17,12 +17,12 @@ class ShopSerpTab {
   async peek(keyword) {
     try {
       const saved = await this.browser.storage.session.get(['rfSerpTabId', 'rfSerpTabKeyword']);
-      if (saved.rfSerpTabKeyword !== keyword || saved.rfSerpTabId == null) return null;
+      if ((keyword != null && saved.rfSerpTabKeyword !== keyword) || saved.rfSerpTabId == null) return null;
       const tab = await this.browser.tabs.get(saved.rfSerpTabId);
       const url = new URL(tab.url);
-      if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
+      if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== saved.rfSerpTabKeyword) return null;
       const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
-      if (r?.ok && Array.isArray(r.products)) return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+      if (r?.ok && Array.isArray(r.products)) return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab', keyword: saved.rfSerpTabKeyword };
     } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
     return null;
   }
@@ -53,6 +53,13 @@ class ShopSerpTab {
     try {
       const url = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp';
       const storage = c.storage.session;
+      const held = await storage.get(['rfSerpCaptchaWait', 'rfSerpTabKeyword']);
+      if (held.rfSerpCaptchaWait) {
+        const recovered = await this.peek(held.rfSerpTabKeyword);
+        if (!recovered?.ok) return { ok: false, captcha: true, cooldown: true, status: 200 };
+        await storage.set({ rfSerpCaptchaWait: false });
+        if (held.rfSerpTabKeyword === keyword) return recovered;
+      }
       if (this.tabId === null) {
         const saved = await storage.get('rfSerpTabId');
         this.tabId = saved.rfSerpTabId ?? null;
@@ -71,7 +78,9 @@ class ShopSerpTab {
       await storage.set({ rfSerpTabKeyword: keyword });
       const current = await c.tabs.get(tab.id);
       onUpdated(tab.id, { url: current.url || current.pendingUrl });
-      return await result;
+      const response = await result;
+      if (response.captcha) await storage.set({ rfSerpCaptchaWait: true });
+      return response;
     } catch (e) { return { ok: false, status: 0, message: '쇼핑 탭 오류: ' + e.message }; }
     finally {
       clearTimeout(timer);

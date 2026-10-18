@@ -24,7 +24,7 @@ for (const blocked of [{ok:false,status:403},{ok:false,status:429},{ok:false,sta
   await f.policy.run('a',async()=>{calls++;return blocked;});
   const r=await f.policy.run('b',async()=>{calls++;return {ok:true};});
   assert.equal(r.cooldown,true); assert.equal(calls,1); assert.equal(f.data.rfSerpPolicy.gap,2300); assert.equal(f.data.rfSerpPolicy.slowEntries,1);
-  f.advance(180000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,2);
+  f.advance(180000); await f.policy.run('a',async()=>{calls++;return {ok:true,html:''};}); assert.equal(calls,blocked.captcha?1:2);
  });
 }
 test('165 successes retain interval without periodic rests', async()=>{
@@ -52,7 +52,7 @@ test('storage failure stops before network',async()=>{
 });
 
 test('repeated blocks always wait exactly three minutes without a retry limit', async()=>{
- for (const status of [403,429,200]) {
+ for (const status of [403,429]) {
   const f=fixture(); let calls=0;
   const block=async()=>{calls++;return {ok:false,status,captcha:status===200};};
   for(let i=0;i<5;i++) {
@@ -130,4 +130,22 @@ test('human recovery clears only cooldown and preserves IP increments, counters 
  assert.equal(navigations,1);assert.equal(probes,4);assert.equal(f.data.rfSerpPolicy.http403,1);
  assert.equal(f.data.rfSerpPolicyByIp['ip-a'].gap,2300);assert.equal(f.data.rfSkwCheckSkipUntil,0);
  assert.equal((await f.policy.run('same',fetcher,'ip-a')).cached,true);
+});
+
+test('captcha never navigates after three minutes or a day, and human recovery preserves gap',async()=>{
+ const f=fixture();let fetches=0;
+ const fetcher=async()=>{fetches++;return {ok:false,captcha:true,status:200};};
+ await f.policy.run('held',fetcher);
+ for(const elapsed of [180000,86400000]){
+  f.advance(elapsed);
+  assert.equal((await f.policy.run('next',fetcher,'browser',2000,null,async()=>null)).cooldown,true);
+ }
+ assert.equal(fetches,1);
+ const recovered=await f.policy.run('held',fetcher,'browser',2000,null,async()=>({ok:true,keyword:'held',html:'human'}));
+ assert.equal(recovered.html,'human');assert.equal(fetches,1);assert.equal(f.data.rfSerpPolicy.until,0);
+});
+test('human recovery of a different keyword cannot be saved as current keyword HTML',async()=>{
+ const f=fixture();await f.policy.run('old',async()=>({ok:false,captcha:true}));
+ const recovered=await f.policy.run('new',async()=>({ok:true,html:'new html'}),'browser',2000,null,async()=>({ok:true,keyword:'old',html:'old html'}));
+ assert.equal(recovered.html,'new html');
 });

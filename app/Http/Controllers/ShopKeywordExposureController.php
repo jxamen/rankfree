@@ -34,7 +34,7 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         $data = $request->validate([
-            'kind' => 'required|in:403,429,보안문자,success',
+            'kind' => 'required|in:403,429,보안문자,captcha_wait,success',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:2000|max:10000',
         ]);
@@ -142,6 +142,7 @@ class ShopKeywordExposureController extends Controller
             $progress['retry_at'] = (int) ceil(max(microtime(true) + 2, $until) * 1000);
         }
         return response()->json($progress + [
+            'captcha_wait' => (bool) Cache::get('shop-exposure:captcha-wait:'.$analysis->id, false),
             'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis),
             'collector_ip' => (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'),
         ]);

@@ -42,9 +42,9 @@ class ShopServerFallbackTest extends TestCase
             Http::assertSentCount(1); // Includes no slot API or further network request during cooldown.
             $this->assertNull($item->fresh()->rank);
             $until = Cache::get(NaverShopExposureService::policyKey())['until'];
-            $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success'])->assertJsonPath('server_fallback', true);
+            $this->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => 'success'])->assertJsonPath('server_fallback', false);
             $this->assertSame($until, Cache::get(NaverShopExposureService::policyKey())['until']);
-            $this->assertSame('blocked', $a->fresh()->status);
+            $this->assertSame('checking', $a->fresh()->status);
             $state = Cache::get(NaverShopExposureService::policyKey());
             $state['until'] = 0;
             $state['last'] = 0;

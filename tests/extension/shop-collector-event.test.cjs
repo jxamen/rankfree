@@ -12,14 +12,14 @@ for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,st
     const context = vm.createContext({
       shopSerpPolicy: {run:async()=>result},
       getStore:async()=>({token:'token',apiBase:'https://rankfree.kr'}),
-      chrome:{storage:{local:{get:async()=>({rfSerpPolicy:{blockedOnResume:true}})}}},
+      chrome:{storage:{session:{get:async()=>({}),set:async()=>{}},local:{get:async()=>({rfSerpPolicy:{blockedOnResume:true}})}}},
       apiFetch:async(path,options)=>events.push({path,...options}),
     });
     await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69});',context);
     assert.equal(events.length,1);
     assert.equal(events[0].path,'/api/ext/shop-keyword/69/collector-event');
     assert.equal(events[0].body.collector,'browser');
-    assert.equal(events[0].body.kind,result.captcha?'보안문자':result.ok?'success':String(result.status));
+    assert.equal(events[0].body.kind,result.captcha?'captcha_wait':result.ok?'success':String(result.status));
     assert.equal(events[0].body.blocked_on_resume,!result.ok);
   });
 }

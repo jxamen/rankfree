@@ -3707,12 +3707,16 @@
     }
     const data = domNextData();
     const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
+    if (normal && typeof window !== 'undefined' && !window.__rfSerpScrolled) { window.__rfSerpScrolled = true; window.scrollBy(0, window.innerHeight || 800); }
     reply({ ok: normal, products: normal ? (data?.products || []) : undefined });
   });
 
   // Only read the loaded document; no API requests or captcha interaction.
   async function runSerpRead() {
-    const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
+    const send = result => {
+      if (result.ok && typeof window !== 'undefined' && !window.__rfSerpScrolled) { window.__rfSerpScrolled = true; window.scrollBy(0, window.innerHeight || 800); }
+      return chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
+    };
     for (let attempt = 0; attempt < 20; attempt++) {
       const text = document.body?.innerText || '';
       if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한/.test(text)) {

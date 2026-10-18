@@ -588,7 +588,7 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (serverFallback ? '브라우저 막힘 → 서버로 진행 중 ' : extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (captchaWaiting ? '보안문자 대기 — 수집 탭에서 풀어 주세요 · 서버로 진행 중 ' : serverFallback ? '브라우저 막힘 → 서버로 진행 중 ' : extMode && cfg.method !== 'api' ? '브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
@@ -759,6 +759,7 @@ window.__SK = {
     }
     @endif
     let serverFallback = cfg.serverFallback;
+    let captchaWaiting = false;
     let currentIntervalMs = 2000;
     let collectorIp = {{ \Illuminate\Support\Js::from(request()->ip()) }};
     const intervalLabel = () => ' · IP ' + collectorIp + ' · 간격 ' + (currentIntervalMs / 1000).toFixed(1) + '초 (최대 10초)';
@@ -801,14 +802,15 @@ window.__SK = {
                 let res;
                 while (!stopped) {
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }} }, 90000);
+                    if (res?.captcha) captchaWaiting = true;
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
                     // Only actual network results generate events; cached/cooldown replies do not.
                     if (res && !res.cached && !res.cooldown) {
-                        const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
+                        const kind = res.captcha ? 'captcha_wait' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
                             try {
                                 const event = await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
-                                if (event.ok && (await event.json()).server_fallback) serverFallback = true;
+                                if (event.ok) serverFallback = !!(await event.json()).server_fallback;
                             }
                             catch (e) { /* collection can continue if event delivery fails */ }
                         }
@@ -817,7 +819,7 @@ window.__SK = {
                     if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
                     if (serverFallback) { poll(); return; }
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요';
+                        if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀어 주세요';
                         await sleep(1500);
                         continue; // Existing-tab recovery only; an actual block above transfers to server.
                     }
@@ -844,6 +846,7 @@ window.__SK = {
                         if (p.rank !== undefined) applyItemResult(it, p);   // 배지·노출/광고·패턴 실시간 갱신
                     }
                 } catch (e) { /* 저장 실패 — 다음 pending 배치에서 재시도 */ }
+                if (!stopped) { poll(); return; }
                 // 요청 간격과 실제 차단 후 대기는 확장의 공용 정책에서만 적용한다.
             }
         }
@@ -856,6 +859,13 @@ window.__SK = {
     }
     async function poll() {
         if (stopped) return;
+        if (extMode && serverFallback) {
+            const recovered = await extCall('fetchShopSerp', { probeOnly: true }, 5000);
+            if (recovered?.ok) {
+                const event = await post(cfg.urls.collectorEvent, { kind: 'success' });
+                if (event.ok) serverFallback = !!(await event.json()).server_fallback;
+            }
+        }
         let r;
         try {
             r = await fetch(cfg.urls.check, { method: 'POST', headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ runner: RUNNER }) });
@@ -874,15 +884,21 @@ window.__SK = {
         // 서버 배치의 건별 결과를 확장 모드와 동일하게 실시간 반영 — 요약 숫자만 늘고
         // 노출 테이블은 새로고침해야 보이던 불일치(305 vs 293) 해소
         (d.items || []).forEach(function (x) { applyItemResult({ id: x.id, keyword: x.keyword }, x); });
-        serverFallback = serverFallback || !!d.server_fallback;
+        serverFallback = !!d.server_fallback;
+        captchaWaiting = !!d.captcha_wait;
         collectorIp = d.collector_ip || collectorIp;
         renderProgress(d);
         currentIntervalMs = d.interval_ms || currentIntervalMs;
         if (label) label.textContent += intervalLabel();
         if (d.remaining <= 0) { location.reload(); return; }
+        if (extMode && !serverFallback) { runExtLoop(); return; }
         if (d.blocked) {
             if (d.retry_at) {
-                await waitRestriction(d.retry_at, serverFallback ? '브라우저·서버 모두 막힘 — 3분 대기' : '서버');
+                // Recheck lane eligibility/passive captcha recovery frequently; server policy prevents network retries.
+                if (extMode) {
+                    if (label) label.textContent = '보안문자 대기 — 수집 탭에서 풀어 주세요 · 브라우저·서버 재개 확인 중';
+                    await sleep(1500);
+                } else await waitRestriction(d.retry_at, '서버');
                 if (!stopped) poll();
                 return;
             }

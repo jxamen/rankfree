@@ -65,15 +65,21 @@ class ShopSerpPolicy {
       await save();
       const hit = await this.cache.get(key);
       if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
-      if (this.now() < (s.until || 0)) {
+      if (s.captchaWait || this.now() < (s.until || 0)) {
         const recovered = probe ? await probe() : null;
         if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
-        s.until = 0; s.blockedOnResume = false;
+        s.until = 0; s.captchaWait = false; s.blockedOnResume = false;
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
-        await this.cache.put(key, recovered);
-        return { ...recovered, interval_ms: s.gap, retryAt: null };
+        s.last = this.now();
+        await save();
+        if (!recovered.keyword || recovered.keyword === keyword) {
+          await this.cache.put(key, recovered);
+          return { ...recovered, interval_ms: s.gap, retryAt: null };
+        }
+        // The human solved the previous keyword. Its HTML belongs only to that keyword.
+
       }
       const wait = Math.max(0, (s.last || 0) + Math.min(10000, s.gap) - this.now());
       if (wait) await this.wait(wait);
@@ -85,11 +91,12 @@ class ShopSerpPolicy {
       // Include the 403 tab recheck in spacing: next navigation waits after completion.
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
+        s.captchaWait = !!res.captcha;
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
         s.gap = Math.min(10000, s.gap + 300);
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
-        s.until = 0; s.blockedOnResume = false;
+        s.until = 0; s.captchaWait = false; s.blockedOnResume = false;
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') {

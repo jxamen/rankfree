@@ -9,7 +9,7 @@ test('background drains beyond alarm budget with no success sleeps, and proceeds
  const context = vm.createContext({
   skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>clock},
   getStore:async()=>({token:'test',apiBase:'test'}),
-  chrome:{storage:{local:{get:async()=>({})}}},
+  chrome:{storage:{session:{get:async()=>({}),set:async()=>{}},local:{get:async()=>({})}}},
   handlers:{fetchShopSerp:async()=>{clock+=1600;checks++;return {ok:true,html:'raw'};}},
   apiFetch:async(path)=>{
    if(path.includes('check-queue')) {batches++;return {ok:true,json:{data:{analysis_id:batches,items:batches<=6?Array.from({length:40},(_,i)=>({item_id:i,keyword:String(i)})):[]}}};}
@@ -23,7 +23,7 @@ test('background inspects the same keyword every 1.5 seconds until human recover
  let calls=0, saves=0, batches=0; const waits=[];
  const context=vm.createContext({
   skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
-  getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}}},
+  getStore:async()=>({token:'test'}),chrome:{storage:{session:{get:async()=>({}),set:async()=>{}},local:{get:async()=>({})}}},
   sleep:async ms=>waits.push(ms),
   handlers:{fetchShopSerp:async args=>{assert.equal(args.keyword,'same');calls++;return calls===1?{ok:false,status:403}:calls<4?{ok:false,cooldown:true,retryAt:1180000}:{ok:true,html:'solved'};}},
   apiFetch:async path=>{if(path.includes('check-queue'))return {ok:true,json:{data:{analysis_id:1,items:++batches===1?[{keyword:'same',item_id:2}]:[]}}};saves++;return {ok:true,json:{}};},
@@ -64,7 +64,7 @@ test('legacy queue wait migrates before early return; permission pause is preser
   let written,alarm;
   const context=vm.createContext({skwCheckActive:false,lastScreenSerpAt:0,Date:{now:()=>1000000},
    getStore:async()=>({token:'test'}),
-   chrome:{storage:{local:{get:async()=>({rfSkwCheckSkipUntil:2800000,rfSerpPolicy:{until:2799900,http403:8},rfSkwCheckSkipReason:permission?'permission':undefined}),set:async v=>{written=v;}}},alarms:{create:(n,o)=>{alarm=o;}}},
+   chrome:{storage:{session:{get:async()=>({}),set:async()=>{}},local:{get:async()=>({rfSkwCheckSkipUntil:2800000,rfSerpPolicy:{until:2799900,http403:8},rfSkwCheckSkipReason:permission?'permission':undefined}),set:async v=>{written=v;}}},alarms:{create:(n,o)=>{alarm=o;}}},
   });
   await vm.runInContext(loop+';drainShopKeywordCheckQueue()',context);
   if(permission) assert.equal(written,undefined);

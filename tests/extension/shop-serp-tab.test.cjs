@@ -33,12 +33,12 @@ for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])te
  let fetches=0,tabs=0;const waits=[];const events=[];const store={};
  const policy=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},cache:{get:async()=>null,put:async()=>{}}});
  const context=vm.createContext({shopSerpPolicy:policy,shopSerpTab:{read:async kw=>{tabs++;assert.equal(kw,'same');return tabOK?{ok:true,status:200,html:'data'}:{ok:false,captcha:true,status:200};}},
- chrome:{storage:{local:{get:async()=>({rfSerpMode:mode,rfSerpPolicy:store.rfSerpPolicy})}},action:{setBadgeText(){}},alarms:{clear(){}}},
+ chrome:{storage:{session:{get:async()=>({}),set:async()=>{}},local:{get:async()=>({rfSerpMode:mode,rfSerpPolicy:store.rfSerpPolicy})}},action:{setBadgeText(){}},alarms:{clear(){}}},
  fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:(f,ms)=>{waits.push(ms);f();},
  getStore:async()=>({}),apiFetch:async(_,v)=>events.push(v.body)});
  const r=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"same",analysisId:70});',context);
  assert.equal(r.ok,tabOK);assert.equal(tabs,1);assert.equal(fetches,mode==='request'?1:0);assert.equal(waits.length,mode==='request'?1:0);
- assert.equal(events[0].kind,tabOK?'success':'보안문자');assert.equal(!!store.rfSerpPolicy.until,!tabOK);assert.equal(store.rfSerpPolicy.http403,0);
+ assert.equal(events[0].kind,tabOK?'success':'captcha_wait');assert.equal(!!store.rfSerpPolicy.until,!tabOK);assert.equal(store.rfSerpPolicy.http403,0);
 });
 const content=fs.readFileSync(require('node:path').join(__dirname,'../../extension/content/content.js'),'utf8');
 const readStart=content.indexOf('  async function runSerpRead()');
@@ -64,7 +64,7 @@ test('reuses one tab across keywords and worker instances; recreates only after 
  f.live.delete(7);f.removed.emit(7);assert.equal(f.counts().created,1);
  await read('fourth',8);assert.deepEqual(f.counts(),{created:2,closed:0});
 });
-for(const kind of ['captcha','timeout'])test('reuses tab after '+kind,async()=>{
+for(const kind of ['timeout'])test('reuses tab after '+kind,async()=>{
  const f=browser(),reader=new ShopSerpTab({browser:f.c,timeoutMs:20});
  const first=reader.read('a');await new Promise(setImmediate);
  if(kind==='captcha')f.updated.emit(7,{url:'https://captcha.naver.com/gate'});
@@ -96,4 +96,27 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
  fetch:()=>{throw Error('No network allowed');}});
  vm.runInContext(code,context);listener({type:'__rfSerpPeek'},null,r=>{reply=r;});
  assert.equal(reply.ok,['products','empty'].includes(kind));
+});
+
+test('captcha tab stays untouched across reader restart and next keyword until human recovery',async()=>{
+ const f=browser();let reader=new ShopSerpTab({browser:f.c});
+ const p=reader.read('held');await new Promise(setImmediate);
+ f.updated.emit(7,{url:'https://captcha.naver.com/gate'});await p;
+ reader=new ShopSerpTab({browser:f.c});
+ assert.equal((await reader.read('next')).cooldown,true);
+ assert.equal(f.updates.length,0);assert.equal(f.counts().closed,0);
+ f.c.tabs.sendMessage=async()=>({ok:true,products:[]});
+ const next=reader.read('next');await new Promise(setImmediate);
+ f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:7}});
+ assert.equal((await next).ok,true);assert.equal(f.updates.length,1);
+});
+test('normal document scrolls exactly once after reading, including passive recovery checks',async()=>{
+ const start=content.indexOf("  chrome.runtime.onMessage.addListener((msg, sender, reply) => {");
+ const code=content.slice(start,content.indexOf('  // 백그라운드 상품분석 진행률 수신',start));
+ const order=[];let listener;
+ const context=vm.createContext({window:{innerHeight:900,scrollBy:(x,y)=>{assert.equal(y,900);order.push('scroll');}},document:{body:{innerText:''}},
+ domNextData:()=>{order.push('read');return {products:[{id:1}]};},chrome:{runtime:{onMessage:{addListener:f=>listener=f},sendMessage:async()=>order.push('send')}}});
+ await vm.runInContext(code+'runSerpRead()',context);
+ listener({type:'__rfSerpPeek'},null,()=>{});
+ assert.deepEqual(order,['read','scroll','send','read']);
 });
