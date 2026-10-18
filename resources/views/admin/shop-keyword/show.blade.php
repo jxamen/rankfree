@@ -886,7 +886,7 @@ window.__SK = {
         parallelTabs = value.parallel_tabs;
     }
     function showBrowserSettings() {
-        for (const [id,value] of Object.entries({'sk-interval':browserSettings.interval_ms/1000,'sk-parallel-tabs':browserSettings.parallel_tabs,'sk-tab-open-seconds':browserSettings.tab_open_interval_ms/1000,'sk-collection-mode':browserSettings.collection_mode})) {
+        for (const [id,value] of Object.entries({'sk-interval':Math.round(browserSettings.interval_ms/100)/10,'sk-parallel-tabs':browserSettings.parallel_tabs,'sk-tab-open-seconds':Math.round(browserSettings.tab_open_interval_ms/100)/10,'sk-collection-mode':browserSettings.collection_mode})) {
             const input = document.getElementById(id); if (input) input.value = value;
         }
     }
@@ -905,9 +905,10 @@ window.__SK = {
         if (![intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) return;
         this.disabled = true;
         try {
-            await persistBrowserSettings({interval_ms:Number(intervalInput.value)*1000,parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Number(document.getElementById('sk-tab-open-seconds').value)*1000,collection_mode:document.getElementById('sk-collection-mode').value}, true);
+            await persistBrowserSettings({interval_ms:Math.round(Number(intervalInput.value)*1000),parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Math.round(Number(document.getElementById('sk-tab-open-seconds').value)*1000),collection_mode:document.getElementById('sk-collection-mode').value}, true);
             const r = await post('{{ route('admin.shop-keyword.interval', $analysis) }}', {seconds:intervalInput.value, keywords_per_day:document.getElementById('sk-keywords-per-day').value});
-            if (!r.ok) throw new Error('주문 목표 저장에 실패했습니다.');
+            if (r.status === 419) { location.reload(); return; }
+            if (!r.ok) throw new Error('주문 목표 저장에 실패했습니다 (HTTP ' + r.status + ').');
             notice.textContent = '저장했습니다 — 다음 키워드부터 적용됩니다.';
         } catch (e) { notice.textContent = e.message; }
         finally { this.disabled = false; }
