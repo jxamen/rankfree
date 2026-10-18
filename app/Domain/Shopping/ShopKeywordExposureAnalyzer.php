@@ -203,6 +203,7 @@ class ShopKeywordExposureAnalyzer
                         $res = $this->exposure->exposure($item->keyword, $target, max(2, min($httpTimeout, (int) ceil($budget - $elapsed))));
                     }
                 } catch (Throwable) {
+                    $res = ['error' => 'http_exception'];
                     $stopped = true;   // 일시 오류 — rank 오기록 대신 중단(재시도 가능)
                     break;
                 }
@@ -227,6 +228,8 @@ class ShopKeywordExposureAnalyzer
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
                     $item->save();
+                    if (in_array($fresh->status, ['blocked', 'error'], true)) $fresh->update(['status' => 'checking']);
+                    Cache::forget('shop-exposure:error:'.$analysis->id);
 
                     return true;
                 });
@@ -250,7 +253,11 @@ class ShopKeywordExposureAnalyzer
                 return $this->progress($analysis);
             }
             $paused = $analysis->status === 'paused';
-            $status = $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? ($stopped ? 'blocked' : ($paused ? 'paused' : 'checking')) : 'done');
+            $actualBlock = in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true);
+            $error = $stopped ? ($res['error'] ?? 'unknown_error') : null;
+            if ($error) Cache::put('shop-exposure:error:'.$analysis->id, $error, now()->addDay());
+            else Cache::forget('shop-exposure:error:'.$analysis->id);
+            $status = $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? ($stopped ? ($actualBlock ? 'blocked' : 'error') : ($paused ? 'paused' : 'checking')) : 'done');
             if ($status === 'target_reached') {
                 $remaining = 0;
             }
@@ -264,7 +271,7 @@ class ShopKeywordExposureAnalyzer
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
-                'retry_at' => $retryAt,
+                'retry_at' => $retryAt, 'error' => $error,
                 'items' => $batchResults];
         } finally {
             $lock->release();
@@ -302,6 +309,7 @@ class ShopKeywordExposureAnalyzer
             $item->checked_at = now();
             $item->save();
 
+            Cache::forget('shop-exposure:error:'.$analysis->id);
             $this->backfillMe($analysis, $res['me'] ?? null);
 
             $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
@@ -595,6 +603,7 @@ class ShopKeywordExposureAnalyzer
             'total' => (int) $analysis->combo_count,
             'blocked' => $analysis->status === 'blocked',
             'status' => (string) $analysis->status,
+            'error' => in_array($analysis->status, ['blocked', 'error'], true) ? Cache::get('shop-exposure:error:'.$analysis->id) : null,
         ];
     }
 

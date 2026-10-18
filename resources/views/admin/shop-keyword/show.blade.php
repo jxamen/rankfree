@@ -133,8 +133,8 @@
     <div><div class="text-muted" style="font-size:var(--fs-xs);">상위 {{ $th }}위 노출</div><div class="font-mono text-ink" id="sk-sum-exposed" style="font-size:var(--fs-xl);">{{ $analysis->exposed_count }}</div></div>
     <div><div class="text-muted" style="font-size:var(--fs-xs);">순위 확인 조합</div><div class="font-mono text-ink" id="sk-sum-checked" style="font-size:var(--fs-xl);">{{ $analysis->checked_count }}</div></div>
     <div><div class="text-muted" style="font-size:var(--fs-xs);">추출 키워드</div><div class="font-mono text-ink" style="font-size:var(--fs-xl);">{{ $analysis->token_count }}</div></div>
-    @if ($analysis->status === 'blocked')
-        <div class="text-error" style="font-size:var(--fs-xs);align-self:center;">일부 조합이 미확인 상태입니다 — 랭크프리 확장이 설치돼 있으면 브라우저에서 자동으로 이어서 확인합니다.</div>
+    @if (in_array($analysis->status, ['blocked', 'error'], true))
+        <div id="sk-collection-error" class="text-error" style="font-size:var(--fs-xs);align-self:center;">일부 조합 미확인 · {{ \Illuminate\Support\Facades\Cache::get('shop-exposure:error:'.$analysis->id) ?? '이전 실패 사유 미기록' }} — 이어서 확인하면 다시 시도합니다.</div>
     @endif
 </div>
 
@@ -579,6 +579,8 @@ window.__SK = {
         if (showResume && resume) resume.classList.remove('hidden');
     }
     function renderProgress(d) {
+        const notice = document.getElementById('sk-collection-error');
+        if (notice && !['blocked', 'error'].includes(d.status)) notice.remove();
         if (d.total === undefined) return;
         lastD = d;
         if (fill && label) {
@@ -824,7 +826,7 @@ window.__SK = {
             }
             // 서버(slot API)가 막히면 확장이 있을 때 브라우저 m.search 경로로 이어서 확인(2026-09-28 — slot API 가 빈 {} 응답)
             if (extMode) { runExtLoop(); return; }
-            halt(`서버 확인이 잠시 제한됨(${d.checked}/${d.total}) — 랭크프리 확장을 설치하면 브라우저에서 끝까지 확인됩니다. "이어서 확인"으로 재시도`, true);
+            halt(`서버 확인 실패: ${d.error || '사유 미확인'} (${d.checked}/${d.total}) — 이어서 확인으로 재시도`, true);
             return;
         }
         setTimeout(poll, 0);
