@@ -3,8 +3,11 @@
 namespace App\Domain\Order;
 
 use App\Models\MarketingOrder;
+use App\Models\MarketingOrderItem;
 use App\Models\OrderDispatch;
 use App\Models\ProductVendor;
+use App\Support\GoogleServiceAccount;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -101,7 +104,7 @@ class OrderDispatchService
      *
      * @return array{ok: bool, message: string}
      */
-    public function dispatchItem(\App\Models\MarketingOrderItem $item): array
+    public function dispatchItem(MarketingOrderItem $item): array
     {
         $order = $item->order()->with('product')->first();
         if (! $order || ! $order->product) {
@@ -127,15 +130,15 @@ class OrderDispatchService
             'payload' => $this->buildPayload($order, $pv, $item->quantity, $item),
             'status' => 'pending',
         ]);
-        $this->send($d);
+        $this->send($d, $item);
         $d->refresh();
-        $item->update(['status' => $d->status, 'dispatch_id' => $d->id]);
+
 
         return ['ok' => $d->status === 'sent', 'message' => "{$item->day_no}일차 → '{$pv->vendor->name}' ".OrderDispatch::STATUSES[$d->status]];
     }
 
     /** field_map [{key, src, value}] → 전송 페이로드. src: order:*, product:title, field:<field_key>, alloc:quantity, item:*, static, skip. */
-    public function buildPayload(MarketingOrder $order, ProductVendor $pv, int $qty, ?\App\Models\MarketingOrderItem $item = null): array
+    public function buildPayload(MarketingOrder $order, ProductVendor $pv, int $qty, ?MarketingOrderItem $item = null): array
     {
         $map = collect((array) $pv->field_map)->filter(fn ($m) => trim((string) ($m['key'] ?? '')) !== '');
         if ($map->isEmpty()) {
@@ -157,7 +160,7 @@ class OrderDispatchService
         return $out;
     }
 
-    private function resolve(MarketingOrder $order, int $qty, string $src, string $static, ?\App\Models\MarketingOrderItem $item = null)
+    private function resolve(MarketingOrder $order, int $qty, string $src, string $static, ?MarketingOrderItem $item = null)
     {
         if ($src === 'static') {
             return $static;
@@ -201,13 +204,21 @@ class OrderDispatchService
     }
 
     /** 채널별 전송 — 결과를 dispatch 레코드에 기록. */
-    private function send(OrderDispatch $d): void
+    private function send(OrderDispatch $d, ?MarketingOrderItem $item = null): void
     {
-        if (! app(OrderDispatchState::class)->beginDispatch($d->order)) {
-            $d->update(['status' => 'canceled', 'response' => '주문 상태 변경으로 발주 차단']);
+        $blockedStatus = null;
+        if (! app(OrderDispatchState::class)->beginDispatch($d->order, $blockedStatus, $item)) {
+            DB::transaction(function () use ($d, $item, $blockedStatus) {
+                MarketingOrder::whereKey($d->order_id)->lockForUpdate()->firstOrFail();
+                $d->update(['status' => $blockedStatus === 'dispatching' ? 'pending' : 'canceled', 'response' => '주문 상태 변경으로 발주 차단']);
+                if ($item && ! in_array($item->fresh()->status, ['sent', 'canceled'])) {
+                    $item->update(['status' => $d->status, 'dispatch_id' => $d->id]);
+                }
+            });
 
             return;
         }
+        $unknown = false;
         try {
             $ok = match ($d->channel) {
                 // 리워드 풀은 외부로 보내지 않는다 — 미션 풀 편입이 곧 발주다(.claude/reward design-04 §2-1).
@@ -218,13 +229,22 @@ class OrderDispatchService
             };
         } catch (\Throwable $e) {
             $ok = false;
-            $d->response = mb_substr('오류: '.$e->getMessage(), 0, 1900);
+            $unknown = true;
+            $d->response = mb_substr('결과 불명 — 관리자 확인 필요: '.$e->getMessage(), 0, 1900);
         }
 
-        $d->status = $ok ? 'sent' : 'failed';
-        $d->sent_at = now();
-        $d->save();
-        app(OrderDispatchState::class)->finishDispatch($d->order);
+        DB::transaction(function () use ($d, $item, $ok, $unknown) {
+            MarketingOrder::whereKey($d->order_id)->lockForUpdate()->firstOrFail();
+            $d->status = $ok ? 'sent' : 'failed';
+            $d->sent_at = now();
+            $d->save();
+            if ($item) {
+                $item->update(['status' => $d->status, 'dispatch_id' => $d->id]);
+            }
+            if (! $unknown) {
+                app(OrderDispatchState::class)->finishDispatch($d->order);
+            }
+        });
     }
 
     private function sendApi(OrderDispatch $d): bool
@@ -246,7 +266,11 @@ class OrderDispatchService
         };
         $d->response = mb_substr('HTTP '.$res->status().' — '.$res->body(), 0, 1900);
 
-        return $res->successful();
+        if (! $res->successful()) {
+            throw new \RuntimeException($d->response);
+        }
+
+        return true;
     }
 
     /** 구글시트 append — 서비스 계정(.env GOOGLE_SERVICE_ACCOUNT_JSON=json 파일 경로) JWT 인증. 시트는 서비스 계정 이메일에 공유돼 있어야 한다. */
@@ -258,7 +282,7 @@ class OrderDispatchService
 
             return false;
         }
-        $token = \App\Support\GoogleServiceAccount::token('https://www.googleapis.com/auth/spreadsheets');
+        $token = GoogleServiceAccount::token('https://www.googleapis.com/auth/spreadsheets');
         if (! $token) {
             $d->response = '구글 서비스 계정 인증 실패 — .env GOOGLE_SERVICE_ACCOUNT_JSON(키 파일 경로)을 확인하세요.';
 
@@ -267,7 +291,7 @@ class OrderDispatchService
 
         // 탭 우선순위(2026-07-22): 상품×업체 배분 탭(sheet_tab) → 업체 기본(gsheet_tab) → 첫 탭.
         // 같은 업체를 쓰는 상품마다 다른 탭으로 보낼 수 있다.
-        $allocTab = (string) \App\Models\ProductVendor::where('product_id', $d->order?->product_id)
+        $allocTab = (string) ProductVendor::where('product_id', $d->order?->product_id)
             ->where('vendor_id', $v->id)->value('sheet_tab');
         $tab = trim($allocTab) ?: trim((string) $v->gsheet_tab);
         if ($tab === '') {
@@ -283,7 +307,10 @@ class OrderDispatchService
         );
         $d->response = mb_substr('HTTP '.$res->status().' — '.$res->body(), 0, 1900);
 
-        return $res->successful();
-    }
+        if (! $res->successful()) {
+            throw new \RuntimeException($d->response);
+        }
 
+        return true;
+    }
 }

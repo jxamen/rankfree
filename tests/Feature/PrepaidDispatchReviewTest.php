@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Order\OrderDispatchService;
 use App\Domain\Order\OrderInputException;
 use App\Domain\Order\OrderPlacer;
 use App\Domain\Order\PrepaidWallet;
@@ -16,10 +17,13 @@ use App\Models\Topup;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /** Review evidence only. All data is SQLite :memory:; no real external HTTP. */
@@ -28,7 +32,9 @@ class PrepaidDispatchReviewTest extends TestCase
     use RefreshDatabase;
 
     private User $member;
+
     private User $admin;
+
     private MarketingProduct $product;
 
     protected function setUp(): void
@@ -52,6 +58,7 @@ class PrepaidDispatchReviewTest extends TestCase
     private function coupon()
     {
         $coupon = Coupon::create(['name' => 'Review 5000', 'discount_type' => 'amount', 'discount_value' => 5000, 'is_active' => true]);
+
         return $coupon->userCoupons()->create(['user_id' => $this->member->id, 'source' => 'admin']);
     }
 
@@ -96,10 +103,11 @@ class PrepaidDispatchReviewTest extends TestCase
                 try {
                     app(MarketingOrderController::class)->updateStatus(Request::create('/review', 'PUT', ['status' => $status]), $order->fresh());
                     $this->fail('In-flight order must be protected');
-                } catch (\Illuminate\Validation\ValidationException $e) {
+                } catch (ValidationException $e) {
                     $this->assertArrayHasKey('status', $e->errors());
                 }
             }
+
             return Http::response(['ok' => true]);
         });
         $this->actingAs($this->admin)->post('/admin/orders/'.$order->id.'/place')->assertSessionHasNoErrors();
@@ -116,7 +124,7 @@ class PrepaidDispatchReviewTest extends TestCase
         $order = app(OrderPlacer::class)->place($this->member, $this->product, [], ['quantity' => 1]);
         $order->update(['status' => 'canceled']);
         $item = $order->items()->create(['day_no' => 1, 'quantity' => 1, 'work_date' => today(), 'status' => 'pending']);
-        $result = app(\App\Domain\Order\OrderDispatchService::class)->dispatchItem($item);
+        $result = app(OrderDispatchService::class)->dispatchItem($item);
         $this->assertFalse($result['ok']);
         Http::assertNothingSent();
         $this->assertSame('canceled', $order->fresh()->status);
@@ -212,5 +220,98 @@ class PrepaidDispatchReviewTest extends TestCase
         $this->assertSame($this->admin->id, $topup->fresh()->reviewed_by);
         $this->assertNotNull($topup->fresh()->reviewed_at);
         $this->assertDatabaseCount('wallet_entries', 1);
+    }
+
+    public function test_stale_dispatch_and_item_cancellations_cannot_release_in_flight_order(): void
+    {
+        $this->addVendor();
+        app(PrepaidWallet::class)->change($this->member->id, 1100, 'race:fund', 'fund');
+        $order = app(OrderPlacer::class)->place($this->member, $this->product, [], ['quantity' => 1, 'prepaid' => true]);
+        $order->update(['status' => 'processing']);
+        $stale = $order->fresh();
+        $old = $order->dispatches()->create(['vendor_name' => 'old', 'channel' => 'api', 'quantity' => 1, 'status' => 'failed', 'payload' => []]);
+        $item = $order->items()->create(['day_no' => 1, 'quantity' => 1, 'work_date' => today(), 'status' => 'pending']);
+        Http::fake(function () use ($order, $stale, $old, $item) {
+            $controller = app(MarketingOrderController::class);
+            foreach ([fn () => $controller->cancelDispatches($stale), fn () => $controller->cancelDispatch($old), fn () => $controller->cancelItem($item)] as $cancel) {
+                try {
+                    $cancel();
+                    $this->fail('Cancellation must reject the stale state');
+                } catch (ValidationException $e) {
+                    $this->assertArrayHasKey('dispatch', $e->errors());
+                }
+            }
+            $this->assertSame('dispatching', $order->fresh()->status);
+            $this->actingAs($this->admin)->put('/admin/orders/'.$order->id.'/status', ['status' => 'canceled'])->assertSessionHasErrors('status');
+
+            return Http::response(['ok' => true]);
+        });
+        $this->assertTrue(app(OrderDispatchService::class)->dispatchItem($item)['ok']);
+        $this->assertSame('sent', $item->fresh()->status);
+        $this->assertSame('processing', $order->fresh()->status);
+        $this->assertSame(0, (int) $this->member->fresh()->prepaid_balance);
+        $this->assertDatabaseMissing('wallet_entries', ['reference' => 'refund:'.$order->id]);
+    }
+
+    public function test_busy_parent_leaves_other_due_item_for_scheduler(): void
+    {
+        $this->addVendor();
+        $order = app(OrderPlacer::class)->place($this->member, $this->product, [], ['quantity' => 1]);
+        $order->update(['status' => 'processing']);
+        $first = $order->items()->create(['day_no' => 1, 'quantity' => 1, 'work_date' => today(), 'status' => 'pending']);
+        $second = $order->items()->create(['day_no' => 2, 'quantity' => 1, 'work_date' => today(), 'status' => 'pending']);
+        $dispatcher = app(OrderDispatchService::class);
+        Http::fake(function () use ($dispatcher, $second) {
+            $this->assertFalse($dispatcher->dispatchItem($second)['ok']);
+            $this->assertSame('pending', $second->fresh()->status);
+
+            return Http::response(['ok' => true]);
+        });
+        $this->assertTrue($dispatcher->dispatchItem($first)['ok']);
+        Http::assertSentCount(1);
+        Http::fake(['*' => Http::response(['ok' => true])]);
+        $this->artisan('orders:dispatch-due')->assertSuccessful();
+        $this->assertSame('sent', $second->fresh()->status);
+        $this->assertSame(0, $order->items()->where('status', 'pending')->count());
+    }
+
+    public function test_boosting_unknown_results_block_refund_cancel_and_resend_for_both_services(): void
+    {
+        config(['rankfree.boosting_shop.api_key' => 'FAKE', 'rankfree.boosting_shop.base_url' => 'https://boosting.test.invalid']);
+        foreach (['place', 'shopping'] as $service) {
+            foreach (['html', 'missing', 'exception', 'rejected'] as $response) {
+                $this->product->update(['title' => $service === 'shopping' ? '네이버 쇼핑 퀴즈' : '플레이스 유입']);
+                app(PrepaidWallet::class)->change($this->member->id, 1100, 'fund:'.$service.$response, 'fund');
+                $order = app(OrderPlacer::class)->place($this->member, $this->product, [], ['quantity' => 1, 'prepaid' => true]);
+                $order->update(['field_values' => ['keyword' => 'test', $service === 'shopping' ? 'shop_url' : 'place_url' => 'https://example.test/1']]);
+                $this->assertSame($service, $order->boostingService());
+                Http::swap(new Factory);
+                Http::preventStrayRequests();
+                Http::fake(function () use ($response) {
+                    return match ($response) {
+                        'html' => Http::response('<html>gateway error</html>', 502),
+                        'missing' => Http::response(['message' => 'unknown']),
+                        'exception' => throw new ConnectionException('lost response'),
+                        default => Http::response(['result' => 'fail', 'error' => 'rejected']),
+                    };
+                });
+                $payload = ['product_no' => 47, 'link' => 'https://place.test.invalid/1', 'product_name' => 'test', 'keyword' => 'test', 'search_keywords' => 'test', 'day_quantity' => 1, 'fr_date' => '2026-10-18', 'to_date' => '2026-10-18',
+                    'product_url' => 'https://shop.test.invalid/1', 'landing_urls' => 'https://shop.test.invalid/1', 'tags' => 'test', 'mall_name' => 'test', 'amount' => '1000', 'image_url' => 'https://shop.test.invalid/a.jpg'];
+                $this->actingAs($this->admin)->post('/admin/orders/'.$order->id.'/boosting-shop', $payload)->assertSessionHasErrors('boosting');
+                $this->assertSame($response === 'rejected' ? 'pending' : 'dispatching', $order->fresh()->status, $service.':'.$response);
+                $this->assertSame(1, $order->dispatches()->count());
+                if ($response === 'rejected') {
+                    $this->put('/admin/orders/'.$order->id.'/status', ['status' => 'canceled'])->assertSessionHasNoErrors();
+                    $this->assertDatabaseHas('wallet_entries', ['reference' => 'refund:'.$order->id]);
+                } else {
+                    $this->put('/admin/orders/'.$order->id.'/status', ['status' => 'canceled'])->assertSessionHasErrors('status');
+                    $this->post('/admin/orders/'.$order->id.'/boosting-shop', $payload)->assertSessionHasErrors('boosting');
+                    $this->post('/admin/orders/'.$order->id.'/cancel-dispatches')->assertSessionHasErrors('dispatch');
+                    $this->assertDatabaseMissing('wallet_entries', ['reference' => 'refund:'.$order->id]);
+                    $this->assertStringContainsString('관리자 확인', $order->dispatches()->first()->response);
+                }
+                Http::assertSentCount($response === 'exception' ? 0 : 1);
+            }
+        }
     }
 }
