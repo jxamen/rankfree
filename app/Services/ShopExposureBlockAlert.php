@@ -33,6 +33,15 @@ class ShopExposureBlockAlert
     {
         if ($kind === 'success') {
             Cache::forget('shop-exposure:error:'.$analysis->id);
+            // Human-confirmed browser recovery releases retry_at without resetting pacing.
+            if ($collector === 'browser') {
+                Cache::lock('shop-serp:server-lane', 30)->block(2, function () {
+                    $key = \App\Domain\Shopping\NaverShopExposureService::policyKey();
+                    $policy = Cache::get($key, []);
+                    $policy['until'] = 0;
+                    Cache::put($key, $policy, now()->addDay());
+                });
+            }
             if ($analysis->exists) {
                 ShopKeywordAnalysis::whereKey($analysis->id)->whereIn('status', ['blocked', 'error'])->update(['status' => 'checking']);
             }

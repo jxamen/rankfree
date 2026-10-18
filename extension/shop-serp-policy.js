@@ -34,11 +34,11 @@ class ShopSerpPolicy {
       },
     };
   }
-  run(keyword, fetcher, ip = "browser", serverGap = 2000, revision = null) {
-    const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision));
+  run(keyword, fetcher, ip = "browser", serverGap = 2000, revision = null, probe = null) {
+    const job = this.lane.then(() => this.check(keyword, fetcher, ip, serverGap, revision, probe));
     this.lane = job.catch(() => {}); return job;
   }
-  async check(keyword, fetcher, ip, serverGap, revision) {
+  async check(keyword, fetcher, ip, serverGap, revision, probe) {
     const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(this.now());
     const key = day + ':tab-v1:' + keyword.trim().normalize('NFC');
     // Fail closed when durable storage fails: avoid silently repeating same-day requests.
@@ -65,7 +65,16 @@ class ShopSerpPolicy {
       await save();
       const hit = await this.cache.get(key);
       if (hit) { await save(); return { ...hit, cached: true, interval_ms: s.gap }; }
-      if (this.now() < (s.until || 0)) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '최근 차단으로 3분 휴식 중입니다.' };
+      if (this.now() < (s.until || 0)) {
+        const recovered = probe ? await probe() : null;
+        if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
+        s.until = 0; s.blockedOnResume = false;
+        await save();
+        const queue = await this.storage.get('rfSkwCheckSkipReason');
+        if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
+        await this.cache.put(key, recovered);
+        return { ...recovered, interval_ms: s.gap, retryAt: null };
+      }
       const wait = Math.max(0, (s.last || 0) + Math.min(10000, s.gap) - this.now());
       if (wait) await this.wait(wait);
       const resumedAfterBlock = !!s.until;

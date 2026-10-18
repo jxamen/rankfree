@@ -72,3 +72,28 @@ for(const kind of ['captcha','timeout'])test('reuses tab after '+kind,async()=>{
  const next=reader.read('b');await new Promise(setImmediate);f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:7}});
  assert.equal((await next).ok,true);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
+
+test('passive peek survives reader restart, reads only matching keyword and never navigates a gate',async()=>{
+ const f=browser();let reader=new ShopSerpTab({browser:f.c});
+ const p=reader.read('same');await new Promise(setImmediate);
+ f.updated.emit(7,{url:'https://captcha.naver.com/gate'});await p;
+ let solved=false,inspections=0;
+ f.c.tabs.sendMessage=async(id,msg)=>{assert.equal(id,7);assert.equal(msg.type,'__rfSerpPeek');inspections++;if(!solved)throw Error('No receiver on captcha');return {ok:true,products:[{id:'123'}]};};
+ reader=new ShopSerpTab({browser:f.c});
+ assert.equal(await reader.peek('other'),null);assert.equal(inspections,0);
+ assert.equal(await reader.peek('same'),null);solved=true;
+ assert.equal((await reader.peek('same')).ok,true);
+ assert.equal(f.updates.length,0);assert.deepEqual(f.counts(),{created:1,closed:0});
+});
+
+for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,()=>{
+ const start=content.indexOf("  chrome.runtime.onMessage.addListener((msg, sender, reply) => {");
+ const code=content.slice(start,content.indexOf('  // Only read the loaded document',start));
+ let listener,reply;
+ const context=vm.createContext({chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
+ document:{body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
+ domNextData:()=>kind==='products'?{products:[{id:1}]}:null,
+ fetch:()=>{throw Error('No network allowed');}});
+ vm.runInContext(code,context);listener({type:'__rfSerpPeek'},null,r=>{reply=r;});
+ assert.equal(reply.ok,['products','empty'].includes(kind));
+});

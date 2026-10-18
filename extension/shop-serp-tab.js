@@ -13,6 +13,19 @@ class ShopSerpTab {
     } }));
     return '<script>var _INITIAL_STATE = ' + JSON.stringify({ initProps: { pagedSlot: [{ slots }] } }).replace(/</g, '\\u003c') + ';</script>';
   }
+  // Passive document inspection: never navigate, reload, solve, or change the active tab.
+  async peek(keyword) {
+    try {
+      const saved = await this.browser.storage.session.get(['rfSerpTabId', 'rfSerpTabKeyword']);
+      if (saved.rfSerpTabKeyword !== keyword || saved.rfSerpTabId == null) return null;
+      const tab = await this.browser.tabs.get(saved.rfSerpTabId);
+      const url = new URL(tab.url);
+      if (url.origin !== 'https://search.shopping.naver.com' || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
+      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
+      if (r?.ok && Array.isArray(r.products)) return { ok: true, status: 200, html: ShopSerpTab.html(r.products), mode: 'tab' };
+    } catch (_) { /* Gate pages have no content script. Keep waiting. */ }
+    return null;
+  }
   async read(keyword) {
     const c = this.browser;
     let tab;
@@ -55,6 +68,7 @@ class ShopSerpTab {
         this.tabId = tab.id;
         await storage.set({ rfSerpTabId: tab.id });
       }
+      await storage.set({ rfSerpTabKeyword: keyword });
       const current = await c.tabs.get(tab.id);
       onUpdated(tab.id, { url: current.url || current.pendingUrl });
       return await result;

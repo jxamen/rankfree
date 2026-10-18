@@ -945,16 +945,14 @@ async function drainShopKeywordCheckQueue() {
       if (!items.length) return;                           // 확인할 조합 없음
       for (const it of items) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
-        const res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+        let res;
+        do {
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id });
+          if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
+          await sleep(1500);
+          if (Date.now() - lastScreenSerpAt < 60000) return;
+        } while (true);
         if (!res || res.ok === false) {
-          // 보안문자·차단이면 3분 쉬고 사용자에게 표시 — rank 미저장이라 다음에 자동 재시도된다
-          if (res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429)) {
-            const retryAt = res.retryAt || Date.now() + 3 * 60 * 1000;
-            await chrome.storage.local.set({ rfSkwCheckSkipUntil: retryAt, rfSkwCheckSkipReason: 'naver' });
-            chrome.alarms.create('rf-skw-check-retry', { when: retryAt });
-            try { chrome.action.setBadgeText({ text: '!' }); } catch (e) { /* noop */ }
-            return;
-          }
           continue;
         }
         const r = await apiFetch('/api/ext/shop-keyword/' + d.analysis_id + '/check-html', {
@@ -1047,7 +1045,7 @@ Object.assign(handlers, {
       }
     }
     return { ok: true, status: res.status, html: picked };
-    }, collectorIp || 'browser', interval_ms, interval_revision);
+    }, collectorIp || 'browser', interval_ms, interval_revision, () => shopSerpTab.peek(kw));
     if (result.ok && !result.cached) {
       try { chrome.action.setBadgeText({ text: '' }); chrome.alarms.clear('rf-skw-check-retry'); } catch (e) { /* noop */ }
     }
