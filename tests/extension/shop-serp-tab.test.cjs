@@ -32,7 +32,7 @@ const start=source.indexOf('  async fetchShopSerp({');const handler=source.slice
 for(const mode of [undefined,'tab','request'])for(const tabOK of [true,false])test('mode '+mode+', tab success '+tabOK+' applies only final result to block policy',async()=>{
  let fetches=0,tabs=0;const waits=[];const events=[];const store={};
  const policy=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},cache:{get:async()=>null,put:async()=>{}}});
- const context=vm.createContext({shopSerpPolicy:policy,shopSerpTab:{read:async kw=>{tabs++;assert.equal(kw,'same');return tabOK?{ok:true,status:200,html:'data'}:{ok:false,captcha:true,status:200};}},
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),shopSerpPolicy:policy,shopSerpTab:{read:async kw=>{tabs++;assert.equal(kw,'same');return tabOK?{ok:true,status:200,html:'data'}:{ok:false,captcha:true,status:200};}},
  chrome:{storage:{local:{get:async()=>({rfSerpMode:mode,rfSerpPolicy:store.rfSerpPolicy})}},action:{setBadgeText(){}},alarms:{clear(){}}},
  fetch:async()=>{fetches++;return {ok:false,status:403};},setTimeout:(f,ms)=>{waits.push(ms);f();},
  getStore:async()=>({}),apiFetch:async(path,v)=>path.endsWith('interval-policy') ? {ok:true,json:{data:{interval_ms:4000}}} : events.push(v.body)});
@@ -45,7 +45,7 @@ const readStart=content.indexOf('  let serpScrolled = false;');
 const readFn=content.slice(readStart,content.indexOf('  // 백그라운드 상품분석 진행률 수신',readStart));
 for(const kind of ['products','empty','captcha','unknown'])test('document-only reader '+kind,async()=>{
  const messages=[];let reads=0;
- const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),window:{innerHeight:900,scrollBy:()=>{}},getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
  serpProducts:()=>{reads++;return kind==='products'?{products:[{id:123}]}:null;},
  chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async m=>messages.push(m)}},setTimeout:f=>f(),fetch:()=>{throw Error('must not fetch');}});
  await vm.runInContext(readFn+'runSerpRead()',context);
@@ -90,7 +90,7 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
  const start=content.indexOf('  let serpScrolled = false;');
  const code=content.slice(start,content.indexOf('  // Only read the loaded document',start));
  let listener,reply;
- const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>{}},setTimeout:f=>f(),chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),window:{innerHeight:900,scrollBy:()=>{}},setTimeout:f=>f(),chrome:{runtime:{onMessage:{addListener:f=>{listener=f;}}}},
  getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:kind==='captcha'?'보안문자 입력':kind==='empty'?'검색 결과가 없습니다':''}},
  serpProducts:()=>kind==='products'?{products:[{id:1}]}:null,
  fetch:()=>{throw Error('No network allowed');}});
@@ -100,7 +100,7 @@ for(const kind of ['captcha','unknown','products','empty'])test('passive documen
 
 test('loaded document scrolls once and settles before reading rank',async()=>{
  const events=[];
- const context=vm.createContext({window:{innerHeight:900,scrollBy:()=>events.push('scroll')},
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),window:{innerHeight:900,scrollBy:()=>events.push('scroll')},
  getComputedStyle:()=>({visibility:'visible'}),document:{readyState:'complete',querySelector:()=>({getClientRects:()=>[{}]}),body:{innerText:''}},serpProducts:()=>{events.push('read');return {products:[{id:1}]};},
  chrome:{runtime:{onMessage:{addListener(){}},sendMessage:async()=>events.push('send')}},setTimeout:(f,ms)=>{events.push(ms);f();}});
  await vm.runInContext(readFn+'runSerpRead()',context);

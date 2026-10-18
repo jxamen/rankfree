@@ -37,10 +37,23 @@ class ShopKeywordExposureController extends Controller
             'keyword' => 'sometimes|nullable|string|max:300',
             'stage' => 'sometimes|nullable|string|max:80',
             'message' => 'sometimes|nullable|string|max:1000',
-            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart',
+            'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart,tab_closed',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
+        if ($data['kind'] === 'tab_closed') {
+            if (! in_array($analysis->refresh()->status, ['ad_ended', 'target_reached', 'done'], true)) {
+                $analysis->update(['status' => 'paused']);
+                Cache::forever('shop-exposure:tab-closed:'.$analysis->id, true);
+                $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+                $lock->release('ip:'.$request->ip(), (int) $analysis->id);
+                $lock->release('server', (int) $analysis->id);
+            }
+            return response()->json(['ok' => true]);
+        }
+        if ($analysis->refresh()->status === 'paused' && in_array($data['kind'], ['403', '429', '보안문자'], true)) {
+            return response()->json(['ok' => true]);
+        }
         if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
             \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
                 'analysis_id' => $analysis->id, 'user_id' => $request->user()->id,
@@ -226,6 +239,9 @@ class ShopKeywordExposureController extends Controller
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+        if ($analysis->status === 'paused') {
+            return response()->json(['data' => ['items' => []] + $this->analyzer->progress($analysis)]);
+        }
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json(['data' => ['server_fallback' => true, 'items' => []] + $this->analyzer->progress($analysis)]);
         }
@@ -374,6 +390,7 @@ class ShopKeywordExposureController extends Controller
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $paused = $request->boolean('paused', true);
+        Cache::forget('shop-exposure:tab-closed:'.$analysis->id);
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
 
         if ($paused) {

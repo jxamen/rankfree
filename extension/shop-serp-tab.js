@@ -24,6 +24,7 @@ class ShopSerpTab {
       const delay = Math.max(0, Number(saved.rfSerpLastOpened || 0) + gap - Date.now());
       if (delay) await this.wait(delay);
       if (this.allowOpen && !this.allowOpen()) { const e = new Error('차단 감지 — 동시 검색 1개로 줄임'); e.code = 'RF_PARALLEL_REDUCED'; throw e; }
+      if (await this.closed()) { const e = new Error('수집 탭 닫힘'); e.code = 'RF_TAB_CLOSED'; throw e; }
       const tab = await this.browser.tabs.create(options);
       await storage.set({rfSerpLastOpened:Date.now()});
       return tab;
@@ -68,7 +69,12 @@ class ShopSerpTab {
         price: p.price || p.lowPrice || p.mobileLowPrice, link: p.mallProductUrl || p.crUrl || ''};
     }));
   }
+  async closed() {
+    if (typeof rfCloseWork !== 'undefined') await rfCloseWork;
+    return this.isClosed && await this.isClosed();
+  }
   async focus(keyword) {
+    if (await this.closed()) return;
     const c = this.browser;
     const saved = await this.session().get(['rfSerpTabId']);
     let tab;
@@ -76,12 +82,13 @@ class ShopSerpTab {
     if (!tab) {
       tab = await this.create({url: 'https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp', active: true});
       this.tabId = tab.id;
-      await this.session().set({rfSerpTabId: tab.id, rfSerpTabKeyword: keyword});
+      await this.session().set({rfSerpTabId: tab.id, rfSerpTabKeyword: keyword, rfSerpAnalysisId: this.analysisId});
     } else await c.tabs.update(tab.id, {active: true});
     if (tab.windowId != null) await c.windows.update(tab.windowId, {focused: true});
   }
   // Inspect the existing document; only recreate/focus a missing recovery tab.
   async peek(keyword) {
+    if (await this.closed()) return {ok:false, tab_closed:true};
     try {
       const saved = await this.session().get(['rfSerpTabId', 'rfSerpTabKeyword']);
       if (saved.rfSerpTabKeyword !== keyword) return null;
@@ -101,6 +108,7 @@ class ShopSerpTab {
     return null;
   }
   async read(keyword, target = {}) {
+    if (await this.closed()) return {ok:false, tab_closed:true};
     const c = this.browser;
     let tab;
     let finish;
@@ -116,7 +124,7 @@ class ShopSerpTab {
     };
     const onUpdated = (id, info) => {
       if (id === tab?.id && /shopping\.naver\.com/.test(info.url || '')) {
-        globalThis.rfSerpCurrent = {keyword, screen: '쇼핑'};
+        globalThis.rfSerpCurrent = {analysisId:this.analysisId, keyword, screen: '쇼핑'};
         if (!shopping) { shopping = true; clearTimeout(timer); timer = setTimeout(() => finish({ok:false,status:0,message:'쇼핑 상품 목록 읽기 15초 초과'}), this.timeoutMs); }
       }
       if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
@@ -124,7 +132,7 @@ class ShopSerpTab {
     const onRemoved = id => {
       if (id !== tab?.id) return;
       this.tabId = null;
-      finish({ ok: false, status: 0, message: '수집 탭이 닫혔습니다.' });
+      finish({ ok: false, status: 0, tab_closed:true, message: '수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작' });
     };
     c.runtime.onMessage.addListener(onMessage);
     c.tabs.onUpdated.addListener(onUpdated);
@@ -159,7 +167,7 @@ class ShopSerpTab {
         this.tabId = tab.id;
         await storage.set({ rfSerpTabId: tab.id });
       }
-      await storage.set({ rfSerpTabKeyword: keyword });
+      await storage.set({ rfSerpTabKeyword: keyword, rfSerpAnalysisId: this.analysisId });
       if (!timer) timer = setTimeout(() => finish({ ok: false, status: 0, message: '쇼핑 탭 응답 시간이 초과되었습니다.' }), this.timeoutMs);
       const current = await c.tabs.get(tab.id);
       onUpdated(tab.id, { url: current.url || current.pendingUrl });

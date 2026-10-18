@@ -10,7 +10,7 @@ const handler = source.slice(start, source.indexOf('\n  /**', start));
 for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,status:200,captcha:true}, {ok:true,status:200}]) {
   test('background reports actual browser result '+JSON.stringify(result), async () => {
     const events = [];
-    const context = vm.createContext({
+    const context = vm.createContext({rfCloseWork:Promise.resolve(),
       shopSerpPolicy: {run:async()=>result},
       getStore:async()=>({token:'token',apiBase:'https://rankfree.kr'}),
       chrome:{storage:{local:{get:async()=>({rfSerpPolicy:{blockedOnResume:true}})}}},
@@ -26,7 +26,7 @@ for (const result of [{ok:false,status:403}, {ok:false,status:429}, {ok:false,st
 }
 test('screen delegates delivery to page session; cached and cooldown replies emit no extra events',async()=>{
   for(const [result,sender] of [[{ok:false,status:403},{tab:{id:1}}],[{ok:true,cached:true},null],[{ok:false,cooldown:true},null]]) {
-    const context=vm.createContext({lastScreenSerpAt:0,shopSerpPolicy:{run:async()=>result},...(sender ? {} : {getStore:async()=>({})}),apiFetch:async(path)=>{if(path.endsWith('interval-policy'))return {ok:true,json:{data:{interval_ms:4000}}};throw Error('unexpected API request');}});
+    const context=vm.createContext({rfCloseWork:Promise.resolve(),chrome:{storage:{local:{get:async()=>({})}}},lastScreenSerpAt:0,shopSerpPolicy:{run:async()=>result},...(sender ? {} : {getStore:async()=>({})}),apiFetch:async(path)=>{if(path.endsWith('interval-policy'))return {ok:true,json:{data:{interval_ms:4000}}};throw Error('unexpected API request');}});
     // No getStore is available: the screen path must work without an API token.
     const actual=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:typeof shopSerpTab === \"undefined\" ? {} : shopSerpTab,policy:shopSerpPolicy})}; const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"a",analysisId:69},'+JSON.stringify(sender)+');',context);
     assert.equal(actual,result);
@@ -45,7 +45,7 @@ test('console bridge forwards IP and interval to the shared collection policy', 
 test('tabless checks integrated first, falls back only without shopping block and never opens a tab', async () => {
  for (const [html,expected,blocked] of [['<section data-shopping-block></section>',1,false],['<p>no shopping</p>',2,false],['보안문자',1,true]]) {
   const calls=[], waits=[];
-  const context=vm.createContext({lastScreenSerpAt:0,ShopSerpTab,
+  const context=vm.createContext({rfCloseWork:Promise.resolve(),chrome:{storage:{local:{get:async()=>({})}}},lastScreenSerpAt:0,ShopSerpTab,
    shopSerpPolicy:{run:async(k,read,ip,gap)=>{assert.equal(gap,3500);return read();}},
    shopSerpTab:{read:()=>{throw Error('must not open tab');}},
    sleep:async ms=>waits.push(ms),

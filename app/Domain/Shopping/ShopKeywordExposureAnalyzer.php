@@ -626,6 +626,7 @@ class ShopKeywordExposureAnalyzer
             'total' => (int) $analysis->combo_count,
             'blocked' => $analysis->status === 'blocked',
             'status' => (string) $analysis->status,
+            'tab_closed' => $analysis->status === 'paused' && (bool) Cache::get('shop-exposure:tab-closed:'.$analysis->id),
             'exposed_items' => $this->exposedItems($analysis),
             'error' => in_array($analysis->status, ['blocked', 'error'], true) ? Cache::get('shop-exposure:error:'.$analysis->id) : null,
         ];

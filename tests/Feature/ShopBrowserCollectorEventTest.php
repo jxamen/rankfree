@@ -103,4 +103,25 @@ class ShopBrowserCollectorEventTest extends TestCase
         $this->actingAs($other)->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '403'])->assertForbidden();
         $this->actingAs($owner)->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '500'])->assertUnprocessable();
     }
+    public function test_closing_last_tab_pauses_and_watchdog_and_late_captcha_cannot_restart_it(): void
+    {
+        config(['services.slack.notifications.bot_user_oauth_token' => null]);
+        $u = User::factory()->create(['role' => 'operator', 'api_scopes' => ['shop_keyword']]);
+        $a = ShopKeywordAnalysis::create(['user_id' => $u->id, 'core_keyword' => '닫힘', 'status' => 'checking', 'check_method' => 'search', 'combo_count' => 1]);
+        $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => '닫힘 조합']);
+        [, $token] = ExtToken::issue($u);
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson("/api/ext/shop-keyword/{$a->id}/collector-event", ['kind' => 'tab_closed'])->assertOk();
+        $this->assertSame('paused', $a->fresh()->status);
+        $this->getJson("/api/ext/shop-keyword/{$a->id}/collector-state")->assertJsonPath('data.status', 'paused');
+        $this->travel(3)->minutes();
+        $this->getJson('/api/ext/shop-keyword/check-queue?watchdog=1')->assertOk()->assertJsonPath('data.items', []);
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.collector-event', $a), ['kind' => '보안문자'])->assertOk();
+        $this->assertSame('paused', $a->fresh()->status);
+        $this->getJson(route('admin.shop-keyword.pending', $a))->assertOk()->assertJsonPath('data.tab_closed', true)->assertJsonPath('data.items', []);
+        $this->postJson(route('admin.shop-keyword.pause', $a), ['paused' => false])->assertOk();
+        $this->assertSame('checking', $a->fresh()->status);
+        $this->getJson(route('admin.shop-keyword.pending', $a))->assertOk()->assertJsonCount(1, 'data.items');
+    }
+
 }
