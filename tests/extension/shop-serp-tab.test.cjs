@@ -60,7 +60,7 @@ test('reuses one tab across keywords and worker instances; recreates only after 
  await read('first',7);await read('second',7);
  reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});await read('third',7);
  assert.deepEqual(f.counts(),{created:1,closed:0});
- assert.deepEqual(f.updates.map(x=>x.id),[7,7]);assert.match(f.updates[0].url,/query=second#rfnav$/);
+ assert.deepEqual(f.updates.map(x=>x.id),[7,7]);assert.match(f.updates[0].url,/query=second$/);
  f.live.delete(7);f.removed.emit(7);assert.equal(f.counts().created,1);
  await read('fourth',8);assert.deepEqual(f.counts(),{created:2,closed:0});
 });
@@ -69,6 +69,7 @@ for(const kind of ['captcha','timeout'])test('reuses tab after '+kind,async()=>{
  const first=reader.read('a');await new Promise(setImmediate);
  if(kind==='captcha')f.updated.emit(7,{url:'https://captcha.naver.com/gate'});
  assert.equal((await first).ok,false);
+ if(kind==='captcha'){ f.c.tabs.sendMessage=async()=>({ok:true,products:[]}); assert.equal((await reader.peek('a')).ok,true); }
  const next=reader.read('b');await new Promise(setImmediate);f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[]}},{tab:{id:7}});
  assert.equal((await next).ok,true);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
@@ -83,7 +84,7 @@ test('passive peek survives reader restart, reads only matching keyword and neve
  assert.equal(await reader.peek('other'),null);assert.equal(inspections,0);
  assert.equal(await reader.peek('same'),null);solved=true;f.live.get(7).url='https://msearch.shopping.naver.com/search/all?query=same';
  assert.equal((await reader.peek('same')).ok,true);
- assert.ok(f.updates.every(u=>u.active===true && !u.url));assert.deepEqual(f.counts(),{created:1,closed:0});
+ assert.equal(f.updates.filter(u=>u.url).length,1);assert.match(f.updates.find(u=>u.url).url,/query=same&ct=1$/);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
 
 for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,async()=>{
@@ -136,7 +137,7 @@ test('tabless shopping HTML normalizes embedded list, identity and advertisement
  assert.equal(slots[1].data.nvMid,'catalog');assert.equal(slots[1].data.rank,3);
 });
 
-test('captcha activates the existing tab and focuses its window; missing recovery tab is created',async()=>{
+test('captcha activates the existing tab and focuses its window; missing recovery tab is never recreated',async()=>{
  const f=browser(),focused=[];
  f.c.windows={update:async(id,opts)=>focused.push({id,...opts})};
  const reader=new ShopSerpTab({browser:f.c});
@@ -146,5 +147,62 @@ test('captcha activates the existing tab and focuses its window; missing recover
  assert.equal((await p).captcha,true);assert.equal(f.updates.at(-1).active,true);assert.deepEqual(focused,[{id:42,focused:true}]);
  f.live.delete(7);
  f.c.tabs.create=async opts=>{assert.equal(opts.active,true);assert.match(opts.url,/msearch.shopping.naver.com/);return {id:8,windowId:43};};
- await reader.peek('same');assert.equal(focused.at(-1).id,43);
+ await reader.peek('same');assert.equal(focused.at(-1).id,42);assert.equal(f.counts().created,1);
+});
+
+test('captcha recovery strips hashes, waits eight seconds, tries three keywords and never loops navigation on resume',async()=>{
+ const f=browser();let now=10000,reply={ok:false,captcha:true};
+ const realNow=Date.now;Date.now=()=>now;
+ try {
+  let reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
+  reader.alternativeKeywords=['next','core','third'];
+  const p=reader.read('original');await new Promise(setImmediate);
+  f.messages.emit({type:'__rfSerpRead',result:{ok:false,captcha:true,status:200}},{tab:{id:7}});
+  assert.equal((await p).captcha,true);
+  assert.equal(f.updates.filter(u=>u.url).length,1);
+  assert.match(f.updates[0].url,/query=original&ct=1$/);
+  f.c.tabs.sendMessage=async()=>reply;
+  // A new service worker / Continue must inspect, never issue a fresh navigation.
+  reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});reader.alternativeKeywords=['next','core','third'];
+  await reader.read('original');now+=7999;await reader.peek('original');
+  assert.equal(f.updates.filter(u=>u.url).length,1);
+  now++;await reader.peek('original');assert.match(f.updates.at(-1).url,/query=next&ct=1$/);
+  reply={ok:false,captcha:true,challengeVisible:true};now+=9000;await reader.peek('original');
+  const count=f.updates.length;now+=7000;reply={ok:false,captcha:true};await reader.peek('original');assert.equal(f.updates.length,count);
+  now+=1000;await reader.peek('original');assert.match(f.updates.at(-1).url,/query=core&ct=1$/);
+  now+=8000;await reader.peek('original');assert.match(f.updates.at(-1).url,/query=third&ct=1$/);
+  now+=8000;assert.match((await reader.peek('original')).message,/보안문자 화면이 열리지 않음/);
+  const finalCount=f.updates.length;now+=8000;await reader.peek('original');assert.equal(f.updates.length,finalCount);
+  // Solving an alternative restores original; alternative products must not be saved as original.
+  reply={ok:true,products:[{id:'alternative'}],result_source:'integrated'};
+  const restored=reader.peek('original');await new Promise(setImmediate);
+  assert.match(f.updates.at(-1).url,/query=original$/);
+  f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[{id:'original'}],result_source:'integrated'}},{tab:{id:7}});
+  const r=await restored;assert.match(r.html,/original/);assert.doesNotMatch(r.html,/alternative/);
+ } finally {Date.now=realNow;}
+});
+
+test('solved original document is saved through policy after Continue without navigation',async()=>{
+ const f=browser(),store={},saved=[];
+ const reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
+ const policy=new ShopSerpPolicy({storage:{get:async()=>store,set:async v=>Object.assign(store,v)},cache:{get:async()=>null,put:async(k,v)=>saved.push(v)},wait:async()=>{}});
+ const run=()=>policy.run('same',()=>reader.read('same'),'browser',1000,null,()=>reader.peek('same'));
+ const p=run();await new Promise(setImmediate);f.updated.emit(7,{url:'https://captcha.naver.com/gate'});await p;
+ const before=f.updates.length;await policy.resume('browser');
+ f.c.tabs.sendMessage=async()=>({ok:true,products:[{id:'solved'}],result_source:'integrated'});
+ const r=await run();assert.equal(r.ok,true);assert.equal(r.result_source,'integrated');assert.match(r.html,/solved/);
+ assert.equal(f.updates.length,before);assert.equal(saved.length,1);assert.equal(store.rfSerpPolicy.until,0);
+});
+
+test('integrated recovery document is observed without clicking shopping or captcha controls',async()=>{
+ const navigation=fs.readFileSync(require('node:path').join(__dirname,'../../extension/content/shop-navigation.js'),'utf8');
+ const listeners=[];const sent=[];
+ const context=vm.createContext({location:{hash:'',href:'https://m.search.naver.com/search.naver?query=same&ct=1'},URL,
+ chrome:{runtime:{sendMessage:async m=>{sent.push(m);return {owned:true,recovering:true};},onMessage:{addListener:f=>listeners.push(f)}}},
+ document:{body:{innerText:'검색 서비스 이용이 제한되었습니다'},querySelectorAll:selector=>selector==='input'?[{name:'captcha',getClientRects:()=>[{}],getAttribute:()=>'',click:()=>assert.fail('must not click')}]:[],readyState:'complete'},
+ getComputedStyle:()=>({visibility:'visible',display:'block'})});
+ await vm.runInContext(navigation,context);
+ assert.equal(sent.length,1);
+ let reply;listeners.forEach(listener=>listener({type:'__rfSerpPeek'},null,r=>reply=r));
+ assert.equal(reply.captcha,true);assert.equal(reply.challengeVisible,true);assert.equal(reply.ok,false);
 });

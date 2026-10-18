@@ -87,7 +87,7 @@ class ShopSerpPolicy {
       if (s.until && (probe || this.now() < s.until)) {
         const recovered = probe ? await probe() : null;
         if (recovered?.tab_closed) return recovered;
-        if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
+        if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: recovered?.message || '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
         s.until = 0; s.blockedOnResume = false; s.last = this.now();
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');

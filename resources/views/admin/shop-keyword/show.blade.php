@@ -917,7 +917,7 @@ window.__SK = {
                     if (stopped) return;
                     if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword;
+                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword);
                         await sleep(1500);
                         continue; // Inspect the same tab until the person clears the gate.
                     }

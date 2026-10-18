@@ -79,36 +79,66 @@ class ShopSerpTab {
     const saved = await this.session().get(['rfSerpTabId']);
     let tab;
     try { tab = await c.tabs.get(saved.rfSerpTabId); } catch (_) {}
-    if (!tab) {
-      tab = await this.create({url: 'https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(keyword) + '#rfserp', active: true});
-      this.tabId = tab.id;
-      await this.session().set({rfSerpTabId: tab.id, rfSerpTabKeyword: keyword, rfSerpAnalysisId: this.analysisId});
-    } else await c.tabs.update(tab.id, {active: true});
+    if (!tab) return;
+    await c.tabs.update(tab.id, {active: true});
     if (tab.windowId != null) await c.windows.update(tab.windowId, {focused: true});
   }
-  // Inspect the existing document; only recreate/focus a missing recovery tab.
+  async recovery(keyword) {
+    const storage = this.session();
+    const saved = await storage.get(['rfSerpRecovery', 'rfSerpTabId']);
+    if (saved.rfSerpRecovery) return;
+    const state = {keyword, current:keyword, since:Date.now(), attempts:0};
+    await storage.set({rfSerpRecovery:state});
+    if (await this.closed()) return;
+    await this.browser.tabs.update(saved.rfSerpTabId, {url:this.recoveryUrl(keyword), active:true});
+  }
+  recoveryUrl(keyword) {
+    return 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) + '&ct=1';
+  }
+  // Recovery state is durable and independent of the pacing/resume button.
   async peek(keyword) {
     if (await this.closed()) return {ok:false, tab_closed:true};
+    const storage = this.session();
+    const saved = await storage.get(['rfSerpTabId', 'rfSerpTabKeyword', 'rfSerpRecovery']);
+    if (saved.rfSerpTabKeyword !== keyword) return null;
+    const state = saved.rfSerpRecovery;
     try {
-      const saved = await this.session().get(['rfSerpTabId', 'rfSerpTabKeyword']);
-      if (saved.rfSerpTabKeyword !== keyword) return null;
-      if (saved.rfSerpTabId == null) { await this.focus(keyword); return null; }
       const tab = await this.browser.tabs.get(saved.rfSerpTabId);
       const url = new URL(tab.url);
-      if (url.origin === 'https://m.search.naver.com' && url.hash === '#rfnav' && url.searchParams.get('query') === keyword) {
-        await this.browser.tabs.sendMessage(tab.id, { type: '__rfNavResume' });
+      const expected = state?.current || keyword;
+      if (url.searchParams.get('query') && url.searchParams.get('query') !== expected) return null;
+      const r = await this.browser.tabs.sendMessage(tab.id, {type:'__rfSerpPeek'});
+      if (r?.ok && Array.isArray(r.products)) {
+        await storage.set({rfSerpRecovery:null});
+        if (state && state.current !== keyword) return this.read(keyword, this.target || {});
+        return {ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'};
+      }
+      if (r?.challengeVisible && state) {
+        state.since = Date.now();
+        await storage.set({rfSerpRecovery:state});
         return null;
       }
-      if (!['https://search.shopping.naver.com', 'https://msearch.shopping.naver.com'].includes(url.origin) || !url.pathname.startsWith('/search/') || url.searchParams.get('query') !== keyword) return null;
-      const r = await this.browser.tabs.sendMessage(saved.rfSerpTabId, { type: '__rfSerpPeek' });
-      if (r?.ok && Array.isArray(r.products)) {
-        return { ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' };
+    } catch (_) { /* Gate origins may not have a content-script receiver. */ }
+    if (state && Date.now() - state.since >= 8000) {
+      const choices = [...new Set([...(this.alternativeKeywords || []), keyword.split(/\s+/)[0], keyword + ' 쇼핑', keyword + ' 추천', keyword + ' 상품'])].filter(k => k && k !== keyword);
+      if (state.attempts < 3) {
+        state.current = choices[state.attempts]; state.attempts++; state.since = Date.now();
+        await storage.set({rfSerpRecovery:state});
+        if (await this.closed()) return {ok:false,tab_closed:true};
+        await this.browser.tabs.update(saved.rfSerpTabId, {url:this.recoveryUrl(state.current),active:true});
+      } else {
+        const message = '보안문자 화면이 열리지 않음 — 탭을 닫으면 멈춥니다';
+        globalThis.rfSerpCurrent = {analysisId:this.analysisId,keyword,screen:message};
+        return {ok:false,cooldown:true,message};
       }
-    } catch (_) { await this.focus(keyword).catch(() => {}); }
+    }
     return null;
   }
   async read(keyword, target = {}) {
     if (await this.closed()) return {ok:false, tab_closed:true};
+    this.target = target;
+    const pending = (await this.session().get(['rfSerpRecovery'])).rfSerpRecovery;
+    if (pending) return (await this.peek(pending.keyword)) || {ok:false,captcha:true,status:200};
     const c = this.browser;
     let tab;
     let finish;
@@ -149,7 +179,7 @@ class ShopSerpTab {
       } catch (_) {} finally { inspecting = false; }
     }, 500);
     try {
-      const url = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) + '#rfnav';
+      const url = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) ;
       const storage = this.session();
       if (this.tabId === null) {
         const saved = await storage.get('rfSerpTabId');
@@ -174,7 +204,7 @@ class ShopSerpTab {
       const response = await result;
       clearTimeout(timer);
 
-      if (response.captcha || [403,429].includes(response.status)) await this.focus(keyword).catch(() => {});
+      if (response.captcha || [403,429].includes(response.status)) { await this.recovery(keyword); await this.focus(keyword).catch(() => {}); }
       return response;
     } catch (e) { return { ok: false, status: 0, deferred: e.code === 'RF_PARALLEL_REDUCED', message: '쇼핑 탭 오류: ' + e.message }; }
     finally {

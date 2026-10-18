@@ -1021,7 +1021,7 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
         if (Date.now() - lastScreenSerpAt < 60000) return; // 도중에 화면이 시작되면 즉시 양보
         let res;
         do {
-          res = await handlers.fetchShopSerp({ keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
+          res = await handlers.fetchShopSerp({ keyword: it.keyword, alternativeKeywords: items.filter(x => x.keyword !== it.keyword).map(x => x.keyword), target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
           if (res?.parallel_reduced) parallelTabs = 1;
           skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
@@ -1107,8 +1107,16 @@ Object.assign(handlers, {
     if (analysisId) await chrome.storage.local.set({['rfSerpClosed:' + analysisId]:[]});
     return shopSerpPolicy.resume(collectorIp || 'browser');
   },
+  async __rfCollectionContext(_, sender) {
+    const data = await chrome.storage.session.get(null);
+    for (let slot = 0; slot < 4; slot++) {
+      const tail = slot ? ':lane:' + slot : '';
+      if (sender?.tab?.id != null && sender.tab.id === data['rfSerpTabId' + tail]) return {owned:true, recovering:!!data['rfSerpRecovery' + tail]};
+    }
+    return {owned:false};
+  },
   async shopSerpStatus() { return globalThis.rfSerpCurrent || {}; },
-  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
+  async fetchShopSerp({ keyword, target, analysisId, collectorIp, interval_ms, interval_revision, collection_mode, alternativeKeywords = [], parallel_tabs = 1, tab_open_interval_ms = 3000 }, sender) {
     await rfCloseWork;
     if (analysisId) {
       const key = 'rfSerpClosed:' + analysisId;
@@ -1143,6 +1151,7 @@ Object.assign(handlers, {
     }
     const result = await shopSerpPool.run(analysisId, kw, parallel_tabs, async ({tab, policy}) => {
     tab.openIntervalMs = tab_open_interval_ms;
+    tab.alternativeKeywords = alternativeKeywords;
     return policy.run(kw, async effectiveGap => {
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
       if (collection_mode !== 'fetch') return tab.read(kw, target);

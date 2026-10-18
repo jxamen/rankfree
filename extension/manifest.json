@@ -27,7 +27,10 @@
         "http://localhost:8000/*",
         "https://m.search.naver.com/*",
         "https://s.search.naver.com/*",
-        "https://msearch.shopping.naver.com/*"
+        "https://msearch.shopping.naver.com/*",
+        "https://captcha.naver.com/*",
+        "https://ncpt.naver.com/*",
+        "https://nid.naver.com/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -161,6 +164,18 @@
                 "content/shop-navigation.js"
             ],
             "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://captcha.naver.com/*",
+                "https://ncpt.naver.com/*",
+                "https://nid.naver.com/*"
+            ],
+            "js": [
+                "content/shop-captcha.js"
+            ],
+            "run_at": "document_idle",
+            "all_frames": true
         }
     ],
     "action": {
