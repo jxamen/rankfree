@@ -759,7 +759,7 @@ window.__SK = {
 
             for (const it of d.items) {
                 if (stopped) return;
-                const res = await extCall('fetchShopSerp', { keyword: it.keyword }, 30000);
+                const res = await extCall('fetchShopSerp', { keyword: it.keyword, analysisId: {{ (int) $analysis->id }} }, 30000);
                 if (stopped) return;   // 중단 클릭 — 진행 중이던 건은 버리고 즉시 멈춤(재개 시 다시 확인)
                 if (!res) { halt('확장이 응답하지 않습니다 — chrome://extensions 에서 확장 새로고침 후 "이어서 확인"', true); return; }
                 if (res.cooldown) { halt(res.message + " 잠시 후 이어서 확인하세요.", true); return; }

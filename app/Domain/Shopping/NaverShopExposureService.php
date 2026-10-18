@@ -81,7 +81,7 @@ class NaverShopExposureService
                 'interval_ms' => $previous === null ? null : round(($state['last'] - $previous) * 1000),
                 'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked, 'slow_entry' => (bool) $blocked, 'gap_ms' => $state['gap'] ?? $gap]);
             if (! $r->ok() || $captcha) {
-                return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status()] + $out;
+                return ['blocked' => true, 'error' => $captcha ? 'captcha' : 'http_'.$r->status(), 'blocked_on_resume' => $resumedAfterBlock && (bool) $blocked] + $out;
             }
             Cache::put($cacheKey, $html, now('Asia/Seoul')->endOfDay());
             return $this->rankFromHtml($html, $target) + $out;
