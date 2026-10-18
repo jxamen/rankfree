@@ -194,3 +194,11 @@
 - 생성 API는 같은 사용자·핵심 키워드·기존 상품 매칭 기준에 KST 당일 created_at 범위를 적용한다. 사용자별 생성 잠금으로 중복 생성 경합을 막고, 미확인 조합만 이어간다. 완료/목표도달 결과는 유지한다. 응답 reused(boolean), reuse_mode(new/reused), reuse_label(새로/재사용(이어서)).
 - AppSetting shop.exposure.collection_mode=tab(기본)/fetch를 간격 옆에서 저장한다. 서버 pending/확장 interval-policy가 같은 값을 전달한다. fetch는 통합검색 HTML 쇼핑 영역 판정 후, 영역이 없을 때만 모바일 쇼핑 HTML을 요청한다. 쇼핑 __NEXT_DATA__ 목록은 기존 판정용 _INITIAL_STATE로 변환한다.
 - 두 모드 모두 공용 직렬 lane을 거쳐 이전 수집 완료 후 설정 간격 이상 대기한다. fetch의 통합→쇼핑 요청 사이에도 유효 간격을 기다린다. 차단은 3분 후 재확인·+300ms, 보안문자는 탭 모드로 바꿔 사람이 풀도록 안내한다. 자동 풀이·IP 변경·브라우저 차단 시 서버 전환을 추가하지 않는다.
+
+## 상품정보 재수집 0.6.7.2 (2026-10-18)
+
+- 상품 탭 대기자를 탭 생성 전에 등록하고 추출 payload는 별도 저장 API 완료 전에 전달한다. 25초 탭 대기와 30초 API 제한이 충돌하지 않는다. 상품 탭 또는 상품 큐 저장이 진행 중이면 SERP 감시자의 runtime.reload를 미룬다.
+- 상품 URL 그대로 표시되는 네이버 제한 본문과 nid/captcha/ncpt 이동을 감지한다. 제한 제목은 상품명으로 저장하지 않는다. 제한 탭은 보존·재사용하고 자동 풀이는 하지 않는다.
+- 상품 큐는 실패를 `collector-event(kind=client_error, stage=product)`로 보고하고 다음 3분 알람에 재시도한다. 상태는 분석별 24시간 캐시에 보관하고 소유자만 product-status로 읽는다. SERP 차단·서버 전환·간격에는 영향을 주지 않는다.
+- 화면은 실패 이유를 버튼 옆에 즉시 표시하고 60초 뒤 재시도한다. 큐 상태는 15초마다 확인한다. 저장 HTTP/JSON 오류도 표시하며 성공한 저장만 새로고침한다. 이미지 누락도 태그/배송비와 같은 24시간 보충 큐 대상으로 처리한다.
+- 재현: `node --test tests/extension/*.test.cjs`, `node scripts/test-product-recollect-browser.cjs` (로컬 fixture + 실제 Chromium 확장/브릿지/상품 content script).

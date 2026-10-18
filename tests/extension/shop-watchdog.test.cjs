@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('extension/background.js','utf8');
 const code=source.slice(source.indexOf('async function reportShopClientEvent'),source.indexOf('\nfunction sleep',source.indexOf('async function reportShopClientEvent')));
-function context(extra={}) {return vm.createContext({crypto:require('node:crypto').webcrypto,Date:{now:()=>1000000},skwCheckActive:false,skwCheckHeartbeat:0,lastScreenSerpAt:999999,getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}},runtime:{reload:()=>{}}},...extra});}
+function context(extra={}) {return vm.createContext({crypto:require('node:crypto').webcrypto,Date:{now:()=>1000000},productInfoWaiters:new Map(),skwQueueActive:false,skwCheckActive:false,skwCheckHeartbeat:0,lastScreenSerpAt:999999,getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}},runtime:{reload:()=>{}}},...extra});}
 test('one minute alarm recovers screen stall despite recent screen request, then saves',async()=>{
  let queues=0,saves=0;const events=[];
  const c=context({handlers:{fetchShopSerp:async()=>({ok:true,html:'data'})},apiFetch:async(path,args)=>{
@@ -42,4 +42,13 @@ test('boosting copy waits beyond 15 minutes, finishes and processes next order; 
  await vm.runInContext(code+';process({no:1}).then(()=>process({no:2}))',c);
  assert.ok(clock>900000);assert.deepEqual(links,[1,2]);assert.ok(notes.some(x=>x.includes('자동 복구')));
  await assert.rejects(vm.runInContext('process({no:3})',c),/분석 상태: error/);
+});
+
+test('watchdog defers runtime reload while product tab or queue save is active',async()=>{
+ for(const extra of [{productInfoWaiters:new Map([['111',()=>{}]])},{skwQueueActive:true}]) {
+  let reloads=0;
+  const c=context({skwCheckActive:true,skwCheckHeartbeat:0,...extra,chrome:{runtime:{reload:()=>reloads++}}});
+  await vm.runInContext(code+';watchShopKeywordQueue()',c);
+  assert.equal(reloads,0);
+ }
 });

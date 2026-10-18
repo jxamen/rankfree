@@ -70,7 +70,7 @@ class ShopKeywordTagRecollectTest extends TestCase
         $a = $this->analysis();
         ShopProductInfo::create([
             'user_id' => $this->user->id, 'channel_product_id' => '111',
-            'delivery_fee' => 0,
+            'delivery_fee' => 0, 'thumbnail_url' => 'https://example.com/product.jpg',
             'title' => '내 상품', 'seller_tags' => ['킹크렙포크', '부모님선물'],
             'collected_at' => now()->subDays(3),
         ]);
@@ -107,6 +107,38 @@ class ShopKeywordTagRecollectTest extends TestCase
     public function test_상품정보가_아예_없으면_큐에_들어온다(): void
     {
         $this->assertContains($this->analysis()->id, $this->queueIds());
+    }
+
+    public function test_missing_thumbnail_retries_after_daily_cooldown(): void
+    {
+        $a = $this->analysis();
+        $pi = ShopProductInfo::create([
+            'user_id' => $this->user->id, 'channel_product_id' => '111',
+            'title' => '내 상품', 'seller_tags' => ['태그'], 'delivery_fee' => 0,
+            'collected_at' => now()->subDays(3),
+        ]);
+        $this->assertContains($a->id, $this->queueIds());
+        $pi->update(['collected_at' => now()]);
+        $this->assertNotContains($a->id, $this->queueIds());
+    }
+
+    public function test_product_failure_status_is_owned_and_does_not_block_rank_collection(): void
+    {
+        $a = $this->analysis();
+        $status = $a->refresh()->status;
+        $this->withHeaders($this->headers)->postJson('/api/ext/shop-keyword/'.$a->id.'/collector-event', [
+            'kind' => 'client_error', 'stage' => 'product', 'message' => '네이버 제한 화면 — 풀린 뒤 자동 재시도',
+        ])->assertOk();
+        $this->assertSame($status, $a->fresh()->status);
+        $this->user->update(['role' => 'operator']);
+        $this->actingAs($this->user)->getJson(route('admin.shop-keyword.product-status', $a))
+            ->assertOk()->assertJson(['message' => '네이버 제한 화면 — 풀린 뒤 자동 재시도']);
+        $other = User::factory()->create(['role' => 'operator']);
+        $this->actingAs($other)->getJson(route('admin.shop-keyword.product-status', $a))->assertForbidden();
+        $this->actingAs($this->user)->postJson(route('admin.shop-keyword.collector-event', $a), [
+            'kind' => 'client_error', 'stage' => 'product', 'message' => '',
+        ])->assertOk();
+        $this->getJson(route('admin.shop-keyword.product-status', $a))->assertOk()->assertJson(['message' => '']);
     }
 
     /** 핵심 회귀 — 태그가 빈 수집 결과가 기존 태그를 지우면 안 된다. */
