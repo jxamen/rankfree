@@ -194,7 +194,7 @@
                     <td class="py-2 text-ink" style="font-size:var(--fs-sm);">{{ $c->keyword }}
                         @if ($c->ad_exposed)<span class="badge" style="font-size:var(--fs-xs);color:var(--color-muted);" title="이 키워드에서 내 상품이 광고로도 노출 중">광고</span>@endif
                     </td>
-                    <td class="py-2 text-right {{ $rc }} font-mono" style="font-size:var(--fs-sm);">{{ $rt }} @if ($c->result_source)<span class="text-muted-soft">{{ $c->result_source === 'integrated' ? '통합' : '쇼핑' }}</span>@endif</td>
+                    <td class="py-2 text-right {{ $rc }} font-mono" style="font-size:var(--fs-sm);">{{ $rt }} @if ($c->result_source)<span class="text-muted-soft">· {{ $c->result_source === 'integrated' ? '통합' : '쇼핑' }}</span>@endif</td>
                     <td class="py-2 text-right" style="white-space:nowrap;">
                         <a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener nofollow" class="text-muted-soft" style="font-size:var(--fs-xs);">검색 ↗</a>
                         <button type="button" class="sk-del" data-item="{{ $c->id }}" data-kind="combo" title="삭제" style="margin-left:8px;">✕</button>
@@ -291,7 +291,7 @@
             @php [$rt, $rc] = $rankCell($c->rank); @endphp
             <span class="badge sk-badge" data-item="{{ $c->id }}" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;">
                 <a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener nofollow" class="text-ink" style="text-decoration:none;">{{ $c->keyword }}</a>
-                <span class="{{ $rc }} font-mono">{{ $rt }}</span>
+                <span class="{{ $rc }} font-mono">{{ $rt }}@if ($c->result_source) · {{ $c->result_source === 'integrated' ? '통합' : '쇼핑' }}@endif</span>
             </span>
         @endforeach
     </div>
@@ -324,7 +324,7 @@
             @endphp
             <span class="badge sk-badge" data-item="{{ $c->id }}" data-state="{{ $state }}" style="font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;">
                 <a href="{{ $shopUrl($c->keyword) }}" target="_blank" rel="noopener nofollow" class="text-ink" style="text-decoration:none;">{{ $c->keyword }}</a>
-                <span class="sk-rank {{ $rc }} font-mono">{{ $rt }}</span>
+                <span class="sk-rank {{ $rc }} font-mono">{{ $rt }}@if ($c->result_source) · {{ $c->result_source === 'integrated' ? '통합' : '쇼핑' }}@endif</span>
                 @if ($c->ad_exposed)<span class="text-muted-soft sk-ad-flag" title="광고로도 노출">광고</span>@endif
                 <button type="button" class="sk-del" data-item="{{ $c->id }}" data-kind="combo" title="이 조합 삭제">✕</button>
             </span>
@@ -639,9 +639,10 @@ window.__SK = {
     // ── 확인 결과 실시간 반영 — 조합 배지 갱신 + 노출 테이블·광고 섹션 자동 등록 ──
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const shopUrl = (kw) => 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw);
-    const rankSpan = (rank) => rank <= 0
-        ? '<span class="sk-rank text-muted-soft font-mono">미노출</span>'
-        : '<span class="sk-rank ' + (rank <= cfg.th ? 'text-success font-semibold' : 'text-muted') + ' font-mono">' + rank + '위</span>';
+    const sourceLabel = (source) => source === 'integrated' ? ' · 통합' : source === 'shopping' ? ' · 쇼핑' : '';
+    const rankSpan = (rank, source) => rank <= 0
+        ? '<span class="sk-rank text-muted-soft font-mono">미노출' + sourceLabel(source) + '</span>'
+        : '<span class="sk-rank ' + (rank <= cfg.th ? 'text-success font-semibold' : 'text-muted') + ' font-mono">' + rank + '위' + sourceLabel(source) + '</span>';
 
     function applyItemResult(it, res) {
         const rank = Number(res.rank) || 0;
@@ -655,7 +656,7 @@ window.__SK = {
         if (badge) {
             badge.dataset.state = state;
             const r = badge.querySelector('.sk-rank');
-            if (r) r.outerHTML = rankSpan(rank);
+            if (r) r.outerHTML = rankSpan(rank, res.result_source);
             if (res.ad && !badge.querySelector('.sk-ad-flag')) {
                 const flag = document.createElement('span');
                 flag.className = 'text-muted-soft sk-ad-flag';
@@ -666,7 +667,7 @@ window.__SK = {
             badgeVisible(badge);
         }
         if (state === 'exposed') addExposedRow(it, rank, res);
-        if (res.ad) addAdBadge(it, rank);
+        if (res.ad) addAdBadge(it, rank, res.result_source);
         updatePattern(it, res);
     }
 
@@ -750,7 +751,7 @@ window.__SK = {
         if (window.__skCopyData) (window.__skCopyData.exposed = window.__skCopyData.exposed || []).push(it.keyword);
     }
 
-    function addAdBadge(it, rank) {
+    function addAdBadge(it, rank, source) {
         const list = document.getElementById('sk-ad-list');
         if (!list || list.querySelector('[data-item="' + it.id + '"]')) return;
         const empty = document.getElementById('sk-ad-empty');
@@ -759,7 +760,7 @@ window.__SK = {
         span.className = 'badge sk-badge';
         span.dataset.item = it.id;
         span.style.cssText = 'font-size:var(--fs-xs);display:inline-flex;align-items:center;gap:5px;';
-        span.innerHTML = '<a href="' + shopUrl(it.keyword) + '" target="_blank" rel="noopener nofollow" class="text-ink" style="text-decoration:none;">' + esc(it.keyword) + '</a>' + rankSpan(rank);
+        span.innerHTML = '<a href="' + shopUrl(it.keyword) + '" target="_blank" rel="noopener nofollow" class="text-ink" style="text-decoration:none;">' + esc(it.keyword) + '</a>' + rankSpan(rank, source);
         list.appendChild(span);
         const cnt = document.getElementById('sk-ad-count');
         if (cnt) cnt.textContent = '(' + ((parseInt((cnt.textContent || '').replace(/[()]/g, ''), 10) || 0) + 1) + ')';

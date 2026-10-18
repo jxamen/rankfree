@@ -33,19 +33,21 @@ const html = (slots, hidden=false) => `<nav><a role="tab" href="https://msearch.
   ]) {
    await p.route('https://m.search.naver.com/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:html(slots,hidden)}));
    await p.goto('https://m.search.naver.com/search.naver?where=m&query=cup&case='+encodeURIComponent(name)+'#rfnav');
-   await p.evaluate(()=>{
+   await p.evaluate((integrated)=>{
     // Exercise independent readiness and menu visibility gates before the dwell.
-    const a=document.querySelector('nav a');a.style.display='none';
+    const a=document.querySelector('nav a');a.style.display=integrated?'none':'';
     Object.defineProperty(document,'readyState',{configurable:true,get:()=>window.ready||'loading'});
     setTimeout(()=>{window.ready='complete';a.style.display='';window.readyAt=Date.now();},350);
     Math.random=()=>0;
-   });
+   },integrated);
    const began=Date.now();
    await p.evaluate(nav);
    if(integrated) {
     assert.match(p.url(),/#rfnav$/);
     const state=await p.evaluate(()=>({r:window.navResult,events:window.events,at:window.readyAt}));
-    assert.equal(state.r.result_source,'integrated');
+    if (name === 'empty block') {
+     assert.equal(state.r.ok,false);assert.match(state.r.message,/못 읽음/);
+    } else assert.equal(state.r.result_source,'integrated');
     assert.equal(state.at,undefined); // decision while still loading, without dwell
     assert.equal(state.events.some(e=>e.type==='scroll'||e.type==='click'),false);
     evidence.push({name,screen:'integrated',elapsedMs:Date.now()-began, decidedBeforeComplete:state.at===undefined});

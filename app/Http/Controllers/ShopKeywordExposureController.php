@@ -246,7 +246,7 @@ class ShopKeywordExposureController extends Controller
             return response()->json($this->analyzer->progress($analysis) + ['skipped' => true]);
         }
 
-        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? null));
+        return response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated'));
     }
 
     /** 확장이 수집한 코어 키워드 신호(가격비교 HTML·함께많이찾는)를 참고/재료 토큰으로 병합. */

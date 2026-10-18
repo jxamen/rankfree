@@ -85,4 +85,27 @@ class ShopKeywordScreenResultTest extends TestCase
             'html' => '', 'result_source' => 'unknown'])->assertUnprocessable();
         $this->assertNull($item->fresh()->rank);
     }
+    public function test_both_check_html_controllers_store_each_source_and_legacy_default(): void
+    {
+        foreach (['page', 'extension'] as $path) {
+            foreach (['integrated', 'shopping', null] as $source) {
+                $a = $this->analysis();
+                $user = User::findOrFail($a->user_id);
+                $user->update(['api_scopes' => ['shop_keyword']]);
+                $item = $this->item($a, '출처 테스트');
+                $data = ['item_id' => $item->id, 'html' => '', 'runner' => 'source-test'];
+                if ($source !== null) $data['result_source'] = $source;
+                $url = route('admin.shop-keyword.check-html', $a);
+                if ($path === 'extension') {
+                    [, $token] = \App\Models\ExtToken::issue($user);
+                    $this->withHeader('Authorization', 'Bearer '.$token);
+                    $url = "/api/ext/shop-keyword/{$a->id}/check-html";
+                }
+                $this->postJson($url, $data)->assertOk()->assertJsonPath('result_source', $source ?? 'integrated');
+                $this->assertSame($source ?? 'integrated', $item->fresh()->result_source);
+                app(\App\Domain\Shopping\ShopExposureRunLock::class)->release('ip:127.0.0.1', $a->id);
+            }
+        }
+    }
+
 }
