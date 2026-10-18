@@ -119,6 +119,7 @@
     {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
     <button type="button" id="sk-recollect" class="btn btn-secondary btn-sm"
         title="확장으로 상품페이지(제목·관련태그·대표이미지·가격)를 다시 수집합니다">상품정보 다시 수집</button>
+    <span id="sk-product-status" role="status" aria-live="polite">{{ \Illuminate\Support\Facades\Cache::get('shop-product-status:'.$analysis->id, [])['message'] ?? '' }}</span>
     {{-- data-confirm 은 form 에 — app.js 전역 핸들러(SweetAlert2)가 form 속성만 읽는다 --}}
     <form method="POST" action="{{ route('admin.shop-keyword.destroy', $analysis) }}" style="margin-left:auto;"
           data-confirm="'{{ $analysis->core_keyword }}' 분석을 삭제할까요?" data-confirm-text="조합·확인 결과·단축 URL이 함께 삭제되며 되돌릴 수 없습니다.">
@@ -1010,6 +1011,7 @@ window.__SK = {
         try {
             if (cfg.needTitle && cfg.productUrl) {
                 const pi = await extCall('collectProductPage', { url: cfg.productUrl }, 40000);
+                if (!pi?.ok) { await reportProduct(pi?.message || '상품정보 응답 시간 초과 — 자동 재시도'); productRetry = setTimeout(recollectProduct, 60000); }
                 if (pi && pi.ok) {
                     const r = await post(cfg.urls.productInfo, { info: pi.info || null });
                     if (r.ok) {
@@ -1064,29 +1066,53 @@ window.__SK = {
 
     // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)
     const recollect = document.getElementById('sk-recollect');
-    if (recollect) recollect.addEventListener('click', async function () {
-        if (cfg.ended) return;
-        if (!cfg.productUrl) { alert('제품 URL이 없어 수집할 수 없습니다.'); return; }
-        recollect.disabled = true;
-        recollect.textContent = '수집 중…';
-        const ok = await waitExt(1500);
-        if (!ok) {
-            recollect.disabled = false;
-            recollect.textContent = '상품정보 다시 수집';
-            alert('랭크프리 확장이 이 페이지에 연결되지 않았습니다 — 확장 설치·로그인 후 페이지를 새로고침하세요.');
-            return;
-        }
-        const pi = await extCall('collectProductPage', { url: cfg.productUrl }, 45000);
-        if (pi && pi.ok) {
-            await post(cfg.urls.productInfo, { info: pi.info || null }).catch(() => {});
+    const productStatus = document.getElementById('sk-product-status');
+    let productRetry = null, productBusy = false;
+    async function reportProduct(message) {
+        if (productStatus) productStatus.textContent = message;
+        try { await post(cfg.urls.collectorEvent, { kind: 'client_error', stage: 'product', message }); } catch (_) {}
+    }
+    async function recollectProduct() {
+        if (cfg.ended || productBusy) return;
+        clearTimeout(productRetry); productRetry = null;
+        productBusy = true;
+        if (recollect) { recollect.disabled = true; recollect.textContent = '수집 중…'; }
+        if (productStatus) productStatus.textContent = '상품 페이지를 확인하고 있습니다…';
+        let retry = false;
+        try {
+            if (!cfg.productUrl) throw new Error('제품 URL이 없어 수집할 수 없습니다.');
+            if (!await waitExt(1500)) throw new Error('랭크프리 확장이 연결되지 않았습니다 — 확장 설치·로그인 후 새로고침하세요.');
+            const pi = await extCall('collectProductPage', { url: cfg.productUrl }, 40000);
+            retry = true;
+            if (!pi?.ok || !pi.info) throw new Error(pi?.message || '확장 응답 시간 초과 — 자동 재시도');
+            const r = await post(cfg.urls.productInfo, { info: pi.info });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok || body.ok === false) {
+                retry = r.status === 429 || r.status >= 500;
+                throw new Error(body.message || '상품정보 저장 실패 (HTTP ' + r.status + ')');
+            }
+            await reportProduct('');
             location.reload();
-        } else {
-            recollect.disabled = false;
-            recollect.textContent = '상품정보 다시 수집';
-            // 확장이 원인을 알려주면 그대로(예: 네이버 로그인 확인 게이트 — 열린 탭에서 확인 후 재시도)
-            alert((pi && pi.message) || '수집에 실패했습니다 — 상품페이지가 열리지 않았을 수 있어요. 잠시 후 다시 시도하세요.');
+        } catch (e) {
+            await reportProduct(e.message);
+            if (retry) productRetry = setTimeout(recollectProduct, 60000);
+        } finally {
+            productBusy = false;
+            if (recollect) { recollect.disabled = false; recollect.textContent = '상품정보 다시 수집'; }
         }
-    });
+    }
+    if (recollect) recollect.addEventListener('click', recollectProduct);
+    // Queue failures are visible even when this page did not initiate collection.
+    setInterval(async () => {
+        if (productBusy || cfg.ended) return;
+        try {
+            const r = await fetch('{{ route('admin.shop-keyword.product-status', $analysis) }}', { headers: { Accept: 'application/json' } });
+            if (!r.ok) return;
+            const status = await r.json();
+            if (productStatus) productStatus.textContent = status.message || '';
+            if (status.message && !productRetry) productRetry = setTimeout(recollectProduct, 60000);
+        } catch (_) {}
+    }, 15000);
 
     (async function boot() {
         if (cfg.ended) return;

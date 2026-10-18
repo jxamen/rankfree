@@ -68,6 +68,12 @@ class ExtShopKeywordController extends Controller
         }
         if ($analysis->refresh()->status === 'paused' && in_array($data['kind'], ['403', '429', '보안문자'], true)) {
             return response()->json(['ok' => true]);
+}
+        // Product failures are independent of SERP blocking/pacing and analysis status.
+        if (($data['stage'] ?? '') === 'product' && $data['kind'] === 'client_error') {
+            \Illuminate\Support\Facades\Cache::put('shop-product-status:'.$analysis->id, [
+                'message' => $data['message'] ?? '', 'updated_at' => now()->toIso8601String(),
+            ], now()->addDay());
         }
         if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
             \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
@@ -119,7 +125,7 @@ class ExtShopKeywordController extends Controller
                         $s->selectRaw('1')->from('shop_product_infos')
                             ->whereColumn('shop_product_infos.user_id', 'shop_keyword_analyses.user_id')
                             ->whereColumn('shop_product_infos.channel_product_id', 'shop_keyword_analyses.product_id')
-                            ->where(fn ($w) => $w->where(fn ($complete) => $complete->whereRaw('LENGTH(shop_product_infos.seller_tags) > 2')->whereNotNull('shop_product_infos.delivery_fee'))
+                            ->where(fn ($w) => $w->where(fn ($complete) => $complete->whereRaw('LENGTH(shop_product_infos.seller_tags) > 2')->whereNotNull('shop_product_infos.delivery_fee')->whereNotNull('shop_product_infos.thumbnail_url')->where('shop_product_infos.thumbnail_url', '!=', ''))
                                 ->orWhere('shop_product_infos.collected_at', '>=', now()->subDay()));
                     });
             });

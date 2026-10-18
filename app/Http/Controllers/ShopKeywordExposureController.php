@@ -53,6 +53,12 @@ class ShopKeywordExposureController extends Controller
         }
         if ($analysis->refresh()->status === 'paused' && in_array($data['kind'], ['403', '429', '보안문자'], true)) {
             return response()->json(['ok' => true]);
+}
+        // Product failures are independent of SERP blocking/pacing and analysis status.
+        if (($data['stage'] ?? '') === 'product' && $data['kind'] === 'client_error') {
+            \Illuminate\Support\Facades\Cache::put('shop-product-status:'.$analysis->id, [
+                'message' => $data['message'] ?? '', 'updated_at' => now()->toIso8601String(),
+            ], now()->addDay());
         }
         if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
             \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
@@ -66,6 +72,12 @@ class ShopKeywordExposureController extends Controller
             $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
         );
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
+    }
+
+    public function productStatus(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+        return response()->json(\Illuminate\Support\Facades\Cache::get('shop-product-status:'.$analysis->id, ['message' => '']));
     }
 
     public function resetInterval(Request $request, ShopKeywordAnalysis $analysis): JsonResponse

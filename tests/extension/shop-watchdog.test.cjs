@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('extension/background.js','utf8');
 const code=source.slice(source.indexOf('async function reportShopClientEvent'),source.indexOf('\nfunction sleep',source.indexOf('async function reportShopClientEvent')));
-function context(extra={}) {return vm.createContext({crypto:require('node:crypto').webcrypto,Date:{now:()=>1000000},skwCheckActive:false,skwCheckHeartbeat:0,lastScreenSerpAt:999999,getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}},runtime:{reload:()=>{}}},...extra});}
+function context(extra={}) {return vm.createContext({crypto:require('node:crypto').webcrypto,Date:{now:()=>1000000},productInfoWaiters:new Map(),skwQueueActive:false,skwCheckActive:false,skwCheckHeartbeat:0,lastScreenSerpAt:999999,getStore:async()=>({token:'test'}),chrome:{storage:{local:{get:async()=>({})}},runtime:{reload:()=>{}}},...extra});}
 test('one minute alarm recovers screen stall despite recent screen request, then saves',async()=>{
  let queues=0,saves=0;const events=[];
  const c=context({handlers:{fetchShopSerp:async()=>({ok:true,html:'data'})},apiFetch:async(path,args)=>{
@@ -48,4 +48,13 @@ test('watchdog never reloads a worker for an analysis whose tabs were all closed
  const c=context({skwCheckActive:true,skwCheckHeartbeat:800000,rfSerpCurrent:{analysisId:42},apiFetch:async()=>{events++;return {ok:true};},chrome:{storage:{local:{get:async()=>({'rfSerpClosed:42':[0,1,2,3]})}},runtime:{reload:()=>reloads++}}});
  await vm.runInContext(code+';watchShopKeywordQueue()',c);
  assert.equal(reloads,0);assert.equal(events,0);
+});
+
+test('watchdog defers runtime reload while product tab or queue save is active',async()=>{
+ for(const extra of [{productInfoWaiters:new Map([['111',()=>{}]])},{skwQueueActive:true}]) {
+  let reloads=0;
+  const c=context({skwCheckActive:true,skwCheckHeartbeat:0,...extra,chrome:{runtime:{reload:()=>reloads++}}});
+  await vm.runInContext(code+';watchShopKeywordQueue()',c);
+  assert.equal(reloads,0);
+ }
 });
