@@ -10,6 +10,7 @@ use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopKeywordAnalysisItem;
 use App\Models\ShopProductInfo;
 use App\Models\User;
+use App\Services\ShopExposureBlockAlert;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -66,6 +67,19 @@ class ShopKeywordExposureAnalyzer
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
 
         $target = $this->shop->resolveTarget(trim($productInput));
+
+        // API requests first persist a queue item. No token extraction or combinations before detail collection.
+        if (! empty($opts['product_first']) && ($target['product_id'] ?? '') !== '') {
+            return ShopKeywordAnalysis::create([
+                'user_id' => $user->id, 'core_keyword' => $core,
+                'product_url' => $target['url'] ?: $productInput, 'product_id' => $target['product_id'],
+                'threshold' => $threshold, 'check_method' => 'search', 'created_via' => 'api',
+                'status' => 'pending', 'token_count' => 0, 'combo_count' => 0,
+                'checked_count' => 0, 'exposed_count' => 0,
+                'product_collection' => ['state' => 'pending', 'attempts' => 0, 'next_at' => 0, 'message' => '상품 세부 정보 수집 대기'],
+                ...($opts['order_meta'] ?? []),
+            ]);
+        }
 
         // 확장이 수집한 상품정보(있으면 조합 재료로 — 제목·브랜드·가격·SEO태그). 서버는 상품페이지 429라 확장 수집분 사용.
         if (empty($opts['product_info']) && ($target['product_id'] ?? '') !== '') {
@@ -224,7 +238,7 @@ class ShopKeywordExposureAnalyzer
                     default => empty($res['error']) && empty($res['blocked']) ? 'success' : null,
                 };
                 if ($alertKind) {
-                    app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false), $res['interval_ms'] ?? null);
+                    app(ShopExposureBlockAlert::class)->record($analysis, (string) config('rankfree.shopping.exposure.collector_ip', 'server-egress-unknown'), 'server', $alertKind, (bool) ($res['blocked_on_resume'] ?? false), $res['interval_ms'] ?? null);
                 }
                 // fetch 실패/차단 → rank 저장 안 함(미확인 유지, 재시도 가능)
                 if (! empty($res['error']) || ! empty($res['blocked'])) {
@@ -241,7 +255,9 @@ class ShopKeywordExposureAnalyzer
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
                     $item->save();
-                    if (in_array($fresh->status, ['blocked', 'error'], true)) $fresh->update(['status' => 'checking']);
+                    if (in_array($fresh->status, ['blocked', 'error'], true)) {
+                        $fresh->update(['status' => 'checking']);
+                    }
                     Cache::forget('shop-exposure:error:'.$analysis->id);
 
                     return true;
@@ -268,8 +284,11 @@ class ShopKeywordExposureAnalyzer
             $paused = $analysis->status === 'paused';
             $actualBlock = in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true);
             $error = $stopped ? ($res['error'] ?? 'unknown_error') : null;
-            if ($error) Cache::put('shop-exposure:error:'.$analysis->id, $error, now()->addDay());
-            else Cache::forget('shop-exposure:error:'.$analysis->id);
+            if ($error) {
+                Cache::put('shop-exposure:error:'.$analysis->id, $error, now()->addDay());
+            } else {
+                Cache::forget('shop-exposure:error:'.$analysis->id);
+            }
             $status = $analysis->targetReached() ? 'target_reached' : ($remaining > 0 ? ($stopped ? ($actualBlock ? 'blocked' : 'error') : ($paused ? 'paused' : 'checking')) : 'done');
             if ($status === 'target_reached') {
                 $remaining = 0;
@@ -284,7 +303,7 @@ class ShopKeywordExposureAnalyzer
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
-                'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? \App\Services\ShopExposureBlockAlert::baseInterval()), 'retry_at' => $retryAt, 'error' => $error,
+                'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? ShopExposureBlockAlert::baseInterval()), 'retry_at' => $retryAt, 'error' => $error,
                 'items' => $batchResults, 'judged_count' => count($batchResults), 'exposed_items' => $this->exposedItems($analysis)];
         } finally {
             $lock->release();
@@ -323,7 +342,7 @@ class ShopKeywordExposureAnalyzer
             $item->checked_at = now();
             $item->save();
 
-            \App\Services\ShopExposureBlockAlert::clearWait($analysis);
+            ShopExposureBlockAlert::clearWait($analysis);
             $this->backfillMe($analysis, $res['me'] ?? null);
 
             $checked = (int) $analysis->combos()->whereNotNull('rank')->count();
@@ -384,6 +403,21 @@ class ShopKeywordExposureAnalyzer
      *
      * @return array{found:bool, added:int, title:?string, mall:?string, price:?int}
      */
+    public function completeProductPreparation(ShopKeywordAnalysis $analysis, ShopProductInfo $pi): void
+    {
+        $ext = $this->extractTokens((string) $analysis->core_keyword, $this->targetOf($analysis), [
+            'product_info' => ['title' => $pi->title, 'brand' => $pi->brand ?: $pi->mall_name,
+                'mall' => $pi->mall_name, 'price' => $pi->price, 'seller_tags' => (array) $pi->seller_tags],
+        ]);
+        $analysis->update(['product_title' => $pi->title, 'brand' => $pi->brand,
+            'mall_name' => $pi->mall_name, 'product_price' => $pi->price]);
+        $this->addTokens($analysis, $ext['tokens']);
+        $this->regenerate($analysis);
+        $analysis->update(['product_collection' => ['state' => 'completed',
+            'attempts' => $analysis->product_collection['attempts'] ?? 0,
+            'completed_at' => now()->toIso8601String(), 'message' => '상품 세부 정보 수집 완료']]);
+    }
+
     public function refreshProductInfo(ShopKeywordAnalysis $analysis): array
     {
         if ($analysis->refresh()->status === 'ad_ended') {

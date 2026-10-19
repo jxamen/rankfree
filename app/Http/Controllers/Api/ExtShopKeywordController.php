@@ -3,12 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Shopping\ShopExposureRunLock;
+use App\Domain\Shopping\ShopKeywordClaims;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Http\Controllers\Controller;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopProductInfo;
+use App\Services\ShopExposureBlockAlert;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * 확장 — 쇼핑 유입키워드 상품정보 자동 수집(2026-07-29).
@@ -27,12 +33,13 @@ class ExtShopKeywordController extends Controller
     public function intervalPolicy(Request $request): JsonResponse
     {
         $this->authorizeScope($request);
+
         return response()->json(['data' => [
             'collector_ip' => $request->ip(),
-            'browser_default_interval_ms' => \App\Services\ShopExposureBlockAlert::baseInterval(),
-            'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
-            'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
-        ] + \App\Services\ShopExposureBlockAlert::parallelSettings()]);
+            'browser_default_interval_ms' => ShopExposureBlockAlert::baseInterval(),
+            'collection_mode' => ShopExposureBlockAlert::collectionMode(), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
+            'interval_revision' => ShopExposureBlockAlert::revision($request->ip()),
+        ] + ShopExposureBlockAlert::parallelSettings()]);
     }
 
     public function __construct(private ShopKeywordExposureAnalyzer $analyzer) {}
@@ -41,6 +48,7 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
+
         return response()->json(['data' => ['status' => $analysis->status]]);
     }
 
@@ -58,37 +66,54 @@ class ExtShopKeywordController extends Controller
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
         ]);
         if ($data['kind'] === 'parallel_reset') {
-            \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+            ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+
             return response()->json(['ok' => true]);
         }
         if ($data['kind'] === 'tab_closed') {
             if (! in_array($analysis->refresh()->status, ['ad_ended', 'target_reached', 'done'], true)) {
                 $analysis->update(['status' => 'paused']);
-                \Illuminate\Support\Facades\Cache::forever('shop-exposure:tab-closed:'.$analysis->id, true);
-                $lock = app(\App\Domain\Shopping\ShopExposureRunLock::class);
+                Cache::forever('shop-exposure:tab-closed:'.$analysis->id, true);
+                $lock = app(ShopExposureRunLock::class);
                 $lock->release('ip:'.$request->ip(), (int) $analysis->id);
                 $lock->release('server', (int) $analysis->id);
             }
+
             return response()->json(['ok' => true]);
         }
         if ($analysis->refresh()->status === 'paused' && in_array($data['kind'], ['403', '429', '보안문자'], true)) {
             return response()->json(['ok' => true]);
-}
+        }
         // Product failures are independent of SERP blocking/pacing and analysis status.
         if (($data['stage'] ?? '') === 'product' && $data['kind'] === 'client_error') {
-            \Illuminate\Support\Facades\Cache::put('shop-product-status:'.$analysis->id, [
+            $state = $analysis->product_collection;
+            if ($state && ($state['state'] ?? '') === 'collecting') {
+                $failed = ($state['attempts'] ?? 0) >= 3;
+                ShopKeywordAnalysis::whereKey($analysis->id)
+                    ->where('product_collection->state', 'collecting')
+                    ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
+                    ->update(['status' => $failed ? 'failed' : 'pending', 'product_collection' => json_encode([
+                        ...$state, 'state' => $failed ? 'failed' : 'retry',
+                        'next_at' => now()->timestamp + 30,
+                        'message' => ($data['message'] ?? '') ?: '상품정보 수집 실패',
+                    ], JSON_UNESCAPED_UNICODE)]);
+            }
+
+            Cache::put('shop-product-status:'.$analysis->id, [
                 'message' => $data['message'] ?? '', 'updated_at' => now()->toIso8601String(),
             ], now()->addDay());
         }
         if (in_array($data['kind'], ['client_error', 'watchdog_restart'], true)) {
-            \Illuminate\Support\Facades\Log::warning('shop_exposure_client_event', [
+            Log::warning('shop_exposure_client_event', [
                 'analysis_id' => $analysis->id, 'user_id' => $request->user()->id,
                 'kind' => $data['kind'], 'keyword' => $data['keyword'] ?? '',
                 'stage' => $data['stage'] ?? '', 'message' => $data['message'] ?? '',
             ]);
+
             return response()->json(['ok' => true]);
         }
-        app(\App\Services\ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
+        app(ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
+
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }
 
@@ -135,17 +160,49 @@ class ExtShopKeywordController extends Controller
                     });
             });
 
-        $rows = (clone $base)->latest('id')->limit($limit)
+        // Durable leases prevent simultaneous extensions from claiming the same product.
+        $firstItems = [];
+        $candidates = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+            ->whereIn('product_collection->state', ['pending', 'collecting', 'retry'])->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
+            ->orderBy('id')->get();
+        foreach ($candidates as $candidate) {
+            if (count($firstItems) >= $limit) {
+                break;
+            }
+            DB::transaction(function () use ($candidate, &$firstItems) {
+                $a = ShopKeywordAnalysis::whereKey($candidate->id)->lockForUpdate()->first();
+                $state = $a->product_collection;
+                if ($a->collectionStopped()) {
+                    return;
+                }
+                if (in_array($state['state'] ?? '', ['completed', 'failed'], true)
+                    || ($state['next_at'] ?? 0) > now()->timestamp) {
+                    return;
+                }
+                if (($state['attempts'] ?? 0) >= 3) {
+                    $a->update(['status' => 'failed', 'product_collection' => [...$state,
+                        'state' => 'failed', 'message' => '상품 수집 응답 시간 초과 (3회)']]);
+
+                    return;
+                }
+                $a->update(['product_collection' => [...$state, 'state' => 'collecting',
+                    'attempts' => ($state['attempts'] ?? 0) + 1, 'next_at' => now()->timestamp + 90]]);
+                $firstItems[] = ['analysis_id' => (int) $a->id, 'core_keyword' => $a->core_keyword,
+                    'product_id' => $a->product_id, 'product_url' => $a->product_url];
+            });
+        }
+        $base->whereNull('product_collection');
+        $rows = (clone $base)->latest('id')->limit(max(0, $limit - count($firstItems)))
             ->get(['id', 'core_keyword', 'product_id', 'product_url']);
 
         return response()->json(['data' => [
-            'items' => $rows->map(fn ($a) => [
+            'items' => array_merge($firstItems, $rows->map(fn ($a) => [
                 'analysis_id' => (int) $a->id,
                 'core_keyword' => (string) $a->core_keyword,
                 'product_id' => (string) $a->product_id,
                 'product_url' => (string) $a->product_url,
-            ])->all(),
-            'remaining' => (clone $base)->count(),
+            ])->all()),
+            'remaining' => count($firstItems) + (clone $base)->count(),
         ]]);
     }
 
@@ -157,7 +214,18 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
+
+        return Cache::lock('shop-product-save:'.$analysis->id, 120)
+            ->block(5, fn () => $this->productInfoLocked($request, $analysis));
+    }
+
+    private function productInfoLocked(Request $request, ShopKeywordAnalysis $analysis): JsonResponse
+    {
+        $this->authorizeScope($request);
+        abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+
+        abort_if($analysis->product_collection && $analysis->collectionStopped(), 409, '분석이 중단되었습니다.');
 
         $data = $request->validate([
             'info' => 'required|array',
@@ -208,7 +276,16 @@ class ExtShopKeywordController extends Controller
             $attrs,
         );
 
-        $r = $this->analyzer->refreshProductInfo($analysis);
+        if ($analysis->product_collection) {
+            $pi = ShopProductInfo::where('user_id', $analysis->user_id)
+                ->where('channel_product_id', (string) $analysis->product_id)->firstOrFail();
+            if (($analysis->product_collection['state'] ?? '') !== 'completed') {
+                $this->analyzer->completeProductPreparation($analysis, $pi);
+            }
+            $r = ['added' => 0];
+        } else {
+            $r = $this->analyzer->refreshProductInfo($analysis);
+        }
         if (($r['added'] ?? 0) > 0) {
             $this->analyzer->regenerate($analysis);
         }
@@ -243,14 +320,14 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
 
         $request->validate(['exclude' => 'sometimes|array|max:10000', 'exclude.*' => 'integer']);
-        $limit = min(4, max(1, (int) $request->query('limit', \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'])));
+        $limit = min(4, max(1, (int) $request->query('limit', ShopExposureBlockAlert::parallelSettings()['parallel_tabs'])));
 
         // Failed reads remain unknown. Once this runner has skipped every remaining item,
         // release its own lease so the next analysis can start immediately.
         if ($request->input('exclude', [])) {
             $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
-                    ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
-                    ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
+                ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
+                ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
                 ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereIn('id', $request->input('exclude')))
                 ->whereDoesntHave('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude')))->pluck('id');
             foreach ($skipped as $id) {
@@ -260,9 +337,10 @@ class ExtShopKeywordController extends Controller
 
         $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
             ->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
-                    ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
-                    ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
+                ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
+                ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
+            ->where(fn ($q) => $q->whereNull('product_collection')->orWhere('product_collection->state', 'completed'))
             ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude', [])))
             ->orderBy('id')->first();
 
@@ -272,12 +350,12 @@ class ExtShopKeywordController extends Controller
         // A watchdog must observe saves, not lease/policy heartbeats from a frozen page.
         if ($request->boolean('watchdog')) {
             $last = $analysis->combos()->max('checked_at');
-            if ($last && \Illuminate\Support\Carbon::parse($last)->gt(now()->subMinutes(2))) {
+            if ($last && Carbon::parse($last)->gt(now()->subMinutes(2))) {
                 return response()->json(['data' => ['items' => [], 'recent_save' => true]]);
             }
         }
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
-            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + \App\Services\ShopExposureBlockAlert::parallelSettings() + $this->analyzer->progress($analysis)]);
+            return response()->json(['data' => ['server_fallback' => true, 'items' => []] + ShopExposureBlockAlert::parallelSettings() + $this->analyzer->progress($analysis)]);
         }
         // IP별 수집 잠금(2026-09-29) — 같은 IP 에서 다른 곳이 수집 중이면 빈 큐(확장은 다음 알람 3분 뒤 재시도 = 줄 서기)
         $lock = app(ShopExposureRunLock::class);
@@ -286,21 +364,23 @@ class ExtShopKeywordController extends Controller
             return response()->json(['data' => ['items' => [], 'busy' => true, 'taken_over' => $r['taken_over'] ?? false, 'message' => ($r['taken_over'] ?? false) ? '다른 창/확장이 이어 받았어요' : $lock->busyMessage($r['holder'], (bool) $request->user()?->isAdmin())]]);
         }
 
-        $limit = min($limit, \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_reduced'] ? 1 : 4);
+        $limit = min($limit, ShopExposureBlockAlert::parallelSettings((int) $analysis->id)['parallel_reduced'] ? 1 : 4);
         // Never hand the extension more work than the remaining top-five quota.
         if ($analysis->keyword_target) {
             $limit = min($limit, max(1, $analysis->keyword_target - $analysis->topFiveCount()));
         }
-        if ($request->boolean('policy_only')) app(\App\Domain\Shopping\ShopKeywordClaims::class)->renew($analysis, (string) $request->input('runner', ''));
-        $items = $request->boolean('policy_only') ? collect() : app(\App\Domain\Shopping\ShopKeywordClaims::class)->claim($analysis, (string) $request->input('runner', ''), $limit, $request->input('exclude', []));
+        if ($request->boolean('policy_only')) {
+            app(ShopKeywordClaims::class)->renew($analysis, (string) $request->input('runner', ''));
+        }
+        $items = $request->boolean('policy_only') ? collect() : app(ShopKeywordClaims::class)->claim($analysis, (string) $request->input('runner', ''), $limit, $request->input('exclude', []));
 
         return response()->json(['data' => [
-            'collector_ip' => $request->ip(), 'interval_revision' => \App\Services\ShopExposureBlockAlert::revision($request->ip()),
-            'collection_mode' => \App\Services\ShopExposureBlockAlert::collectionMode(), 'interval_ms' => \App\Services\ShopExposureBlockAlert::interval($request->ip()),
+            'collector_ip' => $request->ip(), 'interval_revision' => ShopExposureBlockAlert::revision($request->ip()),
+            'collection_mode' => ShopExposureBlockAlert::collectionMode(), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
             'target' => $this->analyzer->targetOf($analysis),
             'analysis_id' => (int) $analysis->id,
             'items' => $items->map(fn ($i) => ['item_id' => $i['id'], 'keyword' => $i['keyword'], 'claim_token' => $i['claim_token']])->all(),
-        ] + \App\Services\ShopExposureBlockAlert::parallelSettings((int) $analysis->id) + $this->analyzer->progress($analysis)]);
+        ] + ShopExposureBlockAlert::parallelSettings((int) $analysis->id) + $this->analyzer->progress($analysis)]);
     }
 
     /**
@@ -312,6 +392,8 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+
+        abort_if($analysis->product_collection && ($analysis->product_collection['state'] ?? '') !== 'completed', 409, '상품 세부 정보 수집 대기');
 
         if (ShopKeywordExposureAnalyzer::usesServerFallback($analysis)) {
             return response()->json($this->analyzer->progress($analysis) + ['server_fallback' => true, 'skipped' => true]);
@@ -336,6 +418,6 @@ class ExtShopKeywordController extends Controller
         }
 
         // html 이 비어 있어도 정상 입력 — 가격비교 슬롯을 못 찾은 것으로 보고 순위 없음으로 기록한다.
-        return app(\App\Domain\Shopping\ShopKeywordClaims::class)->save($analysis, $item, (string) $request->input('runner', ''), (string) $request->input('claim_token', ''), fn () => response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated')));
+        return app(ShopKeywordClaims::class)->save($analysis, $item, (string) $request->input('runner', ''), (string) $request->input('claim_token', ''), fn () => response()->json($this->analyzer->applyHtml($analysis, $item, (string) ($data['html'] ?? ''), $data['result_source'] ?? 'integrated')));
     }
 }

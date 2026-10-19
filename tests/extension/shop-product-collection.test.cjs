@@ -73,3 +73,23 @@ test('retry ignores the old restriction DOM while a reused tab is loading',async
 test('Naver service unavailable is distinguished from a restriction screen',async()=>{
  const f=fixture({blocked:'unavailable'});const result=await f.run();assert.equal(result.ok,false);assert.equal(result.retryable,true);assert.match(result.message,/서비스 접속 불가/);
 });
+
+test('headless product queue reports real failures, continues next item and never labels a successful save as client_error', async()=>{
+ const a=source.indexOf('async function drainShopKeywordProductQueue()');
+ const code=source.slice(a,source.indexOf('// 순위 확인도 확장이',a));
+ const events=[],saves=[],collected=[];
+ const c=vm.createContext({skwQueueActive:false,getStore:async()=>({token:'token',apiBase:'local'}),
+  chrome:{storage:{local:{get:async()=>({}),set:async()=>{}}}},
+  apiFetch:async(url,opts)=>url.includes('product-queue')?{ok:true,json:{data:{items:[
+   {analysis_id:1,product_url:'blocked'},{analysis_id:2,product_url:'success'},{analysis_id:3,product_url:'save-fails'}
+  ]}}}:(saves.push({url,opts}),{ok:!url.includes('/3/'),status:422,json:{message:'상품 불일치'}}),
+  handlers:{collectProductPage:async({url})=>{collected.push(url);return url==='blocked'?{ok:false,message:'네이버 제한 화면'}:{ok:true,info:{title:'상품'}};}},
+  reportShopClientEvent:async(...args)=>events.push(args),setTimeout:fn=>fn()
+ });
+ await vm.runInContext(code+';drainShopKeywordProductQueue()',c);
+ assert.deepEqual(collected,['blocked','success','save-fails']);
+ assert.equal(saves.length,2);assert.equal(events.length,2);
+ assert.equal(events[0][0],1);assert.match(events[0][3],/네이버 제한/);
+ assert.equal(events[1][0],3);assert.match(events[1][3],/422.*상품 불일치/);
+ assert.equal(c.skwQueueActive,false);
+});
