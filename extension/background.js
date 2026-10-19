@@ -1251,12 +1251,12 @@ Object.assign(handlers, {
         const markup = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
         const recognized = source === 'integrated'
           ? /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(markup)
-          : html !== raw || /_INITIAL_STATE\s*=/.test(raw);
+          : html !== raw;
         return {ok:r.ok && recognized, status:r.status, captcha:false, evidence,
           html, result_source:source, message:r.message || (!recognized ? '읽기 실패 재시도 — 검색 결과 구조를 확인하지 못했습니다.' : '')};
       };
       const integrated = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), 'integrated');
-      if ([403,429].includes(integrated.status) || ![200].includes(integrated.status) || /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(integrated.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) return integrated;
+      if (integrated.ok || integrated.status !== 200) return integrated;
       await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '쇼핑' };
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
