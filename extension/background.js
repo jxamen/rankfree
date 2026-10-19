@@ -957,7 +957,7 @@ async function drainShopKeywordProductQueue() {
       const saved = await apiFetch('/api/ext/shop-keyword/' + it.analysis_id + '/product-info', {
         method: 'POST', body: { info: pi.info }, token, apiBase,
       });
-      await reportShopClientEvent(it.analysis_id, '', 'product', saved.ok ? '' : '상품정보 저장 실패 (HTTP ' + saved.status + ')');
+      if (!saved.ok) await reportShopClientEvent(it.analysis_id, '', 'product', '상품정보 저장 실패 (HTTP ' + saved.status + '): ' + (saved.json?.message || '응답 오류'));
       await new Promise((r) => setTimeout(r, 1500));   // 연속 탭 열기 간격
     }
   } catch (e) { /* noop */ } finally {

@@ -8,9 +8,11 @@ use App\Domain\Shopping\ShopKeywordShortLinkService;
 use App\Http\Controllers\Controller;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopProductInfo;
+use App\Services\ShopExposureBlockAlert;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * 쇼핑 유입키워드 분석 외부 API v1 (scope: shop_keyword) — 2026-07-26.
@@ -34,7 +36,7 @@ class ShopKeywordApiController extends Controller
     /** 분석 생성 + 순위 확인 자동 시작. */
     public function store(Request $request)
     {
-        return \Illuminate\Support\Facades\Cache::lock('shop-keyword:create:'.$request->user()->id, 120)
+        return Cache::lock('shop-keyword:create:'.$request->user()->id, 120)
             ->block(15, fn () => $this->storeLocked($request));
     }
 
@@ -64,16 +66,30 @@ class ShopKeywordApiController extends Controller
             $orderMeta = [
                 'order_start_date' => $data['order_start_date'], 'order_end_date' => $data['order_end_date'],
                 'order_days' => $days,
-                'keyword_target' => $days * \App\Services\ShopExposureBlockAlert::keywordsPerDay(),
+                'keyword_target' => $days * ShopExposureBlockAlert::keywordsPerDay(),
             ];
         }
 
         // 같은 회원이 같은 키워드 + 같은 상품을 다시 요청하면 새로 만들지 않고 기존 분석을 돌려준다(2026-07-29).
         // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
         if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
+            // Reused legacy analyses may have a search-derived title but no collected detail record.
+            if (! $existing->product_collection && ! $existing->collectionStopped()
+                && preg_match('#^https://(?:smartstore|brand)\.naver\.com/[^/]+/products/\d+#i', (string) $existing->product_url)
+                && ! $this->oneProductInfo($existing)?->collected_at) {
+                $existing->update(['status' => 'pending', 'product_collection' => [
+                    'state' => 'pending', 'attempts' => 0, 'next_at' => 0, 'message' => '상품 세부 정보 수집 대기',
+                ]]);
+            }
+            if (($existing->product_collection['state'] ?? '') === 'failed') {
+                $existing->update(['status' => 'pending', 'product_collection' => [
+                    'state' => 'pending', 'attempts' => 0, 'next_at' => 0, 'message' => '상품 세부 정보 재수집 대기',
+                ]]);
+            }
             if ($existing->status === 'paused' && ! $existing->targetReached()) {
-                \App\Services\ShopExposureBlockAlert::resetParallel((int) $existing->id);
-                $existing->update(['status' => $existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
+                ShopExposureBlockAlert::resetParallel((int) $existing->id);
+                $waitingForProduct = $existing->product_collection && ($existing->product_collection['state'] ?? '') !== 'completed';
+                $existing->update(['status' => $waitingForProduct ? 'pending' : ($existing->combos()->whereNull('rank')->exists() ? 'checking' : 'done')]);
             }
             if ($orderMeta && ! in_array($existing->status, ['done', 'target_reached', 'ad_ended'])) {
                 $existing->update($orderMeta);
@@ -96,6 +112,7 @@ class ShopKeywordApiController extends Controller
             // 확인 방식을 search 로 고정한다 — 기록된 순위 근거와 실제 확인 경로를 일치시킨다.
             'check_method' => 'search',
             'created_via' => 'api',
+            'product_first' => empty($data['product_info']['title']),
             'order_meta' => $orderMeta,
         ];
         if (! empty($data['product_info']['title'])) {
@@ -293,6 +310,7 @@ class ShopKeywordApiController extends Controller
             'check_method' => (string) $analysis->check_method,
             'status' => (string) $analysis->status,
             'collection_status' => $analysis->collectionLabel(),
+            'product_collection' => $analysis->product_collection,
             'top_five_count' => $analysis->topFiveCount(),
             'keyword_target' => $analysis->keyword_target,
             'order_days' => $analysis->order_days,
