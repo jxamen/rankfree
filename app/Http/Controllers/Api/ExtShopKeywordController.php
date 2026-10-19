@@ -37,6 +37,8 @@ class ExtShopKeywordController extends Controller
 
         return response()->json(['data' => [
             'collector_ip' => $request->ip(),
+            // Data only: the extension accepts 200..4000 and cannot widen the packaged rule.
+            'captcha_rules' => ['max_page_text_chars' => max(200, min(4000, (int) \App\Models\AppSetting::read('shop.captcha.max_page_text_chars', '4000')))],
             'browser_default_interval_ms' => ShopExposureBlockAlert::baseInterval(),
             'collection_mode' => ShopExposureBlockAlert::collectionMode(), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
             'interval_revision' => ShopExposureBlockAlert::revision($request->ip()),
@@ -65,6 +67,11 @@ class ExtShopKeywordController extends Controller
             'collector' => 'sometimes|in:extension,screen,browser',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
+            'evidence' => 'sometimes|nullable|array:version,signal,url_pattern,visible',
+            'evidence.version' => 'required_with:evidence|in:visible-v1',
+            'evidence.signal' => 'required_with:evidence|in:none,normal-results,visible-gate-iframe,visible-challenge,http-status,fetch-unverified',
+            'evidence.url_pattern' => 'required_with:evidence|in:naver-page,naver-captcha-iframe,naver-captcha-page,naver-fetch',
+            'evidence.visible' => 'required_with:evidence|boolean',
         ]);
         if ($data['kind'] === 'parallel_reset') {
             ShopExposureBlockAlert::resetParallel((int) $analysis->id);
@@ -113,7 +120,7 @@ class ExtShopKeywordController extends Controller
 
             return response()->json(['ok' => true]);
         }
-        app(ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null);
+        app(ShopExposureBlockAlert::class)->record($analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null, $data['evidence'] ?? null);
 
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }

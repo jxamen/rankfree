@@ -40,6 +40,11 @@ class ShopKeywordExposureController extends Controller
             'kind' => 'required|in:403,429,보안문자,success,client_error,watchdog_restart,tab_closed,parallel_reset',
             'blocked_on_resume' => 'sometimes|boolean',
             'interval_ms' => 'sometimes|nullable|integer|min:1000|max:30000',
+            'evidence' => 'sometimes|nullable|array:version,signal,url_pattern,visible',
+            'evidence.version' => 'required_with:evidence|in:visible-v1',
+            'evidence.signal' => 'required_with:evidence|in:none,normal-results,visible-gate-iframe,visible-challenge,http-status,fetch-unverified',
+            'evidence.url_pattern' => 'required_with:evidence|in:naver-page,naver-captcha-iframe,naver-captcha-page,naver-fetch',
+            'evidence.visible' => 'required_with:evidence|boolean',
         ]);
         if ($data['kind'] === 'parallel_reset') {
             \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
@@ -73,7 +78,7 @@ class ShopKeywordExposureController extends Controller
             return response()->json(['ok' => true]);
         }
         app(\App\Services\ShopExposureBlockAlert::class)->record(
-            $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null
+            $analysis, $request->ip(), 'browser', $data['kind'], $data['blocked_on_resume'] ?? false, $data['interval_ms'] ?? null, $data['evidence'] ?? null
         );
         return response()->json(['ok' => true, 'server_fallback' => ShopKeywordExposureAnalyzer::usesServerFallback($analysis)]);
     }
