@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -36,6 +37,17 @@ class ShopKeywordAnalysis extends Model
         'order_days' => 'integer',
         'keyword_target' => 'integer',
     ];
+
+    /** API work is always queued; screen work needs a recent start, heartbeat or save. */
+    public function scopeBackgroundEligible(Builder $query): Builder
+    {
+        $since = now()->subMinutes(10);
+
+        return $query->where(fn ($q) => $q->where('created_via', 'api')
+            ->orWhere('collection_seen_at', '>', $since)
+            ->orWhere('created_at', '>', $since)
+            ->orWhereHas('combos', fn ($c) => $c->where('checked_at', '>', $since)));
+    }
 
     public function collectionStopped(): bool
     {
