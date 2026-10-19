@@ -204,3 +204,18 @@ test('resume preserves last completion and waits the remaining configured gap',a
  f.advance(60000);await f.policy.resume('browser');const now=f.now();
  await f.policy.run('C',async()=>({ok:true,result_source:'shopping'}));assert.equal(f.now(),now);
 });
+
+ test('challenge observation stays stable during cooldown and recovery/cache carry fresh success times', async()=>{
+  const f=fixture();
+  const blocked=await f.policy.run('a',async()=>({ok:false,captcha:true}));
+  assert.equal(blocked.observed_at,f.now());
+  f.advance(1500);
+  const cooldown=await f.policy.run('a',async()=>{throw Error('must not navigate');});
+  assert.equal(cooldown.observed_at,blocked.observed_at);
+  const success=await f.policy.run('a',async()=>{throw Error('must inspect recovery');},'browser',4000,null,async()=>({ok:true,result_source:'integrated',html:'solved'}));
+  assert.ok(success.observed_at>blocked.observed_at);
+  assert.equal(f.data.rfSerpPolicy.until,0);
+  f.advance(1500);
+  const cached=await f.policy.run('a',async()=>{throw Error('must use cache');});
+  assert.equal(cached.cached,true);assert.ok(cached.observed_at>success.observed_at);
+ });

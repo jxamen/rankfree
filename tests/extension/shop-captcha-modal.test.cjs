@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {chromium}=require('playwright');
-const view=fs.readFileSync('resources/views/admin/shop-keyword/show.blade.php','utf8');
+const view=fs.readFileSync(process.env.RF_CAPTCHA_VIEW || 'resources/views/admin/shop-keyword/show.blade.php','utf8');
 const controller=view.slice(view.indexOf('    // Captcha modal controller:'),view.indexOf('    // End captcha modal controller.'));
 test('browser modal transitions: dismiss, repeated wait, recovery, next captcha, parallel lanes and fallback stop',async()=>{
  const browser=await chromium.launch({headless:true});
@@ -18,7 +18,7 @@ test('browser modal transitions: dismiss, repeated wait, recovery, next captcha,
    const halt=()=>{};
    eval(code+';window.state=captchaState;');
   },controller);
-  const state=(key,kw,wait)=>page.evaluate(([a,b,c])=>window.state(a,b,c),[key,kw,wait]);
+  const state=(key,kw,wait,result)=>page.evaluate(([a,b,c,d])=>window.state(a,b,c,d),[key,kw,wait,result]);
   const open=()=>page.locator('dialog').evaluate(el=>el.open);
   await state(1,'<img src=x onerror=alert(1)>',true);
   assert.equal(await open(),true);assert.equal(await page.locator('#sk-captcha-keyword img').count(),0);
@@ -40,6 +40,21 @@ test('browser modal transitions: dismiss, repeated wait, recovery, next captcha,
   await page.evaluate(()=>focusOk=true);await page.getByRole('button',{name:'수집 탭 열기',exact:true}).click();
   assert.equal(await page.locator('#sk-captcha-stop').isVisible(),false);
   await state(5,'',false);assert.equal(await open(),false);
+  // Older parallel lane and aggregate server waits must close on success.
+  await state(10,'old lane',true,{observed_at:100});
+  await state(11,'other lane',true,{observed_at:110});
+  await state('server','aggregate',true);
+  await state(11,'',false,{ok:true,observed_at:200});assert.equal(await open(),false);
+  await state(10,'late old result',true,{observed_at:100});assert.equal(await open(),false);
+  await state(10,'policy only',true,{cooldown:true,observed_at:100});assert.equal(await open(),false);
+  await state(12,'new challenge',true,{observed_at:300});assert.equal(await open(),true);
+  await page.getByRole('button',{name:'닫기',exact:true}).click();
+  await state(12,'same challenge',true,{observed_at:300});assert.equal(await open(),false);
+  await state(12,'policy wait',true,{cooldown:true,observed_at:300});assert.equal(await open(),false);
+  await state(13,'newer challenge',true,{observed_at:400});assert.equal(await open(),true);
+  await state(13,'',false,{ok:true,observed_at:350});assert.equal(await open(),true);
+  await state(13,'',false,{ok:true,observed_at:450});assert.equal(await open(),false);
+
  } finally {await browser.close();}
 });
 test('extension focuses/closes only owned analysis tabs and stops missing-tab analysis',async()=>{

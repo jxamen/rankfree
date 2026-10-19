@@ -42,7 +42,7 @@ test('admin extension loop keeps browser work until human recovery even with sta
   fetch:async()=>({ok:true,status:200,json:async()=>({data:{items:[{id:1,keyword:'a'}]}})}),
   extCall:async()=>++calls<=4?{ok:false,status:403}:{ok:true,cached:true,html:'raw',result_source:'shopping'},
   waitRestriction:async until=>{waits.push(until-1000000);},document:{getElementById:()=>null},sleep:async ms=>{waits.push(ms);},renderProgress:()=>{},halt:()=>{throw Error('unexpected halt');},
-  post:async(url,body)=>{if(url==='/events'){events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}assert.equal(body.result_source,'shopping');saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
+  post:async(url,body)=>{if(url==='/events'){if(body.kind==='success') assert.equal(modalStates.at(-1).waiting,false);events.push(body.kind);return {ok:true,json:async()=>({server_fallback:true})};}assert.equal(body.result_source,'shopping');saves++;return {ok:true,status:200,json:async()=>({status:'target_reached'})};},
  });
  await vm.runInContext(code+';runExtLoop()',context);
  assert.equal(calls,5);assert.equal(saves,1);assert.equal(serverCalls,0);assert.equal(context.serverFallback,false);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[1500,1500,1500,1500]);
@@ -137,4 +137,17 @@ test('rank labels cover both screens, non-exposure and old rows without source',
  for(const [rank,source,label] of [[1,'integrated','1위 · 통합'],[7,'shopping','7위 · 쇼핑'],[0,'shopping','미노출 · 쇼핑'],[2,null,'2위</span>']]) {
   assert.ok(vm.runInContext(code+`;rankSpan(${rank},${JSON.stringify(source)})`,vm.createContext({cfg:{th:5}})).includes(label));
  }
+});
+
+test('extension progress does not replay an aggregate server block as a new captcha',()=>{
+ const blade=fs.readFileSync('resources/views/admin/shop-keyword/show.blade.php','utf8');
+ const start=blade.indexOf('    function renderProgress(d)');
+ const code=blade.slice(start,blade.indexOf('    // ── 상태 필터',start));
+ const states=[];
+ const context=vm.createContext({extMode:true,stopped:false,label:{},captchaState:(...s)=>states.push(s),document:{getElementById:()=>null}});
+ vm.runInContext(code+`;renderProgress({status:'blocked',blocked:true});`,context);
+ assert.equal(states.some(s=>s[2]),false);
+ context.extMode=false;
+ vm.runInContext(`renderProgress({status:'blocked',blocked:true});`,context);
+ assert.equal(states.at(-1)[2],true);
 });

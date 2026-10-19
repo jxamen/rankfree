@@ -592,16 +592,32 @@ window.__SK = {
         });
     }
 
-    // Captcha modal controller: one notification per uninterrupted wait episode.
+    // Captcha modal controller: only fresh observations may notify after recovery.
     const captchaModal = document.getElementById('sk-captcha-modal');
     const captchaWaits = new Map();
     let captchaDismissed = false;
+    let captchaRecoveredAt = 0;
+    const captchaObserved = new Map();
     const captchaOpen = document.getElementById('sk-captcha-open');
     const captchaStop = document.getElementById('sk-captcha-stop');
     const captchaFeedback = document.getElementById('sk-captcha-feedback');
-    function captchaState(key, keyword, waiting) {
+    function captchaState(key, keyword, waiting, result = null) {
+        // Cooldown is a repeated policy wait, never a newly observed challenge.
+        if (result?.cooldown) return false;
+        if (result?.ok) {
+            captchaRecoveredAt = Math.max(captchaRecoveredAt, result.observed_at);
+            for (const [id, at] of captchaObserved) {
+                if (at <= captchaRecoveredAt) { captchaWaits.delete(id); captchaObserved.delete(id); }
+            }
+            captchaWaits.delete('server');
+        }
+        if (waiting && result) {
+            if (result.observed_at <= captchaRecoveredAt) return false;
+            if (captchaObserved.get(key) !== result.observed_at) captchaDismissed = false;
+            captchaObserved.set(key, result.observed_at);
+        }
         if (waiting) captchaWaits.set(key, keyword || cfg.core);
-        else captchaWaits.delete(key);
+        else if (!result?.ok) { captchaWaits.delete(key); captchaObserved.delete(key); }
         if (!captchaWaits.size) {
             captchaModal.close(); captchaDismissed = false;
             captchaStop.hidden = true; captchaFeedback.textContent = '';
@@ -672,7 +688,7 @@ window.__SK = {
             if (!stopped && label) label.textContent = '진행 중 — 순위 확인 중…';
         }
         if (stopped) { captchaWaits.clear(); captchaState('server', '', false); }
-        else if (d.blocked || d.status === 'blocked') captchaState('server', d.current_keyword || d.keyword || d.items?.[0]?.keyword, true);
+        else if ((typeof extMode === 'undefined' || !extMode) && (d.blocked || d.status === 'blocked')) captchaState('server', d.current_keyword || d.keyword || d.items?.[0]?.keyword, true);
         else captchaState('server', '', false);
         if (d.total === undefined) return;
         lastD = d;
@@ -993,6 +1009,7 @@ window.__SK = {
                         renderProgress(fresh); if (stopped) return; d.parallel_revision = fresh.parallel_revision; d.collection_mode = fresh.collection_mode; d.interval_ms = fresh.interval_ms; d.interval_revision = fresh.interval_revision; d.parallel_tabs = fresh.parallel_tabs; d.tab_open_interval_ms = fresh.tab_open_interval_ms;
                     } catch (_) { halt('간격 정책을 읽지 못했습니다 — 새로고침해 주세요', false); return; }
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
+                    const requestStartedAt = Date.now();
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
                     if (res?.tab_closed) {
                         captchaState(it.id, '', false);
@@ -1010,8 +1027,9 @@ window.__SK = {
                         if (parallelNotice) parallelNotice.textContent = '이 분석은 차단으로 1개로 진행 중';
                     }
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
+                    const currentObservation = res && !stopped ? captchaState(it.id, it.keyword, !!(res.captcha || res.status === 403 || res.status === 429), {...res, observed_at: res.observed_at || requestStartedAt}) !== false : false;
                     // Successful cache results also release stale waits; cooldown replies do not.
-                    if (res && (!res.cached || res.ok) && !res.cooldown) {
+                    if (res && currentObservation && (!res.cached || res.ok) && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
                             try {
@@ -1022,8 +1040,6 @@ window.__SK = {
                     }
                     if (stopped) return;
                     if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
-                    if (res.ok && !res.cooldown) captchaState('server', '', false);
-                    captchaState(it.id, it.keyword, !!(res.cooldown || res.captcha || res.status === 403 || res.status === 429));
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
                         if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword);
                         await sleep(1500);
