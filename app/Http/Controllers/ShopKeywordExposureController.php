@@ -138,6 +138,7 @@ class ShopKeywordExposureController extends Controller
         });
         Cache::forget('shop-exposure:error:'.$analysis->id);
         app(ShopExposureRunLock::class)->release('ip:'.$request->ip(), (int) $analysis->id);
+        $analysis->forceFill(['collection_seen_at' => now()])->save();
         $analysis->update(['check_method' => 'search', 'status' => $analysis->combos()->whereNull('rank')->exists() ? 'checking' : 'done']);
         \Illuminate\Support\Facades\Log::info('shop_exposure_continue_now', ['analysis_id' => $analysis->id, 'user_id' => $request->user()->id, 'user_name' => $request->user()->name, 'at' => now()->toIso8601String()]);
         return response()->json(['ok' => true, 'collector_ip' => $request->ip()]);
@@ -404,7 +405,10 @@ class ShopKeywordExposureController extends Controller
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $paused = $request->boolean('paused', true);
-        if (!$paused) \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+        if (! $paused) {
+            \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+            $analysis->forceFill(['collection_seen_at' => now()])->save();
+        }
         Cache::forget('shop-exposure:tab-closed:'.$analysis->id);
         $hasRemaining = $analysis->combos()->whereNull('rank')->exists();
 

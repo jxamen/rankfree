@@ -139,7 +139,7 @@ class ExtShopKeywordController extends Controller
 
         $limit = min(20, max(1, (int) $request->query('limit', 5)));
 
-        $base = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+        $base = ShopKeywordAnalysis::where('user_id', $request->user()->id)->backgroundEligible()
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
             ->whereNotNull('product_id')->where('product_id', '!=', '')
             ->whereNotNull('product_url')->where('product_url', '!=', '')
@@ -162,7 +162,7 @@ class ExtShopKeywordController extends Controller
 
         // Durable leases prevent simultaneous extensions from claiming the same product.
         $firstItems = [];
-        $candidates = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+        $candidates = ShopKeywordAnalysis::where('user_id', $request->user()->id)->backgroundEligible()
             ->whereIn('product_collection->state', ['pending', 'collecting', 'retry'])->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
             ->orderBy('id')->get();
         foreach ($candidates as $candidate) {
@@ -172,7 +172,7 @@ class ExtShopKeywordController extends Controller
             DB::transaction(function () use ($candidate, &$firstItems) {
                 $a = ShopKeywordAnalysis::whereKey($candidate->id)->lockForUpdate()->first();
                 $state = $a->product_collection;
-                if ($a->collectionStopped()) {
+                if ($a->collectionStopped() || ! ShopKeywordAnalysis::whereKey($a->id)->backgroundEligible()->exists()) {
                     return;
                 }
                 if (in_array($state['state'] ?? '', ['completed', 'failed'], true)
@@ -313,7 +313,7 @@ class ExtShopKeywordController extends Controller
 
     /**
      * 순위 확인 대기열 — 확인이 남은 **내 API 분석** 하나와 그 미확인 조합을 준다.
-     * 관리자·주문 분석도 저장이 2분간 끊기면 확장이 이어받는다.
+     * 관리자·주문 분석은 최근 10분 활동이 있고 저장이 2분간 끊겼을 때만 이어받는다.
      */
     public function checkQueue(Request $request): JsonResponse
     {
@@ -325,7 +325,7 @@ class ExtShopKeywordController extends Controller
         // Failed reads remain unknown. Once this runner has skipped every remaining item,
         // release its own lease so the next analysis can start immediately.
         if ($request->input('exclude', [])) {
-            $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
+            $skipped = ShopKeywordAnalysis::where('user_id', $request->user()->id)->backgroundEligible()->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
                 ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
                 ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
                 ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereIn('id', $request->input('exclude')))
@@ -335,14 +335,14 @@ class ExtShopKeywordController extends Controller
             }
         }
 
-        $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+        $analysis = ShopKeywordAnalysis::where('user_id', $request->user()->id)->backgroundEligible()
             ->where(fn ($q) => $q->where('created_via', 'api')->orWhere(fn ($active) => $active->where('status', 'checking')->where('collection_source', '확장 수집기'))->orWhere(fn ($w) => $w->where('status', 'checking')->where('created_at', '<=', now()->subMinutes(2))
                 ->whereDoesntHave('combos', fn ($c) => $c->where('checked_at', '>', now()->subMinutes(2)))
                 ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
             ->where(fn ($q) => $q->whereNull('product_collection')->orWhere('product_collection->state', 'completed'))
             ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude', [])))
-            ->orderBy('id')->first();
+            ->withMax('combos', 'checked_at')->orderByDesc('combos_max_checked_at')->orderBy('id')->first();
 
         if (! $analysis) {
             return response()->json(['data' => ['items' => [], 'remaining' => 0]]);
@@ -392,6 +392,8 @@ class ExtShopKeywordController extends Controller
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+
+        abort_unless(ShopKeywordAnalysis::whereKey($analysis->id)->backgroundEligible()->exists(), 409, '최근 화면/수집 활동이 없는 분석입니다. 화면에서 다시 시작해 주세요.');
 
         abort_if($analysis->product_collection && ($analysis->product_collection['state'] ?? '') !== 'completed', 409, '상품 세부 정보 수집 대기');
 

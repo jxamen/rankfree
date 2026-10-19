@@ -39,6 +39,25 @@ class ShopExposureRunLock
             if (! $renew) {
                 return ['ok' => ! is_array($cur) || (($cur['owner'] ?? '') === $owner && (int) ($cur['analysis_id'] ?? 0) === $analysisId), 'holder' => $cur, 'taken_over' => is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId && ($cur['owner'] ?? '') !== $owner];
             }
+            // Result saves outlive a cache lease: a background poll must not jump ahead
+            // of work actually progressing on this IP, even just after the 90s TTL.
+            $candidateSaving = false;
+            if (str_starts_with($scope, 'ip:')) {
+                $recent = now()->subMinutes(2);
+                $candidateSaving = ShopKeywordAnalysis::whereKey($analysisId)
+                    ->whereHas('combos', fn ($q) => $q->where('checked_at', '>', $recent))->exists();
+                if (! $candidateSaving) {
+                    $active = ShopKeywordAnalysis::where('collection_ip', substr($scope, 3))
+                        ->where('id', '!=', $analysisId)->where('status', 'checking')
+                        ->whereHas('combos', fn ($q) => $q->where('checked_at', '>', $recent))
+                        ->withMax('combos', 'checked_at')->orderByDesc('combos_max_checked_at')->first();
+                    if ($active) {
+                        return ['ok' => false, 'holder' => ['analysis_id' => (int) $active->id,
+                            'keyword' => $active->core_keyword, 'ip' => $active->collection_ip,
+                            'source' => $active->collection_source]];
+                    }
+                }
+            }
             if (is_array($cur) && (int) ($cur['analysis_id'] ?? 0) === $analysisId && ($cur['owner'] ?? '') !== $owner) {
                 Cache::forever($key.':revoked:'.$analysisId.':'.hash('sha256', $cur['owner']), true);
             }
@@ -46,7 +65,9 @@ class ShopExposureRunLock
                 $holder = ShopKeywordAnalysis::find((int) ($cur['analysis_id'] ?? 0));
                 $lastSeen = max((int) ($cur['at'] ?? 0), $holder?->collection_seen_at?->timestamp ?? 0);
                 $stopped = ! $holder || in_array($holder->status, ['done', 'target_reached', 'ad_ended', 'paused'], true);
-                if (! $stopped && $lastSeen > now()->timestamp - self::TTL) {
+                // A stale heartbeat holder yields to an analysis with actual recent saves.
+                $holderSaving = $holder?->combos()->where('checked_at', '>', now()->subMinutes(2))->exists();
+                if (! $stopped && $lastSeen > now()->timestamp - self::TTL && (! $candidateSaving || $holderSaving)) {
                     return ['ok' => false, 'holder' => $cur];
                 }
             }

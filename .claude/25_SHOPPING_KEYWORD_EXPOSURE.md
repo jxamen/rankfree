@@ -210,3 +210,12 @@
 - 화면 요청의 분석 ID를 기억하고 최근 60초 이내 요청이 있었다면 collector-state로 상태를 확인한다. done/target_reached/ad_ended/paused일 때만 양보 시간을 해제한다. 확인 도중 새 화면 요청이 생기거나 상태 조회가 실패하면 양보를 유지한다.
 - 큐 확인 주기만 바꾼다. SERP 요청은 기존 ShopSerpPolicy/Pool의 간격·동시 수·차단 대기, 서버 IP 잠금·claim, paused 및 목표 상한을 그대로 따른다. 상품 큐에도 storage await 뒤 중복 진입 검사를 둔다. 보안문자 자동 풀이·로그인 자동화·탐지 회피는 추가하지 않는다.
 - 검증: `node --test tests/extension/*.test.cjs`, `node tests/extension/shop-batch-autostart.browser.cjs`, `ShopBatchAutostartTest` 및 기존 잠금/claim/목표 테스트. browser 테스트는 실제 MV3 워커·5초 타이머를 쓰고 큐 및 SERP 응답은 로컬 fixture로 제한한다.
+
+
+### 오래된 화면 분석의 백그라운드 큐 제외 (2026-10-19)
+
+- `created_via=api`는 기존처럼 즉시 후보가 된다. 화면·주문 분석은 최근 10분 내 생성(최초 시작), `collection_seen_at` 또는 조합 `checked_at`이 있어야 순위/상품 큐 후보가 된다. `updated_at`과 과거의 `collection_source=확장 수집기`만으로는 허용하지 않는다.
+- 기존 순위 큐의 `checking`·저장 2분 정체·일반 요청 heartbeat 90초 조건은 유지한다. watchdog/policy_only/exclude 경로에도 같은 최근 활동 조건을 적용한다. 상품 큐의 기존 목록과 durable lease 목록 모두 적용하며, 제외된 분석의 상태·재시도 횟수는 바꾸지 않는다.
+- 화면의 이어서/즉시 계속 실행은 `collection_seen_at`을 갱신한다. 오래된 화면 분석에 대한 늦은 확장 순위 업로드는 잠금 획득 전에 409로 거절한다.
+- 순위 큐는 마지막 저장이 최근인 후보부터 선택한다. 같은 IP에서 최근 2분 내 실제 결과를 저장 중인 checking 분석은 잠금 캐시(90초)가 만료돼도 보호한다(계정 경계와 무관). 저장 없이 heartbeat만 보내는 다른 분석보다 실제 저장 분석이 우선한다. 완료·일시정지 분석 및 다른 IP는 차단하지 않는다.
+- 서버 변경만 필요하다. 확장 버전은 0.6.8.8 유지. 운영 데이터 상태 변경/일괄 정리/배포는 포함하지 않는다.
