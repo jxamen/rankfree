@@ -77,23 +77,25 @@ class ShopSerpPolicy {
       s.gap = Math.max(1000, Math.min(30000, Math.max(Number(s.gap) || 4000, Number(serverGap) || 4000)));
       await save();
       const hit = await this.cache.get(key);
+      const cacheObservedAt = this.now();
       if (hit?.ok && ['integrated', 'shopping'].includes(hit.result_source)) {
         s.until = 0; s.blockedOnResume = false;
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
-        return { ...hit, captcha: false, cooldown: false, blocked: false, cached: true, interval_ms: s.gap, retryAt: null, blockedOnResume: false };
+        return { ...hit, captcha: false, cooldown: false, blocked: false, cached: true, observed_at: cacheObservedAt, interval_ms: s.gap, retryAt: null, blockedOnResume: false };
       }
       if (s.until && (probe || this.now() < s.until)) {
         const recovered = probe ? await probe() : null;
+        const recoveredAt = this.now();
         if (recovered?.tab_closed) return recovered;
-        if (!recovered?.ok) return { ok: false, cooldown: true, interval_ms: s.gap, retryAt: s.until, message: recovered?.message || '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
+        if (!recovered?.ok) return { ok: false, cooldown: true, observed_at: s.lastBlockedAt || 0, interval_ms: s.gap, retryAt: s.until, message: recovered?.message || '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
         s.until = 0; s.blockedOnResume = false; s.last = this.now();
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
         if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({ rfSkwCheckSkipUntil: 0, rfSkwCheckSkipReason: '' });
         await this.cache.put(key, recovered);
-        return { ...recovered, interval_ms: s.gap, retryAt: null };
+        return { ...recovered, observed_at: recoveredAt, interval_ms: s.gap, retryAt: null };
       }
       const wait = Math.max(0, (s.last || 0) + Math.min(30000, s.gap) - this.now());
       if (wait) await this.wait(wait);
@@ -102,10 +104,11 @@ class ShopSerpPolicy {
       s.last = this.now();
       await save();
       const res = await fetcher(s.gap);
+      const observedAt = this.now();
       // Include the 403 tab recheck in spacing: next navigation waits after completion.
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
-        s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = this.now(); s.blockedOnResume = resumedAfterBlock;
+        s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = observedAt; s.blockedOnResume = resumedAfterBlock;
         s.gap = Math.min(30000, s.gap + 300);
         s.slowEntries = (s.slowEntries || 0) + 1;
       } else if (res.ok) {
@@ -132,7 +135,7 @@ class ShopSerpPolicy {
       s.http429 = (s.http429 || 0) + (res.status === 429 ? 1 : 0);
       s.captchas = (s.captchas || 0) + (res.captcha ? 1 : 0);
       await save();
-      return { ...res, interval_ms: s.gap, retryAt: s.until || null, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
+      return { ...res, observed_at: observedAt, interval_ms: s.gap, retryAt: s.until || null, blockedOnResume: !!s.blockedOnResume && (res.captcha || res.status === 403 || res.status === 429) };
     } catch (e) { return { ok: false, message: '속도·당일 캐시 저장소 오류 — 수집을 멈췄습니다.' }; }
   }
 }
