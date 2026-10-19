@@ -6,6 +6,8 @@ use App\Models\ExtToken;
 use App\Models\ShopProductInfo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -36,8 +38,23 @@ class ShopProductInfoDeliveryFeeTest extends TestCase
         $this->token = $plain;
     }
 
+    public function test_missing_fee_logs_only_bounded_shipping_evidence(): void
+    {
+        Log::spy();
+        $raw = json_encode(['paths' => [['product.productDeliveryInfo.deliveryFeeType', 'COD'],
+            ['product.productDeliveryInfo.address', '홍길동 서울시 비밀주소'],
+            ['product.shippingInfo.baseFee', 3000]], 'screen' => ['배송비 착불 홍길동 010-1234-5678 test@example.com']]);
+        $this->send(['delivery_fee' => null, 'delivery_diagnostic' => $raw])->assertOk();
+        Log::shouldHaveReceived('info')->with('product_delivery_diagnostic', \Mockery::on(function ($context) {
+            $e = $context['evidence'];
+
+            return strlen($e) <= 2048 && str_contains($e, 'COD')
+                && ! preg_match('/홍길동|서울시|010|example/', $e);
+        }))->once();
+    }
+
     /** @param  array<string,mixed>  $extra */
-    private function send(array $extra): \Illuminate\Testing\TestResponse
+    private function send(array $extra): TestResponse
     {
         return $this->withHeaders(['Authorization' => 'Bearer '.$this->token, 'X-Ext-Version' => '0.4.1'])
             ->postJson('/api/ext/product-infos', array_merge([
