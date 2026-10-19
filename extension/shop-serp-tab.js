@@ -83,18 +83,6 @@ class ShopSerpTab {
     await c.tabs.update(tab.id, {active: true});
     if (tab.windowId != null) await c.windows.update(tab.windowId, {focused: true});
   }
-  async recovery(keyword) {
-    const storage = this.session();
-    const saved = await storage.get(['rfSerpRecovery', 'rfSerpTabId']);
-    if (saved.rfSerpRecovery) return;
-    const state = {keyword, current:keyword, since:Date.now(), attempts:0};
-    await storage.set({rfSerpRecovery:state});
-    if (await this.closed()) return;
-    await this.browser.tabs.update(saved.rfSerpTabId, {url:this.recoveryUrl(keyword), active:true});
-  }
-  recoveryUrl(keyword) {
-    return 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) + '&ct=1';
-  }
   // Recovery state is durable and independent of the pacing/resume button.
   async peek(keyword) {
     if (await this.closed()) return {ok:false, tab_closed:true};
@@ -113,24 +101,12 @@ class ShopSerpTab {
         if (state && state.current !== keyword) return this.read(keyword, this.target || {});
         return {ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'};
       }
-      if (r?.challengeVisible && state) {
-        state.since = Date.now();
-        await storage.set({rfSerpRecovery:state});
-        return null;
-      }
-    } catch (_) { /* Gate origins may not have a content-script receiver. */ }
-    if (state && Date.now() - state.since >= 8000) {
-      const choices = [...new Set([...(this.alternativeKeywords || []), keyword.split(/\s+/)[0], keyword + ' 쇼핑', keyword + ' 추천', keyword + ' 상품'])].filter(k => k && k !== keyword);
-      if (state.attempts < 3) {
-        state.current = choices[state.attempts]; state.attempts++; state.since = Date.now();
-        await storage.set({rfSerpRecovery:state});
-        if (await this.closed()) return {ok:false,tab_closed:true};
-        await this.browser.tabs.update(saved.rfSerpTabId, {url:this.recoveryUrl(state.current),active:true});
-      } else {
-        const message = '보안문자 화면이 열리지 않음 — 탭을 닫으면 멈춥니다';
-        globalThis.rfSerpCurrent = {analysisId:this.analysisId,keyword,screen:message};
-        return {ok:false,cooldown:true,message};
-      }
+      if (r?.captcha && r.evidence?.visible) return {ok:false,status:200,...r};
+      // Recovery state is not evidence. An ordinary/empty/unreadable page releases captcha wait.
+      await storage.set({rfSerpRecovery:null});
+      return {ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도',evidence:r?.evidence};
+    } catch (_) {
+      return {ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도 — 탭 전환 중'};
     }
     return null;
   }
@@ -138,17 +114,24 @@ class ShopSerpTab {
     if (await this.closed()) return {ok:false, tab_closed:true};
     this.target = target;
     const pending = (await this.session().get(['rfSerpRecovery'])).rfSerpRecovery;
-    if (pending) return (await this.peek(pending.keyword)) || {ok:false,captcha:true,status:200};
+    if (pending) {
+      const checked = await this.peek(pending.keyword);
+      if (checked?.captcha || (checked?.ok && pending.keyword === keyword)) return checked;
+      await this.session().set({rfSerpRecovery:null});
+    }
     const c = this.browser;
     let tab;
     let finish;
     let shopping = false, inspecting = false;
     const result = new Promise(resolve => { finish = resolve; });
-    const blocked = () => finish({ ok: false, captcha: true, status: 200, message: '네이버 보안 화면 감지 — 수집 탭에서 풀어 주세요.' });
+    const blocked = r => finish({ok:false,status:200,...r,message:'네이버 보안문자 감지 — 수집 탭에서 풀어 주세요.'});
     const onMessage = (msg, sender, reply) => {
       if (tab && sender?.tab?.id === tab.id && msg?.type === '__rfSerpTarget') { reply(target); return; }
       if (!tab || sender?.tab?.id !== tab.id || msg?.type !== '__rfSerpRead') return;
+      if (sender.frameId > 0) return;
+      if (sender.url && new URL(sender.url).searchParams.get('query') && new URL(sender.url).searchParams.get('query') !== keyword) return;
       const r = msg.result;
+      if (r?.captcha && !r.evidence?.visible) return;
       if (r?.ok && Array.isArray(r.products)) finish({ ok: true, status: 200, html: ShopSerpTab.html(r.products), result_source: r.result_source || 'shopping', mode: 'tab' });
       else if (r && !r.ok) finish(r);
     };
@@ -157,7 +140,7 @@ class ShopSerpTab {
         globalThis.rfSerpCurrent = {analysisId:this.analysisId, keyword, screen: '쇼핑'};
         if (!shopping) { shopping = true; clearTimeout(timer); timer = setTimeout(() => finish({ok:false,status:0,message:'쇼핑 상품 목록 읽기 15초 초과'}), this.timeoutMs); }
       }
-      if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
+      // Gate URL alone (especially nid login) is not visible captcha evidence.
     };
     const onRemoved = id => {
       if (id !== tab?.id) return;
@@ -169,13 +152,17 @@ class ShopSerpTab {
     c.tabs.onRemoved.addListener(onRemoved);
     let timer; // Start the document timeout after the configured opening queue.
     const poll = setInterval(async () => {
-      if (!shopping || inspecting || !tab) return;
+      if (inspecting || !tab) return;
       inspecting = true;
       try {
+        const current = await c.tabs.get(tab.id);
+        if (current.status === 'loading') return;
+        const query = new URL(current.url).searchParams.get('query');
+        if (query && query !== keyword) return;
         const r = await c.tabs.sendMessage(tab.id, {type:'__rfSerpPeek'});
-        if (r?.ok && Array.isArray(r.products)) finish({ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:'shopping',mode:'tab'});
-        else if (r?.captcha) blocked();
-        else finish({ok:false,status:0,message:'못 읽음 — 쇼핑 상품 목록'});
+        if (r?.ok && Array.isArray(r.products)) finish({ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'});
+        else if (r?.captcha && r.evidence?.visible) blocked(r);
+        else if (!r?.captcha) finish({ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도 — 쇼핑 상품 목록'});
       } catch (_) {} finally { inspecting = false; }
     }, 500);
     try {
@@ -204,7 +191,11 @@ class ShopSerpTab {
       const response = await result;
       clearTimeout(timer);
 
-      if (response.captcha || [403,429].includes(response.status)) { await this.recovery(keyword); await this.focus(keyword).catch(() => {}); }
+      if (response.captcha) {
+        // Preserve the actual challenge. Do not replace it with another search.
+        await this.session().set({rfSerpRecovery:{keyword,current:keyword,since:Date.now(),attempts:0}});
+        await this.focus(keyword).catch(() => {});
+      }
       return response;
     } catch (e) { return { ok: false, status: 0, deferred: e.code === 'RF_PARALLEL_REDUCED', message: '쇼핑 탭 오류: ' + e.message }; }
     finally {

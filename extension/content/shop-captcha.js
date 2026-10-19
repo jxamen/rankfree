@@ -1,7 +1,5 @@
-// Observe only: captcha entry and submission belong to the person.
+// Only the top document (or a visible gate iframe observed by its parent) can assert a challenge.
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (msg?.type !== '__rfSerpPeek') return;
-  const visible = el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
-  const challengeVisible = [...document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button])')].some(visible);
-  reply({ok:false,captcha:true,challengeVisible});
+  if (msg?.type !== '__rfSerpPeek' || window.top !== window) return;
+  reply({ok:false,...RfCaptcha.inspect()});
 });

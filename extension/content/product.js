@@ -1957,7 +1957,7 @@
   // 상품정보(제목·업체명·가격·SEO태그·브랜드) 수집 → 서버 저장. 노출 키워드 분석(25) 조합 재료.
   async function collectProductInfo() {
     try {
-      if (/검색 서비스 이용이 제한|서비스 이용이 제한|접근이 제한|비정상적인 접근|보안 확인|보안문자|자동입력 방지|자동입력방지|captcha/i.test((document.body?.innerText || '').slice(0, 20000))) return;
+      if (RfCaptcha.inspect().captcha) return;
       const cpid = getChannelProductNo();
       if (!cpid) return;
       const node = spNodeFrom(await getMyPreloadedAsync(2500));
