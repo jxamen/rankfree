@@ -1907,27 +1907,57 @@
     if (extra) for (const k in extra) node[k] = extra[k];
     return node;
   }
-  // Unknown shipping must remain null: num(undefined) returns 0 elsewhere in this file.
+  // Numeric base charge only: thresholds, remote surcharges and bundle counts are not fees.
+  function shippingText() {
+    const matches = (document.body?.innerText || '').match(/(?:배송비|무료배송|조건부 무료|착불|묶음배송)[^\n]{0,80}/g) || [];
+    return matches.slice(0, 8).map(t => (t.replace(/0\d{1,2}[- )]*\d{3,4}[- ]*\d{4}/g, '').match(/배송비|무료배송|조건부 무료|착불|묶음배송|선결제|이상|미만|무료|원|[0-9,]+/g) || []).join(' '));
+  }
   function productDeliveryFee(product) {
     const info = product && product.productDeliveryInfo;
-    if (!info || typeof info !== 'object') return null;
-    const fee = info.deliveryFee;
+    const fee = info && info.deliveryFee;
     const nested = fee && typeof fee === 'object' ? fee : null;
-    if (String(info.deliveryFeeType || (nested && nested.deliveryFeeType) || '') === 'FREE') return 0;
-    const candidates = [info.baseFee, nested ? nested.baseFee : fee];
-    for (const value of candidates) {
+    if (String(info?.deliveryFeeType || nested?.deliveryFeeType || '') === 'FREE') return 0;
+    for (const value of [info?.baseFee, nested ? nested.baseFee : fee]) {
       if (value == null || typeof value === 'object') continue;
       const text = String(value).trim().replace(/,/g, '');
       if (!/^\d+$/.test(text)) continue;
       const amount = Number(text);
       if (Number.isSafeInteger(amount) && amount <= 10000000) return amount;
     }
+    // Visible explicit charge supports conditional/free-threshold, COD and bundle labels.
+    // Never turn a threshold amount or a COD-only label into a zero fee.
+    for (const text of shippingText()) {
+      const m = text.match(/^배송비\s+([0-9,]+)\s*원/);
+      if (m && Number(m[1].replace(/,/g, '')) <= 10000000) return Number(m[1].replace(/,/g, ''));
+      if (/^(?:배송비\s+)?무료배송$/.test(text.trim())) return 0;
+    }
     return null;
+  }
+  function deliveryDiagnostic(product) {
+    const evidence = { version: '0.6.9.0', paths: [], screen: shippingText() };
+    const walk = (obj, path, depth) => {
+      if (!obj || typeof obj !== 'object' || depth > 4) return;
+      for (const [key, val] of Object.entries(obj)) {
+        if (!/delivery|shipping|fee|free|bundle|payment|base|condition/i.test(key)) continue;
+        const next = path + '.' + key.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 60);
+        // Raw strings may contain contact details: retain only known shipping enums/numbers.
+        const safe = typeof val === 'number' || typeof val === 'boolean' ? val
+          : typeof val === 'string' && /^(?:[0-9,]+|FREE|PAID|CONDITIONAL_FREE|CHARGE|PREPAID|COD|CASH_ON_DELIVERY|BUNDLE|UNIT|QUANTITY|RANGE|FIXED)$/.test(val) ? val : null;
+        evidence.paths.push([next, safe]);
+        walk(val, next, depth + 1);
+      }
+    };
+    walk(product, 'product', 0);
+    // JSON itself stays valid and at most 2KiB in UTF-8.
+    while (new TextEncoder().encode(JSON.stringify(evidence)).length > 2048) {
+      if (evidence.paths.length) evidence.paths.pop(); else evidence.screen.pop();
+    }
+    return JSON.stringify(evidence);
   }
   // 상품정보(제목·업체명·가격·SEO태그·브랜드) 수집 → 서버 저장. 노출 키워드 분석(25) 조합 재료.
   async function collectProductInfo() {
     try {
-      if (/검색 서비스 이용이 제한|서비스 이용이 제한|접근이 제한|비정상적인 접근|보안 확인|보안문자|자동입력 방지|자동입력방지|captcha/i.test((document.body?.innerText || '').slice(0, 20000))) return;
+      if (RfCaptcha.inspect().captcha) return;
       const cpid = getChannelProductNo();
       if (!cpid) return;
       const node = spNodeFrom(await getMyPreloadedAsync(2500));
@@ -1959,6 +1989,7 @@
         // 즉시할인가 우선(benefitsView.discountedSalePrice) → 없으면 정가(salePrice) → 폴백. 셀러력 스코어러와 동일 필드(2026-07-24)
         price: num((A.benefitsView && A.benefitsView.discountedSalePrice) || A.salePrice || getProductPrice() || 0) || null,
         delivery_fee: (deliveryFee === null || deliveryFee === undefined || isNaN(deliveryFee)) ? null : deliveryFee,
+        delivery_diagnostic: deliveryFee === null ? deliveryDiagnostic(A) : null,
         seller_tags: tags.slice(0, 60),
         category: String((A.category && A.category.wholeCategoryName) || '').slice(0, 191),
         thumbnail_url: thumb || null,

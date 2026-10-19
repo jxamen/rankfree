@@ -7,13 +7,13 @@ const start=source.indexOf('  async collectProductPage(');
 const method=source.slice(start,source.indexOf('\n  },',start)+5);
 function fixture({blocked=false,redirect=false,timeout=false,early=false}={}) {
  const waiters=new Map(), removed=[],tabs=new Map();let created=0, timer,probe;
- const c=vm.createContext({productInfoWaiters:waiters,productBlockedTabs:new Map(),setTimeout:fn=>(timer=fn,1),clearTimeout:()=>{},setInterval:fn=>(probe=fn,2),clearInterval:()=>{},removeTab:id=>removed.push(id),chrome:{
+ const c=vm.createContext({RfCaptcha:{inspect(){}},productInfoWaiters:waiters,productBlockedTabs:new Map(),setTimeout:fn=>(timer=fn,1),clearTimeout:()=>{},setInterval:fn=>(probe=fn,2),clearInterval:()=>{},removeTab:id=>removed.push(id),chrome:{
   tabs:{onUpdated:{addListener:()=>{},removeListener:()=>{}},create:async()=>{
    created++;const tab={id:created,url:redirect?'https://nid.naver.com/login':'https://smartstore.naver.com/s/products/111'};tabs.set(tab.id,tab);
    if(early)waiters.get('111')({payload:{title:'상품',seller_tags:['태그']}});
    return tab;
   },get:async id=>tabs.get(id),update:async(id,opts)=>{tabs.set(id,{id,url:opts.url});return tabs.get(id);}},
-  scripting:{executeScript:async()=>{if(timeout)timer();return [{result:blocked}];}}
+  scripting:{executeScript:async()=>{if(timeout)timer();return [{result:{captcha:blocked===true,unavailable:blocked==='unavailable'}}];}}
  }});
  vm.runInContext('const handlers={'+method+'};',c);
  return {c,waiters,removed,get created(){return created;},inspect:()=>probe(),run:()=>vm.runInContext("handlers.collectProductPage({url:'https://smartstore.naver.com/s/products/111'})",c)};
@@ -22,7 +22,7 @@ test('waiter is installed before tab creation; fast extraction is not lost',asyn
  const f=fixture({early:true});const r=await f.run();assert.equal(r.ok,true);assert.equal(r.info.title,'상품');assert.equal(f.waiters.size,0);assert.deepEqual(f.removed,[1]);
 });
 test('same URL restriction and security redirects return reason; next retry reuses tab and succeeds',async()=>{
- for(const options of [{blocked:true},{redirect:true}]) {
+ for(const options of [{blocked:true},{redirect:true,blocked:true}]) {
   const f=fixture(options);const r=await f.run();assert.equal(r.blocked,true);assert.equal(r.retryable,true);assert.equal(r.message,'네이버 제한 화면 — 풀린 뒤 자동 재시도');assert.deepEqual(f.removed,[]);
   f.c.chrome.scripting.executeScript=async()=>{f.waiters.get('111')({payload:{title:'회복',thumbnail_url:'image',seller_tags:['태그']}});return [{result:false}];};
   const recovered=await f.run();assert.equal(recovered.ok,true);assert.equal(f.created,1);assert.deepEqual(f.removed,[1]);
@@ -47,7 +47,7 @@ test('product content does not save restriction titles and extracts image/tags a
  const a=content.indexOf('  async function collectProductInfo()');const code=content.slice(a,content.indexOf('\n  async function spFetchTop',a));
  for(const blocked of [true,false]){
   const saved=[];
-  const c=vm.createContext({document:{body:{innerText:blocked?'검색 서비스 이용이 제한되었습니다':'상품 상세'},querySelector:()=>null},getChannelProductNo:()=>111,getMyPreloadedAsync:async()=>({}),spNodeFrom:()=>({product:{name:'파티 상품',seoInfo:{sellerTags:[{text:'할로윈'}]},representImage:{url:'https://img/product.jpg'}},smartStoreV2:{channel:{channelName:'파티타임'}}}),productDeliveryFee:()=>0,num:Number,getProductPrice:()=>1000,sendBg:async(type,payload)=>saved.push(payload)});
+  const c=vm.createContext({RfCaptcha:{inspect:()=>({captcha:blocked})},document:{body:{innerText:blocked?'검색 서비스 이용이 제한되었습니다':'상품 상세'},querySelector:()=>null},getChannelProductNo:()=>111,getMyPreloadedAsync:async()=>({}),spNodeFrom:()=>({product:{name:'파티 상품',seoInfo:{sellerTags:[{text:'할로윈'}]},representImage:{url:'https://img/product.jpg'}},smartStoreV2:{channel:{channelName:'파티타임'}}}),productDeliveryFee:()=>0,num:Number,getProductPrice:()=>1000,sendBg:async(type,payload)=>saved.push(payload)});
   await vm.runInContext(code+';collectProductInfo()',c);
   assert.equal(saved.length,blocked?0:1);
   if(!blocked){assert.equal(saved[0].thumbnail_url,'https://img/product.jpg');assert.equal(saved[0].seller_tags[0],'할로윈');}

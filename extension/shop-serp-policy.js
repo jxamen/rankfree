@@ -89,7 +89,13 @@ class ShopSerpPolicy {
         const recovered = probe ? await probe() : null;
         const recoveredAt = this.now();
         if (recovered?.tab_closed) return recovered;
-        if (!recovered?.ok) return { ok: false, cooldown: true, observed_at: s.lastBlockedAt || 0, interval_ms: s.gap, retryAt: s.until, message: recovered?.message || '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' };
+        if (probe && recovered?.retryable && !recovered.captcha) {
+          s.until = 0; s.blockedOnResume = false; await save();
+          const queue = await this.storage.get('rfSkwCheckSkipReason');
+          if (queue.rfSkwCheckSkipReason !== 'permission') await this.storage.set({rfSkwCheckSkipUntil:0,rfSkwCheckSkipReason:''});
+          return {...recovered,interval_ms:s.gap,observed_at:recoveredAt};
+        }
+        if (!recovered?.ok) return { ok: false, captcha:!!recovered?.captcha, evidence:recovered?.evidence, cooldown: true, observed_at: s.lastBlockedAt || 0, interval_ms: s.gap, retryAt: s.until, message: recovered?.message || (s.blockKind === 'captcha' ? '보안문자 대기 — 수집 탭에서 풀면 바로 이어서 해요' : '네이버 요청 제한 — 잠시 후 재시도') };
         s.until = 0; s.blockedOnResume = false; s.last = this.now();
         await save();
         const queue = await this.storage.get('rfSkwCheckSkipReason');
@@ -108,6 +114,7 @@ class ShopSerpPolicy {
       // Include the 403 tab recheck in spacing: next navigation waits after completion.
       s.last = this.now();
       if (res.captcha || res.status === 403 || res.status === 429) {
+        s.blockKind = res.captcha ? 'captcha' : 'http';
         s.until = this.now() + 180000; s.successes = 0; s.lastBlockedAt = observedAt; s.blockedOnResume = resumedAfterBlock;
         s.gap = Math.min(30000, s.gap + 300);
         s.slowEntries = (s.slowEntries || 0) + 1;

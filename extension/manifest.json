@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "랭크프리 — 네이버 쇼핑·플레이스 분석",
-    "version": "0.6.8.9",
+    "version": "0.6.9.1",
     "description": "네이버 마케팅을 위한 무료 분석 도구 — 쇼핑·플레이스·키워드·블로그·상품 리뷰를 한 곳에서 분석. 사장님·마케터·셀러가 내 순위와 시장을 빠르게 파악하도록 돕습니다. rankfree.kr 무료 로그인.",
     "icons": {
         "16": "icons/icon16.png",
@@ -53,6 +53,7 @@
                 "https://msearch.shopping.naver.com/search/*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/content.js",
                 "content/shop-seo.js"
             ],
@@ -68,6 +69,7 @@
                 "https://search.naver.com/search.naver*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/content.js"
             ],
             "css": [
@@ -81,6 +83,7 @@
                 "https://map.naver.com/*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/content.js"
             ],
             "css": [
@@ -106,6 +109,7 @@
                 "https://brand.naver.com/*/products/*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/product.js"
             ],
             "css": [
@@ -120,6 +124,7 @@
             ],
             "all_frames": true,
             "js": [
+                "captcha-detector.js",
                 "content/place-rank.js"
             ],
             "css": [
@@ -136,6 +141,7 @@
                 "http://localhost:8000/admin/*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/admin-bridge.js"
             ],
             "run_at": "document_idle"
@@ -152,6 +158,7 @@
                 "http://localhost:8000/console/shop-keyword*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/console-bridge.js"
             ],
             "run_at": "document_idle"
@@ -161,6 +168,7 @@
                 "https://m.search.naver.com/search.naver*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/shop-navigation.js"
             ],
             "run_at": "document_idle"
@@ -172,6 +180,7 @@
                 "https://nid.naver.com/*"
             ],
             "js": [
+                "captcha-detector.js",
                 "content/shop-captcha.js"
             ],
             "run_at": "document_idle",
