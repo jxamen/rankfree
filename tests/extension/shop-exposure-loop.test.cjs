@@ -46,7 +46,8 @@ test('admin extension loop keeps browser work until human recovery even with sta
  });
  await vm.runInContext(code+';runExtLoop()',context);
  assert.equal(calls,5);assert.equal(saves,1);assert.equal(serverCalls,0);assert.equal(context.serverFallback,false);assert.deepEqual(events,['403','403','403','403','success']);assert.deepEqual(waits,[1500,1500,1500,1500]);
- assert.deepEqual(modalStates.filter(s=>s.id===1).map(s=>s.waiting),[true,true,true,true,false]);
+ // HTTP 403/429 is a request limit, not a captcha: the captcha modal stays closed (PR #60).
+ assert.deepEqual(modalStates.filter(s=>s.id===1).map(s=>s.waiting),[false,false,false,false,false]);
 });
 
 test('admin clears the old failure notice on the next successful progress response', () => {

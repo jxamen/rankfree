@@ -5,7 +5,7 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
-importScripts('shop-serp-policy.js', 'shop-serp-tab.js', 'shop-serp-pool.js');
+importScripts('captcha-detector.js', 'shop-serp-policy.js', 'shop-serp-tab.js', 'shop-serp-pool.js');
 const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
 const shopSerpPool = new ShopSerpPool({tabFactory: slot => slot ? new ShopSerpTab({slot}) : shopSerpTab, policyFactory: slot => slot ? new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot)}) : shopSerpPolicy});
@@ -116,6 +116,17 @@ const productInfoWaiters = new Map();
 const productBlockedTabs = new Map();
 
 const handlers = {
+  async captchaRules() {
+    const saved = (await chrome.storage.local.get('rfCaptchaRules')).rfCaptchaRules;
+    if (saved && Date.now() - saved.at < 300000) return saved.rules;
+    const {token,apiBase} = await getStore();
+    if (!token) return {max_page_text_chars:4000};
+    const response = await apiFetch('/api/ext/shop-keyword/interval-policy', {token,apiBase});
+    const value = Number(response.json?.data?.captcha_rules?.max_page_text_chars);
+    const rules = {max_page_text_chars:Number.isInteger(value) && value >= 200 && value <= 4000 ? value : 4000};
+    if (response.ok) await chrome.storage.local.set({rfCaptchaRules:{at:Date.now(),rules}});
+    return rules;
+  },
   /** 로그인 → 토큰 저장 */
   async login({ email, password, apiBase }) {
     const base = (apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
@@ -420,7 +431,7 @@ const handlers = {
         headers: { Accept: 'text/html,application/json', 'Accept-Language': 'ko-KR,ko;q=0.9' },
       });
       const text = await res.text();
-      return { ok: res.ok, status: res.status, text };
+      return { ok: res.ok, status: res.status, text, url: res.url };
     } catch (e) {
       return { ok: false, status: 0, message: String((e && e.message) || e) };
     }
@@ -631,7 +642,7 @@ const handlers = {
         if (!tabId || id !== tabId || !info) return;
         if (isGateUrl(info.url || '')) {
           // 네이버가 보안(캡차/로그인) 게이트로 돌렸다 — 확실한 차단. 타이머 안 기다리고 즉시 판정.
-          finish({ ok: false, message: '네이버 보안(캡차) 감지 — 차단으로 보입니다.' });
+          finish({ ok: false, message: '읽기 실패 재시도 — 네이버 로그인/확인 페이지' });
           return;
         }
         if (info.status === 'complete') markLoaded();
@@ -679,7 +690,7 @@ const handlers = {
           try {
             chrome.tabs.get(tab.id, (t) => {
               if (chrome.runtime.lastError || !t || done) return;
-              if (isGateUrl(t.url || t.pendingUrl || '')) { finish({ ok: false, message: '네이버 보안(캡차) 감지 — 차단으로 보입니다.' }); return; }
+              if (isGateUrl(t.url || t.pendingUrl || '')) { finish({ ok: false, message: '읽기 실패 재시도 — 네이버 로그인/확인 페이지' }); return; }
               if (t.status === 'complete') markLoaded();
             });
           } catch (e) { /* noop */ }
@@ -871,7 +882,7 @@ async function drainShopRankQueue(why) {
         }
 
         if (!res || res.ok === false || !Array.isArray(res.products) || !res.products.length) {
-          const captcha = !!(res && (res.captcha || res.blocked));
+          const captcha = !!(res && res.captcha);
           log('❌ 「' + it.keyword + '」 수집 실패' + (captcha ? '(보안문자)' : '') + ' — ' + ((res && res.message) || '이유 없음'));
           await apiFetch('/api/ext/shop-rank/' + it.job_id + '/fail', {
             method: 'POST', apiBase,
@@ -1233,12 +1244,19 @@ Object.assign(handlers, {
       const read = async (url, source) => {
         if (tab.allowOpen && !tab.allowOpen()) return {ok:false,deferred:true};
         const r = await handlers.spFetchHtml({url});
-        const captcha = /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(r.text || '');
-        return {ok: r.ok && !captcha, status: r.status, captcha, html: source === 'shopping' && r.ok && !captcha ? ShopSerpTab.fetchedHtml(r.text || '') : r.text || '', result_source: source,
-          message: captcha ? '보안문자 대기 — 브라우저 탭으로 열기로 바꿔 사람이 풀어 주세요.' : r.message};
+        // A fetched response has no rendered visibility. Text in scripts/hidden nodes is never captcha evidence.
+        const evidence = {version:'visible-v1',signal:[403,429].includes(r.status) ? 'http-status' : 'fetch-unverified',url_pattern:'naver-fetch',visible:false};
+        const raw = r.text || '';
+        const html = source === 'shopping' && r.ok ? ShopSerpTab.fetchedHtml(raw) : raw;
+        const markup = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+        const recognized = source === 'integrated'
+          ? /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(markup)
+          : html !== raw;
+        return {ok:r.ok && recognized, status:r.status, captcha:false, evidence,
+          html, result_source:source, message:r.message || (!recognized ? '읽기 실패 재시도 — 검색 결과 구조를 확인하지 못했습니다.' : '')};
       };
       const integrated = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), 'integrated');
-      if (!integrated.ok || /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(integrated.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''))) return integrated;
+      if (integrated.ok || integrated.status !== 200) return integrated;
       await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '쇼핑' };
       return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
@@ -1259,7 +1277,7 @@ Object.assign(handlers, {
           const policy = (await chrome.storage.local.get('rfSerpPolicy')).rfSerpPolicy || {};
           await apiFetch('/api/ext/shop-keyword/' + Number(analysisId) + '/collector-event', {
             method: 'POST', token, apiBase,
-            body: { kind, collector: 'browser', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume, interval_ms: result.interval_ms },
+            body: { kind, collector: 'browser', blocked_on_resume: kind !== 'success' && !!policy.blockedOnResume, interval_ms: result.interval_ms, evidence: result.evidence },
           });
         } catch (e) { /* reporting must not interrupt collection */ }
       }
@@ -1337,11 +1355,7 @@ Object.assign(handlers, {
       gate = true;
       finish({ ok: false, blocked: true, message: message || '네이버 제한 화면 — 풀린 뒤 자동 재시도' });
     };
-    const onUpd = (id, info) => {
-      if (id === tab?.id && /^https:\/\/(?:nid|captcha|ncpt)\.naver\.com\//i.test(info.url || '')) blocked();
-    };
     try {
-      chrome.tabs.onUpdated.addListener(onUpd);
       timer = setTimeout(() => finish({ ok: false, message: '상품정보 수집 시간 초과 — 잠시 후 자동 재시도' }), 25000);
       const oldTab = productBlockedTabs.get(pid);
       productBlockedTabs.delete(pid);
@@ -1354,14 +1368,11 @@ Object.assign(handlers, {
         inspecting = true;
         try {
           const current = await chrome.tabs.get(tab.id);
-          onUpd(tab.id, { url: current.url });
           if (current.status === 'loading') return; // reused tab still contains the previous restriction document
-          const results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => {
-            const text = (document.body?.innerText || '').slice(0, 20000);
-            if (/현재 서비스 접속이 불가|서비스에 접속할 수 없/.test(text)) return 'unavailable';
-            return /검색 서비스 이용이 제한|서비스 이용이 제한|접근이 제한|비정상적인 접근|보안 확인|보안문자|자동입력 방지|자동입력방지|captcha/i.test(text);
-          }});
-          if (results?.[0]?.result) blocked(results[0].result === 'unavailable' ? '네이버 상품 서비스 접속 불가 — 잠시 후 자동 재시도' : undefined);
+          const results = await chrome.scripting.executeScript({target:{tabId:tab.id},func:RfCaptcha.inspect});
+          const detection = results?.[0]?.result;
+          if (detection?.captcha) blocked();
+          else if (detection?.unavailable) finish({ok:false,message:'네이버 상품 서비스 접속 불가 — 잠시 후 자동 재시도'});
         } catch (_) { /* navigation can temporarily make the document inaccessible */ }
         finally { inspecting = false; }
       };
@@ -1374,7 +1385,6 @@ Object.assign(handlers, {
       return { ok: false, retryable: true, message: '상품 탭 수집 실패: ' + String(e.message || e) };
     } finally {
       clearTimeout(timer); clearInterval(probe);
-      chrome.tabs.onUpdated.removeListener(onUpd);
       productInfoWaiters.delete(pid);
       // Keep a security tab available for the user to solve; retries reuse it below.
       if (gate && tab) productBlockedTabs.set(pid, tab.id);

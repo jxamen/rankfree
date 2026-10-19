@@ -2,7 +2,8 @@
 (async () => {
   const context = await chrome.runtime.sendMessage({type:'__rfCollectionContext'});
   if (location.hash !== '#rfnav' && !context?.owned) return;
-  const blocked = () => /보안문자|자동\s*입력\s*방지|비정상적인\s*(검색|접근)|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(document.body?.innerText || '');
+  const detect = () => RfCaptcha.inspect();
+  const blocked = () => detect().captcha;
   const visible = el => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
   const send = result => chrome.runtime.sendMessage({type: '__rfSerpRead', result});
   // Parse JSON only. Never execute page scripts in the extension world.
@@ -43,8 +44,8 @@
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (msg?.type !== '__rfSerpPeek') return;
     const products = blocked() ? null : shoppingProducts();
-    const challengeVisible = [...document.querySelectorAll('input')].some(el => visible(el) && /captcha|입력|보안|정답/i.test([el.name,el.id,el.placeholder,el.getAttribute('aria-label')].join(' ')));
-    reply({ok:Array.isArray(products) && (products.length > 0 || /검색 결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '')),products:products || [],result_source:'integrated',captcha:blocked(),challengeVisible});
+    const detection = detect();
+    reply({ok:!detection.captcha && Array.isArray(products) && products.length > 0,products:products || [],result_source:'integrated',...detection});
   });
   let running = false, finished = false;
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -56,13 +57,13 @@
     running = true;
     try {
       {
-        if (blocked()) { await send({ok:false,captcha:true,status:200}); return; }
+        if (blocked()) { await send({ok:false,status:200,...detect()}); return; }
         const menu = [...document.querySelectorAll('a[href]')].find(a => visible(a) &&
           (a.getAttribute('role') === 'tab' || a.closest('nav, [role=tablist]')) && a.textContent.trim() === '쇼핑' && new URL(a.href, location.href).hostname.endsWith('.naver.com'));
         const products = shoppingProducts();
         if (Array.isArray(products)) {
           finished = true;
-          await send(products.length || /검색 결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '') ? {ok:true,status:200,products,result_source:'integrated'} : {ok:false,status:0,message:'못 읽음 — 통합검색 상품 목록'});
+          await send(products.length ? {ok:true,status:200,products,result_source:'integrated'} : {ok:false,status:0,message:'못 읽음 — 통합검색 상품 목록'});
           return;
         }
         if (menu && products === null) {

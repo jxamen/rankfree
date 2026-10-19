@@ -43,7 +43,7 @@ test('console bridge forwards IP and interval to the shared collection policy', 
 });
 
 test('tabless checks integrated first, falls back only without shopping block and never opens a tab', async () => {
- for (const [html,expected,blocked] of [['<section data-shopping-block></section>',1,false],['<p>no shopping</p>',2,false],['보안문자',1,true]]) {
+ for (const [html,expected,blocked] of [['<section data-shopping-block></section>',1,false],['<p>no shopping</p>',2,false],['보안문자',2,false]]) {
   const calls=[], waits=[];
   const context=vm.createContext({rfCloseWork:Promise.resolve(),chrome:{storage:{local:{set:async()=>{},get:async()=>({})}}},lastScreenSerpAt:0,ShopSerpTab,
    shopSerpPolicy:{run:async(k,read,ip,gap)=>{assert.equal(gap,3500);return read();}},

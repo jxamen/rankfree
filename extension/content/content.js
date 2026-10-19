@@ -3729,10 +3729,11 @@
     serpPreparing = (async () => {
       {
         const text = document.body?.innerText || '';
-        if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(text)) return false;
+        if (RfCaptcha.inspect().captcha) return false;
         const empty = /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(text);
         // Mobile class names differ from desktop. Embedded products are sufficient evidence.
-        if (empty || serpProducts()?.products?.length) {
+        if (empty) return false;
+        if (serpProducts()?.products?.length) {
           if (!empty) {
             window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'smooth' });
             await new Promise(resolve => setTimeout(resolve, 750));
@@ -3748,9 +3749,10 @@
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     if (msg?.type !== '__rfSerpPeek') return;
     (async () => {
-      if (/HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|접근이\s*제한/.test(document.body?.innerText || '')) { reply({ok:false,captcha:true}); return; }
+      const detection = RfCaptcha.inspect();
+      if (detection.captcha) { reply({ok:false,...detection}); return; }
       const data = serpProducts();
-      const normal = !!data?.products?.length || /검색 결과가 없습니다|검색결과가 없습니다|상품이 없습니다/.test(document.body?.innerText || '');
+      const normal = !!data?.products?.length;
       reply({ok:normal,products:normal ? (data?.products || []) : undefined,result_source:'shopping'});
     })();
     return true;
@@ -3760,8 +3762,9 @@
   async function runSerpRead() {
     const send = result => chrome.runtime.sendMessage({ type: '__rfSerpRead', result });
     if (!await prepareSerp()) {
-      const captcha = /HTTP ERROR (403|429)|비정상적인\s*(검색|접근)|자동\s*입력\s*방지|보안문자\s*입력|일시적으로\s*제한|접근이\s*제한|검색\s*서비스\s*이용이\s*제한|이용이\s*제한되었/.test(document.body?.innerText || '');
-      await send({ok:false,status:captcha ? 200 : 0,captcha,message:captcha ? '네이버 차단 화면 감지 — 수집 탭에서 풀어 주세요.' : '쇼핑 페이지 로딩 또는 상품 목록을 확인하지 못했습니다.'});
+      const detection = RfCaptcha.inspect();
+      const captcha = detection.captcha;
+      await send({ok:false,status:captcha ? 200 : 0,...detection,message:captcha ? '네이버 차단 화면 감지 — 수집 탭에서 풀어 주세요.' : '읽기 실패 재시도 — 쇼핑 상품 목록'});
       return;
     }
     const data = serpProducts();
