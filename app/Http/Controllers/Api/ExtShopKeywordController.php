@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShopKeywordAnalysis;
 use App\Models\ShopProductInfo;
 use App\Services\ShopExposureBlockAlert;
+use App\Support\DeliveryDiagnostic;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -91,8 +92,8 @@ class ExtShopKeywordController extends Controller
                 $failed = ($state['attempts'] ?? 0) >= 3;
                 ShopKeywordAnalysis::whereKey($analysis->id)
                     ->where('product_collection->state', 'collecting')
-                    ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
-                    ->update(['status' => $failed ? 'failed' : 'pending', 'product_collection' => json_encode([
+                    ->where(fn ($q) => $q->where('product_collection->mode', 'product_only')->orWhereNotIn('status', ['paused', 'target_reached', 'ad_ended']))
+                    ->update([...(($state['mode'] ?? '') === 'product_only' ? [] : ['status' => $failed ? 'failed' : 'pending']), 'product_collection' => json_encode([
                         ...$state, 'state' => $failed ? 'failed' : 'retry',
                         'next_at' => now()->timestamp + 30,
                         'message' => ($data['message'] ?? '') ?: '상품정보 수집 실패',
@@ -162,8 +163,9 @@ class ExtShopKeywordController extends Controller
 
         // Durable leases prevent simultaneous extensions from claiming the same product.
         $firstItems = [];
-        $candidates = ShopKeywordAnalysis::where('user_id', $request->user()->id)->backgroundEligible()
-            ->whereIn('product_collection->state', ['pending', 'collecting', 'retry'])->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])
+        $candidates = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+            ->whereIn('product_collection->state', ['pending', 'collecting', 'retry'])
+            ->where(fn ($q) => $q->where('product_collection->mode', 'product_only')->orWhere(fn ($q) => $q->backgroundEligible()->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])))
             ->orderBy('id')->get();
         foreach ($candidates as $candidate) {
             if (count($firstItems) >= $limit) {
@@ -172,7 +174,7 @@ class ExtShopKeywordController extends Controller
             DB::transaction(function () use ($candidate, &$firstItems) {
                 $a = ShopKeywordAnalysis::whereKey($candidate->id)->lockForUpdate()->first();
                 $state = $a->product_collection;
-                if ($a->collectionStopped() || ! ShopKeywordAnalysis::whereKey($a->id)->backgroundEligible()->exists()) {
+                if (($state['mode'] ?? '') !== 'product_only' && ($a->collectionStopped() || ! ShopKeywordAnalysis::whereKey($a->id)->backgroundEligible()->exists())) {
                     return;
                 }
                 if (in_array($state['state'] ?? '', ['completed', 'failed'], true)
@@ -180,7 +182,7 @@ class ExtShopKeywordController extends Controller
                     return;
                 }
                 if (($state['attempts'] ?? 0) >= 3) {
-                    $a->update(['status' => 'failed', 'product_collection' => [...$state,
+                    $a->update([...(($state['mode'] ?? '') === 'product_only' ? [] : ['status' => 'failed']), 'product_collection' => [...$state,
                         'state' => 'failed', 'message' => '상품 수집 응답 시간 초과 (3회)']]);
 
                     return;
@@ -223,9 +225,10 @@ class ExtShopKeywordController extends Controller
     {
         $this->authorizeScope($request);
         abort_unless($analysis->user_id === $request->user()->id, 403);
-        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
+        $productOnly = ($analysis->refresh()->product_collection['mode'] ?? '') === 'product_only';
+        abort_if(! $productOnly && $analysis->status === 'ad_ended', 409, '종료(광고 끝남)');
 
-        abort_if($analysis->product_collection && $analysis->collectionStopped(), 409, '분석이 중단되었습니다.');
+        abort_if(! $productOnly && $analysis->product_collection && $analysis->collectionStopped(), 409, '분석이 중단되었습니다.');
 
         $data = $request->validate([
             'info' => 'required|array',
@@ -234,6 +237,7 @@ class ExtShopKeywordController extends Controller
             'info.brand' => 'nullable|string|max:120',
             'info.mall_name' => 'nullable|string|max:150',
             'info.price' => 'nullable|integer|min:0|max:2000000000',
+            'info.delivery_diagnostic' => 'nullable|string|max:2048',
             'info.delivery_fee' => 'nullable|integer|min:0|max:10000000',   // 배송비 — 0=무료
             'info.seller_tags' => 'nullable|array|max:60',
             'info.seller_tags.*' => 'nullable|string|max:80',
@@ -246,6 +250,13 @@ class ExtShopKeywordController extends Controller
         if ((string) ($info['channel_product_id'] ?? '') !== (string) $analysis->product_id
             || trim((string) ($info['title'] ?? '')) === '') {
             return response()->json(['ok' => false, 'message' => '이 분석의 상품 정보가 아닙니다.'], 422);
+        }
+
+        if (($info['delivery_fee'] ?? null) === null && ! empty($info['delivery_diagnostic'])) {
+            Log::info('product_delivery_diagnostic', [
+                'user_id' => $request->user()->id, 'product_id' => $info['channel_product_id'] ?? '',
+                'evidence' => DeliveryDiagnostic::sanitize($info['delivery_diagnostic']),
+            ]);
         }
 
         $tags = array_values(array_unique(array_filter(array_map(
@@ -275,6 +286,12 @@ class ExtShopKeywordController extends Controller
             ['user_id' => $analysis->user_id, 'channel_product_id' => (string) $analysis->product_id],
             $attrs,
         );
+
+        if ($productOnly) {
+            $analysis->update(['product_collection' => [...$analysis->product_collection, 'state' => 'completed', 'completed_at' => now()->toIso8601String()]]);
+
+            return response()->json(['ok' => true, 'data' => ['analysis_id' => $analysis->id, 'status' => $analysis->status, 'check_pending' => false]]);
+        }
 
         if ($analysis->product_collection) {
             $pi = ShopProductInfo::where('user_id', $analysis->user_id)
@@ -341,6 +358,7 @@ class ExtShopKeywordController extends Controller
                 ->when(! $request->boolean('watchdog'), fn ($w) => $w->where(fn ($v) => $v->whereNull('collection_seen_at')->orWhere('collection_seen_at', '<=', now()->subSeconds(90))))))
             ->whereNotIn('status', ['paused', 'target_reached', 'ad_ended'])       // 사용자가 중단한 분석은 건드리지 않는다
             ->where(fn ($q) => $q->whereNull('product_collection')->orWhere('product_collection->state', 'completed'))
+            ->where(fn ($q) => $q->whereNull('product_collection->mode')->orWhere('product_collection->mode', '!=', 'product_only')->orWhere('product_collection->resume_search', true))
             ->whereHas('combos', fn ($q) => $q->whereNull('rank')->whereNotIn('id', $request->input('exclude', [])))
             ->withMax('combos', 'checked_at')->orderByDesc('combos_max_checked_at')->orderBy('id')->first();
 

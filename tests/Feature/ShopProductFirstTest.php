@@ -31,6 +31,36 @@ class ShopProductFirstTest extends TestCase
         [, $this->ext] = ExtToken::issue($this->owner);
     }
 
+    public function test_explicit_refresh_preserves_stopped_states_and_never_creates_search_work(): void
+    {
+        foreach (['target_reached', 'paused', 'ad_ended', 'done'] as $status) {
+            $a = ShopKeywordAnalysis::create(['user_id' => $this->owner->id, 'core_keyword' => '비타민',
+                'product_id' => 'p'.$status, 'product_url' => 'https://smartstore.naver.com/test/products/111',
+                'status' => $status, 'created_via' => 'api', 'created_at' => now()->subDays(5)]);
+            $a->items()->create(['kind' => 'combo', 'source' => 'combo', 'keyword' => '기존 미확인 조합']);
+            $this->withToken($this->api)->postJson('/api/v1/shop-keywords/'.$a->id.'/recollect-product')
+                ->assertOk()->assertJsonPath('product_collection.state', 'pending');
+            $this->queue()->assertJsonPath('data.items.0.analysis_id', $a->id);
+            $this->queue()->assertJsonCount(0, 'data.items');
+            $this->productFailure($a->id);
+            $this->assertSame($status, $a->fresh()->status);
+            $this->travel(31)->seconds();
+            $this->queue()->assertJsonPath('data.items.0.analysis_id', $a->id);
+            $this->withToken($this->ext)->postJson('/api/ext/shop-keyword/'.$a->id.'/product-info', ['info' => [
+                'channel_product_id' => $a->product_id, 'title' => '새 상품', 'delivery_fee' => 0,
+            ]])->assertOk()->assertJsonPath('data.check_pending', false);
+            $this->assertSame($status, $a->fresh()->status);
+            $this->assertSame('completed', $a->fresh()->product_collection['state']);
+            $this->assertSame(1, $a->items()->count());
+            $this->withToken($this->ext)->getJson('/api/ext/shop-keyword/check-queue')->assertOk()->assertJsonCount(0, 'data.items');
+            $this->assertSame(0, ShopProductInfo::where('channel_product_id', $a->product_id)->first()->delivery_fee);
+        }
+        $other = User::factory()->create(['api_scopes' => ['shop_keyword']]);
+        [, $key] = ApiKey::issue($other, 'other', ['shop_keyword'], null, null, null);
+        $this->withToken($key)->postJson('/api/v1/shop-keywords/'.$a->id.'/recollect-product')->assertForbidden();
+        Http::assertNothingSent();
+    }
+
     private function start(string $pid = '111'): int
     {
         return $this->withToken($this->api)->postJson('/api/v1/shop-keywords', [

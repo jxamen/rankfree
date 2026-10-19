@@ -18,8 +18,10 @@ use App\Http\Controllers\Api\ExtShopRankController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\KeywordSuggestController;
 use App\Http\Controllers\Api\OrderApiController;
+use App\Http\Controllers\Api\PlaceRankApiController;
 use App\Http\Controllers\Api\RankController;
 use App\Http\Controllers\Api\ShopKeywordApiController;
+use App\Http\Controllers\Api\ShopRankApiController;
 use App\Http\Controllers\Api\VendorMissionApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -168,11 +170,12 @@ Route::prefix('v1')->group(function (): void {
     // check_method=api(기본)는 서버가 shop.json 으로 확인해 확장 없이 완결된다(25·28 참조).
     Route::middleware('auth.apikey:shop_keyword')->group(function (): void {
         // 쇼핑 순위체크 등록(2026-10-08) — 부스팅샵 진행 중 쇼핑 주문 자동 등록
-        Route::post('/shop-rank/slots', [\App\Http\Controllers\Api\ShopRankApiController::class, 'store'])->middleware('throttle:60,1');
+        Route::post('/shop-rank/slots', [ShopRankApiController::class, 'store'])->middleware('throttle:60,1');
         // 플레이스 순위체크 등록(2026-10-11) — 부스팅샵 진행 중 플레이스 주문 자동 등록
-        Route::post('/place-rank/slots', [\App\Http\Controllers\Api\PlaceRankApiController::class, 'store'])->middleware('throttle:60,1');
+        Route::post('/place-rank/slots', [PlaceRankApiController::class, 'store'])->middleware('throttle:60,1');
         Route::get('/shop-keywords', [ShopKeywordApiController::class, 'index']);
         Route::post('/shop-keywords', [ShopKeywordApiController::class, 'store'])->middleware('throttle:30,1');
+        Route::post('/shop-keywords/{analysis}/recollect-product', [ShopKeywordApiController::class, 'recollectProduct'])->whereNumber('analysis')->middleware('throttle:30,1');
         Route::get('/shop-keywords/{analysis}', [ShopKeywordApiController::class, 'show'])->whereNumber('analysis');
         // Short URL — 생성(그룹 분배) · 목록 · 재배정(URL 유지, 키워드만 다시 나눔)
         Route::get('/shop-keywords/{analysis}/short-links', [ShopKeywordApiController::class, 'shortLinks'])

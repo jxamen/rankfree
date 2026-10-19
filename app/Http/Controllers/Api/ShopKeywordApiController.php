@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * 쇼핑 유입키워드 분석 외부 API v1 (scope: shop_keyword) — 2026-07-26.
@@ -176,6 +177,25 @@ class ShopKeywordApiController extends Controller
             'exposed_keywords' => $this->shortLinks->exposedKeywords($analysis),
             'short_links' => $this->linkPayload($analysis),
         ]);
+    }
+
+    /** Explicit product-only refresh; never resume keyword collection. */
+    public function recollectProduct(Request $request, ShopKeywordAnalysis $analysis)
+    {
+        abort_unless($analysis->user_id === $request->user()->id, 403);
+        abort_unless($analysis->product_id && $analysis->product_url, 422, '상품 URL이 없습니다.');
+
+        return DB::transaction(function () use ($analysis) {
+            $a = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $state = $a->product_collection;
+            if (! (($state['mode'] ?? '') === 'product_only' && in_array($state['state'] ?? '', ['pending', 'collecting', 'retry']))) {
+                $a->update(['product_collection' => ['mode' => 'product_only', 'state' => 'pending',
+                    'attempts' => 0, 'next_at' => 0, 'resume_search' => $a->status === 'checking', 'requested_at' => now()->toIso8601String()]]);
+            }
+
+            return response()->json(['ok' => true, 'collected_at' => optional($this->oneProductInfo($a)?->collected_at)->toIso8601String(),
+                'product_collection' => $a->product_collection]);
+        });
     }
 
     /**

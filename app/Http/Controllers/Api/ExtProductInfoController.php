@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShopProductInfo;
+use App\Support\DeliveryDiagnostic;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * 확장 상품정보 수신(25) — 상품 페이지 simpleProductForDetailPage.A 에서 뽑은
@@ -21,12 +23,20 @@ class ExtProductInfoController extends Controller
             'brand' => 'nullable|string|max:120',
             'mall_name' => 'nullable|string|max:150',
             'price' => 'nullable|integer|min:0|max:2000000000',
+            'delivery_diagnostic' => 'nullable|string|max:2048',
             'delivery_fee' => 'nullable|integer|min:0|max:10000000',   // 배송비 — 0=무료, 미전송(null)=미수집
             'seller_tags' => 'nullable|array|max:60',
             'seller_tags.*' => 'nullable|string|max:80',
             'category' => 'nullable|string|max:191',
             'thumbnail_url' => 'nullable|string|max:500',   // 대표이미지 — 쇼핑 유입 발주용(2026-07-22)
         ]);
+
+        if (($data['delivery_fee'] ?? null) === null && ! empty($data['delivery_diagnostic'])) {
+            Log::info('product_delivery_diagnostic', [
+                'user_id' => $request->user()->id, 'product_id' => $data['channel_product_id'] ?? '',
+                'evidence' => DeliveryDiagnostic::sanitize($data['delivery_diagnostic']),
+            ]);
+        }
 
         $tags = array_values(array_unique(array_filter(array_map(
             fn ($s) => trim((string) $s), (array) ($data['seller_tags'] ?? [])
