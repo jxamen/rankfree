@@ -189,3 +189,15 @@ test('integrated recovery document is observed without clicking shopping or capt
  let reply;listeners.forEach(listener=>listener({type:'__rfSerpPeek'},null,r=>reply=r));
  assert.equal(reply.captcha,true);assert.equal(reply.challengeVisible,true);assert.equal(reply.ok,false);
 });
+
+test('URL alone, another keyword, another tab and a child frame cannot assert captcha',async()=>{
+ const f=browser(),reader=new ShopSerpTab({browser:f.c,timeoutMs:100,wait:async()=>{}});
+ const p=reader.read('current');await new Promise(setImmediate);
+ f.updated.emit(7,{url:'https://nid.naver.com/nidlogin.login'});
+ const challenge={type:'__rfSerpRead',result:{ok:false,captcha:true,evidence:{visible:true},status:200}};
+ f.messages.emit(challenge,{tab:{id:99},frameId:0});
+ f.messages.emit(challenge,{tab:{id:7},frameId:1});
+ f.messages.emit(challenge,{tab:{id:7},frameId:0,url:'https://m.search.naver.com/search.naver?query=old'});
+ f.messages.emit({type:'__rfSerpRead',result:{ok:true,products:[{id:'normal'}]}},{tab:{id:7},frameId:0,url:'https://m.search.naver.com/search.naver?query=current'});
+ assert.equal((await p).ok,true);assert.equal(f.updates.filter(u=>u.url).length,0);
+});
