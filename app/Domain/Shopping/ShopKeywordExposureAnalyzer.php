@@ -543,7 +543,7 @@ class ShopKeywordExposureAnalyzer
             return ['added' => 0];
         }
         if ($analysis->refresh()->targetReached()) {
-            return $this->finishTarget($analysis);
+            return ['added' => 0] + $this->finishTarget($analysis);
         }
         $cfg = (array) config('rankfree.shopping.exposure');
         $hardCap = max(100, (int) ($cfg['hard_cap'] ?? 3000));
