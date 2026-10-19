@@ -202,3 +202,11 @@
 - 상품 큐는 실패를 `collector-event(kind=client_error, stage=product)`로 보고하고 다음 3분 알람에 재시도한다. 상태는 분석별 24시간 캐시에 보관하고 소유자만 product-status로 읽는다. SERP 차단·서버 전환·간격에는 영향을 주지 않는다.
 - 화면은 실패 이유를 버튼 옆에 즉시 표시하고 60초 뒤 재시도한다. 큐 상태는 15초마다 확인한다. 저장 HTTP/JSON 오류도 표시하며 성공한 저장만 새로고침한다. 이미지 누락도 태그/배송비와 같은 24시간 보충 큐 대상으로 처리한다.
 - 재현: `node --test tests/extension/*.test.cjs`, `node scripts/test-product-recollect-browser.cjs` (로컬 fixture + 실제 Chromium 확장/브릿지/상품 content script).
+
+## API 연속 분석 자동 인계 0.6.8.7 (2026-10-19)
+
+- 상세 화면 없이 API로 시작한 분석은 로그인된 요청자 확장의 product/check 큐가 처리한다. 서버만으로 브라우저 검색을 시작할 수 없으므로 확장 업데이트가 필요하다.
+- 워커 부팅 직후와 실행 중 5초마다 두 큐를 확인한다. 상품 탭이 느려도 이미 조합이 있는 분석은 독립적으로 확인한다. 빈 큐 뒤 생성되는 다음 주문도 다음 tick에서 받는다. 30초 알람은 워커 종료 후 복구용이며 기존 1분 watchdog은 유지한다. 브라우저 종료·절전·네트워크 중단 중에는 수 초 시작을 보장하지 않는다.
+- 화면 요청의 분석 ID를 기억하고 최근 60초 이내 요청이 있었다면 collector-state로 상태를 확인한다. done/target_reached/ad_ended/paused일 때만 양보 시간을 해제한다. 확인 도중 새 화면 요청이 생기거나 상태 조회가 실패하면 양보를 유지한다.
+- 큐 확인 주기만 바꾼다. SERP 요청은 기존 ShopSerpPolicy/Pool의 간격·동시 수·차단 대기, 서버 IP 잠금·claim, paused 및 목표 상한을 그대로 따른다. 상품 큐에도 storage await 뒤 중복 진입 검사를 둔다. 보안문자 자동 풀이·로그인 자동화·탐지 회피는 추가하지 않는다.
+- 검증: `node --test tests/extension/*.test.cjs`, `node tests/extension/shop-batch-autostart.browser.cjs`, `ShopBatchAutostartTest` 및 기존 잠금/claim/목표 테스트. browser 테스트는 실제 MV3 워커·5초 타이머를 쓰고 큐 및 SERP 응답은 로컬 fixture로 제한한다.

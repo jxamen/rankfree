@@ -937,6 +937,7 @@ async function drainShopKeywordProductQueue() {
   const skipUntil = (await chrome.storage.local.get(['rfSkwSkipUntil'])).rfSkwSkipUntil || 0;
   if (Date.now() < skipUntil) return;               // 권한 없음 등으로 백오프 중
 
+  if (skwQueueActive) return; // Storage awaits may overlap an alarm or the fast poll.
   skwQueueActive = true;
   try {
     const q = await apiFetch('/api/ext/shop-keyword/product-queue?limit=3', { token, apiBase });
@@ -965,9 +966,10 @@ async function drainShopKeywordProductQueue() {
 }
 
 // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버는 API 분석의 순위를 자동으로 돌리지 않는다.
-// 상품정보가 채워져야 조합이 생기므로 상품정보 큐 다음에 실행한다.
+// 상품정보가 채워져 조합이 생기면 순위 큐가 다음 확인에서 이어받는다.
 let skwCheckActive = false;
 let skwCheckHeartbeat = 0;
+let lastScreenAnalysisId = null;
 let lastScreenSerpAt = 0;   // 관리자 화면 루프가 m.search 를 쓴 시각 — 같은 IP 이중 크롤 방지용
 
 async function reportShopClientEvent(analysisId, keyword, stage, message, kind = 'client_error') {
@@ -1199,7 +1201,10 @@ Object.assign(handlers, {
       }
     }
     // 탭(관리자 분석 화면)에서 온 호출이면 백그라운드 순위확인 큐가 양보한다 — 같은 IP 이중 크롤 방지
-    if (sender && sender.tab) lastScreenSerpAt = Date.now();
+    if (sender && sender.tab) {
+      lastScreenSerpAt = Date.now();
+      lastScreenAnalysisId = analysisId || null;
+    }
     const kw = String(keyword || '').trim();
     if (!kw) return { ok: false, message: '키워드가 비었습니다.' };
     if (!(sender && sender.tab)) {
@@ -1685,22 +1690,45 @@ Object.assign(handlers, {
   },
 });
 
+// API starts cannot message a sleeping browser. Keep the authenticated queue observable
+// even after an empty response (the next boosting order may be created seconds later).
+// These are queue reads only; ShopSerpPolicy and the server lease still govern searches.
+async function pollShopKeywordQueues() {
+  try {
+    const seen = lastScreenSerpAt;
+    const screenId = lastScreenAnalysisId;
+    if (screenId && Date.now() - seen < 60000) {
+      const {token, apiBase} = await getStore();
+      if (!token) return;
+      const state = await apiFetch('/api/ext/shop-keyword/' + screenId + '/collector-state', {token, apiBase});
+      if (state.ok && ['done', 'target_reached', 'ad_ended', 'paused'].includes(state.json?.data?.status)
+          && lastScreenAnalysisId === screenId && lastScreenSerpAt === seen) lastScreenSerpAt = 0;
+    }
+    // Product tabs can be slow. They must not delay an already prepared analysis.
+    await Promise.allSettled([drainShopKeywordProductQueue(), drainShopKeywordCheckQueue()]);
+  } catch (_) { /* Network failure: retain screen priority and retry next tick. */ }
+}
+
 // ── 알람·부트 훅 — 핸들러 등록 뒤에 와야 첫 알람이 빈 handlers 를 만나지 않는다 ─────────
 try {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a && a.name === 'rf-skw-watchdog') watchShopKeywordQueue();
     if (a && a.name === 'rf-skw-check-retry') drainShopKeywordCheckQueue();
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
-    // 상품정보 → 순위확인 순서(각자 자기 플래그로 중복 방지)
-    if (a && a.name === SKW_QUEUE_ALARM) drainShopKeywordProductQueue().then(drainShopKeywordCheckQueue);
+    // 상품정보·순위확인 큐(각자 자기 플래그로 중복 방지)
+    if (a && a.name === SKW_QUEUE_ALARM) pollShopKeywordQueues();
     // 쇼핑 순위체크 워커 — 위 큐와 별도 알람(각자 자기 플래그로 중복 방지)
     if (a && a.name === SHOP_RANK_ALARM) drainShopRankQueue('알람');
   });
   chrome.alarms.get('rf-skw-watchdog').then(a => {
     if (!a) chrome.alarms.create('rf-skw-watchdog', { periodInMinutes: 1, delayInMinutes: 1 });
   }).catch(() => {});
-  chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 3, delayInMinutes: 1 });
-  // 순위체크는 사람이 결과를 기다리는 경우가 있어 더 자주 본다(MV3 알람 최소 주기는 1분).
+  chrome.alarms.create(SKW_QUEUE_ALARM, { periodInMinutes: 0.5, delayInMinutes: 0.5 });
+  // Chrome API activity during polling keeps an awake MV3 worker available. The alarm
+  // is a fallback after browser suspension; a closed/suspended browser cannot collect.
+  setInterval(() => { pollShopKeywordQueues(); }, 5000);
+  pollShopKeywordQueues();
+  // 순위체크는 사람이 결과를 기다리는 경우가 있어 더 자주 본다(이 순위체크 큐는 1분 주기).
   chrome.alarms.create(SHOP_RANK_ALARM, { periodInMinutes: 1, delayInMinutes: 0.5 });
 } catch (e) { /* noop */ }
 
