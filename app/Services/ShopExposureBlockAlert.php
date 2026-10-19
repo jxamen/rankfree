@@ -81,14 +81,14 @@ class ShopExposureBlockAlert
         }
     }
 
-    public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null): void
+    public function record(ShopKeywordAnalysis $analysis, string $ip, string $collector, string $kind, bool $blockedOnResume = false, ?int $intervalMs = null, ?array $evidence = null): void
     {
         if ($collector === 'browser' && in_array($kind, ['403', '429', '보안문자'], true)) Cache::forever('shop-parallel-reduced:'.$analysis->id, true);
         if ($kind === 'success') {
             self::clearWait($analysis, $collector === 'browser');
         }
         try {
-            Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($analysis, $ip, $collector, $kind, $blockedOnResume, $intervalMs) {
+            Cache::lock('shop-block:lock:'.hash('sha256', $ip), 15)->block(2, function () use ($analysis, $ip, $collector, $kind, $blockedOnResume, $intervalMs, $evidence) {
                 $now = now('Asia/Seoul');
                 $key = 'shop-block:'.hash('sha256', $ip);
                 $state = Cache::get($key, []);
@@ -102,6 +102,7 @@ class ShopExposureBlockAlert
                     'core_keyword' => $analysis->core_keyword, 'kind' => $kind, 'today_count' => $count,
                     'blocked_on_resume' => $blockedOnResume, 'retry_at' => $kind === 'success' ? null : $now->copy()->addMinutes(3)->toIso8601String(),
                     'interval_ms' => max(self::interval($ip), min(30000, $intervalMs ?? self::baseInterval()))];
+                if ($evidence !== null) $event['evidence'] = $evidence;
                 Log::info('shop_exposure_block_event', $event);
                 $token = config('services.slack.notifications.bot_user_oauth_token');
                 $channel = config('services.slack.shop_exposure_block_channel');

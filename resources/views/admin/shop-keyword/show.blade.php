@@ -1027,13 +1027,13 @@ window.__SK = {
                         if (parallelNotice) parallelNotice.textContent = '이 분석은 차단으로 1개로 진행 중';
                     }
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
-                    const currentObservation = res && !stopped ? captchaState(it.id, it.keyword, !!(res.captcha || res.status === 403 || res.status === 429), {...res, observed_at: res.observed_at || requestStartedAt}) !== false : false;
+                    const currentObservation = res && !stopped ? captchaState(it.id, it.keyword, !!res.captcha, {...res, observed_at: res.observed_at || requestStartedAt}) !== false : false;
                     // Successful cache results also release stale waits; cooldown replies do not.
                     if (res && currentObservation && (!res.cached || res.ok) && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {
                             try {
-                                await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms });
+                                await post(cfg.urls.collectorEvent, { kind, blocked_on_resume: !!res.blockedOnResume, interval_ms: res.interval_ms, evidence: res.evidence });
                             }
                             catch (e) { /* collection can continue if event delivery fails */ }
                         }
@@ -1041,7 +1041,7 @@ window.__SK = {
                     if (stopped) return;
                     if (!res) res = {ok:false, message:'확장 응답 시간 초과'};
                     if (res.cooldown || res.captcha || res.status === 403 || res.status === 429) {
-                        if (label) label.textContent = d.collection_mode === 'fetch' ? '보안문자 대기 — 브라우저 탭으로 열기로 저장하고 이어서 확인해 사람이 풀어 주세요.' : (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword);
+                        if (label) label.textContent = res.captcha ? (res.message || '보안문자 — 수집 탭에서 풀어 주세요 · 지금: ' + it.keyword) : (res.message || '네이버 요청 제한 — 잠시 후 재시도');
                         await sleep(1500);
                         continue; // Inspect the same tab until the person clears the gate.
                     }
