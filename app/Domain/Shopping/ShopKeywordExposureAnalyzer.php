@@ -255,6 +255,7 @@ class ShopKeywordExposureAnalyzer
                     $item->ad_exposed = ! empty($res['ad']);
                     $item->checked_at = now();
                     $item->save();
+                    app(ShopKeywordShortLinkService::class)->appendDiscoveredKeywords($fresh);
                     if (in_array($fresh->status, ['blocked', 'error'], true)) {
                         $fresh->update(['status' => 'checking']);
                     }
@@ -341,6 +342,7 @@ class ShopKeywordExposureAnalyzer
             $item->ad_exposed = ! empty($res['ad']);
             $item->checked_at = now();
             $item->save();
+            app(ShopKeywordShortLinkService::class)->appendDiscoveredKeywords($analysis);
 
             ShopExposureBlockAlert::clearWait($analysis);
             $this->backfillMe($analysis, $res['me'] ?? null);
