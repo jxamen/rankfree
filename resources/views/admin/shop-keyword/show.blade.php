@@ -615,9 +615,9 @@ window.__SK = {
     const captchaFeedback = document.getElementById('sk-captcha-feedback');
     function captchaState(key, keyword, waiting, result = null) {
         // Cooldown is a repeated policy wait, never a newly observed challenge.
-        if (result?.cooldown) return false;
-        if (result?.ok) {
-            captchaRecoveredAt = Math.max(captchaRecoveredAt, result.observed_at);
+        if (result?.cooldown && !result.captcha_wait) return false;
+        if (result?.ok && result.captcha_cleared_at) {
+            captchaRecoveredAt = Math.max(captchaRecoveredAt, result.captcha_cleared_at);
             for (const [id, at] of captchaObserved) {
                 if (at <= captchaRecoveredAt) { captchaWaits.delete(id); captchaObserved.delete(id); }
             }
@@ -1039,8 +1039,8 @@ window.__SK = {
                         if (parallelNotice) parallelNotice.textContent = '이 분석은 차단으로 1개로 진행 중';
                     }
                     if (res && res.interval_ms) currentIntervalMs = res.interval_ms;
-                    const currentObservation = res && !stopped ? captchaState(it.id, it.keyword, !!res.captcha, {...res, observed_at: res.observed_at || requestStartedAt}) !== false : false;
-                    // Successful cache results also release stale waits; cooldown replies do not.
+                    const currentObservation = res && !stopped ? captchaState(it.id, res.blocked_keyword || it.keyword, !!res.captcha, {...res, observed_at: res.observed_at || requestStartedAt}) !== false : false;
+                    // Report results separately; only verified tab recovery releases security waits.
                     if (res && currentObservation && (!res.cached || res.ok) && !res.cooldown) {
                         const kind = res.captcha ? '보안문자' : [403, 429].includes(res.status) ? String(res.status) : res.ok ? 'success' : null;
                         if (kind) {

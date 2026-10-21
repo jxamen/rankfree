@@ -23,6 +23,8 @@ class ShopSerpTab {
       const gap = Math.max(0, Number(this.openIntervalMs ?? 3000));
       const delay = Math.max(0, Number(saved.rfSerpLastOpened || 0) + gap - Date.now());
       if (delay) await this.wait(delay);
+      const waiting = this.beforeNavigate && await this.beforeNavigate();
+      if (waiting) { const e = new Error(waiting.message); e.captchaWait = waiting; throw e; }
       if (this.allowOpen && !this.allowOpen()) { const e = new Error('차단 감지 — 동시 검색 1개로 줄임'); e.code = 'RF_PARALLEL_REDUCED'; throw e; }
       if (await this.closed()) { const e = new Error('수집 탭 닫힘'); e.code = 'RF_TAB_CLOSED'; throw e; }
       const tab = await this.browser.tabs.create(options);
@@ -72,6 +74,11 @@ class ShopSerpTab {
   async closed() {
     if (typeof rfCloseWork !== 'undefined') await rfCloseWork;
     return this.isClosed && await this.isClosed();
+  }
+  async hasTab() {
+    const saved = await this.session().get('rfSerpTabId');
+    if (saved.rfSerpTabId == null) return false;
+    try { await this.browser.tabs.get(saved.rfSerpTabId); return true; } catch (_) { return false; }
   }
   async focus(keyword) {
     if (await this.closed()) return;
@@ -177,6 +184,8 @@ class ShopSerpTab {
         catch (_) { this.tabId = null; }
       }
       if (tab) {
+        const waiting = this.beforeNavigate && await this.beforeNavigate();
+        if (waiting) return waiting;
         if (this.allowOpen && !this.allowOpen()) return {ok:false,deferred:true};
         await c.tabs.update(tab.id, { url, active: false });
       } else {
@@ -197,7 +206,7 @@ class ShopSerpTab {
         await this.focus(keyword).catch(() => {});
       }
       return response;
-    } catch (e) { return { ok: false, status: 0, deferred: e.code === 'RF_PARALLEL_REDUCED', message: '쇼핑 탭 오류: ' + e.message }; }
+    } catch (e) { return e.captchaWait || { ok: false, status: 0, deferred: e.code === 'RF_PARALLEL_REDUCED', message: '쇼핑 탭 오류: ' + e.message }; }
     finally {
       clearInterval(poll);
       clearTimeout(timer);

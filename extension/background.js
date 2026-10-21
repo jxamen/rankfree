@@ -1237,11 +1237,14 @@ Object.assign(handlers, {
     if (localSettings) interval_revision = 'browser:' + interval_ms;
     const result = await shopSerpPool.run(analysisId, kw, parallel_tabs, async ({tab, policy}) => {
     tab.openIntervalMs = tab_open_interval_ms;
+    tab.collectorIp = collectorIp || 'browser';
     tab.alternativeKeywords = alternativeKeywords;
     return policy.run(kw, async effectiveGap => {
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
       if (collection_mode !== 'fetch') return tab.read(kw, target);
       const read = async (url, source) => {
+        const waiting = tab.beforeNavigate && await tab.beforeNavigate();
+        if (waiting) return waiting;
         if (tab.allowOpen && !tab.allowOpen()) return {ok:false,deferred:true};
         const r = await handlers.spFetchHtml({url});
         // A fetched response has no rendered visibility. Text in scripts/hidden nodes is never captcha evidence.
