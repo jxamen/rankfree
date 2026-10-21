@@ -20,106 +20,83 @@ class ShopKeywordShortLinkService
     public const REFERENCE_SOURCES = ['autocomplete', 'searchad', 'shopping_related', 'keyword_rec', 'together', 'competitor_brand'];
 
     /**
-     * 노출 키워드를 그룹 수만큼 나눠 Short URL 을 새로 만든다(호출 안 된 링크는 교체, 호출된 링크는 주소 유지).
+     * 노출 키워드를 그룹 수만큼 나눠 Short URL 을 새로 만든다(호출된 링크도 전부 교체).
      *
-     * @throws DomainException 노출 키워드 없음 · 그룹 수 초과 · 그룹 수 < 호출된 링크 수
+     * @throws DomainException 노출 키워드 없음 · 그룹 수 초과 · 그룹 수 범위 오류
      */
-    public function generate(ShopKeywordAnalysis $analysis, int $groupCount): Collection
+    public function generate(ShopKeywordAnalysis $analysis, ?int $groupCount): Collection
     {
-        $keywords = $this->exposedKeywords($analysis);
-        if ($keywords === []) {
-            throw new DomainException('상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.');
-        }
-        if ($groupCount > count($keywords)) {
-            throw new DomainException('Short URL 개수는 상위 노출 키워드 수보다 많을 수 없습니다.');
-        }
-        // 이미 트래픽이 돈 링크는 주소를 바꾸면 안 된다(배포된 URL 이 죽는다) —
-        // 호출된 링크는 토큰·도메인을 그대로 두고 앞 그룹으로 재사용, 모자란 개수만 새로 만든다(2026-09-29)
-        $called = $analysis->shortLinks()->where('hit_count', '>', 0)->orderBy('group_no')->orderBy('id')->get();
-        if ($groupCount < $called->count()) {
-            throw new DomainException('호출된 Short URL이 '.$called->count().'개라 그보다 적게 만들 수 없습니다.');
-        }
-
-        $references = $this->referenceKeywords($analysis);
-        $domains = $this->secondaryDomains();
-        $groups = $this->keywordGroups($keywords, $groupCount);
-
-        DB::transaction(function () use ($analysis, $called, $references, $groupCount, $domains, $groups): void {
-            $analysis->shortLinks()->whereNotIn('id', $called->pluck('id'))->delete();
-
-            foreach ($called->values() as $idx => $link) {
-                $link->update([
-                    'group_no' => $idx + 1,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$idx],
-                    'reference_keywords' => $references,
-                    'cursor' => 0,
-                ]);
+        $links = DB::transaction(function () use ($analysis, $groupCount) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $old = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->lockForUpdate()->get();
+            // Null is used only by the list action: take the current count under lock.
+            $groupCount ??= $old->count();
+            $keywords = $this->exposedKeywords($analysis);
+            $this->validateCount($keywords, $groupCount);
+            $groups = $this->keywordGroups($keywords, $groupCount, $old->pluck('keywords')->all());
+            $references = $this->referenceKeywords($analysis);
+            $domains = $this->secondaryDomains();
+            $tokens = [];
+            for ($i = 0; $i < $groupCount; $i++) {
+                do { $token = $this->newToken(); } while (in_array($token, $tokens, true));
+                $tokens[] = $token;
             }
-
-            for ($groupNo = $called->count() + 1; $groupNo <= $groupCount; $groupNo++) {
-                ShopKeywordShortLink::create([
-                    'analysis_id' => $analysis->id,
-                    'token' => $this->newToken(),
-                    'domain' => $domains !== [] ? $domains[($groupNo - 1) % count($domains)] : null,
-                    'group_no' => $groupNo,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$groupNo - 1],
-                    'reference_keywords' => $references,
-                ]);
+            // Generate tokens while old rows still exist, so none can be reused.
+            $analysis->shortLinks()->delete();
+            foreach ($tokens as $idx => $token) {
+                ShopKeywordShortLink::create(['analysis_id' => $analysis->id, 'token' => $token,
+                    'domain' => $domains !== [] ? $domains[$idx % count($domains)] : null,
+                    'group_no' => $idx + 1, 'group_count' => $groupCount,
+                    'keywords' => $groups[$idx], 'reference_keywords' => $references]);
             }
+            return $analysis->shortLinks()->orderBy('group_no')->get();
         });
-
-        // 연결 주문의 Short URL 자동 채움 필드 반영(빈 필드만) — 발주 전달값
         app(OrderFieldAutofill::class)->fillFromAnalysis($analysis->fresh());
-
-        return $analysis->shortLinks()->orderBy('group_no')->get();
+        return $links;
     }
 
     /**
      * 재배정 — 이미 배포한 URL(토큰·도메인)은 그대로 두고 키워드만 다시 나눈다.
-     * 순위 확인이 더 진행돼 노출 키워드가 늘었을 때 쓴다(링크 수를 늘리려면 generate — 호출된 링크는 주소를 유지한다).
+     * 순위 확인이 더 진행돼 노출 키워드가 늘었을 때 쓴다(링크 수를 늘리려면 generate — 모든 주소를 교체한다).
      *
      * @throws DomainException 링크 없음 · 노출 키워드 없음 · 링크 수 > 키워드 수
      */
     public function reassign(ShopKeywordAnalysis $analysis): Collection
     {
-        $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->get();
-        if ($links->isEmpty()) {
-            throw new DomainException('재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.');
-        }
-
-        $keywords = $this->exposedKeywords($analysis);
-        $groupCount = $links->count();
-        if ($keywords === []) {
-            throw new DomainException('상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.');
-        }
-        if ($groupCount > count($keywords)) {
-            throw new DomainException('Short URL 수가 상위 노출 키워드 수보다 많아 재배정할 수 없습니다.');
-        }
-
-        $references = $this->referenceKeywords($analysis);
-        $groups = $this->keywordGroups($keywords, $groupCount);
-
-        DB::transaction(function () use ($links, $references, $groupCount, $groups): void {
-            foreach ($links->values() as $idx => $link) {
-                $link->update([
-                    'group_no' => $idx + 1,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$idx],
-                    'reference_keywords' => $references,
-                    'cursor' => 0,   // 회전 위치 초기화 — 새 키워드 묶음의 처음부터
-                ]);
+        return DB::transaction(function () use ($analysis) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->lockForUpdate()->get();
+            if ($links->isEmpty()) {
+                throw new DomainException('재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.');
             }
+            $keywords = $this->exposedKeywords($analysis);
+            $this->validateCount($keywords, $links->count());
+            $groups = $this->keywordGroups($keywords, $links->count(), $links->pluck('keywords')->all());
+            $references = $this->referenceKeywords($analysis);
+            $analysis->shortLinks()->update(['keywords' => '[]', 'cursor' => 0]);
+            foreach ($links->values() as $idx => $link) {
+                // A group can randomly remain equal: reload the cleared DB value
+                // so Eloquent does not omit it as an unchanged attribute.
+                $link->refresh();
+                $link->update(['group_no' => $idx + 1, 'group_count' => $links->count(),
+                    'keywords' => $groups[$idx], 'reference_keywords' => $references, 'cursor' => 0]);
+            }
+            return $analysis->shortLinks()->orderBy('group_no')->get();
         });
+    }
 
-        return $analysis->shortLinks()->orderBy('group_no')->get();
+    private function validateCount(array $keywords, int $count): void
+    {
+        if ($keywords === []) throw new DomainException('상위 5위 노출 키워드가 아직 없습니다.');
+        if ($count < 1 || $count > 100 || $count > count($keywords)) {
+            throw new DomainException('Short URL 개수는 1~100개이며 상위 5위 키워드 수 이하여야 합니다.');
+        }
     }
 
     /** 노출 판정(1~threshold 위) 키워드 — 확인 순서 유지, 중복 제거. */
     public function exposedKeywords(ShopKeywordAnalysis $analysis): array
     {
-        $th = $analysis->keyword_target ? 5 : (int) $analysis->threshold;
+        $th = 5;
 
         return $analysis->combos()
             ->whereBetween('rank', [1, $th])
@@ -135,13 +112,22 @@ class ShopKeywordShortLinkService
     }
 
     /** 그룹 분배 — 라운드로빈(인덱스 modulo)으로 고르게 섞는다. */
-    public function keywordGroups(array $keywords, int $groupCount): array
+    public function keywordGroups(array $keywords, int $groupCount, array $previous = []): array
     {
-        $groups = array_fill(0, $groupCount, []);
-        foreach ($keywords as $idx => $keyword) {
-            $groups[$idx % $groupCount][] = $keyword;
+        $this->validateCount($keywords, $groupCount);
+        shuffle($keywords);
+        $distribute = static function (array $words) use ($groupCount) {
+            $groups = array_fill(0, $groupCount, []);
+            foreach ($words as $idx => $keyword) $groups[$idx % $groupCount][] = $keyword;
+            return $groups;
+        };
+        $groups = $distribute($keywords);
+        // A random draw can equal the old assignment. Make the requested change
+        // observable whenever there is more than one distinct keyword.
+        if ($groups === $previous && count($keywords) > 1) {
+            $keywords[] = array_shift($keywords);
+            $groups = $distribute($keywords);
         }
-
         return $groups;
     }
 

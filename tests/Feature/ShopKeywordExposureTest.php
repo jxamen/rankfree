@@ -571,8 +571,9 @@ class ShopKeywordExposureTest extends TestCase
 
         $links = ShopKeywordShortLink::where('analysis_id', $a->id)->orderBy('group_no')->get();
         $this->assertCount(2, $links);
-        $this->assertSame(['비타민c 고함량', '비타민c 1000', '비타민c 스틱'], $links[0]->keywords);
-        $this->assertSame(['비타민c 리포좀', '비타민c 분말'], $links[1]->keywords);
+        $this->assertCount(3, $links[0]->keywords);
+        $this->assertCount(2, $links[1]->keywords);
+        $this->assertEqualsCanonicalizing(['비타민c 고함량', '비타민c 1000', '비타민c 스틱', '비타민c 리포좀', '비타민c 분말'], $links->pluck('keywords')->flatten()->all());
 
         $queries = [];
         DB::listen(function ($query) use (&$queries): void {
@@ -586,9 +587,9 @@ class ShopKeywordExposureTest extends TestCase
         $second = $this->shortRedirectParams($links[0]->token);
         $third = $this->shortRedirectParams($links[1]->token);
 
-        $this->assertSame('비타민c 고함량', $first['query']);
-        $this->assertSame('비타민c 1000', $second['query']);
-        $this->assertSame('비타민c 리포좀', $third['query']);
+        $this->assertSame($links[0]->keywords[0], $first['query']);
+        $this->assertSame($links[0]->keywords[1], $second['query']);
+        $this->assertSame($links[1]->keywords[0], $third['query']);
         $this->assertContains($first['acq'], ['비타민c 효능', '비타민c 하루권장량']);
         $this->assertContains($second['acq'], ['비타민c 효능', '비타민c 하루권장량']);
         $this->assertSame('mtp_sug.top', $first['sm']);
@@ -625,7 +626,7 @@ class ShopKeywordExposureTest extends TestCase
             ->assertSee('1,234');
     }
 
-    public function test_called_short_links_are_not_deleted_by_regenerate(): void
+    public function test_called_short_links_are_replaced_by_regenerate(): void
     {
         $u = User::factory()->create(['role' => 'operator']);
         $a = ShopKeywordAnalysis::create([
@@ -653,7 +654,7 @@ class ShopKeywordExposureTest extends TestCase
             'hit_count' => 1,
         ]);
 
-        // 호출된 링크가 있어도 다시 생성 — 호출된 주소는 1번 그룹으로 유지, 모자란 개수만 새로 만든다
+        // 호출된 주소도 모두 지우고 요청 개수만큼 새로 만든다.
         $this->actingAs($u)
             ->from(route('admin.shop-keyword.show', $a))
             ->post(route('admin.shop-keyword.short-links.store', $a), ['group_count' => 2])
@@ -661,9 +662,8 @@ class ShopKeywordExposureTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(2, ShopKeywordShortLink::where('analysis_id', $a->id)->count());
-        $kept = ShopKeywordShortLink::where('token', 'called00001')->firstOrFail();
-        $this->assertSame([1, 2, 1], [(int) $kept->group_no, (int) $kept->group_count, (int) $kept->hit_count]);
-        $this->assertSame(['비타민c 고함량'], $kept->keywords);
+        $this->assertNull(ShopKeywordShortLink::where('token', 'called00001')->first());
+        $this->get(route('shop-keyword.short', 'called00001'))->assertStatus(410)->assertSee('만료된 주소예요');
     }
 
     public function test_short_link_reassign_preserves_urls_and_call_counts(): void
@@ -720,8 +720,9 @@ class ShopKeywordExposureTest extends TestCase
         $this->assertSame(0, $links[1]->hit_count);
         $this->assertSame(0, $links[0]->cursor);
         $this->assertSame(0, $links[1]->cursor);
-        $this->assertSame(['비타민c 고함량', '비타민c 1000'], $links[0]->keywords);
-        $this->assertSame(['비타민c 리포좀'], $links[1]->keywords);
+        $this->assertCount(2, $links[0]->keywords);
+        $this->assertCount(1, $links[1]->keywords);
+        $this->assertEqualsCanonicalizing(['비타민c 고함량', '비타민c 1000', '비타민c 리포좀'], $links->pluck('keywords')->flatten()->all());
         $this->assertSame(['비타민c 효능'], $links[0]->reference_keywords);
         $this->assertSame(['비타민c 효능'], $links[1]->reference_keywords);
     }

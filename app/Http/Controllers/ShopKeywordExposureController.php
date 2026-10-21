@@ -478,42 +478,49 @@ class ShopKeywordExposureController extends Controller
 
     public function storeShortLinks(Request $request, ShopKeywordAnalysis $analysis)
     {
-        abort_unless($analysis->user_id === $request->user()->id, 403);
-
-        $data = $request->validate([
-            'group_count' => 'required|integer|min:1|max:100',
-        ]);
-
-        $groupCount = (int) $data['group_count'];
-
-        // 생성 규칙은 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
+        abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
+        $rules = ['keep_count' => 'sometimes|boolean'];
+        if (!$request->boolean('keep_count')) $rules['group_count'] = 'required|integer|min:1|max:100';
+        $data = $request->validate($rules);
+        $count = $request->boolean('keep_count') ? null : (int) $data['group_count'];
         try {
-            app(ShopKeywordShortLinkService::class)->generate($analysis, $groupCount);
+            $links = app(ShopKeywordShortLinkService::class)->generate($analysis, $count);
         } catch (\DomainException $e) {
-            return back()->withErrors(['group_count' => $e->getMessage()]);
+            return $request->expectsJson() ? response()->json(['message' => $e->getMessage()], 422)
+                : back()->withErrors(['group_count' => $e->getMessage()]);
         }
-
-        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$groupCount}개를 생성했습니다.");
+        return $this->shortActionResponse($request, $analysis, '새 URL '.$links->count().'개');
     }
 
-    public function reassignShortLinks(Request $request, ShopKeywordAnalysis $analysis): RedirectResponse
+    public function reassignShortLinks(Request $request, ShopKeywordAnalysis $analysis)
     {
-        abort_unless($analysis->user_id === $request->user()->id, 403);
-
-        // 재배정 규칙도 ShopKeywordShortLinkService 단일 소스 — 외부 API(28)와 공유한다.
+        abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
         try {
             $links = app(ShopKeywordShortLinkService::class)->reassign($analysis);
         } catch (\DomainException $e) {
-            return back()->withErrors(['short_links' => $e->getMessage()]);
+            return $request->expectsJson() ? response()->json(['message' => $e->getMessage()], 422)
+                : back()->withErrors(['short_links' => $e->getMessage()]);
         }
-
-        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$links->count()}개에 키워드를 재배정했습니다.");
+        return $this->shortActionResponse($request, $analysis, '재배정 '.$links->count().'개');
     }
 
-    public function short(string $token): RedirectResponse
+    private function shortActionResponse(Request $request, ShopKeywordAnalysis $analysis, string $message)
+    {
+        if ($request->expectsJson()) {
+            $a = $analysis->fresh()->loadCount('shortLinks');
+            return response()->json(['message' => $message, 'analysis_id' => $a->id,
+                'short_links_count' => $a->short_links_count,
+                'row_html' => view('admin.shop-keyword._row', compact('a'))->render()]);
+        }
+        return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', $message);
+    }
+
+    public function short(string $token)
     {
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $link = ShopKeywordShortLink::where('token', $token)->firstOrFail();
+            $link = ShopKeywordShortLink::where('token', $token)->first();
+            if (!$link) return response()->view('shop-keyword-expired', [], 410)
+                ->header('Cache-Control', 'no-store');
             $keywords = array_values(array_filter(array_map('strval', (array) $link->keywords)));
             abort_unless($keywords !== [], 404);
 

@@ -232,9 +232,9 @@
     <div class="flex items-center justify-between mb-1 flex-wrap" style="gap:10px;">
         <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">Short URL 자동 출력</div>
         <div class="flex items-center gap-2">
-            <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" class="flex items-center gap-2">
+            <form method="POST" action="{{ route('admin.shop-keyword.short-links.store', $analysis) }}" data-confirm="Short URL을 새로 생성할까요?" data-confirm-text="기존 Short URL은 모두 지워지고 이미 공유한 주소도 더는 열리지 않아요. 입력한 개수만큼 새로 만들어 키워드를 무작위로 나눕니다." class="flex items-center gap-2">
                 @csrf
-                <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
+                <input type="number" name="group_count" min="1" max="{{ max(1, $exposed->count()) }}" value="{{ old('group_count', $shortLinks->count() ?: min(10, max(1, $exposed->count()))) }}" class="input text-right" style="width:86px;height:34px;font-size:var(--fs-xs);">
                 <button type="submit" class="btn btn-secondary btn-sm" @disabled($exposed->isEmpty())>{{ $shortLinks->isEmpty() ? '생성' : '다시 생성' }}</button>
             </form>
             <button type="button" class="btn btn-primary btn-sm sk-copy {{ $shortLinks->isEmpty() ? 'hidden' : '' }}" data-copy="short">전체 복사 ↵</button>
@@ -250,7 +250,7 @@
         <div class="text-error mb-3" style="font-size:var(--fs-xs);">{{ $message }}</div>
     @enderror
     @if ($shortLinksLocked)
-        <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">호출된 Short URL은 주소를 그대로 두고, 다시 생성하면 모자란 개수만 새로 만들어 키워드를 다시 나눕니다.</div>
+        <div class="text-muted-soft mb-3" style="font-size:var(--fs-xs);">다시 생성하면 기존 Short URL은 모두 지워지고 이미 공유한 주소도 더는 열리지 않아요. 입력한 개수만큼 새로 만들어 키워드를 무작위로 나눕니다.</div>
     @endif
 
     @if ($shortLinks->isNotEmpty())
