@@ -90,6 +90,30 @@ class ShopSerpTab {
     await c.tabs.update(tab.id, {active: true});
     if (tab.windowId != null) await c.windows.update(tab.windowId, {focused: true});
   }
+  // Open the same visible search challenge once; this does not release collection wait.
+  openChallenge(keyword, detection) {
+    const job = (ShopSerpTab.challengeLane || Promise.resolve()).then(() => this.openChallengeOnce(keyword, detection));
+    ShopSerpTab.challengeLane = job.catch(() => {});
+    return job;
+  }
+  async openChallengeOnce(keyword, detection) {
+    if (!detection?.captcha || !detection.evidence?.visible || await this.closed()) return;
+    const storage = this.session();
+    const saved = await storage.get(['rfSerpTabId', 'rfSerpTabKeyword', 'rfSerpChallengeOpened']);
+    if (saved.rfSerpTabKeyword !== keyword || saved.rfSerpTabId == null) return;
+    const tab = await this.browser.tabs.get(saved.rfSerpTabId);
+    if (tab.status === 'loading') return;
+    const url = new URL(tab.url);
+    if (url.protocol !== 'https:' || !/^(m\.)?search\.naver\.com$/.test(url.hostname) ||
+        url.pathname !== '/search.naver' || url.searchParams.get('query') !== keyword) return;
+    if (url.searchParams.get('ct') === '1') return;
+    const opened = saved.rfSerpChallengeOpened;
+    if (opened?.tabId === tab.id && opened.keyword === keyword) return;
+    // Persist before navigating, so redirects and service-worker restarts cannot loop.
+    await storage.set({rfSerpChallengeOpened:{tabId:tab.id,keyword}});
+    url.searchParams.set('ct', '1');
+    await this.browser.tabs.update(tab.id, {url:url.href, active:true});
+  }
   // Recovery state is durable and independent of the pacing/resume button.
   async peek(keyword) {
     if (await this.closed()) return {ok:false, tab_closed:true};
@@ -108,7 +132,10 @@ class ShopSerpTab {
         if (state && state.current !== keyword) return this.read(keyword, this.target || {});
         return {ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'};
       }
-      if (r?.captcha && r.evidence?.visible) return {ok:false,status:200,...r};
+      if (r?.captcha && r.evidence?.visible) {
+        await this.openChallenge(keyword, r).catch(() => {});
+        return {ok:false,status:200,...r};
+      }
       // Recovery state is not evidence. An ordinary/empty/unreadable page releases captcha wait.
       await storage.set({rfSerpRecovery:null});
       return {ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도',evidence:r?.evidence};
@@ -187,11 +214,12 @@ class ShopSerpTab {
         const waiting = this.beforeNavigate && await this.beforeNavigate();
         if (waiting) return waiting;
         if (this.allowOpen && !this.allowOpen()) return {ok:false,deferred:true};
+        await storage.set({rfSerpChallengeOpened:null});
         await c.tabs.update(tab.id, { url, active: false });
       } else {
         tab = await this.create({ url, active: false, pinned: false });
         this.tabId = tab.id;
-        await storage.set({ rfSerpTabId: tab.id });
+        await storage.set({ rfSerpTabId: tab.id, rfSerpChallengeOpened:null });
       }
       await storage.set({ rfSerpTabKeyword: keyword, rfSerpAnalysisId: this.analysisId });
       if (!timer) timer = setTimeout(() => finish({ ok: false, status: 0, message: '쇼핑 탭 응답 시간이 초과되었습니다.' }), this.timeoutMs);
@@ -201,8 +229,9 @@ class ShopSerpTab {
       clearTimeout(timer);
 
       if (response.captcha) {
-        // Preserve the actual challenge. Do not replace it with another search.
+        // Keep the keyword and wait; expand the same search challenge for the user.
         await this.session().set({rfSerpRecovery:{keyword,current:keyword,since:Date.now(),attempts:0}});
+        await this.openChallenge(keyword, response).catch(() => {});
         await this.focus(keyword).catch(() => {});
       }
       return response;
