@@ -66,3 +66,13 @@ test('normal page recovery closes old modal even when product read failed; newer
  ctx.captchaState('current','original',false,{ok:false,captcha:false,captcha_cleared_at:20});
  assert.equal(modal.open,true);assert.equal(waits.get('new'),'new');
 });
+test('normal recovery preserves another live gate, then respects a closed-tab pause',async()=>{
+ const {pool,data}=setup();
+ const readers=new Map([[0,{...normal,ok:false,normal_page:true}],[1,gate]]),live=new Map();
+ pool.tabFactory=slot=>({peek:async()=>readers.get(slot),hasTab:async()=>live.get(slot)!==false});
+ await pool.holdCaptcha(0,42,'normal',gate);await pool.holdCaptcha(1,42,'still blocked',gate);
+ let r=await pool.captchaGuard();assert.equal(r.captcha_wait,true);assert.equal(r.blocked_keyword,'still blocked');
+ assert.deepEqual(Object.keys(data.rfSerpCaptchaWaits),['1']);assert.equal(data.rfSerpCaptchaClearedAt,undefined);
+ live.set(1,false);r=await pool.captchaGuard();assert.equal(r.paused,true);assert.equal(r.captcha,undefined);
+ assert.equal(data.rfSerpCaptchaClearedAt,undefined);
+});
