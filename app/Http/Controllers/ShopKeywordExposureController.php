@@ -495,10 +495,12 @@ class ShopKeywordExposureController extends Controller
         return redirect()->route('admin.shop-keyword.show', $analysis)->with('status', "Short URL {$links->count()}개에 키워드를 재배정했습니다.");
     }
 
-    public function short(string $token): RedirectResponse
+    public function short(string $token)
     {
         for ($attempt = 0; $attempt < 10; $attempt++) {
-            $link = ShopKeywordShortLink::where('token', $token)->firstOrFail();
+            $link = ShopKeywordShortLink::where('token', $token)->first();
+            if (!$link) return response()->view('shop-keyword-expired', [], 410)
+                ->header('Cache-Control', 'no-store');
             $keywords = array_values(array_filter(array_map('strval', (array) $link->keywords)));
             abort_unless($keywords !== [], 404);
 
