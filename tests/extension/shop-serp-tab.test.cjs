@@ -74,7 +74,7 @@ for(const kind of ['captcha','timeout'])test('reuses tab after '+kind,async()=>{
  assert.equal((await next).ok,true);assert.deepEqual(f.counts(),{created:1,closed:0});
 });
 
-test('passive peek survives reader restart, reads only matching keyword and never navigates a gate',async()=>{
+test('passive peek survives reader restart and never repeats the initial ct challenge navigation',async()=>{
  const f=browser();let reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
  const p=reader.read('same');await new Promise(setImmediate);
  f.messages.emit({type:'__rfSerpRead',result:{ok:false,captcha:true,evidence:{visible:true,signal:'visible-challenge'},status:200}},{tab:{id:7}});await p;
@@ -84,7 +84,7 @@ test('passive peek survives reader restart, reads only matching keyword and neve
  assert.equal(await reader.peek('other'),null);assert.equal(inspections,0);
  assert.equal((await reader.peek('same')).retryable,true);solved=true;f.live.get(7).url='https://msearch.shopping.naver.com/search/all?query=same';
  assert.equal((await reader.peek('same')).ok,true);
- assert.equal(f.updates.filter(u=>u.url).length,0);assert.deepEqual(f.counts(),{created:1,closed:0});
+ assert.equal(f.updates.filter(u=>u.url).length,1);assert.equal(new URL(f.updates.find(u=>u.url).url).searchParams.get('ct'),'1');assert.deepEqual(f.counts(),{created:1,closed:0});
 });
 
 for(const kind of ['captcha','unknown','products','empty'])test('passive document probe only accepts normal results: '+kind,async()=>{
@@ -150,7 +150,7 @@ test('captcha activates the existing tab and focuses its window; missing recover
  await reader.peek('same');assert.equal(focused.at(-1).id,42);assert.equal(f.counts().created,1);
 });
 
-test('actual challenge remains in the same tab across worker restart and resume; no alternative navigation',async()=>{
+test('actual challenge opens ct once in the same tab across worker restart and resume',async()=>{
  const f=browser();let reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
  const p=reader.read('original');await new Promise(setImmediate);
  f.messages.emit({type:'__rfSerpRead',result:{ok:false,captcha:true,evidence:{visible:true},status:200}},{tab:{id:7}});
@@ -159,10 +159,10 @@ test('actual challenge remains in the same tab across worker restart and resume;
  reader=new ShopSerpTab({browser:f.c,wait:async()=>{}});
  assert.equal((await reader.read('original')).captcha,true);
  assert.equal((await reader.peek('original')).captcha,true);
- assert.equal(f.updates.filter(u=>u.url).length,0);
+ assert.equal(f.updates.filter(u=>u.url).length,1);
  f.c.tabs.sendMessage=async()=>({ok:true,products:[{id:'original'}],result_source:'integrated'});
  assert.equal((await reader.peek('original')).ok,true);
- assert.equal(f.updates.filter(u=>u.url).length,0);
+ assert.equal(f.updates.filter(u=>u.url).length,1);
 });
 
 test('solved original document is saved through policy after Continue without navigation',async()=>{
