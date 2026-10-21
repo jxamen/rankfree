@@ -38,6 +38,28 @@ class ShopKeywordAnalysis extends Model
         'keyword_target' => 'integer',
     ];
 
+    /** Keep order metadata when collectors replace their state JSON. No schema change. */
+    public function setProductCollectionAttribute($value): void
+    {
+        $previous = json_decode($this->attributes['product_collection'] ?? 'null', true) ?: [];
+        if (isset($previous['_boost']) && !isset($value['_boost'])) {
+            $value = ($value ?? []) + ['_boost' => $previous['_boost']];
+        }
+        $this->attributes['product_collection'] = $value === null ? null : json_encode($value, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function boostMeta(): array
+    {
+        return (array) ($this->product_collection['_boost'] ?? []);
+    }
+
+    public function setBoostMeta(array $meta): void
+    {
+        $state = $this->product_collection ?? ['state' => 'completed'];
+        $state['_boost'] = $meta;
+        $this->product_collection = $state;
+    }
+
     /** API work is always queued; screen work needs a recent start, heartbeat or save. */
     public function scopeBackgroundEligible(Builder $query): Builder
     {

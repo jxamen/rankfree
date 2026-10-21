@@ -44,6 +44,7 @@ class ShopKeywordApiController extends Controller
     private function storeLocked(Request $request)
     {
         $data = $request->validate([
+            'source_order' => 'nullable|string|regex:/^boosting:[0-9]+$/|max:80',
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|in:4,5',   // 외부 API 는 상위 4·5위 판정만(2026-07-29)
@@ -99,6 +100,7 @@ class ShopKeywordApiController extends Controller
                 }
             }
 
+            $this->registerRanks($existing, $data['source_order'] ?? null);
             return response()->json([
                 'analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
                 'reuse_mode' => 'reused',
@@ -129,6 +131,7 @@ class ShopKeywordApiController extends Controller
         }
 
         $analysis = $this->analyzer->prepare($request->user(), trim($data['core_keyword']), trim($data['product']), null, $opts);
+        $this->registerRanks($analysis, $data['source_order'] ?? null);
 
         // 서버는 순위를 자동으로 돌리지 않는다(2026-07-29) — 조합이 생기면 status=checking 으로 두고,
         // 요청자 계정의 확장이 /api/ext/shop-keyword/check-queue 를 폴링해 확인을 이어받는다.
@@ -147,6 +150,15 @@ class ShopKeywordApiController extends Controller
     }
 
     /** 내 분석 목록. */
+    private function registerRanks(ShopKeywordAnalysis $analysis, ?string $sourceOrder): void
+    {
+        if (!$sourceOrder) return;
+        $analysis->setBoostMeta($analysis->boostMeta() + ['source_order' => $sourceOrder]);
+        $analysis->saveQuietly();
+        app(\App\Domain\Shopping\ShopAnalysisRankRegistration::class)->safelySync($analysis);
+        $analysis->refresh();
+    }
+
     public function index(Request $request)
     {
         $perPage = min(100, max(1, (int) $request->query('per_page', 20)));
@@ -318,6 +330,8 @@ class ShopKeywordApiController extends Controller
 
         return [
             'id' => (int) $analysis->id,
+            'rank_registration' => $analysis->boostMeta()['rank_registration'] ?? null,
+            'source_order' => $analysis->boostMeta()['source_order'] ?? null,
             'core_keyword' => (string) $analysis->core_keyword,
             // 수집·저장된 상품 정보 — 확장이 채운 값이 그대로 나간다(2026-07-29)
             'product_url' => (string) $analysis->product_url,
