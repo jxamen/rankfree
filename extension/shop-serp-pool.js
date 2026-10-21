@@ -31,16 +31,26 @@ class ShopSerpPool {
       const waits = data.rfSerpCaptchaWaits || {};
       const recovered = data.rfSerpCaptchaRecoveredSlots || {};
       let cleared = false;
+      let closed = false;
       if (inspect) for (const [slot, blocked] of Object.entries(waits)) {
         let result;
-        try { result = await this.lane(Number(slot)).tab.peek(blocked.keyword); } catch (_) {}
+        const tab = this.lane(Number(slot)).tab;
+        try {
+          if (blocked.tab_closed || (tab.hasTab && !await tab.hasTab())) result = {tab_closed:true};
+          else result = await tab.peek(blocked.keyword);
+        } catch (_) {}
+        // Closing a challenge is a pause, not proof that the challenge was solved.
+        // Keep the hold until explicit continue, but never ask to solve a missing tab.
+        if (result?.tab_closed) { blocked.tab_closed = true; closed = true; continue; }
         if (result?.ok && !result.cached && ['integrated','shopping'].includes(result.result_source)) {
           delete waits[slot]; cleared = true; recovered[slot] = blocked.ip || 'browser';
         }
       }
-      if (cleared) await this.storage.set({rfSerpCaptchaWaits:waits,rfSerpCaptchaRecoveredSlots:recovered,
+      if (cleared || closed) await this.storage.set({rfSerpCaptchaWaits:waits,rfSerpCaptchaRecoveredSlots:recovered,
         ...(!Object.keys(waits).length ? {rfSerpCaptchaClearedAt:Date.now()} : {})});
-      const blocked = Object.values(waits)[0];
+      const blocked = Object.values(waits).find(wait => !wait.tab_closed);
+      if (!blocked && Object.keys(waits).length) return {ok:false,tab_closed:true,paused:true,
+        message:'수집 탭을 닫아 멈췄어요 — 이어서를 누르면 다시 시작'};
       if (!blocked) return null;
       return {ok:false,captcha:true,cooldown:true,captcha_wait:true,blocked_keyword:blocked.keyword,
         observed_at:blocked.observed_at,evidence:blocked.evidence,
