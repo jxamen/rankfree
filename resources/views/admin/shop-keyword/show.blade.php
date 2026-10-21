@@ -619,8 +619,8 @@ window.__SK = {
             waiting = false;
         }
         // Cooldown is a repeated policy wait, never a newly observed challenge.
-        if (result?.cooldown && !result.captcha_wait) return false;
-        if (result?.ok && result.captcha_cleared_at) {
+        if (result?.cooldown && !result.captcha_wait && !(result.captcha_cleared_at && !result.captcha)) return false;
+        if (result && !result.captcha && !result.captcha_wait && result.captcha_cleared_at) {
             captchaRecoveredAt = Math.max(captchaRecoveredAt, result.captcha_cleared_at);
             for (const [id, at] of captchaObserved) {
                 if (at <= captchaRecoveredAt) { captchaWaits.delete(id); captchaObserved.delete(id); }
