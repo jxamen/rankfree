@@ -27,8 +27,11 @@ test('rendered challenge only: normal results, hidden elements, login, text, ifr
   await check('<p>보안문자 captcha 보안 확인 상품 설명</p>',false);
   await check('<p>검색 결과가 없습니다</p>',false);
   await check('',false);
-  await check('<div data-shopping-block>정상 검색 상품</div>'+challenge,false,'normal-results');
+  await check('<div data-shopping-block>정상 검색 상품</div>'+challenge,true,'visible-challenge');
+  await check('<div data-shopping-block>정상 검색 상품</div>',false,'normal-results');
+  await check(challenge+'<p>'+ '상품 정보 '.repeat(1500)+'</p>',true,'visible-challenge');
   await check('<iframe src="https://captcha.naver.com/challenge" width="300" height="150"></iframe>',true,'visible-gate-iframe');
+  await check('<div data-shopping-block>정상 검색 상품</div><iframe src="https://captcha.naver.com/challenge" width="300" height="150"></iframe>',true,'visible-gate-iframe');
   await check('<iframe hidden src="https://captcha.naver.com/challenge"></iframe>',false);
   await check('<iframe style="width:0;height:0;border:0" src="https://ncpt.naver.com/a"></iframe>',false);
   await check('<iframe src="https://nid.naver.com/nidlogin.login"></iframe>',false);

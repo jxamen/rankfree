@@ -40,11 +40,13 @@ test('browser modal transitions: dismiss, repeated wait, recovery, next captcha,
   await page.evaluate(()=>focusOk=true);await page.getByRole('button',{name:'수집 탭 열기',exact:true}).click();
   assert.equal(await page.locator('#sk-captcha-stop').isVisible(),false);
   await state(5,'',false);assert.equal(await open(),false);
-  // Older parallel lane and aggregate server waits must close on success.
+  // Cached/parallel successes cannot prove the blocked documents recovered.
   await state(10,'old lane',true,{observed_at:100});
   await state(11,'other lane',true,{observed_at:110});
   await state('server','aggregate',true);
-  await state(11,'',false,{ok:true,observed_at:200});assert.equal(await open(),false);
+  await state(11,'',false,{ok:true,cached:true,observed_at:200});assert.equal(await open(),true);
+  await state(11,'',false,{ok:true,observed_at:200});assert.equal(await open(),true);
+  await state(11,'',false,{ok:true,observed_at:200,captcha_cleared_at:200});assert.equal(await open(),false);
   await state(10,'late old result',true,{observed_at:100});assert.equal(await open(),false);
   await state(10,'policy only',true,{cooldown:true,observed_at:100});assert.equal(await open(),false);
   await state(12,'new challenge',true,{observed_at:300});assert.equal(await open(),true);
@@ -52,8 +54,9 @@ test('browser modal transitions: dismiss, repeated wait, recovery, next captcha,
   await state(12,'same challenge',true,{observed_at:300});assert.equal(await open(),false);
   await state(12,'policy wait',true,{cooldown:true,observed_at:300});assert.equal(await open(),false);
   await state(13,'newer challenge',true,{observed_at:400});assert.equal(await open(),true);
-  await state(13,'',false,{ok:true,observed_at:350});assert.equal(await open(),true);
-  await state(13,'',false,{ok:true,observed_at:450});assert.equal(await open(),false);
+  await state(13,'',false,{ok:true,observed_at:350,captcha_cleared_at:350});assert.equal(await open(),true);
+  await state(13,'',false,{ok:true,observed_at:450,captcha_cleared_at:450});assert.equal(await open(),false);
+  await state(14,'blocked in another analysis',true,{captcha_wait:true,cooldown:true,observed_at:500});assert.equal(await open(),true);
 
  } finally {await browser.close();}
 });
