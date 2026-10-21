@@ -75,6 +75,9 @@ class ShopKeywordShortLinkService
             $references = $this->referenceKeywords($analysis);
             $analysis->shortLinks()->update(['keywords' => '[]', 'cursor' => 0]);
             foreach ($links->values() as $idx => $link) {
+                // A group can randomly remain equal: reload the cleared DB value
+                // so Eloquent does not omit it as an unchanged attribute.
+                $link->refresh();
                 $link->update(['group_no' => $idx + 1, 'group_count' => $links->count(),
                     'keywords' => $groups[$idx], 'reference_keywords' => $references, 'cursor' => 0]);
             }

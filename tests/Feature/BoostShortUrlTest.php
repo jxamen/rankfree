@@ -64,4 +64,34 @@ class BoostShortUrlTest extends TestCase
         try { $service->generate($a, 7); $this->fail('Invalid count accepted'); }
         catch (\DomainException) { $this->assertSame($before, $a->shortLinks()->orderBy('group_no')->get()->toArray()); }
     }
+
+    public function test_list_actions_use_current_count_and_leave_other_rows_unchanged(): void
+    {
+        $a = $this->analysis();
+        $other = $this->analysis();
+        $service = app(ShopKeywordShortLinkService::class);
+        $before = $service->generate($a, 2);
+        $otherBefore = $service->generate($other, 2)->toArray();
+        $this->actingAs($a->user)->get(route('admin.shop-keyword'))->assertOk()
+            ->assertSee('URL 재생성')->assertSee('키워드 재배정');
+        $this->postJson(route('admin.shop-keyword.short-links.store', $a), ['keep_count' => true, 'group_count' => 99])
+            ->assertOk()->assertJsonPath('short_links_count', 2)->assertJsonPath('message', '새 URL 2개');
+        $after = $a->shortLinks()->orderBy('group_no')->get();
+        $this->assertSame([], array_intersect($before->pluck('token')->all(), $after->pluck('token')->all()));
+        $this->postJson(route('admin.shop-keyword.short-links.reassign', $a))->assertOk()->assertJsonPath('message', '재배정 2개');
+        $this->assertNotSame($after->pluck('keywords')->all(), $a->shortLinks()->orderBy('group_no')->pluck('keywords')->all());
+        $this->assertSame($otherBefore, $other->shortLinks()->orderBy('group_no')->get()->toArray());
+        $this->actingAs($other->user)->postJson(route('admin.shop-keyword.short-links.reassign', $a))->assertForbidden();
+        $this->actingAs(User::factory()->create())->postJson(route('admin.shop-keyword.short-links.store', $a), ['keep_count' => true])->assertForbidden();
+    }
+
+    public function test_randomly_unchanged_group_is_written_back_after_clear(): void
+    {
+        $a = $this->analysis();
+        $links = app(ShopKeywordShortLinkService::class)->generate($a, 2);
+        $expected = [$links[0]->keywords, array_reverse($links[1]->keywords)];
+        $service = \Mockery::mock(ShopKeywordShortLinkService::class)->makePartial();
+        $service->shouldReceive('keywordGroups')->once()->andReturn($expected);
+        $this->assertSame($expected, $service->reassign($a)->pluck('keywords')->all());
+    }
 }

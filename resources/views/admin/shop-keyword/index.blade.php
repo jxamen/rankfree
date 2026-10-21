@@ -60,26 +60,38 @@
 
 <div class="text-ink font-semibold mb-2" style="font-size:var(--fs-sm);">최근 분석</div>
 @forelse ($analyses as $a)
-    <div class="card p-4 mb-2 flex items-center gap-3">
-        <a href="{{ route('admin.shop-keyword.show', $a) }}" style="flex:1;min-width:0;text-decoration:none;">
-            <div class="text-ink font-semibold" style="font-size:var(--fs-sm);">{{ $a->core_keyword }}
-                <span class="text-muted-soft font-normal" style="font-size:var(--fs-xs);">· {{ $a->product_id ? '상품 '.$a->product_id : ($a->mall_name ?: '대상 미상') }}</span>
-            </div>
-            <div class="text-muted" style="font-size:var(--fs-xs);">조합 {{ $a->combo_count }} · 확인 {{ $a->checked_count }} · 단축 URL {{ $a->short_links_count }} · <b class="text-ink">상위 {{ $a->threshold }}위 노출 {{ $a->exposed_count }}</b>
-                @if ($a->status === 'blocked')<span class="text-error">· 일부 미확인(열면 이어서 확인)</span>
-                @elseif ($a->status === 'paused')<span class="text-muted">· 중단됨("이어서 확인"으로 재개)</span>@endif
-            </div>
-            @include('admin.shop-keyword.collection', ['a' => $a])
-        </a>
-        <span class="font-mono text-muted-soft" style="font-size:var(--fs-xs);">{{ $a->created_at->timezone('Asia/Seoul')->format('m-d H:i') }}</span>
-        <form method="POST" action="{{ route('admin.shop-keyword.destroy', $a) }}"
-              data-confirm="'{{ $a->core_keyword }}' 분석을 삭제할까요?" data-confirm-text="조합·확인 결과·단축 URL이 함께 삭제되며 되돌릴 수 없습니다.">
-            @csrf @method('DELETE')
-            <button type="submit" class="btn btn-ghost btn-sm text-error">삭제</button>
-        </form>
-    </div>
+    @include('admin.shop-keyword._row', ['a' => $a])
 @empty
     <div class="card-soft p-5 text-center text-muted-soft" style="font-size:var(--fs-xs);">아직 분석이 없습니다. 위에서 핵심 키워드와 상품 URL로 시작하세요.</div>
 @endforelse
 
+<script>
+document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-short-action]');
+    if (!button || button.disabled) return;
+    const row = button.closest('[data-analysis-id]');
+    if (row.dataset.busy) return;
+    const regenerate = button.dataset.shortAction === 'regenerate';
+    const question = regenerate ? '지금 ' + button.dataset.count + '개 → 새로 ' + button.dataset.count + '개. 기존 주소는 더는 열리지 않아요. URL을 재생성할까요?' : '배정 키워드를 비우고 상위 5위 키워드를 무작위로 재배정할까요?';
+    if (!confirm(question)) return;
+    const controls = [...row.querySelectorAll('button')].map(el => [el, el.disabled]);
+    row.dataset.busy = '1'; controls.forEach(([el]) => el.disabled = true);
+    const result = row.querySelector('[data-short-result]'); result.textContent = '처리 중…';
+    try {
+        const response = await fetch(button.dataset.url, {method:'POST', credentials:'same-origin',
+            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':@json(csrf_token())},
+            body:JSON.stringify(regenerate ? {keep_count:true} : {})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || '처리하지 못했습니다.');
+        const holder = document.createElement('template'); holder.innerHTML = data.row_html.trim();
+        const replacement = holder.content.firstElementChild;
+        replacement.querySelector('[data-short-result]').textContent = data.message;
+        row.replaceWith(replacement);
+    } catch (error) {
+        result.textContent = error.message || '연결을 확인해 주세요.';
+    } finally {
+        delete row.dataset.busy; controls.forEach(([el, disabled]) => el.disabled = disabled);
+    }
+});
+</script>
 @endsection
