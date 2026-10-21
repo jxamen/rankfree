@@ -45,6 +45,8 @@ class ShopKeywordApiController extends Controller
     {
         $data = $request->validate([
             'source_order' => 'nullable|string|regex:/^boosting:[0-9]+$/|max:80',
+            'reuse_only' => 'sometimes|boolean',
+            'force_new' => 'sometimes|boolean',
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|in:4,5',   // 외부 API 는 상위 4·5위 판정만(2026-07-29)
@@ -74,7 +76,24 @@ class ShopKeywordApiController extends Controller
 
         // 같은 회원이 같은 키워드 + 같은 상품을 다시 요청하면 새로 만들지 않고 기존 분석을 돌려준다(2026-07-29).
         // 반복 호출로 같은 분석이 계속 쌓이던 문제(실측: '양말' 5건) 방지. 대상 판별은 문자열 파싱뿐이라 비용이 없다.
-        if ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
+        if (!empty($data['source_order'])) {
+            $reuse = app(\App\Domain\Shopping\ShopAnalysisReuse::class);
+            $existing = $reuse->forOrder($request->user(), $data['source_order']);
+            $mode = 'existing';
+            if (empty($data['force_new'])) {
+                if (!$existing) {
+                    $existing = $reuse->copyLatest($request->user(), $data['product'], $data['core_keyword'], $data['source_order'], $orderMeta);
+                    $mode = 'copied';
+                }
+                if ($existing) {
+                    $this->registerRanks($existing, $data['source_order']);
+                    return response()->json(['analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
+                        'reused' => true, 'reuse_mode' => $mode,
+                        'reuse_label' => $mode === 'copied' ? '재사용('.($existing->boostMeta()['source_date'] ?? '').')' : '이미 있음']);
+                }
+            }
+            if (!empty($data['reuse_only'])) return response()->json(['analysis' => null, 'reuse_mode' => 'missing', 'reuse_label' => '기존 없음']);
+        } elseif ($existing = $this->findExisting($request->user()->id, trim($data['core_keyword']), trim($data['product']))) {
             // Reused legacy analyses may have a search-derived title but no collected detail record.
             if (! $existing->product_collection && ! $existing->collectionStopped()
                 && preg_match('#^https://(?:smartstore|brand)\.naver\.com/[^/]+/products/\d+#i', (string) $existing->product_url)
@@ -131,6 +150,7 @@ class ShopKeywordApiController extends Controller
         }
 
         $analysis = $this->analyzer->prepare($request->user(), trim($data['core_keyword']), trim($data['product']), null, $opts);
+        if (!empty($data['source_order'])) $analysis->update(['product_url' => trim($data['product'])]);
         $this->registerRanks($analysis, $data['source_order'] ?? null);
 
         // 서버는 순위를 자동으로 돌리지 않는다(2026-07-29) — 조합이 생기면 status=checking 으로 두고,
@@ -164,6 +184,7 @@ class ShopKeywordApiController extends Controller
         $perPage = min(100, max(1, (int) $request->query('per_page', 20)));
 
         $rows = ShopKeywordAnalysis::where('user_id', $request->user()->id)
+            ->when($request->filled('source_order'), fn ($q) => $q->where('product_collection->_boost->source_order', $request->query('source_order')))
             ->latest('id')->paginate($perPage);
 
         $infos = $this->productInfoMap($request->user()->id, collect($rows->items())->pluck('product_id')->all());
@@ -257,6 +278,7 @@ class ShopKeywordApiController extends Controller
      */
     private function productPayload(ShopKeywordAnalysis $analysis, ?ShopProductInfo $pi = null): array
     {
+        if ($snapshot = ($analysis->boostMeta()['product_snapshot'] ?? null)) return $snapshot;
         return [
             'title' => (string) ($pi->title ?? $analysis->product_title),
             'brand' => (string) ($pi->brand ?? $analysis->brand),
@@ -330,6 +352,8 @@ class ShopKeywordApiController extends Controller
 
         return [
             'id' => (int) $analysis->id,
+            'reused_from' => $analysis->boostMeta()['reused_from'] ?? null,
+            'source_date' => $analysis->boostMeta()['source_date'] ?? null,
             'rank_registration' => $analysis->boostMeta()['rank_registration'] ?? null,
             'source_order' => $analysis->boostMeta()['source_order'] ?? null,
             'core_keyword' => (string) $analysis->core_keyword,
