@@ -83,6 +83,17 @@ class ShopKeywordApiTest extends TestCase
         ], $override);
     }
 
+    public function test_boosting_request_registers_and_reports_duplicate_without_payment(): void
+    {
+        $body = ['core_keyword' => '시험 상품', 'product' => 'https://smartstore.naver.com/test/products/999999999',
+            'source_order' => 'boosting:999999999'];
+        $first = $this->api('POST', '/api/v1/shop-keywords', $body)->assertCreated();
+        $first->assertJsonPath('analysis.rank_registration.registered', 1);
+        $this->api('POST', '/api/v1/shop-keywords', $body)->assertOk()
+            ->assertJsonPath('analysis.rank_registration.skipped', 1);
+        $this->assertSame(1, \App\Models\ShopRankSlot::where('user_id', $this->user->id)->count());
+    }
+
     public function test_scope_required(): void
     {
         [, $other] = ApiKey::issue($this->user, '스코프없음', ['rank'], null, null, null);

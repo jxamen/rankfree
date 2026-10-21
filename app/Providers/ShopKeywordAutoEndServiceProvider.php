@@ -11,6 +11,7 @@ class ShopKeywordAutoEndServiceProvider extends ServiceProvider
     {
         // Register separately: the production console routes contain protected local changes.
         $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) {
+            $schedule->command('shop-keyword:rank-sync')->everyMinute()->withoutOverlapping()->runInBackground();
             $schedule->command('shop-keyword:auto-end')->timezone('Asia/Seoul')
                 ->dailyAt('00:10')->withoutOverlapping()->runInBackground();
         });
