@@ -614,6 +614,10 @@ window.__SK = {
     const captchaStop = document.getElementById('sk-captcha-stop');
     const captchaFeedback = document.getElementById('sk-captcha-feedback');
     function captchaState(key, keyword, waiting, result = null) {
+        if (result?.tab_closed && result.paused) {
+            captchaWaits.clear(); captchaObserved.clear();
+            waiting = false;
+        }
         // Cooldown is a repeated policy wait, never a newly observed challenge.
         if (result?.cooldown && !result.captcha_wait) return false;
         if (result?.ok && result.captcha_cleared_at) {
@@ -1024,7 +1028,7 @@ window.__SK = {
                     const requestStartedAt = Date.now();
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
                     if (res?.tab_closed) {
-                        captchaState(it.id, '', false);
+                        captchaState(it.id, '', false, res);
                         if (res.paused) {
                             stopped = true;
                             if (stopBtn) { stopBtn.textContent = '이어서'; stopBtn.disabled = false; }

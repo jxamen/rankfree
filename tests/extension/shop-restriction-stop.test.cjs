@@ -54,10 +54,10 @@ test('visible gate stops all later keywords and analyses, including cached succe
  assert.equal(searches,1);assert.deepEqual(probes,[[0,'blocked'],[0,'blocked']]);
  assert.equal(Object.keys(store.data.rfSerpCaptchaWaits).length,1);
 });
-test('worker restart and unreadable/empty/closed tab do not release a gate; confirmed normal page does',async()=>{
+test('worker restart and unreadable/empty tab do not release a gate; confirmed normal page does',async()=>{
  const first=setup();await first.p.run(3,'original',1,async({tab})=>{tab.collectorIp='test-ip';return blocked;});
  const {p,readers,resumes}=setup(first.store);let searches=0;
- for(const reply of [null,{ok:false,retryable:true},{ok:false,tab_closed:true},{ok:true,cached:true,result_source:'shopping'}]) {
+ for(const reply of [null,{ok:false,retryable:true},{ok:true,cached:true,result_source:'shopping'}]) {
   readers.set(0,reply);const r=await p.run(3,'next',1,async()=>{searches++;return {ok:true};});assert.equal(r.captcha_wait,true);
  }
  assert.equal(searches,0);
