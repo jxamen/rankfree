@@ -294,7 +294,7 @@ class ShopKeywordExposureAnalyzer
             if ($status === 'target_reached') {
                 $remaining = 0;
             }
-            $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
+            $this->saveCollectionProgress($analysis, ['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
             $retryAt = null;
             if ($stopped && isset($res) && in_array($res['error'] ?? '', ['http_403', 'http_429', 'captcha', 'collector_cooldown'], true)) {
@@ -355,7 +355,7 @@ class ShopKeywordExposureAnalyzer
             if ($status === 'target_reached') {
                 $remaining = 0;
             }
-            $analysis->update(['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
+            $this->saveCollectionProgress($analysis, ['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
             return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
                 'total' => (int) $analysis->combo_count, 'blocked' => false, 'status' => $status,
@@ -612,7 +612,7 @@ class ShopKeywordExposureAnalyzer
             }
         }
 
-        $analysis->update([
+        $this->saveCollectionProgress($analysis, [
             'combo_count' => $analysis->combos()->count(),
             'checked_count' => $analysis->combos()->whereNotNull('rank')->count(),
             'exposed_count' => $analysis->combos()->whereBetween('rank', [1, $threshold])->count(),
@@ -638,9 +638,28 @@ class ShopKeywordExposureAnalyzer
     /** 순위체크 없이 현재 진행상황만 반환(락 미획득·항목 소실 시). */
     private function finishTarget(ShopKeywordAnalysis $analysis): array
     {
-        $analysis->update(['status' => 'target_reached']);
+        $this->saveCollectionProgress($analysis, ['status' => 'target_reached']);
 
         return $this->progress($analysis);
+    }
+
+    /** Publish completion and the final random assignment atomically, once per collection. */
+    private function saveCollectionProgress(ShopKeywordAnalysis $analysis, array $attributes): void
+    {
+        DB::transaction(function () use ($analysis, $attributes) {
+            $fresh = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            if ($fresh->status === 'ad_ended') {
+                $analysis->refresh();
+                return;
+            }
+            $finished = ['done', 'target_reached'];
+            if (in_array($attributes['status'] ?? '', $finished, true)
+                && ! in_array($fresh->status, $finished, true)) {
+                app(ShopKeywordShortLinkService::class)->reassignOnCompletion($fresh);
+            }
+            $fresh->update($attributes);
+            $analysis->refresh();
+        });
     }
 
     private function exposedItems(ShopKeywordAnalysis $analysis): array

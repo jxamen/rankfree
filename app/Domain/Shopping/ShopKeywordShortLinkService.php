@@ -63,15 +63,26 @@ class ShopKeywordShortLinkService
      */
     public function reassign(ShopKeywordAnalysis $analysis): Collection
     {
-        return DB::transaction(function () use ($analysis) {
+        return $this->redistribute($analysis);
+    }
+
+    /** Collection may finish with fewer words than the precreated order-period URLs. */
+    public function reassignOnCompletion(ShopKeywordAnalysis $analysis): Collection
+    {
+        return $this->redistribute($analysis, true);
+    }
+
+    private function redistribute(ShopKeywordAnalysis $analysis, bool $allowEmptyGroups = false): Collection
+    {
+        return DB::transaction(function () use ($analysis, $allowEmptyGroups) {
             $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
             $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->lockForUpdate()->get();
             if ($links->isEmpty()) {
+                if ($allowEmptyGroups) return $links;
                 throw new DomainException('재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.');
             }
             $keywords = $this->exposedKeywords($analysis);
-            $this->validateCount($keywords, $links->count());
-            $groups = $this->keywordGroups($keywords, $links->count(), $links->pluck('keywords')->all());
+            $groups = $this->keywordGroups($keywords, $links->count(), $links->pluck('keywords')->all(), $allowEmptyGroups);
             $references = $this->referenceKeywords($analysis);
             $analysis->shortLinks()->update(['keywords' => '[]', 'cursor' => 0]);
             foreach ($links->values() as $idx => $link) {
@@ -151,9 +162,10 @@ class ShopKeywordShortLinkService
     }
 
     /** 그룹 분배 — 라운드로빈(인덱스 modulo)으로 고르게 섞는다. */
-    public function keywordGroups(array $keywords, int $groupCount, array $previous = []): array
+    public function keywordGroups(array $keywords, int $groupCount, array $previous = [], bool $allowEmptyGroups = false): array
     {
-        $this->validateCount($keywords, $groupCount);
+        if (! $allowEmptyGroups) $this->validateCount($keywords, $groupCount);
+        if ($groupCount < 1 || $groupCount > 100) throw new DomainException('Short URL 개수는 1~100개여야 합니다.');
         shuffle($keywords);
         $distribute = static function (array $words) use ($groupCount) {
             $groups = array_fill(0, $groupCount, []);
