@@ -123,6 +123,7 @@ class ShopSerpTab {
     const state = saved.rfSerpRecovery;
     try {
       const tab = await this.browser.tabs.get(saved.rfSerpTabId);
+      if (tab.status === 'loading') return null;
       const url = new URL(tab.url);
       const expected = state?.current || keyword;
       if (url.searchParams.get('query') && url.searchParams.get('query') !== expected) return null;
@@ -136,9 +137,14 @@ class ShopSerpTab {
         await this.openChallenge(keyword, r).catch(() => {});
         return {ok:false,status:200,...r};
       }
-      // Recovery state is not evidence. An ordinary/empty/unreadable page releases captcha wait.
+      // Normal-document recovery is independent of successful product parsing. Unknown,
+      // loading, cached and unrelated pages cannot establish this evidence.
+      const normalPage = !r?.cached && r?.captcha === false && r.evidence?.signal === 'normal-results' &&
+        r.evidence.visible === false && url.protocol === 'https:' &&
+        /^(?:(?:m\.)?search\.naver\.com|(?:msearch|search)\.shopping\.naver\.com)$/.test(url.hostname) &&
+        url.searchParams.get('query') === expected;
       await storage.set({rfSerpRecovery:null});
-      return {ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도',evidence:r?.evidence};
+      return {ok:false,status:0,captcha:false,retryable:true,normal_page:normalPage,message:'읽기 실패 재시도',evidence:r?.evidence};
     } catch (_) {
       return {ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도 — 탭 전환 중'};
     }

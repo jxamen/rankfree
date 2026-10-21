@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const {chromium}=require('playwright');
 const event=()=>{const listeners=new Set();return {addListener:f=>listeners.add(f),removeListener:f=>listeners.delete(f),emit:(...args)=>listeners.forEach(f=>f(...args))};};
 const storage=()=>{const data={};return {get:async keys=>structuredClone(Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,data[k]]))),set:async v=>Object.assign(data,structuredClone(v))};};
-test('rendered gate -> ct opens once -> whole collector waits with zero further navigation/save -> same document recovery -> correct next item',async()=>{
+for (const recovery of ['products','normal document without readable products']) test('rendered gate -> ct once -> whole collector waits -> '+recovery+' -> correct next item',async()=>{
  const browser=await chromium.launch({headless:true});
  const ctx=await browser.newContext();
  const pages=new Map(),navigations=[],saved=[];
@@ -43,7 +43,9 @@ test('rendered gate -> ct opens once -> whole collector waits with zero further 
   for(const keyword of ['next','saved','next'])assert.equal((await run(keyword)).captcha_wait,true);
   assert.deepEqual(navigations,['saved','blocked','blocked:ct=1']);assert.equal(saved.length,1);
   // A person completed the gate; only replace the fixture DOM, no challenge-solving request.
-  const page=pages.get(1);await page.setContent(normal('blocked'));await page.evaluate(()=>{window.rfListeners=[]});
+  const page=pages.get(1);
+  await page.setContent(recovery==='products' ? normal('blocked') : '<div style="height:2300px">정상 검색 결과</div><section data-slog-container="shp_lis"><h2>네이버 쇼핑 인기상품</h2><p>상품 정보 읽기 실패 시험</p></section>');
+  await page.evaluate(()=>{window.rfListeners=[]});
   await page.addScriptTag({content:detector});await page.addScriptTag({content:nav});
   const resumed=await run('next');assert.equal(resumed.ok,true);assert.ok(resumed.captcha_cleared_at);
   assert.deepEqual(navigations,['saved','blocked','blocked:ct=1','next']);assert.equal(saved.length,2);

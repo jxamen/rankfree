@@ -11,10 +11,11 @@ globalThis.RfCaptcha = {
           (u.hostname === 'nid.naver.com' && /\/(?:captcha|ncpt)(?:\/|\.|$)/i.test(u.pathname));
       } catch (_) { return false; }
     };
-    const visible = el => {
+    const visible = (el, requireViewport = true) => {
       if (!el || !el.getClientRects().length) return false;
       const rect = el.getBoundingClientRect();
-      if (rect.width < 2 || rect.height < 2 || rect.bottom <= 0 || rect.right <= 0 || rect.top >= innerHeight || rect.left >= innerWidth) return false;
+      if (rect.width < 2 || rect.height < 2) return false;
+      if (requireViewport && (rect.bottom <= 0 || rect.right <= 0 || rect.top >= innerHeight || rect.left >= innerWidth)) return false;
       for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
         const s = getComputedStyle(n);
         if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse' || Number(s.opacity) === 0 || n.hidden || n.getAttribute('aria-hidden') === 'true') return false;
@@ -24,7 +25,8 @@ globalThis.RfCaptcha = {
     // Child frames cannot establish visibility in the parent. Inspect their iframe there.
     if (window.top !== window) return answer(false);
     if (!/(^|\.)naver\.com$/.test(location.hostname)) return answer(false);
-    const normal = [...document.querySelectorAll('[data-slog-container="shp_lis"], [data-shopping-block], [data-shp-contents-id], [class*="product_item"], [class*="productItem"], [class*="ProductItem"], #sp_nws_all, #web')].some(visible);
+    // Loaded results below the fold still prove a normal document. Hidden results do not.
+    const normal = [...document.querySelectorAll('[data-slog-container="shp_lis"], [data-shopping-block], [data-shp-contents-id], [class*="product_item"], [class*="productItem"], [class*="ProductItem"], #sp_nws_all, #web')].some(el => visible(el, false));
     const frame = [...document.querySelectorAll('iframe[src]')].find(el => gate(el.src) && visible(el));
     if (frame) {
       evidence.signal = 'visible-gate-iframe'; evidence.url_pattern = 'naver-captcha-iframe'; evidence.visible = true;

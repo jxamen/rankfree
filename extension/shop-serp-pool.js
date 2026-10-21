@@ -42,7 +42,9 @@ class ShopSerpPool {
         // Closing a challenge is a pause, not proof that the challenge was solved.
         // Keep the hold until explicit continue, but never ask to solve a missing tab.
         if (result?.tab_closed) { blocked.tab_closed = true; closed = true; continue; }
-        if (result?.ok && !result.cached && ['integrated','shopping'].includes(result.result_source)) {
+        const normalPage = result?.normal_page === true && result.captcha === false &&
+          result.evidence?.signal === 'normal-results' && result.evidence.visible === false;
+        if (!result?.cached && !result?.captcha && ((result?.ok && ['integrated','shopping'].includes(result.result_source)) || normalPage)) {
           delete waits[slot]; cleared = true; recovered[slot] = blocked.ip || 'browser';
         }
       }
