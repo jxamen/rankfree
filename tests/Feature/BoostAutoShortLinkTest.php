@@ -70,7 +70,8 @@ class BoostAutoShortLinkTest extends TestCase
         });
         $analyzer = app(ShopKeywordExposureAnalyzer::class);
         $items = [];
-        for ($i = 1; $i <= 9; $i++) $items[] = $analysis->items()->create([
+        // Leave one pending item: completion deliberately reshuffles the temporary assignment.
+        for ($i = 1; $i <= 10; $i++) $items[] = $analysis->items()->create([
             'kind' => 'combo', 'source' => 'test', 'keyword' => '키워드 '.$i]);
         foreach (array_slice($items, 0, 7) as $item) $analyzer->applyHtml($analysis, $item, '3');
         $analyzer->applyHtml($analysis, $items[7], '6');
