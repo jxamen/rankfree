@@ -84,42 +84,37 @@ class ShopKeywordShortLinkService
      */
     public function reassign(ShopKeywordAnalysis $analysis): Collection
     {
-        $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->get();
-        if ($links->isEmpty()) {
-            throw new DomainException('재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.');
-        }
-
-        $keywords = $this->exposedKeywords($analysis);
-        $groupCount = $links->count();
-        if ($keywords === []) {
-            throw new DomainException('상위 노출 키워드가 아직 없습니다. 순위 확인을 먼저 완료하세요.');
-        }
-        if ($groupCount > count($keywords)) {
-            throw new DomainException('Short URL 수가 상위 노출 키워드 수보다 많아 재배정할 수 없습니다.');
-        }
-
-        $references = $this->referenceKeywords($analysis);
-        $groups = $this->keywordGroups($keywords, $groupCount);
-
-        DB::transaction(function () use ($links, $references, $groupCount, $groups): void {
-            foreach ($links->values() as $idx => $link) {
-                $link->update([
-                    'group_no' => $idx + 1,
-                    'group_count' => $groupCount,
-                    'keywords' => $groups[$idx],
-                    'reference_keywords' => $references,
-                    'cursor' => 0,   // 회전 위치 초기화 — 새 키워드 묶음의 처음부터
-                ]);
+        return DB::transaction(function () use ($analysis) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->lockForUpdate()->get();
+            if ($links->isEmpty()) {
+                throw new DomainException('재배정할 Short URL이 없습니다. 먼저 Short URL을 생성하세요.');
             }
+            $keywords = $this->exposedKeywords($analysis);
+            $this->validateCount($keywords, $links->count());
+            $groups = $this->keywordGroups($keywords, $links->count(), $links->pluck('keywords')->all());
+            $references = $this->referenceKeywords($analysis);
+            $analysis->shortLinks()->update(['keywords' => '[]', 'cursor' => 0]);
+            foreach ($links->values() as $idx => $link) {
+                $link->update(['group_no' => $idx + 1, 'group_count' => $links->count(),
+                    'keywords' => $groups[$idx], 'reference_keywords' => $references, 'cursor' => 0]);
+            }
+            return $analysis->shortLinks()->orderBy('group_no')->get();
         });
+    }
 
-        return $analysis->shortLinks()->orderBy('group_no')->get();
+    private function validateCount(array $keywords, int $count): void
+    {
+        if ($keywords === []) throw new DomainException('상위 5위 노출 키워드가 아직 없습니다.');
+        if ($count < 1 || $count > 100 || $count > count($keywords)) {
+            throw new DomainException('Short URL 개수는 1~100개이며 상위 5위 키워드 수 이하여야 합니다.');
+        }
     }
 
     /** 노출 판정(1~threshold 위) 키워드 — 확인 순서 유지, 중복 제거. */
     public function exposedKeywords(ShopKeywordAnalysis $analysis): array
     {
-        $th = $analysis->keyword_target ? 5 : (int) $analysis->threshold;
+        $th = 5;
 
         return $analysis->combos()
             ->whereBetween('rank', [1, $th])
@@ -135,13 +130,22 @@ class ShopKeywordShortLinkService
     }
 
     /** 그룹 분배 — 라운드로빈(인덱스 modulo)으로 고르게 섞는다. */
-    public function keywordGroups(array $keywords, int $groupCount): array
+    public function keywordGroups(array $keywords, int $groupCount, array $previous = []): array
     {
-        $groups = array_fill(0, $groupCount, []);
-        foreach ($keywords as $idx => $keyword) {
-            $groups[$idx % $groupCount][] = $keyword;
+        $this->validateCount($keywords, $groupCount);
+        shuffle($keywords);
+        $distribute = static function (array $words) use ($groupCount) {
+            $groups = array_fill(0, $groupCount, []);
+            foreach ($words as $idx => $keyword) $groups[$idx % $groupCount][] = $keyword;
+            return $groups;
+        };
+        $groups = $distribute($keywords);
+        // A random draw can equal the old assignment. Make the requested change
+        // observable whenever there is more than one distinct keyword.
+        if ($groups === $previous && count($keywords) > 1) {
+            $keywords[] = array_shift($keywords);
+            $groups = $distribute($keywords);
         }
-
         return $groups;
     }
 
