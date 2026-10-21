@@ -164,6 +164,21 @@ class ShopKeywordExposureController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->filled('fresh_order_analysis')) {
+            $request->validate(['fresh_order_analysis' => 'required|integer']);
+            $source = ShopKeywordAnalysis::findOrFail($request->integer('fresh_order_analysis'));
+            abort_unless($source->user_id === $request->user()->id && $request->user()->isAdmin(), 403);
+            $meta = $source->boostMeta();
+            abort_unless(!empty($meta['source_order']), 422);
+            $apiRequest = Request::create('/api/v1/shop-keywords', 'POST', [
+                'core_keyword' => $source->core_keyword, 'product' => $source->product_url,
+                'source_order' => $meta['source_order'], 'force_new' => true,
+                'order_start_date' => $source->order_start_date, 'order_end_date' => $source->order_end_date,
+            ]);
+            $apiRequest->setUserResolver(fn () => $request->user());
+            $result = app(\App\Http\Controllers\Api\ShopKeywordApiController::class)->store($apiRequest)->getData(true);
+            return redirect()->route('admin.shop-keyword.show', $result['analysis']['id']);
+        }
         $data = $request->validate([
             'core_keyword' => 'required|string|max:600',
             'product' => 'required|string|max:500',

@@ -2,6 +2,15 @@
 @section('page-title', '쇼핑 노출 키워드 — '.$analysis->core_keyword)
 
 @section('admin-content')
+@if($sourceDate = ($analysis->boostMeta()['source_date'] ?? null))
+<div class="card-soft p-3 mb-3">이전 분석 재사용({{ $sourceDate }})
+    <form method="POST" action="{{ route('admin.shop-keyword.store') }}" data-confirm="이 주문만 새로 분석할까요?">
+        @csrf
+        <input type="hidden" name="fresh_order_analysis" value="{{ $analysis->id }}">
+        <button type="submit" class="btn btn-secondary btn-sm">새로 분석</button>
+    </form>
+</div>
+@endif
 @if($rr = ($analysis->boostMeta()['rank_registration'] ?? null))
 <p>랭크프리 등록: 등록 {{ $rr['registered'] }} · 건너뜀 {{ $rr['skipped'] }} · 실패 {{ $rr['failed'] }} {{ $rr['failed'] ? '(재시도 대기)' : '' }} · {{ $rr['at'] }}</p>
 @endif
