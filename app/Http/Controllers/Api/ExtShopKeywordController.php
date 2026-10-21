@@ -289,13 +289,41 @@ class ExtShopKeywordController extends Controller
             $attrs['delivery_fee'] = (int) $info['delivery_fee'];
         }
 
-        ShopProductInfo::updateOrCreate(
+        $savedProduct = ShopProductInfo::updateOrCreate(
             ['user_id' => $analysis->user_id, 'channel_product_id' => (string) $analysis->product_id],
             $attrs,
         );
 
         if ($productOnly) {
-            $analysis->update(['product_collection' => [...$analysis->product_collection, 'state' => 'completed', 'completed_at' => now()->toIso8601String()]]);
+            DB::transaction(function () use ($analysis, $savedProduct) {
+                $current = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+                $meta = $current->boostMeta();
+                // Imported orders read their own snapshot, not the shared product row.
+                // Refresh only the explicitly recollected order; retain its association,
+                // reuse history, ranks, short links and the other orders' snapshots.
+                if (isset($meta['product_snapshot'])) {
+                    $meta['product_snapshot'] = [
+                        'title' => (string) $savedProduct->title,
+                        'brand' => (string) ($savedProduct->brand ?? $current->brand),
+                        'mall_name' => (string) ($savedProduct->mall_name ?? $current->mall_name),
+                        'price' => (int) ($savedProduct->price ?? $current->product_price),
+                        'delivery_fee' => $savedProduct->delivery_fee,
+                        'category' => (string) ($savedProduct->category ?? ''),
+                        'thumbnail_url' => (string) ($savedProduct->thumbnail_url ?? ''),
+                        'seller_tags' => array_values((array) ($savedProduct->seller_tags ?? [])),
+                        'collected_at' => $savedProduct->collected_at?->toIso8601String(),
+                    ];
+                    $current->setBoostMeta($meta);
+                }
+                $current->update([
+                    'product_title' => $savedProduct->title,
+                    'product_price' => $savedProduct->price ?? $current->product_price,
+                    'brand' => $savedProduct->brand ?? $current->brand,
+                    'mall_name' => $savedProduct->mall_name ?? $current->mall_name,
+                    'product_collection' => [...$current->product_collection,
+                        'state' => 'completed', 'completed_at' => now()->toIso8601String()],
+                ]);
+            });
 
             return response()->json(['ok' => true, 'data' => ['analysis_id' => $analysis->id, 'status' => $analysis->status, 'check_pending' => false]]);
         }
