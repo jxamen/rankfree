@@ -85,6 +85,45 @@ class ShopKeywordShortLinkService
         });
     }
 
+    /** Start collection with stable addresses for the order period, even before any rank is known. */
+    public function ensureInitialLinks(ShopKeywordAnalysis $analysis): Collection
+    {
+        return DB::transaction(function () use ($analysis) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            if (!$analysis->shortLinks()->exists()) {
+                $domains = $this->secondaryDomains();
+                $count = max(1, min(100, (int) ($analysis->order_days ?: 5)));
+                for ($i = 0; $i < $count; $i++) {
+                    $analysis->shortLinks()->create(['token' => $this->newToken(),
+                        'domain' => $domains !== [] ? $domains[$i % count($domains)] : null,
+                        'group_no' => $i + 1, 'group_count' => $count,
+                        'keywords' => [], 'reference_keywords' => []]);
+                }
+            }
+            return $this->appendDiscoveredKeywords($analysis);
+        });
+    }
+
+    /** Append newly confirmed top-five words in discovery order; keep URLs and prior assignments. */
+    public function appendDiscoveredKeywords(ShopKeywordAnalysis $analysis): Collection
+    {
+        return DB::transaction(function () use ($analysis) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $links = $analysis->shortLinks()->orderBy('group_no')->orderBy('id')->lockForUpdate()->get();
+            if ($links->isEmpty()) return $links;
+            $assigned = $links->pluck('keywords')->flatten()->unique()->values()->all();
+            $new = array_values(array_diff($this->exposedKeywords($analysis), $assigned));
+            if ($new === []) return $links;
+            $groups = $links->pluck('keywords')->map(fn ($words) => (array) $words)->all();
+            foreach ($new as $idx => $word) $groups[(count($assigned) + $idx) % $links->count()][] = $word;
+            $references = $this->referenceKeywords($analysis);
+            foreach ($links as $idx => $link) {
+                $link->update(['keywords' => $groups[$idx], 'reference_keywords' => $references]);
+            }
+            return $links;
+        });
+    }
+
     private function validateCount(array $keywords, int $count): void
     {
         if ($keywords === []) throw new DomainException('상위 5위 노출 키워드가 아직 없습니다.');

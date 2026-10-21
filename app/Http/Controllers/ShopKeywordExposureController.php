@@ -522,7 +522,8 @@ class ShopKeywordExposureController extends Controller
             if (!$link) return response()->view('shop-keyword-expired', [], 410)
                 ->header('Cache-Control', 'no-store');
             $keywords = array_values(array_filter(array_map('strval', (array) $link->keywords)));
-            abort_unless($keywords !== [], 404);
+            if ($keywords === []) return response()->view('shop-keyword-pending', [], 200)
+                ->header('Cache-Control', 'no-store');
 
             $idx = $link->cursor % count($keywords);
             $keyword = $keywords[$idx];

@@ -47,6 +47,7 @@ class ShopKeywordApiController extends Controller
             'source_order' => 'nullable|string|regex:/^boosting:[0-9]+$/|max:80',
             'reuse_only' => 'sometimes|boolean',
             'force_new' => 'sometimes|boolean',
+            'auto_short_links' => 'sometimes|boolean',
             'core_keyword' => 'required|string|max:120',
             'product' => 'required|string|max:500',
             'threshold' => 'nullable|integer|in:4,5',   // 외부 API 는 상위 4·5위 판정만(2026-07-29)
@@ -67,6 +68,11 @@ class ShopKeywordApiController extends Controller
         if (! empty($data['order_start_date']) && ! empty($data['order_end_date'])) {
             $days = (int) CarbonImmutable::parse($data['order_start_date'])
                 ->diffInDays(CarbonImmutable::parse($data['order_end_date'])) + 1;
+            if (!empty($data['source_order']) && !empty($data['auto_short_links']) && $days > 100) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'order_end_date' => '단축 URL 자동 생성은 1~100일 주문을 지원합니다.',
+                ]);
+            }
             $orderMeta = [
                 'order_start_date' => $data['order_start_date'], 'order_end_date' => $data['order_end_date'],
                 'order_days' => $days,
@@ -87,7 +93,11 @@ class ShopKeywordApiController extends Controller
                 }
                 if ($existing) {
                     $this->registerRanks($existing, $data['source_order']);
+                    if (!empty($data['auto_short_links']) && empty($data['reuse_only']) && !in_array($existing->status, ['done', 'target_reached', 'ad_ended'])) {
+                        $this->shortLinks->ensureInitialLinks($existing);
+                    }
                     return response()->json(['analysis' => $this->payload($existing) + ['product' => $this->productPayload($existing, $this->oneProductInfo($existing))],
+                        'short_links' => $this->linkPayload($existing),
                         'reused' => true, 'reuse_mode' => $mode,
                         'reuse_label' => $mode === 'copied' ? '재사용('.($existing->boostMeta()['source_date'] ?? '').')' : '이미 있음']);
                 }
@@ -152,6 +162,9 @@ class ShopKeywordApiController extends Controller
         $analysis = $this->analyzer->prepare($request->user(), trim($data['core_keyword']), trim($data['product']), null, $opts);
         if (!empty($data['source_order'])) $analysis->update(['product_url' => trim($data['product'])]);
         $this->registerRanks($analysis, $data['source_order'] ?? null);
+        if (!empty($data['source_order']) && !empty($data['auto_short_links'])) {
+            $this->shortLinks->ensureInitialLinks($analysis);
+        }
 
         // 서버는 순위를 자동으로 돌리지 않는다(2026-07-29) — 조합이 생기면 status=checking 으로 두고,
         // 요청자 계정의 확장이 /api/ext/shop-keyword/check-queue 를 폴링해 확인을 이어받는다.
@@ -163,6 +176,7 @@ class ShopKeywordApiController extends Controller
 
         return response()->json([
             'analysis' => $this->payload($analysis) + ['product' => $this->productPayload($analysis, $this->oneProductInfo($analysis))],
+            'short_links' => $this->linkPayload($analysis),
             'reused' => false,
             'reuse_mode' => 'new',
             'reuse_label' => '새로',
