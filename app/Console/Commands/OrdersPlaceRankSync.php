@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\Order\RankTrackingExclusions;
 use App\Domain\Place\RankSlotService;
 use App\Models\MarketingOrder;
 use App\Models\User;
@@ -39,6 +40,11 @@ class OrdersPlaceRankSync extends Command
                 return ($start === '' || $start <= $today) && ($end === '' || $end >= $today);
             });
         foreach ($orders as $o) {
+            if (app(RankTrackingExclusions::class)->excludesOrder($o)) {
+                $counts['skipped']++;
+
+                continue;
+            }
             if ($o->place_rank_slot_id) {
                 $counts['linked']++;   // 주문에 이미 연결된 순위추적이 있다
 
