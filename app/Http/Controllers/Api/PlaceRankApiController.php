@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Order\RankTrackingExclusions;
 use App\Domain\Place\RankSlotService;
 use App\Http\Controllers\Controller;
 use DomainException;
@@ -23,6 +24,10 @@ class PlaceRankApiController extends Controller
             'keywords.*' => ['string', 'max:100'],
             'label' => ['nullable', 'string', 'max:100'],
         ]);
+
+        if (app(RankTrackingExclusions::class)->excludesBoostingLabel($data['label'] ?? null)) {
+            return response()->json(['slots' => [], 'excluded' => true], 201);
+        }
 
         $out = [];
         foreach (array_unique(array_filter(array_map('trim', $data['keywords']))) as $kw) {

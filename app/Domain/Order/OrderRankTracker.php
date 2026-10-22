@@ -27,6 +27,10 @@ class OrderRankTracker
 
     public function register(MarketingOrder $order): void
     {
+        if (app(RankTrackingExclusions::class)->excludesOrder($order)) {
+            return;
+        }
+
         $this->registerShop($order);
         $this->registerPlace($order);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Order\RankTrackingExclusions;
 use App\Domain\Shopping\ShopRankSlotService;
 use App\Http\Controllers\Controller;
 use DomainException;
@@ -26,6 +27,10 @@ class ShopRankApiController extends Controller
 
         // 첫 순위는 상위 20위면 즉시, 그 밖이면 확장 작업 대기열에 넣고 바로 응답(웹 요청이 40초 기다리다 503 나던 것, 2026-10-08 56008)
         config(['rankfree.shopping.worker_wait_sec' => 3]);
+
+        if (app(RankTrackingExclusions::class)->excludesBoostingLabel($data['label'] ?? null)) {
+            return response()->json(['slots' => [], 'excluded' => true], 201);
+        }
 
         $out = [];
         foreach (array_unique(array_filter(array_map('trim', $data['keywords']))) as $kw) {

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\Order\RankTrackingExclusions;
 use App\Domain\Shopping\ShopRankSlotService;
 use App\Models\MarketingOrder;
 use App\Models\User;
@@ -40,6 +41,11 @@ class OrdersShopRankSync extends Command
                 return ($start === '' || $start <= $today) && ($end === '' || $end >= $today);
             });
         foreach ($orders as $o) {
+            if (app(RankTrackingExclusions::class)->excludesOrder($o)) {
+                $counts['skipped']++;
+
+                continue;
+            }
             $src = $o->shopKeywordSource();
             if (! $src || trim((string) $src['keyword']) === '' || trim((string) $src['url']) === '') {
                 $counts['skipped']++;
