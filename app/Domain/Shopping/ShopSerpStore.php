@@ -3,6 +3,7 @@
 namespace App\Domain\Shopping;
 
 use App\Domain\Keyword\KeywordMasterSync;
+use App\Jobs\RefreshShopProductSummary;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -95,12 +96,20 @@ class ShopSerpStore
             DB::table('keyword_shop_ranks')->insert($chunk);
         }
 
-        app(ShopProductSummary::class)->refresh(array_merge($oldKeys, array_keys($prod)));
+        $this->refreshSummaries(array_merge($oldKeys, array_keys($prod)));
 
         // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
         app(KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
 
         return count($rows);
+    }
+
+    /** Keep expensive derived-index writes outside the collector HTTP timeout. */
+    private function refreshSummaries(array $keys): void
+    {
+        foreach (array_chunk(array_values(array_unique($keys)), 300) as $chunk) {
+            RefreshShopProductSummary::dispatch($chunk)->afterCommit();
+        }
     }
 
     /**
@@ -197,7 +206,7 @@ class ShopSerpStore
         $query = DB::table('keyword_shop_ranks')->where('keyword', $keyword)->where('collected_month', $month);
         $keys = (clone $query)->pluck('product_key')->all();
         $deleted = $query->delete();
-        app(ShopProductSummary::class)->refresh($keys);
+        $this->refreshSummaries($keys);
 
         return $deleted;
     }
@@ -208,7 +217,7 @@ class ShopSerpStore
         if (DB::connection()->getDriverName() !== 'mysql') {
             $keys = DB::table('keyword_shop_ranks')->where('collected_month', $month)->pluck('product_key')->all();
             $deleted = DB::table('keyword_shop_ranks')->where('collected_month', $month)->delete();
-            app(ShopProductSummary::class)->refresh($keys);
+            $this->refreshSummaries($keys);
 
             return $deleted.'행 삭제';
         }
@@ -222,7 +231,7 @@ class ShopSerpStore
         }
         DB::statement("ALTER TABLE keyword_shop_ranks DROP PARTITION {$p}");
         DB::table('shop_product_summaries')->where('collected_month', $month)->select('product_key')
-            ->chunkById(300, fn ($rows) => app(ShopProductSummary::class)->refresh($rows->pluck('product_key')->all()), 'product_key');
+            ->chunkById(300, fn ($rows) => $this->refreshSummaries($rows->pluck('product_key')->all()), 'product_key');
 
         return "파티션 {$p} 삭제";
     }

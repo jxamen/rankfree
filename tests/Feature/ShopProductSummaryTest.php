@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Domain\Shopping\ShopSerpStore;
 use App\Http\Controllers\Admin\ShopProductController;
+use App\Jobs\RefreshShopProductSummary;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class ShopProductSummaryTest extends TestCase
@@ -96,6 +98,21 @@ class ShopProductSummaryTest extends TestCase
         $this->assertEquals(2, DB::table('shop_product_summaries')->count());
         DB::table('keyword_shop_ranks')->delete();
         $this->artisan('shop-products:refresh-summaries')->assertSuccessful();
+        $this->assertEquals(0, DB::table('shop_product_summaries')->count());
+    }
+
+    public function test_collection_queues_bounded_refreshes_after_commit(): void
+    {
+        Queue::fake();
+        app(ShopSerpStore::class)->save('batch', array_map(fn ($id) => $this->product($id), range(1, 650)));
+        Queue::assertPushed(RefreshShopProductSummary::class, 3);
+        $total = 0;
+        foreach (Queue::pushed(RefreshShopProductSummary::class) as $job) {
+            $this->assertLessThanOrEqual(300, count($job->keys));
+            $this->assertTrue($job->afterCommit);
+            $total += count($job->keys);
+        }
+        $this->assertEquals(650, $total);
         $this->assertEquals(0, DB::table('shop_product_summaries')->count());
     }
 }

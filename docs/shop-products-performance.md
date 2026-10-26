@@ -6,7 +6,7 @@ shop_product_summaries is an additive, rebuildable index. It contains one row pe
 
 The page uses simplePaginate(100): no total count, previous/next navigation, an ascending No column and a displayed range in the existing total badge. Visible product columns and filter meanings remain unchanged. Title search retains literal substring semantics; for MariaDB it scans the clustered month range rather than doing random lookups through a sort index. Search still requires a scan and must be remeasured if the dataset grows substantially.
 
-ShopSerpStore updates summaries after collection, replacement, month deletion and partition deletion, including products removed from a keyword. A daily 04:40 reconciliation repairs direct writes or interrupted collectors. Refresh locks product rows in sorted order and replaces each bounded batch transactionally. Concurrent readers see the previous or new committed batch. An interrupted rebuild is safe to rerun.
+ShopSerpStore queues bounded 300-key summary refresh jobs after collection, replacement, month deletion and partition deletion, including products removed from a keyword. Jobs are dispatched after commit, retry three times, and use the existing default database queue. This keeps index writes outside the 15-second collector HTTP limit; list summaries are eventually consistent (normally one worker polling interval plus processing time). A daily 04:40 reconciliation repairs direct writes or interrupted collectors. Refresh locks product rows in sorted order and replaces each bounded batch transactionally. Concurrent readers see the previous or new committed batch. An interrupted rebuild is safe to rerun.
 
 ## Deployment
 
