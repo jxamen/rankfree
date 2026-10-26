@@ -31,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->callAfterResolving(\Illuminate\Console\Scheduling\Schedule::class, function ($schedule) {
+            $schedule->command('shop-products:refresh-options')->everyFiveMinutes()->withoutOverlapping(5);
             $schedule->command('shop-products:refresh-summaries')->dailyAt('04:40')->withoutOverlapping(120);
         });
 
