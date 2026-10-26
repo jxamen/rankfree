@@ -2,6 +2,8 @@
 
 namespace App\Domain\Shopping;
 
+use App\Domain\Keyword\KeywordMasterSync;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -92,7 +94,7 @@ class ShopSerpStore
         }
 
         // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
-        app(\App\Domain\Keyword\KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
+        app(KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
 
         return count($rows);
     }
@@ -139,15 +141,28 @@ class ShopSerpStore
     /** 키워드의 수집분(상품 조인) — month 미지정이면 최신 월. */
     public function items(string $keyword, ?int $month = null)
     {
-        $month ??= DB::table('keyword_shop_ranks')->where('keyword', $keyword)->max('collected_month');
+        $month ??= $this->latestMonth($keyword);
         if (! $month) {
             return collect();
         }
 
+        return $this->itemsQuery($keyword, $month)->get();
+    }
+
+    public function latestMonth(string $keyword): ?int
+    {
+        $month = DB::table('keyword_shop_ranks')->where('keyword', $keyword)->max('collected_month');
+
+        return $month ? (int) $month : null;
+    }
+
+    /** 어드민과 외부 API가 같은 컬럼·순서로 조회한다. */
+    public function itemsQuery(string $keyword, int $month): Builder
+    {
         return DB::table('keyword_shop_ranks as r')
             ->join('shop_products as p', 'p.product_key', '=', 'r.product_key')
             ->where('r.keyword', $keyword)->where('r.collected_month', $month)
-            ->orderBy('r.rnk')
+            ->orderBy('r.rnk')->orderBy('r.id')
             ->select(
                 'r.rnk',
                 'r.collected_at',
@@ -162,8 +177,7 @@ class ShopSerpStore
                 'p.talk_id',
                 'p.link',
                 'p.product_key',
-            )
-            ->get();
+            );
     }
 
     /** 수집된 월 목록(최신순). */
