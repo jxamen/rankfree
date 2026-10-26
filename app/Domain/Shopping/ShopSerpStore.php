@@ -3,6 +3,7 @@
 namespace App\Domain\Shopping;
 
 use App\Domain\Keyword\KeywordMasterSync;
+use App\Jobs\RefreshShopProductSummary;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -87,16 +88,28 @@ class ShopSerpStore
             DB::table('shop_malls')->upsert(array_values($malls), ['mall_name'], ['seen_at', 'updated_at']);
         }
 
+        $oldKeys = DB::table('keyword_shop_ranks')->where('keyword', $keyword)->where('collected_month', $month)->pluck('product_key')->all();
+
         // 이번 달 매핑 교체(같은 달 재수집이면 갱신)
         DB::table('keyword_shop_ranks')->where('keyword', $keyword)->where('collected_month', $month)->delete();
         foreach (array_chunk($rows, 500) as $chunk) {
             DB::table('keyword_shop_ranks')->insert($chunk);
         }
 
+        $this->refreshSummaries(array_merge($oldKeys, array_keys($prod)));
+
         // 목록의 '수집일' 필터·정렬은 키워드 마스터 인덱스를 탄다 — 수집 즉시 반영
         app(KeywordMasterSync::class)->touchSerp($keyword, 'shopping', count($rows));
 
         return count($rows);
+    }
+
+    /** Keep expensive derived-index writes outside the collector HTTP timeout. */
+    private function refreshSummaries(array $keys): void
+    {
+        foreach (array_chunk(array_values(array_unique($keys)), 300) as $chunk) {
+            RefreshShopProductSummary::dispatch($chunk)->afterCommit();
+        }
     }
 
     /**
@@ -190,14 +203,23 @@ class ShopSerpStore
     /** 특정 월 수집분 삭제(키워드 단위) — 상품 마스터는 남긴다. */
     public function deleteMonth(string $keyword, int $month): int
     {
-        return DB::table('keyword_shop_ranks')->where('keyword', $keyword)->where('collected_month', $month)->delete();
+        $query = DB::table('keyword_shop_ranks')->where('keyword', $keyword)->where('collected_month', $month);
+        $keys = (clone $query)->pluck('product_key')->all();
+        $deleted = $query->delete();
+        $this->refreshSummaries($keys);
+
+        return $deleted;
     }
 
     /** 월 전체 정리 — MariaDB 는 파티션 DROP(즉시). */
     public function dropMonth(int $month): string
     {
         if (DB::connection()->getDriverName() !== 'mysql') {
-            return DB::table('keyword_shop_ranks')->where('collected_month', $month)->delete().'행 삭제';
+            $keys = DB::table('keyword_shop_ranks')->where('collected_month', $month)->pluck('product_key')->all();
+            $deleted = DB::table('keyword_shop_ranks')->where('collected_month', $month)->delete();
+            $this->refreshSummaries($keys);
+
+            return $deleted.'행 삭제';
         }
         $p = 'p'.$month;
         $ex = DB::selectOne(
@@ -208,6 +230,8 @@ class ShopSerpStore
             return '해당 월 파티션 없음';
         }
         DB::statement("ALTER TABLE keyword_shop_ranks DROP PARTITION {$p}");
+        DB::table('shop_product_summaries')->where('collected_month', $month)->select('product_key')
+            ->chunkById(300, fn ($rows) => $this->refreshSummaries($rows->pluck('product_key')->all()), 'product_key');
 
         return "파티션 {$p} 삭제";
     }

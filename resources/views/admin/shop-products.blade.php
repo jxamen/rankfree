@@ -48,7 +48,7 @@
         @endif
 
         <span class="text-muted ml-auto flex-none" style="font-size:var(--fs-xs);">
-            <b class="font-mono text-ink">{{ number_format($total) }}</b>개
+            <b class="font-mono text-ink">{{ number_format($items->firstItem() ?? 0) }}–{{ number_format($items->lastItem() ?? 0) }}</b>개 표시
         </span>
     </form>
 
@@ -81,7 +81,7 @@
                     @php $info = $storeId !== '' ? ($sellerInfoMap[$storeId] ?? null) : null; $hasInfo = (bool) $info; @endphp
                     <tr style="border-bottom:1px solid var(--color-hairline-soft);">
                         <td style="padding:7px 6px;text-align:right;" class="font-mono text-muted-soft">
-                            {{ number_format($items->total() - ($items->firstItem() - 1) - $loop->index) }}
+                            {{ number_format($items->firstItem() + $loop->index) }}
                         </td>
                         <td style="padding:7px 6px;max-width:460px;">
                             @if (!empty($p->link))
