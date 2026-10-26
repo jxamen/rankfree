@@ -30,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->callAfterResolving(\Illuminate\Console\Scheduling\Schedule::class, function ($schedule) {
+            $schedule->command('shop-products:refresh-summaries')->dailyAt('04:40')->withoutOverlapping(120);
+        });
+
         // 상대 시간(diffForHumans) 한글 표기 — "2 days ago" → "2일 전"
         Carbon::setLocale('ko');
 

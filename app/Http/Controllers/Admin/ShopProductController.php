@@ -32,30 +32,37 @@ class ShopProductController extends Controller
 
         $like = fn (string $s) => '%'.addcslashes($s, '\\%_').'%';
 
-        // 상품별 집계(노출 키워드 수·최고 순위·최근 수집일)를 매핑에서 만든다.
-        // 월 필터가 걸리면 그 달 매핑만 본다(파티션 프루닝).
-        $agg = DB::table('keyword_shop_ranks')
-            ->selectRaw('product_key, COUNT(DISTINCT keyword) as kw_cnt, MIN(rnk) as best_rnk, MAX(collected_at) as last_at')
-            ->when($month, fn ($x) => $x->where('collected_month', $month))
-            ->groupBy('product_key');
-
-        $base = fn () => DB::table('shop_products as p')
-            ->joinSub($agg, 'a', 'a.product_key', '=', 'p.product_key')
+        // Month 0 is the cross-month DISTINCT summary, maintained outside list requests.
+        $base = fn () => DB::table('shop_product_summaries as p')
+            ->where('p.collected_month', $month)
+            // Substring search must scan: keep that scan sequential, not random sort-index lookups.
+            ->when($q !== '' && DB::connection()->getDriverName() === 'mysql', fn ($x) => $x->forceIndex('PRIMARY'))
             ->when($q !== '', fn ($x) => $x->where('p.title', 'like', $like($q)))
             ->when($mall !== '', fn ($x) => $x->where('p.mall_name', $mall))
             ->when($ad === 'y', fn ($x) => $x->where('p.is_ad', true))
             ->when($ad === 'n', fn ($x) => $x->where('p.is_ad', false))
-            ->when($talk === 'y', fn ($x) => $x->whereNotNull('p.talk_id')->where('p.talk_id', '!=', ''));
+            ->when($talk === 'y', fn ($x) => $x->where('p.has_talk', true));
 
         $items = $base()
-            ->select('p.product_key', 'p.title', 'p.price', 'p.mall_name', 'p.store_id', 'p.talk_id', 'p.link', 'p.is_ad',
-                'a.kw_cnt', 'a.best_rnk', 'a.last_at')
-            ->when($sort === 'recent', fn ($x) => $x->orderByDesc('a.last_at'))
-            ->when($sort === 'kw', fn ($x) => $x->orderByDesc('a.kw_cnt')->orderByDesc('a.last_at'))
+            ->select('p.product_key', 'p.title', 'p.price', 'p.mall_name', 'p.is_ad',
+                'p.kw_cnt', 'p.best_rnk', 'p.last_at')
+            ->when($sort === 'recent', fn ($x) => $x->orderByDesc('p.last_at'))
+            ->when($sort === 'kw', fn ($x) => $x->orderByDesc('p.kw_cnt')->orderByDesc('p.last_at'))
             ->when($sort === 'price_high', fn ($x) => $x->orderByDesc('p.price'))
             ->when($sort === 'price_low', fn ($x) => $x->orderBy('p.price'))
             ->when($sort === 'title', fn ($x) => $x->orderBy('p.title'))
-            ->paginate(100)->withQueryString();
+            ->orderBy('p.product_key', in_array($sort, ['recent', 'kw', 'price_high']) ? 'desc' : 'asc')
+            ->simplePaginate(100)->withQueryString();
+
+        // Fetch large/detail columns only for the visible page.
+        $details = DB::table('shop_products')->whereIn('product_key', collect($items->items())->pluck('product_key'))
+            ->get(['product_key', 'store_id', 'talk_id', 'link'])->keyBy('product_key');
+        foreach ($items as $item) {
+            $detail = $details->get($item->product_key);
+            $item->store_id = $detail?->store_id;
+            $item->talk_id = $detail?->talk_id;
+            $item->link = $detail?->link;
+        }
 
         // 어떤 키워드로 걸렸는지 — 보이는 상품 것만(목록당 100개라 가볍다)
         $keys = collect($items->items())->pluck('product_key')->all();
@@ -100,11 +107,6 @@ class ShopProductController extends Controller
                 ->groupBy('mall_name')->orderByDesc('c')->limit(50)->pluck('c', 'mall_name')->all()),
             'months' => Cache::remember('shop_products:months', 300, fn () => DB::table('keyword_shop_ranks')
                 ->distinct()->orderByDesc('collected_month')->pluck('collected_month')->all()),
-            // 총계는 필터 조합별 5분 캐시(상품이 늘면 count 가 무거워진다)
-            'total' => Cache::remember(
-                'shop_products:total:'.md5(implode('|', [$q, $mall, $ad, $talk, $month])), 300,
-                fn () => $base()->count()
-            ),
         ]);
     }
 
