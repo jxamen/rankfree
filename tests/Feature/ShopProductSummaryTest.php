@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ShopProductController;
 use App\Jobs\RefreshShopProductSummary;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -121,6 +122,22 @@ class ShopProductSummaryTest extends TestCase
         app(ShopSerpStore::class)->save('one', [$this->product(1)]);
         $this->data();
         $this->travel(6)->minutes();
+        DB::enableQueryLog();
+        $data = $this->data(['q' => 'Product']);
+        $this->assertArrayHasKey('Mall 1', $data['malls']);
+        $this->assertSame([(int) now()->format('Ym')], array_map('intval', $data['months']));
+        foreach (DB::getQueryLog() as $query) {
+            $this->assertStringNotContainsString('group by', strtolower($query['query']));
+            $this->assertStringNotContainsString('distinct', strtolower($query['query']));
+        }
+        DB::disableQueryLog();
+    }
+
+    public function test_persisted_options_survive_empty_cache_without_aggregation(): void
+    {
+        app(ShopSerpStore::class)->save('one', [$this->product(1)]);
+        $this->artisan('shop-products:refresh-options')->assertSuccessful();
+        Cache::flush();
         DB::enableQueryLog();
         $data = $this->data(['q' => 'Product']);
         $this->assertArrayHasKey('Mall 1', $data['malls']);
