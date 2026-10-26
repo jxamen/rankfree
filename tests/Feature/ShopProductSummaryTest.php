@@ -115,4 +115,20 @@ class ShopProductSummaryTest extends TestCase
         $this->assertEquals(650, $total);
         $this->assertEquals(0, DB::table('shop_product_summaries')->count());
     }
+
+    public function test_expired_filter_options_are_refreshed_after_response(): void
+    {
+        app(ShopSerpStore::class)->save('one', [$this->product(1)]);
+        $this->data();
+        $this->travel(6)->minutes();
+        DB::enableQueryLog();
+        $data = $this->data(['q' => 'Product']);
+        $this->assertArrayHasKey('Mall 1', $data['malls']);
+        $this->assertSame([(int) now()->format('Ym')], array_map('intval', $data['months']));
+        foreach (DB::getQueryLog() as $query) {
+            $this->assertStringNotContainsString('group by', strtolower($query['query']));
+            $this->assertStringNotContainsString('distinct', strtolower($query['query']));
+        }
+        DB::disableQueryLog();
+    }
 }
