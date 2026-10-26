@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ExtShopKeywordController;
 use App\Http\Controllers\Api\ExtShoppingSeoController;
 use App\Http\Controllers\Api\ExtShopRankController;
 use App\Http\Controllers\Api\KeywordController;
+use App\Http\Controllers\Api\KeywordProductsController;
 use App\Http\Controllers\Api\KeywordSuggestController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\PlaceRankApiController;
@@ -145,6 +146,9 @@ Route::prefix('v1')->group(function (): void {
     // 키워드분석 — 경량(scope: keyword)과 상세(scope: keyword_detail)를 분리 제공
     Route::middleware('auth.apikey:keyword')->get('/keyword', [KeywordController::class, 'show']);
     Route::middleware('auth.apikey:keyword_detail')->get('/keyword/detail', [KeywordController::class, 'detail']);
+
+    Route::get('/keyword/products', [KeywordProductsController::class, 'index'])
+        ->middleware(['auth.apikey:keyword', 'throttle:60,1']);
 
     // 마케팅 상품 주문 (scope: order) — 상품 조회·주문 생성·상태 조회. 웹 주문과 동일 로직(OrderPlacer)
     Route::middleware('auth.apikey:order')->group(function (): void {
