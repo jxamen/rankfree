@@ -102,10 +102,10 @@ class ShopProductController extends Controller
             'sellerInfoMap' => $sellerInfoMap,
             'q' => $q, 'mall' => $mall, 'ad' => $ad, 'talk' => $talk, 'month' => $month, 'sort' => $sort,
             // 필터 후보 — 판매처가 많아질 수 있어 상위만(캐시)
-            'malls' => Cache::remember('shop_products:malls', 300, fn () => DB::table('shop_products')
+            'malls' => Cache::flexible('shop_products:malls', [300, 86400], fn () => DB::table('shop_products')
                 ->whereNotNull('mall_name')->selectRaw('mall_name, count(*) as c')
                 ->groupBy('mall_name')->orderByDesc('c')->limit(50)->pluck('c', 'mall_name')->all()),
-            'months' => Cache::remember('shop_products:months', 300, fn () => DB::table('keyword_shop_ranks')
+            'months' => Cache::flexible('shop_products:months', [300, 86400], fn () => DB::table('shop_product_summaries')->where('collected_month', '>', 0)
                 ->distinct()->orderByDesc('collected_month')->pluck('collected_month')->all()),
         ]);
     }
