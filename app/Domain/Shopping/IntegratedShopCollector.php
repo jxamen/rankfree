@@ -14,7 +14,7 @@ class IntegratedShopCollector
     {
         // File store is shared by all PHP workers on this single production server.
         $cache = Cache::store('file');
-        $key = 'integrated-shop:v1:'.hash('sha256', $device."\0".$keyword);
+        $key = 'integrated-shop:v2:'.hash('sha256', $device."\0".$keyword);
         if ($value = $cache->get($key)) {
             return $value + ['cached' => true];
         }

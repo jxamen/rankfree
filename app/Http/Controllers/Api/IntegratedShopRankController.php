@@ -33,15 +33,19 @@ class IntegratedShopRankController extends Controller
                     $stopped = $data['status'];
                 }
                 $matches = array_values(array_filter($data['items'], fn ($item) => ($item[$input['target']['type']] ?? null) === trim($input['target']['value'])));
+                $success = in_array($data['status'], ['ok', 'area_absent'], true);
+                $data['received_count'] = $success ? count($data['items']) : null;
                 $data['matches'] = $matches;
                 $data['rank'] = $matches[0]['rank'] ?? null;
                 $organic = array_column(array_filter($matches, fn ($m) => $m['organic_rank'] !== null), 'organic_rank');
                 $data['organic_rank'] = $organic ? min($organic) : null;
                 $data['is_ad'] = $matches[0]['is_ad'] ?? null;
                 $rank = $data[$input['rank_by'] ?? 'rank'];
+                $data['rank_status'] = ! $success ? 'collection_failed' : ($matches ? 'found' : 'outside');
+                $data['rank_label'] = ! $success ? null : ($data['rank'] !== null ? $data['rank'].'위' : $data['received_count'].'위 밖');
                 $qualifies = $qualifies || ($rank !== null && $rank <= ($input['top'] ?? PHP_INT_MAX));
                 $row[$device] = $data;
-                if ($data['status'] !== 'ok') {
+                if (! $success) {
                     $errors[] = ['keyword' => $keyword, 'device' => $device, 'status' => $data['status']];
                 }
             }

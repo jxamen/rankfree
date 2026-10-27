@@ -25,7 +25,7 @@ class IntegratedShopRankTest extends TestCase
 
     private function html(?array $slots = null): string
     {
-        $card = ['nvMid' => '123', 'productName' => '<mark>상품</mark> "};" \\ test', 'sourceType' => 'AD', 'cardType' => 'AD_CARD', 'mallName' => '몰', 'productUrl' => ['pcUrl' => 'https://example.com/product', 'mobileUrl' => 'https://example.com/mobile']];
+        $card = ['rank' => 91, 'nvMid' => '123', 'productName' => '<mark>상품</mark> "};" \\ test', 'sourceType' => 'AD', 'cardType' => 'AD_CARD', 'mallName' => '몰', 'productUrl' => ['pcUrl' => 'https://example.com/product', 'mobileUrl' => 'https://example.com/mobile']];
         $slots ??= [['slotType' => 'CARD', 'data' => $card], ['slotType' => 'HORIZONTAL_LIST', 'data' => [array_replace($card, ['sourceType' => 'SUPER_POINT', 'cardType' => 'SUPER_POINT_CARD']), array_replace($card, ['nvMid' => '456', 'sourceType' => 'SAS', 'cardType' => 'PRODUCT_CARD']), array_replace($card, ['nvMid' => '789', 'sourceType' => 'AITEMS_FORYOU_AD'])]]];
 
         return '<script>naver.search.ext.newshopping["shopping"]._INITIAL_STATE='.json_encode(['areaCode' => 'shp_gui', 'initProps' => ['pagedSlot' => [['page' => 1, 'slots' => $slots]]]]).'; other();</script>';
@@ -53,16 +53,21 @@ class IntegratedShopRankTest extends TestCase
         $this->assertSame('ok', $parser->parse(str_replace('shp_gui', 'shp_dig', $this->html()))['status']);
     }
 
-    public function test_preloaded_next_pages_do_not_change_initial_ranks(): void
+    public function test_all_pages_preserve_boundaries_and_source_ranks(): void
     {
         $html = $this->html();
         $start = strpos($html, '=') + 1;
         $state = json_decode(substr($html, $start, strpos($html, '; other();') - $start), true, 512, JSON_THROW_ON_ERROR);
         $state['areaCode'] = 'shp_fnd';
-        $state['initProps']['pagedSlot'][] = ['page' => 2, 'slots' => [['slotType' => 'UNKNOWN']]];
+        $state['initProps']['pagedSlot'][] = ['page' => 2, 'slots' => $state['initProps']['pagedSlot'][0]['slots']];
         $result = app(IntegratedShopParser::class)->parse('<script>naver.search.ext.newshopping.shopping._INITIAL_STATE='.json_encode($state).';</script>');
         $this->assertSame('ok', $result['status']);
-        $this->assertCount(4, $result['items']);
+        $this->assertCount(8, $result['items']);
+        $this->assertSame([1, 1, 1, 1, 2, 2, 2, 2], array_column($result['items'], 'page'));
+        $this->assertSame([1, 2, 3, 4, 1, 2, 3, 4], array_column($result['items'], 'position'));
+        $this->assertSame(range(1, 8), array_column($result['items'], 'rank'));
+        $this->assertSame([null, 1, 2, null, null, 3, 4, null], array_column($result['items'], 'organic_rank'));
+        $this->assertSame(array_fill(0, 8, 91), array_column($result['items'], 'source_rank'));
         $this->assertSame('parse_failed', app(IntegratedShopParser::class)->parse('')['status']);
     }
 
@@ -102,7 +107,13 @@ class IntegratedShopRankTest extends TestCase
         Http::assertNothingSent();
         $lock->release();
         Http::fake(['*' => Http::response('error', 500)]);
-        $this->postJson('/_integrated-test', ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '123']])->assertOk()->assertJsonPath('data.0.pc.rank', null)->assertJsonPath('data.0.pc.status', 'fetch_failed');
+        $this->postJson('/_integrated-test', ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '123']])->assertOk()->assertJsonPath('data.0.pc.rank', null)->assertJsonPath('data.0.pc.status', 'fetch_failed')->assertJsonPath('data.0.pc.received_count', null)->assertJsonPath('data.0.pc.rank_status', 'collection_failed')->assertJsonPath('data.0.pc.rank_label', null);
+    }
+
+    public function test_successful_absence_reports_actual_count(): void
+    {
+        Http::fake(['*' => Http::response($this->html())]);
+        $this->postJson('/_integrated-test', ['keywords' => ['absent'], 'target' => ['type' => 'nvMid', 'value' => 'missing']])->assertOk()->assertJsonPath('data.0.mobile.received_count', 4)->assertJsonPath('data.0.mobile.rank_status', 'outside')->assertJsonPath('data.0.mobile.rank_label', '4위 밖')->assertJsonCount(0, 'errors');
     }
 
     public function test_top_and_organic_matching_and_validation(): void
