@@ -27,8 +27,6 @@ class StoreBizInfoController extends Controller
         $cutoff = now()->subDays($days);
         // Select one product per store, and the same latest seller row the admin screen uses.
         $stores = DB::table('shop_products')->select('store_id')->selectRaw('MIN(product_key) as product_key')
-            ->selectRaw("MAX(NULLIF(mall_name, '')) as store_name")
-            ->selectRaw("MAX(CASE WHEN link LIKE 'https://brand.naver.com/%' OR link LIKE 'http://brand.naver.com/%' THEN link END) as brand_link")
             ->whereNotNull('store_id')->where('store_id', '<>', '')
             ->when(isset($input['store_id']), fn ($q) => $q->where('store_id', $input['store_id']))
             ->when(isset($input['after_store_id']), fn ($q) => $q->where('store_id', '>', $input['after_store_id']))
@@ -46,18 +44,27 @@ class StoreBizInfoController extends Controller
                 }
             })
             ->orderBy('stores.store_id')->limit($limit + 1)
-            ->get(['stores.store_id', 'stores.brand_link', 'stores.store_name', 'p.product_key', 'p.channel_uid', 'p.channel_id', 'p.channel_no', 'p.mall_name', 'p.link',
+            ->get(['stores.store_id', 'p.product_key', 'p.channel_uid', 'p.channel_id', 'p.channel_no', 'p.mall_name', 'p.link',
                 's.id as seller_info_id', 's.captured_at', 's.biz_name', 's.biz_reg_no', 's.representative', 's.address']);
         $hasMore = $rows->count() > $limit;
-        $items = $rows->take($limit)->map(function ($row) {
+        // Enrich only the current page. Aggregating URL/name text across the entire
+        // product corpus defeats the cheap store cursor query on production MySQL.
+        $details = DB::table('shop_products')->whereIn('store_id', $rows->take($limit)->pluck('store_id'))
+            ->select('store_id')->selectRaw("MAX(NULLIF(mall_name, '')) as store_name")
+            ->selectRaw("MAX(CASE WHEN link LIKE 'https://brand.naver.com/%' OR link LIKE 'http://brand.naver.com/%' THEN link END) as brand_link")
+            ->groupBy('store_id')->get()->keyBy('store_id');
+        $items = $rows->take($limit)->map(function ($row) use ($details) {
+            $detail = $details->get($row->store_id);
+            $row->store_name = $detail?->store_name;
+
             $missing = array_values(array_filter(['biz_name', 'biz_reg_no', 'representative', 'address'], fn ($f) => ! $row->$f));
-            $storeUrl = $this->normalizeStoreUrl($row->brand_link ?: ($row->link ?? ''));
+            $storeUrl = $this->normalizeStoreUrl($detail?->brand_link ?: ($row->link ?? ''));
             if (! $storeUrl || $storeUrl['store_id'] !== $row->store_id) {
                 $storeUrl = ['store_url' => 'https://smartstore.naver.com/'.$row->store_id];
             }
             $row->store_url = $storeUrl['store_url'];
             $row->profile_url = $row->store_url.'/profile';
-            unset($row->brand_link, $row->product_key, $row->channel_uid, $row->channel_id, $row->channel_no, $row->mall_name, $row->link);
+            unset($row->product_key, $row->channel_uid, $row->channel_id, $row->channel_no, $row->mall_name, $row->link);
             $row->reason = $missing ? 'missing' : 'stale';
             $row->missing_fields = $missing;
             $row->captured_at = $row->captured_at ? CarbonImmutable::parse($row->captured_at)->toIso8601String() : null;
