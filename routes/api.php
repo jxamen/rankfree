@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\ExtSellerPowerController;
 use App\Http\Controllers\Api\ExtShopKeywordController;
 use App\Http\Controllers\Api\ExtShoppingSeoController;
 use App\Http\Controllers\Api\ExtShopRankController;
+use App\Http\Controllers\Api\IntegratedShopRankController;
 use App\Http\Controllers\Api\KeywordController;
 use App\Http\Controllers\Api\KeywordProductsController;
 use App\Http\Controllers\Api\KeywordSuggestController;
@@ -124,6 +125,9 @@ Route::prefix('ext')->group(function (): void {
 |--------------------------------------------------------------------------
 */
 Route::prefix('v1')->group(function (): void {
+    Route::post('/integrated-shop-rank', IntegratedShopRankController::class)
+        ->middleware(['auth.apikey:integrated_shop_rank', 'throttle:10,1,integrated-shop-rank']);
+
     Route::get('/stores/bizinfo', [StoreBizInfoController::class, 'index'])
         ->middleware(['auth.apikey:store_bizinfo', 'throttle:60,1,store-bizinfo:']);
     Route::post('/stores/bizinfo', [StoreBizInfoController::class, 'store'])

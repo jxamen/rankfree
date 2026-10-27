@@ -12,6 +12,7 @@ class ApiKey extends Model
 {
     /** scope 코드 → 표시명 (경량/상세 키워드분석은 별도 상품으로 분리) */
     public const SCOPES = [
+        'integrated_shop_rank' => '통합검색 쇼핑 순위',
         'rank' => '순위추적',
         'compete' => '경쟁분석',
         'keyword' => '키워드분석',
