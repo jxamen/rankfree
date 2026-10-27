@@ -125,6 +125,12 @@
 
 <div class="flex items-center gap-2 mb-4 flex-wrap">
     <a href="{{ route('admin.shop-keyword') }}" class="btn btn-ghost btn-sm">← 목록</a>
+    @if (in_array($analysis->status, ['checking', 'paused'], true))
+        {{-- 수집 중 · 일시정지이면 조건 없이 늘 보인다(대표님 10-27 17:17 「수집중인데 이어서 수집이나 수집 버튼이 없음」). 확인할 조합이 없어도 막지 않고, 누르면 안내만 한다 --}}
+        <button type="button" id="sk-run" class="btn btn-secondary btn-sm"
+            title="멈춘 수집을 이어서 시작합니다(기존 「이어서」와 같습니다)">{{ $analysis->status === 'paused' ? '수집 시작' : '이어서 수집' }}</button>
+        <span id="sk-run-note" role="status" aria-live="polite" class="text-muted-soft" style="font-size:var(--fs-xs);"></span>
+    @endif
     <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('admin.shop-keyword.regenerate', $analysis) }}"
         title="노출 안 된 조합을 접고 새 조합을 생성합니다(노출 키워드는 유지)">＋ 새로 조합</button>
     <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
@@ -1206,6 +1212,16 @@ window.__SK = {
             if (extMode && cfg.method !== 'api') runExtLoop(); else poll();
         } catch (e) { if (label) label.textContent = e.message; }
         finally { stopBtn.disabled = false; }
+    });
+
+    // 「이어서 수집 / 수집 시작」 — 수집 중 · 일시정지에서 늘 보이는 버튼(대표님 10-27 17:17). 멈춘 수집은 위 「이어서」와 같게 재개하고,
+    // 확인할 조합이 없으면(진행 카드가 없다) 막지 않고 안내만 한다.
+    const runBtn = document.getElementById('sk-run');
+    const runNote = document.getElementById('sk-run-note');
+    if (runBtn) runBtn.addEventListener('click', function () {
+        if (!stopBtn) { runNote.textContent = '확인할 조합이 없어요'; return; }
+        if (stopped) { runNote.textContent = ''; stopBtn.click(); return; }
+        runNote.textContent = '이미 수집 중이에요';
     });
 
     // 상품정보 다시 수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 수동 재수집(확장 필요)
