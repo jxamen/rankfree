@@ -172,7 +172,7 @@ function normalize(p, page, seq) {
     // 1페이지 — ns-portal slot API (토큰 불필요). 페이지 컨텍스트에서 부르면 418 을 피한다.
     try {
         const first = await page.evaluate(async (q) => {
-            const u = 'https://ns-portal.shopping.naver.com/api/v2/shopping-paged-slot?query=' + encodeURIComponent(q) + '&source=shp_gui&pageSize=20';
+            const u = 'https://ns-portal.shopping.naver.com/api/v3/shopping-paged-slot?query=' + encodeURIComponent(q) + '&source=shp_gui&pageSize=20';
             const r = await fetch(u, { credentials: 'include' });
             return r.ok ? await r.json() : null;
         }, opt.query);
