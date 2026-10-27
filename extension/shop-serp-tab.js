@@ -131,7 +131,7 @@ class ShopSerpTab {
       if (r?.ok && Array.isArray(r.products)) {
         await storage.set({rfSerpRecovery:null});
         if (state && state.current !== keyword) return this.read(keyword, this.target || {});
-        return {ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'};
+        return {ok:true,status:200,html:ShopSerpTab.html(r.products),products:r.products,source:r.source,page:r.page,result_source:r.result_source || 'shopping',mode:'tab'};
       }
       if (r?.captcha && r.evidence?.visible) {
         await this.openChallenge(keyword, r).catch(() => {});
@@ -200,13 +200,13 @@ class ShopSerpTab {
         const query = new URL(current.url).searchParams.get('query');
         if (query && query !== keyword) return;
         const r = await c.tabs.sendMessage(tab.id, {type:'__rfSerpPeek'});
-        if (r?.ok && Array.isArray(r.products)) finish({ok:true,status:200,html:ShopSerpTab.html(r.products),result_source:r.result_source || 'shopping',mode:'tab'});
+        if (r?.ok && Array.isArray(r.products)) finish({ok:true,status:200,html:ShopSerpTab.html(r.products),products:r.products,source:r.source,page:r.page,result_source:r.result_source || 'shopping',mode:'tab'});
         else if (r?.captcha && r.evidence?.visible) blocked(r);
-        else if (!r?.captcha) finish({ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도 — 쇼핑 상품 목록'});
+        else if (!r?.captcha && !r?.pending) finish({ok:false,status:0,captcha:false,retryable:true,message:'읽기 실패 재시도 — 쇼핑 상품 목록'});
       } catch (_) {} finally { inspecting = false; }
     }, 500);
     try {
-      const url = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword) ;
+      const url = (target.v3Top20 ? 'https://search.shopping.naver.com/ns/search?query=' : 'https://m.search.naver.com/search.naver?where=m&query=') + encodeURIComponent(keyword);
       const storage = this.session();
       if (this.tabId === null) {
         const saved = await storage.get('rfSerpTabId');
