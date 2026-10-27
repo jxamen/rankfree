@@ -170,6 +170,8 @@ class ExtShopRankController extends Controller
     {
         $data = $request->validate([
             'worker_id' => 'required|string|max:64',
+            'source' => 'nullable|in:naver-v3',
+            'page' => 'required_with:source|integer|in:1',
             'products' => 'required|array|max:2000',
             'products.*' => 'array',
             'total' => 'nullable|integer|min:0',
@@ -178,6 +180,21 @@ class ExtShopRankController extends Controller
         if ($job->status !== 'claimed' || $job->claimed_by !== $data['worker_id']) {
             // 리스가 끊겨 다른 워커가 이미 가져갔다 — 늦게 온 결과로 덮지 않는다
             return response()->json(['ok' => false, 'message' => 'not_owner'], 409);
+        }
+
+        if (($data['source'] ?? null) === 'naver-v3') {
+            $request->validate([
+                'products' => 'required|array|size:20',
+                'products.*.nvMid' => ['required', 'string', 'regex:/^\d+$/'],
+                'products.*.title' => 'required|string|max:300',
+                'products.*.price' => 'required|integer|min:0',
+                'products.*.mallName' => 'present|nullable|string|max:120',
+                'products.*.rank' => 'required|integer|min:1|max:20',
+                'products.*.isAd' => 'required|boolean',
+            ]);
+            foreach (array_values($data['products']) as $i => $product) {
+                abort_unless((int) $product['rank'] === $i + 1, 422, 'invalid_screen_order');
+            }
         }
 
         $res = $this->ranker->rank(
@@ -197,7 +214,7 @@ class ExtShopRankController extends Controller
          */
         $perPage = 40;
         $wanted = max($perPage, (int) $job->pages * $perPage);
-        if (! $res['found'] && $res['scanned'] < $perPage) {
+        if (! $res['found'] && (($data['source'] ?? null) === 'naver-v3' || $res['scanned'] < $perPage)) {
             $job->failAttempt('partial:'.$res['scanned'].'/'.$wanted, 60);
 
             return response()->json(['ok' => true, 'data' => [

@@ -85,7 +85,7 @@ class ShopRankSlotService
      * 주문 자동 등록용(2026-10-08 담당 직원 「쇼핑 건이면 다 랭크프리에서 순위체크」) — 같은 상품 · 키워드 슬롯이 있으면
      * 꺼져 있을 때만 다시 켜고, 없으면 만든다. 주문에서 오는 등록이라 슬롯 한도는 보지 않는다.
      *
-     * @return array{status: string, slot: ShopRankSlot}  status = created | reactivated | exists
+     * @return array{status: string, slot: ShopRankSlot} status = created | reactivated | exists
      */
     public function ensureTracked(User $user, string $targetInput, string $keyword, ?string $label = null): array
     {
@@ -131,22 +131,17 @@ class ShopRankSlotService
     /**
      * 슬롯 1개 순위 조회 + 일별 기록 저장(멱등).
      *
-     * @param  bool  $deep  20위 밖을 서버 브라우저로 끝까지 본다(일 2회 배치 전용).
-     *                      확장이 안 켜져 있어도 완결되지만 키워드당 20~30초 걸리므로 실시간에는 쓰지 않는다.
+     * @param  bool  $deep  기존 호출자 호환용. extension 모드에서는 항상 확장 워커를 사용한다.
+     *                      server 모드의 브라우저 수집은 기존 설정을 그대로 따른다.
      */
     public function run(ShopRankSlot $slot, bool $deep = false): array
     {
         $source = (string) config('rankfree.shopping.rank_source', 'extension');
 
         if ($source === 'extension') {
-            // 상위 20위는 서버가 slot API 1콜(약 0.3초)로 즉시 끝낸다 — 확장 큐를 태우지 않는다.
-            $quick = config('rankfree.shopping.quick_top20', true) ? $this->browser->quickCheck($slot) : null;
-            if ($quick === null) {
-                // 20위 밖 — 배치면 서버 브라우저가 끝까지 보고(무인), 실시간이면 확장 워커에 맡긴다
-                // (확장은 실사용자 브라우저·IP 라 훨씬 빠르지만 PC 가 켜져 있어야 한다).
-                return $deep ? $this->storeResult($slot, $this->browser->checkRank($slot)) : $this->runViaWorker($slot);
-            }
-            $res = $quick;
+            // Read v3 in the real Chrome extension. Missing/partial collection stays queued;
+            // never use the server login browser as an implicit fallback in this mode.
+            return $this->runViaWorker($slot);
         } else {
             // server = 서버 브라우저 수집. 깊은 순위는 20초 이상 걸려 실사용에는 권하지 않는다.
             $res = $source === 'server'

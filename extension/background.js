@@ -876,7 +876,10 @@ async function drainShopRankQueue(why) {
 
         let res = null;
         try {
-          res = await handlers.collectShopping({ keyword: it.keyword, count: it.count || 80, match: it.match });
+          res = await shopSerpPool.run('rank-v3', it.keyword, 1, async ({tab, policy}) => {
+            tab.openIntervalMs = 3000;
+            return policy.run(it.keyword, () => tab.read(it.keyword, {v3Top20:true}), 'browser', 4000, 'rank-v3', () => tab.peek(it.keyword), 'rank-v3');
+          }, 3000);
         } catch (e) {
           res = { ok: false, message: String((e && e.message) || e) };
         }
@@ -917,9 +920,9 @@ async function drainShopRankQueue(why) {
 
         const r = await apiFetch('/api/ext/shop-rank/' + it.job_id + '/result', {
           method: 'POST', apiBase,
-          body: { worker_id: workerId, products: res.products, total: res.total || 0 },
+          body: { worker_id: workerId, products: res.products, total: res.total || 0, source: res.source, page: res.page },
         });
-        if (!r.ok) await reportShopClientEvent(d.analysis_id, it.keyword, 'save', 'HTTP ' + r.status);
+        if (!r.ok) console.warn('[RankFree] 순위 결과 저장 실패:', r.status);
         if (r.status === 401 || r.status === 403) return;
 
         // 결과를 눈으로 확인할 수 있게 — 순위가 몇 위로 잡혔는지, 부족해서 되돌려졌는지
