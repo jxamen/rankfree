@@ -200,6 +200,21 @@ class ShopSerpStore
     /** 수집된 월 목록(최신순). */
     public function months(?string $keyword): array
     {
+        if ($keyword === null) {
+            // Seek the month-leading index instead of scanning every mapping
+            // for DISTINCT (including empty future partitions).
+            $months = [];
+            $month = $this->latestMonth(null);
+            while ($month !== null) {
+                $months[] = $month;
+                $previous = DB::table('keyword_shop_ranks')
+                    ->where('collected_month', '<', $month)->max('collected_month');
+                $month = $previous ? (int) $previous : null;
+            }
+
+            return $months;
+        }
+
         return DB::table('keyword_shop_ranks')->when($keyword !== null, fn ($q) => $q->where('keyword', $keyword))
             ->distinct()->orderByDesc('collected_month')->pluck('collected_month')->all();
     }
