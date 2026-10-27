@@ -5,7 +5,7 @@
  * (host_permissions 기반이라 CORS 제약이 없다).
  */
 
-importScripts('captcha-detector.js', 'shop-serp-policy.js', 'shop-serp-tab.js', 'shop-serp-pool.js');
+importScripts('captcha-detector.js', 'shop-serp-policy.js', 'shop-serp-tab.js', 'shop-serp-pool.js', 'shop-serp-fetch.js');
 const shopSerpTab = new ShopSerpTab();
 const shopSerpPolicy = new ShopSerpPolicy();
 const shopSerpPool = new ShopSerpPool({tabFactory: slot => slot ? new ShopSerpTab({slot}) : shopSerpTab, policyFactory: slot => slot ? new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot)}) : shopSerpPolicy});
@@ -1053,6 +1053,7 @@ async function drainShopKeywordCheckQueue(watchdog = false) {
         let res;
         do {
           res = await handlers.fetchShopSerp({ keyword: it.keyword, alternativeKeywords: items.filter(x => x.keyword !== it.keyword).map(x => x.keyword), target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: d.analysis_id, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms });
+          if (res?.fetch_stopped) { batchStopped = true; return; }
           if (res?.parallel_reduced) parallelTabs = 1;
           skwCheckHeartbeat = Date.now();
           if (!(res && (res.cooldown || res.captcha || res.status === 403 || res.status === 429))) break;
@@ -1238,6 +1239,10 @@ Object.assign(handlers, {
     const localSettings = (await chrome.storage.local.get('rfShopSettings')).rfShopSettings;
     if (localSettings) ({interval_ms, collection_mode, parallel_tabs, tab_open_interval_ms} = localSettings);
     if (localSettings) interval_revision = 'browser:' + interval_ms;
+    if (collection_mode === 'fetch') {
+      const held = (await chrome.storage.local.get('rfFetchStopped')).rfFetchStopped;
+      if (held) return {...held, ok:false, fetch_stopped:true};
+    }
     const result = await shopSerpPool.run(analysisId, kw, parallel_tabs, async ({tab, policy}) => {
     tab.openIntervalMs = tab_open_interval_ms;
     tab.collectorIp = collectorIp || 'browser';
@@ -1245,28 +1250,16 @@ Object.assign(handlers, {
     return policy.run(kw, async effectiveGap => {
       globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '통합검색' };
       if (collection_mode !== 'fetch') return tab.read(kw, target);
-      const read = async (url, source) => {
-        const waiting = tab.beforeNavigate && await tab.beforeNavigate();
-        if (waiting) return waiting;
-        if (tab.allowOpen && !tab.allowOpen()) return {ok:false,deferred:true};
-        const r = await handlers.spFetchHtml({url});
-        // A fetched response has no rendered visibility. Text in scripts/hidden nodes is never captcha evidence.
-        const evidence = {version:'visible-v1',signal:[403,429].includes(r.status) ? 'http-status' : 'fetch-unverified',url_pattern:'naver-fetch',visible:false};
-        const raw = r.text || '';
-        const html = source === 'shopping' && r.ok ? ShopSerpTab.fetchedHtml(raw) : raw;
-        const markup = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-        const recognized = source === 'integrated'
-          ? /data-slog-container=["']shp_lis|data-shopping-block|네이버 쇼핑 인기상품/.test(markup)
-          : html !== raw;
-        return {ok:r.ok && recognized, status:r.status, captcha:false, evidence,
-          html, result_source:source, message:r.message || (!recognized ? '읽기 실패 재시도 — 검색 결과 구조를 확인하지 못했습니다.' : '')};
-      };
-      const integrated = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(kw), 'integrated');
-      if (integrated.ok || integrated.status !== 200) return integrated;
-      await sleep(Math.max(1000, Number(effectiveGap) || Number(interval_ms) || 4000));
-      globalThis.rfSerpCurrent = { analysisId, keyword: kw, screen: '쇼핑' };
-      return read('https://msearch.shopping.naver.com/search/all?query=' + encodeURIComponent(kw), 'shopping');
-    }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => tab.peek(kw), (collection_mode || 'tab') + JSON.stringify(target || {}));
+      return ShopSerpFetch.run(kw, target, {
+        read: async url => {
+          const held = (await chrome.storage.local.get('rfFetchStopped')).rfFetchStopped;
+          if (held) return {...held, ok:false, fetch_stopped:true};
+          return handlers.spFetchHtml({url});
+        },
+        stop: result => chrome.storage.local.set({rfFetchStopped:result}),
+        wait:sleep, gap:effectiveGap
+      });
+    }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => tab.peek(kw), (collection_mode === 'fetch' ? 'fetch-integrated-v1' : 'tab') + JSON.stringify(target || {}));
     }, tab_open_interval_ms);
     await rfCloseWork;
     if (analysisId && (await chrome.storage.local.get('rfSerpClosed:' + analysisId))['rfSerpClosed:' + analysisId]?.length === 4) {

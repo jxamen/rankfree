@@ -42,17 +42,23 @@ test('console bridge forwards IP and interval to the shared collection policy', 
  assert.equal(sent.payload.collectorIp,'192.0.2.1');assert.equal(sent.payload.interval_ms,4200);assert.equal(sent.payload.collection_mode,'fetch');assert.equal(sent.payload.target.product_id,'123');
 });
 
-test('tabless checks integrated first, falls back only without shopping block and never opens a tab', async () => {
- for (const [html,expected,blocked] of [['<section data-shopping-block></section>',1,false],['<p>no shopping</p>',2,false],['보안문자',2,false]]) {
-  const calls=[], waits=[];
-  const context=vm.createContext({rfCloseWork:Promise.resolve(),chrome:{storage:{local:{set:async()=>{},get:async()=>({})}}},lastScreenSerpAt:0,ShopSerpTab,
-   shopSerpPolicy:{run:async(k,read,ip,gap)=>{assert.equal(gap,3500);return read();}},
-   shopSerpTab:{read:()=>{throw Error('must not open tab');}},
-   sleep:async ms=>waits.push(ms),
-  });
-  const result=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:shopSerpTab,policy:shopSerpPolicy})}; const handlers={spFetchHtml:async ({url})=>{calls.push(url);return {ok:true,status:200,text:calls.length===1?html:"shopping"};},'+handler+'};handlers.fetchShopSerp({keyword:"테스트",collection_mode:"fetch",interval_ms:3500},{tab:{id:1}})',Object.assign(context,{calls,html}));
-  assert.equal(calls.length,expected);assert.equal(result.captcha,blocked);
-  assert.equal(result.result_source,expected===2?'shopping':'integrated');
-  assert.deepEqual(waits,expected===2?[3500]:[]);
- }
+test('tabless handler uses both integrated domains and never opens a tab or falls back', async () => {
+ const calls=[], saved={};
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),chrome:{storage:{local:{set:async v=>Object.assign(saved,v),get:async()=>saved}}},lastScreenSerpAt:0,
+  shopSerpPolicy:{run:async(k,read,ip,gap)=>{assert.equal(gap,3500);return read(gap);}},
+  shopSerpTab:{read:()=>{throw Error('must not open tab');}},sleep:async()=>{},calls,
+ });
+ vm.runInContext(fs.readFileSync('extension/shop-serp-fetch.js','utf8'),context);
+ const result=await vm.runInContext('const shopSerpPool={run:async(a,k,n,execute)=>execute({tab:shopSerpTab,policy:shopSerpPolicy})}; const handlers={spFetchHtml:async ({url})=>{calls.push(url);return {ok:true,status:200,text:"<html>no shopping</html>"};},'+handler+'};handlers.fetchShopSerp({keyword:"test",collection_mode:"fetch",interval_ms:3500},{tab:{id:1}})',context);
+ assert.equal(result.ok,true);assert.equal(result.result_source,'integrated');assert.equal(calls.length,2);
+ assert.equal(new URL(calls[0]).host,'m.search.naver.com');assert.equal(new URL(calls[1]).host,'search.naver.com');
+});
+
+test('saved fetch restriction is checked before policy cache or network',async()=>{
+ const context=vm.createContext({rfCloseWork:Promise.resolve(),lastScreenSerpAt:0,
+  chrome:{storage:{local:{get:async()=>({rfShopSettings:{collection_mode:'fetch',interval_ms:3500},rfFetchStopped:{fetch_stopped:true,status:403}})}}},
+  shopSerpPool:{run:()=>{throw Error('must not access cached results after restriction');}}
+ });
+ const result=await vm.runInContext('const handlers={'+handler+'};handlers.fetchShopSerp({keyword:"test"},{tab:{id:1}})',context);
+ assert.equal(result.fetch_stopped,true);assert.equal(result.ok,false);
 });
