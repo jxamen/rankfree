@@ -1127,6 +1127,48 @@ function pickInitialStateScripts(html) {
   } catch (e) { /* noop */ }
 })();
 
+// ── fetch 수집 보안 확인 새 창 (BEGIN) ──────────────────────────────────────────────
+// 탭 없는(fetch) 수집이 보안 확인 · 요청 제한을 만나면 멈춤만 저장하지 않고, 막힌 검색 주소를 새 창으로 한 번만 열어 사람이 직접 풀게 한다.
+// 확장은 창 안의 문제를 읽거나 풀거나 누르지 않는다(자동 풀이 금지 — .claude/30_EXTENSION_STORE_COMPLIANCE.md).
+// 창이 닫히거나 같은 주소가 정상 응답을 주면 멈춤을 풀고, 분석 화면이 그것을 보고 이어서 수집한다.
+const FETCH_HOLD_ALARM = 'rf-fetch-hold-probe';
+let rfFetchHoldWork = Promise.resolve();
+function holdFetchForHuman(result) {
+  const job = rfFetchHoldWork.then(async () => {
+    await chrome.storage.local.set({rfFetchStopped: result});
+    const saved = await chrome.storage.local.get(['rfFetchHoldWindow', 'rfFetchHoldClosedAt']);
+    if (saved.rfFetchHoldWindow && saved.rfFetchHoldWindow.tabId != null) {
+      try { await chrome.tabs.get(saved.rfFetchHoldWindow.tabId); chrome.alarms.create(FETCH_HOLD_ALARM, {periodInMinutes: 0.5}); return; } catch (_) { /* 창이 이미 닫혔다 */ }
+    }
+    // 같은 막힘으로 창이 여러 번 열리지 않게 — 방금(1분 안) 닫은 창이면 다시 열지 않고 멈춤만 유지한다(이어서를 누르면 다시 시도)
+    if (!result || !result.url || Date.now() - Number(saved.rfFetchHoldClosedAt || 0) < 60000) return;
+    const win = await chrome.windows.create({url: result.url, focused: true});
+    await chrome.storage.local.set({rfFetchHoldWindow: {windowId: win.id, tabId: win.tabs && win.tabs[0] ? win.tabs[0].id : null, url: result.url, openedAt: Date.now()}});
+    chrome.alarms.create(FETCH_HOLD_ALARM, {periodInMinutes: 0.5});
+  });
+  rfFetchHoldWork = job.catch(() => {});
+  return job;
+}
+async function releaseFetchHold(reason) {
+  await chrome.storage.local.remove(['rfFetchStopped', 'rfFetchHoldWindow']);
+  if (reason === 'closed') await chrome.storage.local.set({rfFetchHoldClosedAt: Date.now()});
+  try { await chrome.alarms.clear(FETCH_HOLD_ALARM); } catch (_) { /* noop */ }
+}
+// 같은 주소가 정상 응답을 주는지만 본다(풀었는지 읽지 않는다) — 사람이 창에서 풀었다면 쿠키가 공유돼 정상으로 돌아온다
+async function probeFetchHold() {
+  const saved = (await chrome.storage.local.get('rfFetchHoldWindow')).rfFetchHoldWindow;
+  if (!saved) { try { await chrome.alarms.clear(FETCH_HOLD_ALARM); } catch (_) { /* noop */ } return; }
+  const res = await handlers.spFetchHtml({url: saved.url});
+  if (res.ok && res.status === 200 && !ShopSerpFetch.isRestricted(res)) await releaseFetchHold('healthy');
+}
+try {
+  chrome.tabs.onRemoved.addListener(async (tabId) => {
+    const saved = (await chrome.storage.local.get('rfFetchHoldWindow')).rfFetchHoldWindow;
+    if (saved && saved.tabId === tabId) await releaseFetchHold('closed');
+  });
+} catch (e) { /* noop */ }
+// ── fetch 수집 보안 확인 새 창 (END) ────────────────────────────────────────────────
+
 // ── 핸들러 확장 — background.js 의 handlers 객체에 사내 전용 핸들러를 덧붙인다 ──────────
 Object.assign(handlers, {
   /**
@@ -1135,6 +1177,7 @@ Object.assign(handlers, {
    * 탭 상품은 기존 서버가 파싱하는 _INITIAL_STATE 형식으로 변환한다.
    */
   async resumeShopSerp({ collectorIp, analysisId }) {
+    await releaseFetchHold('manual');   // 이어서 = 사람이 다시 시작 — 보안 확인 멈춤을 풀고 다시 시도한다(아직 막혀 있으면 다시 멈추고 안내한다)
     return restartShopSerp(analysisId, collectorIp);
   },
   async __rfCollectionContext(_, sender) {
@@ -1146,7 +1189,8 @@ Object.assign(handlers, {
     return {owned:false};
   },
   // active = 지금 실제로 수집 레인을 쥐고 있는 개수(화면의 「지금 동시 n개 확인 중」, 0.6.9.8~)
-  async shopSerpStatus() { return {...(globalThis.rfSerpCurrent || {}), active: shopSerpPool.active.size}; },
+  // fetch_hold = 보안 확인 · 요청 제한으로 탭 없는 수집이 사람의 해제를 기다리는 중(해제되면 false → 화면이 자동으로 이어서 수집)
+  async shopSerpStatus() { return {...(globalThis.rfSerpCurrent || {}), active: shopSerpPool.active.size, fetch_hold: !!(await chrome.storage.local.get('rfFetchStopped')).rfFetchStopped}; },
   // Preferences belong to this extension profile, shared by its screen and worker.
   async getShopSettings() {
     return {ok:true, settings:(await chrome.storage.local.get('rfShopSettings')).rfShopSettings || null};
@@ -1257,7 +1301,7 @@ Object.assign(handlers, {
           if (held) return {...held, ok:false, fetch_stopped:true};
           return handlers.spFetchHtml({url});
         },
-        stop: result => chrome.storage.local.set({rfFetchStopped:result}),
+        stop: result => holdFetchForHuman(result).catch(() => {}),
         wait:sleep, gap:effectiveGap
       });
     }, collectorIp || 'browser', interval_ms, interval_revision, collection_mode === 'fetch' ? null : () => tab.peek(kw), (collection_mode === 'fetch' ? 'fetch-integrated-v1' : 'tab') + JSON.stringify(target || {}));
@@ -1724,6 +1768,7 @@ try {
   chrome.alarms.onAlarm.addListener((a) => {
     if (a && a.name === 'rf-skw-watchdog') watchShopKeywordQueue();
     if (a && a.name === 'rf-skw-check-retry') drainShopKeywordCheckQueue();
+    if (a && a.name === FETCH_HOLD_ALARM) probeFetchHold();
     if (a && a.name === BULK_WATCHDOG_ALARM) resumeBulkIfNeeded('alarm');
     // 상품정보·순위확인 큐(각자 자기 플래그로 중복 방지)
     if (a && a.name === SKW_QUEUE_ALARM) pollShopKeywordQueues();

@@ -998,6 +998,18 @@ window.__SK = {
 
     // ── 확장 모드: pending 배치 → 조합별 m.search fetch(확장) → 서버 판정 저장 ──
     const failedItems = new Map();
+    // 탭 없는(fetch) 수집이 보안 확인 · 요청 제한을 만나면 확장이 막힌 검색 주소를 새 창으로 열어 준다 — 사람이 직접 풀고,
+    // 확장이 멈춤을 풀면(창을 닫았거나 같은 주소가 정상 응답) 이 화면이 알아채 이어서 수집한다. 확장은 문제를 읽거나 풀지 않는다.
+    let fetchHoldHalt = false, fetchHoldTimer = null;
+    function watchFetchHold() {
+        fetchHoldHalt = true;
+        if (fetchHoldTimer) return;
+        fetchHoldTimer = setInterval(async () => {
+            if (!fetchHoldHalt || !stopped) { clearInterval(fetchHoldTimer); fetchHoldTimer = null; return; }
+            const r = await extCall('shopSerpStatus', {}, 2500);
+            if (r && r.fetch_hold === false && fetchHoldHalt && stopped && stopBtn && !stopBtn.disabled) { clearInterval(fetchHoldTimer); fetchHoldTimer = null; stopBtn.click(); }
+        }, 3000);
+    }
     async function reportClientError(stage, error, keyword = '') {
         try { await post(cfg.urls.collectorEvent, {kind:'client_error', stage, keyword: String(keyword).slice(0,300), message: String(error?.message || error).slice(0,1000)}); } catch (_) {}
     }
@@ -1062,7 +1074,7 @@ window.__SK = {
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
                     const requestStartedAt = Date.now();
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
-                    if (res?.fetch_stopped) { halt(res.message || '통합검색 수집이 제한되어 중단했습니다.', true); return; }
+                    if (res?.fetch_stopped) { halt(res.message || '보안문자를 풀어 주세요 — 푼 뒤 이어서 수집', true); watchFetchHold(); return; }
                     if (res?.tab_closed) {
                         captchaState(it.id, '', false, res);
                         if (res.paused) {
@@ -1212,6 +1224,7 @@ window.__SK = {
     // 중단/재개 — 서버에도 저장해 새로고침해도 중단 상태가 유지된다("이어서 확인"으로만 재개)
     let loopActive = false;
     if (stopBtn) stopBtn.addEventListener('click', async function () {
+        fetchHoldHalt = false;   // 사람이 직접 누른 중단 · 이어서는 자동 이어서보다 우선한다
         if (!stopped) {
             stopped = true;
             captchaWaits.clear(); captchaState('server', '', false);
