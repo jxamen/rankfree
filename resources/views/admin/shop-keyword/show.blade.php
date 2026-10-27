@@ -132,7 +132,7 @@
         <span id="sk-run-note" role="status" aria-live="polite" class="text-muted-soft" style="font-size:var(--fs-xs);"></span>
     @endif
     <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('admin.shop-keyword.regenerate', $analysis) }}"
-        title="이 분석의 조합을 전부 지우고 처음부터 다시 만들어 수집합니다(지우기 전 기존 조합 · 순위는 JSON 으로 백업)">＋ 새로 조합</button>
+        title="상품정보로 추출 키워드를 새로 뽑고, 이 분석의 조합을 전부 지우고 처음부터 다시 만들어 수집합니다(지우기 전 기존 조합 · 순위는 JSON 으로 백업)">＋ 새로 조합</button>
     <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
         title="기존 결과는 보존하고 미확인·수집 실패 항목만 이어서 확인합니다">노출 재확인</button>
     {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
@@ -568,7 +568,7 @@ window.__SK = {
         regen.textContent = '조합 생성 중…';
         fetch(regen.dataset.url, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } })
             .then((r) => r.ok ? r.json() : Promise.reject())
-            .then((d) => { if ((d.added || 0) === 0) { alert(d.message || '재료가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요.'); regen.disabled = false; regen.textContent = '＋ 새로 조합'; } else { location.reload(); } })
+            .then((d) => { if ((d.added || 0) === 0) { if (d.recollect) document.getElementById('sk-recollect')?.click(); alert(d.message || '재료가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요.'); regen.disabled = false; regen.textContent = '＋ 새로 조합'; } else { location.reload(); } })
             .catch(() => { regen.disabled = false; regen.textContent = '＋ 새로 조합'; alert('새 조합 생성 실패'); });
     });
 })();
@@ -1236,6 +1236,7 @@ window.__SK = {
                 if (!r.ok) throw new Error('새 조합을 만들지 못했어요 (HTTP ' + r.status + ')');
                 const d = await r.json();
                 if ((d.added || 0) > 0) { location.reload(); return; }
+                if (d.recollect) document.getElementById('sk-recollect')?.click();
                 runNote.textContent = d.message || '재료가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요';
             } catch (e) { runNote.textContent = e.message; }
             runBtn.disabled = false;

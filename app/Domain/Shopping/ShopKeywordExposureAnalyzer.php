@@ -606,51 +606,79 @@ class ShopKeywordExposureAnalyzer
     }
 
     /**
-     * "새 조합"(대표님 10-27 17:31 「새로 조합이면 다 지우고 다시 만들어야지」) — 그 분석의 조합(확인된 것 · 숨긴 것 · 미확인 모두)을 지우고
-     * 저장된 재료로 처음부터 다시 만든다. 이미 확인한 키워드를 빼지 않고, 노출 패턴 자동 제외도 쓰지 않는다.
+     * "새 조합"(대표님 10-27 17:31 「새로 조합이면 다 지우고 다시 만들어야지」 · 17:51 「뭔 조건이 이렇게 많이 걸려 있는지」) —
+     * 누르면 항상 상품정보(제목 · 태그 · 브랜드 · 가격)로 토큰 추출부터 새로 하고, 그 분석의 조합(확인된 것 · 숨긴 것 · 미확인 모두)을
+     * 지운 뒤 처음부터 다시 만들어 바로 수집 중으로 둔다. 상태 · 광고 끝남 · 목표 도달 · 토큰 유무 같은 앞단 조건은 없다.
+     * 이미 확인한 키워드를 빼지 않고, 노출 패턴 자동 제외도 쓰지 않는다. 저장된 토큰은 두고 새로 뽑은 것을 더한다(수집이 일부 실패해도 줄지 않게).
      * 지우기 전에 기존 조합 · 순위를 JSON 으로 백업만 남긴다(storage/app/private/shop-keyword-backups) — 백업이 안 돼도 막지 않는다.
-     * 만든 뒤에는 수집 중으로 바꿔 바로 돌게 한다. 광고 끝남 · 목표 도달 분석은 끝난 결과라 건드리지 않는다.
+     * 단 재료가 아예 없어 하나도 못 만들면 지우고 빈 손이 되지 않도록 그대로 두고 상품정보 재수집을 안내한다.
      *
-     * @return array{added:int, remaining:int, total:int, backup?:string, message?:string}
+     * @return array{added:int, remaining:int, total:int, backup?:string, message?:string, recollect?:bool}
      */
     public function rebuild(ShopKeywordAnalysis $analysis, ?int $limit = null): array
     {
-        if ($analysis->refresh()->status === 'ad_ended') {
-            return ['added' => 0, 'remaining' => 0, 'total' => (int) $analysis->combo_count, 'message' => '종료(광고 끝남)된 분석이에요.'];
-        }
-        if ($analysis->targetReached()) {
-            return ['added' => 0, 'message' => '목표에 이미 도달했어요.'] + $this->finishTarget($analysis);
-        }
+        $analysis->refresh();
         $cfg = (array) config('rankfree.shopping.exposure');
         $hardCap = max(100, (int) ($cfg['hard_cap'] ?? 3000));
         $max = min($hardCap, max(10, (int) ($limit ?? $hardCap)));
         $maxTokens = max(2, min(6, (int) ($cfg['max_tokens'] ?? 5)));
-        $threshold = (int) $analysis->threshold;
 
+        // ① 상품정보로 토큰 추출부터 새로 — 제목 단어 · 제목 구절 · 태그 · 속성 · 어미 · 참고 키워드. 추출이 실패해도 저장된 토큰으로 계속한다
+        $info = $this->productInfoFor($analysis);
+        try {
+            $ext = $this->extractTokens((string) $analysis->core_keyword, $this->targetOf($analysis), $info ? ['product_info' => $info] : []);
+            $this->backfillMe($analysis, $ext['me'] ?? null);
+            $this->addTokens($analysis, $ext['tokens']);
+        } catch (Throwable $e) {
+            Log::warning('shop_keyword_rebuild_extract_failed', ['analysis' => $analysis->id, 'error' => $e->getMessage()]);
+        }
+        $analysis->refresh();
+
+        // ② 조합 — 패턴 제외 · 이미 확인한 키워드 제외 없이 처음부터
         [$tokens, $me] = $this->storedMaterials($analysis);
         $banned = (array) ($analysis->banned ?? []);
         $new = array_values(array_filter(
             $this->buildCombos((string) $analysis->core_keyword, $tokens, $me, $max, $maxTokens),
             fn ($c) => ! $this->containsBanned($c['keyword'], $banned)
         ));
-        if (! $new) {   // 재료가 없어 아무것도 못 만들면 지우지 않는다(지우고 빈 손이 되는 것 방지) — 상태도 그대로
+        if (! $new) {   // 재료가 없어 아무것도 못 만들면 지우지 않는다(지우고 빈 손이 되는 것 방지)
             return ['added' => 0, 'remaining' => (int) $analysis->combos()->whereNull('rank')->count(), 'total' => (int) $analysis->combo_count,
-                'message' => '재료(제목 · 태그)가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요.'];
+                'recollect' => $info === [],
+                'message' => '재료(제목 · 태그)가 없어 조합을 만들지 못했어요'.($info === [] ? ' — 상품정보를 다시 수집합니다. 끝나면 다시 눌러 주세요.' : ' — 「상품정보 다시 수집」 뒤 다시 눌러 주세요.')];
         }
 
+        // ③ 백업 → 전부 삭제 → 저장 → 수집 중. 상태는 쿼리로 바로 쓴다(광고 끝남 · 목표 도달이어도 되살리고, 모델 이벤트 · 저장 가드에 막히지 않게)
         $backup = $this->backupCombos($analysis);
         $analysis->allCombos()->delete();
         $this->insertCombos($analysis, $new);
-
-        $this->saveCollectionProgress($analysis, [
-            'combo_count' => $analysis->combos()->count(),
-            'checked_count' => 0,
-            'exposed_count' => 0,
-            'status' => 'checking',
+        ShopKeywordAnalysis::whereKey($analysis->id)->update([
+            'token_count' => $analysis->tokens()->count(), 'combo_count' => count($new), 'checked_count' => 0, 'exposed_count' => 0,
+            'status' => 'checking', 'collection_seen_at' => now(), 'updated_at' => now(),
         ]);
+        $analysis->refresh();
 
-        return ['added' => count($new), 'remaining' => (int) $analysis->combos()->whereNull('rank')->count(), 'total' => (int) $analysis->combo_count]
+        return ['added' => count($new), 'remaining' => count($new), 'total' => (int) $analysis->combo_count]
             + ($backup !== null ? ['backup' => $backup] : []);
+    }
+
+    /**
+     * 조합 재료가 될 상품정보 — 확장이 수집해 둔 상품정보(ShopProductInfo)가 우선, 없으면 분석에 저장된 제목 · 브랜드 · 가격. 둘 다 없으면 빈 배열.
+     *
+     * @return array{title?:string, brand?:string, mall?:string, price?:int, seller_tags?:array}|array{}
+     */
+    private function productInfoFor(ShopKeywordAnalysis $analysis): array
+    {
+        $pi = ShopProductInfo::where('user_id', $analysis->user_id)->where('channel_product_id', (string) $analysis->product_id)->first();
+        if ($pi && trim((string) $pi->title) !== '') {
+            return ['title' => (string) $pi->title, 'brand' => (string) ($pi->brand ?: $pi->mall_name), 'mall' => (string) $pi->mall_name,
+                'price' => (int) $pi->price, 'seller_tags' => (array) $pi->seller_tags];
+        }
+        if (trim((string) $analysis->product_title) !== '') {
+            return ['title' => (string) $analysis->product_title, 'brand' => (string) ($analysis->brand ?: $analysis->mall_name),
+                'mall' => (string) $analysis->mall_name, 'price' => (int) $analysis->product_price, 'seller_tags' => []];
+        }
+
+        return [];
     }
 
     /**
@@ -1132,6 +1160,14 @@ class ShopKeywordExposureAnalyzer
                 foreach ($suffixes as $sf) {
                     $push(array_merge([$brand, $core], $sub, [$sf]), 3, true, 'brand_suffix');    // 브랜드+제목+어미
                 }
+            }
+        }
+
+        // F) 실제로 검색되는 연관어(자동완성 · 검색광고 추천 · 쇼핑 연관 · 쇼핑 추천) 중 핵심어를 포함한 것 — 통째로 한 조합.
+        //    이미 수집해 두고도 표시만 하던 재료라 후보를 넓히는 데 비용이 없다(대표님 10-27 17:52 「추출 키워드가 101개로 고정」).
+        foreach (['autocomplete', 'searchad', 'shopping_related', 'keyword_rec'] as $src) {
+            foreach ($tokens[$src] ?? [] as $kw) {
+                $push([$kw], 2, true, 'related');
             }
         }
 
