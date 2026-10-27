@@ -55,9 +55,9 @@ class ApiKeyController extends Controller
     {
         abort_unless($key->user_id === $request->user()->id, 403);
 
-        // A products-only key must be able to turn off its last permission.
+        // A collector-only key must be able to turn off its last permission.
         // Preserve the existing minimum for keys containing other API scopes.
-        $productsOnly = array_diff((array) $key->scopes, ['keyword_products']) === [];
+        $productsOnly = array_diff((array) $key->scopes, ['keyword_products', 'store_bizinfo']) === [];
         if ($productsOnly && ! $request->has('scopes')) {
             $request->merge(['scopes' => []]);
         }
