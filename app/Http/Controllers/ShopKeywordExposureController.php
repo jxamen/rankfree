@@ -506,13 +506,13 @@ class ShopKeywordExposureController extends Controller
     }
 
     /**
-     * "새로 조합" — 그 분석의 조합(확인된 것 · 숨긴 것 · 미확인 모두)을 지우고 처음부터 다시 만든 뒤 수집 중으로 돌린다
-     * (대표님 10-27 17:31 「새로 조합이면 다 지우고 다시 만들어야지」). 지우기 전 JSON 백업은 분석기가 남긴다.
+     * "새로 조합" — 상품정보로 토큰을 새로 뽑고, 그 분석의 조합(확인된 것 · 숨긴 것 · 미확인 모두)을 지우고 처음부터 다시 만든 뒤 수집 중으로 돌린다
+     * (대표님 10-27 17:31 「새로 조합이면 다 지우고 다시 만들어야지」 · 17:51 「뭔 조건이 이렇게 많이 걸려 있는지」 — 상태 · 광고 끝남 · 목표 도달 같은 앞단 조건 없음).
+     * 지우기 전 JSON 백업은 분석기가 남긴다.
      */
     public function regenerate(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
-        abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
         $result = $this->analyzer->rebuild($analysis);
         if (($result['added'] ?? 0) > 0) {

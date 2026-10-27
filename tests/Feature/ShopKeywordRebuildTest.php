@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Domain\Shopping\ShopKeywordExposureAnalyzer;
 use App\Models\ExtToken;
 use App\Models\ShopKeywordAnalysis;
+use App\Models\ShopProductInfo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -18,10 +20,18 @@ class ShopKeywordRebuildTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** false 면 자동완성도 빈 응답 — 재료가 정말 하나도 없는 분석 */
+    private bool $withAutocomplete = true;
+
     protected function setUp(): void
     {
         parent::setUp();
-        config(['rankfree.shopping.exposure.negatives' => ['가짜', '짝퉁'], 'rankfree.shopping.exposure.max_tokens' => 4]);
+        config(['rankfree.shopping.exposure.negatives' => ['가짜', '짝퉁'], 'rankfree.shopping.exposure.max_tokens' => 4,
+            'rankfree.searchad.api_key' => '', 'rankfree.searchad.accounts' => []]);
+        // 새 조합이 토큰을 새로 뽑을 때 부르는 네이버 요청 — 자동완성만 응답하고 나머지는 빈 응답
+        Http::fake(fn ($request) => $this->withAutocomplete && str_contains($request->url(), 'ac.search.naver')
+            ? Http::response(['items' => [[['가짜피 스프레이'], ['가짜피 만들기'], ['가짜피']]]], 200)
+            : Http::response('', 200));
     }
 
     private function admin(): User
@@ -122,6 +132,7 @@ class ShopKeywordRebuildTest extends TestCase
     public function test_rebuild_without_material_deletes_nothing_and_keeps_the_status(): void
     {
         Storage::fake('local');
+        $this->withAutocomplete = false;
         $u = $this->admin();
         $a = $this->analysis($u, 'checking', ['굳은 피' => 0], []);   // 재료(토큰 · 제목 · 태그)가 없다
         $a->forceFill(['product_title' => null, 'brand' => null])->save();
@@ -130,24 +141,71 @@ class ShopKeywordRebuildTest extends TestCase
 
         $this->assertSame(0, (int) $r->json('added'));
         $this->assertNotEmpty($r->json('message'));
+        $this->assertTrue((bool) $r->json('recollect'), '상품정보가 아예 없으면 화면이 상품정보 다시 수집을 시작한다');
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'keyword' => '굳은 피', 'rank' => 0]);
         $this->assertSame('checking', $a->fresh()->status);
         $this->assertSame([], Storage::disk('local')->files('shop-keyword-backups'));
     }
 
-    public function test_ended_and_target_reached_analyses_are_left_alone(): void
+    public function test_no_front_conditions_ended_and_target_reached_and_pending_are_rebuilt_too(): void
     {
         Storage::fake('local');
         $u = $this->admin();
-        $ended = $this->analysis($u, 'ad_ended', ['굳은 피' => 1]);
-        $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $ended))->assertStatus(409);
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $ended->id, 'keyword' => '굳은 피', 'rank' => 1]);
+        foreach ([['ad_ended', []], ['target_reached', ['keyword_target' => 1]], ['pending', []], ['failed', []], ['done', []]] as [$status, $extra]) {
+            $a = $this->analysis($u, $status, ['굳은 피' => 1], ['굳은'], $extra);
+            $r = $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
+            $this->assertGreaterThan(0, (int) $r->json('added'), $status);
+            $this->assertSame('checking', $a->fresh()->status, $status.' → 수집 중');
+            $this->assertDatabaseMissing('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'keyword' => '굳은 피', 'rank' => 1]);   // 확인 결과는 지워지고 처음부터
+            $this->assertSame(0, $a->allCombos()->whereNotNull('rank')->count(), $status);
+        }
+    }
 
-        $reached = $this->analysis($u, 'checking', ['굳은 피' => 1], ['굳은'], ['keyword_target' => 1]);
-        $r = $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $reached))->assertOk();
-        $this->assertSame(0, (int) $r->json('added'));
-        $this->assertNotEmpty($r->json('message'));
-        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $reached->id, 'keyword' => '굳은 피', 'rank' => 1]);
+    public function test_pressing_new_combos_extracts_tokens_again_from_the_product_info_like_analysis_108(): void
+    {
+        // 108번 — 상태 pending, 토큰 0개, 조합 0개. 같은 버튼으로 토큰부터 새로 뽑아 살아난다
+        Storage::fake('local');
+        $u = $this->admin();
+        $a = $this->analysis($u, 'pending', [], []);
+        $this->assertSame(0, $a->tokens()->count());
+        ShopProductInfo::create(['user_id' => $u->id, 'channel_product_id' => '111', 'title' => '굳은 피 진한 가짜피 할로윈 분장 소품',
+            'brand' => '스투피드', 'mall_name' => '파티타임', 'price' => 2400, 'seller_tags' => ['할로윈분장', '분장소품'], 'collected_at' => now()]);
+
+        $r = $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
+
+        $this->assertGreaterThan(100, (int) $r->json('added'));
+        $fresh = $a->fresh();
+        $this->assertSame('checking', $fresh->status);
+        $this->assertGreaterThan(0, $fresh->token_count);
+        $this->assertSame($a->tokens()->count(), $fresh->token_count);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'title', 'keyword' => '할로윈']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'seller_tag', 'keyword' => '분장소품']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '할로윈분장', 'combo_tag' => 'tag']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '가짜피 할로윈', 'combo_tag' => 'title']);
+        $this->assertSame('파티타임', $fresh->mall_name);
+    }
+
+    public function test_every_press_grows_the_extracted_tokens_that_were_missing_and_keeps_the_stored_ones(): void
+    {
+        // 125번 「추출 키워드가 101개로 고정」 — 저장된 토큰(수집분)은 그대로 두고, 빠져 있던 재료(어미 · 자동완성)가 새로 더해져 token_count 가 바뀐다
+        Storage::fake('local');
+        config(['rankfree.shopping.exposure.suffixes' => ['추천', '인기']]);
+        $u = $this->admin();
+        $a = $this->analysis($u, 'done', ['굳은 피' => 1]);
+        $a->items()->create(['kind' => 'token', 'source' => 'competitor_brand', 'keyword' => '분장몰']);   // 확장이 수집해 둔 재료
+        $a->update(['token_count' => $a->tokens()->count()]);
+        $before = $a->fresh()->token_count;
+
+        $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
+
+        $fresh = $a->fresh();
+        $this->assertGreaterThan($before, $fresh->token_count);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'competitor_brand', 'keyword' => '분장몰']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'suffix', 'keyword' => '추천']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'token', 'source' => 'autocomplete', 'keyword' => '가짜피 스프레이']);
+        // 실제로 검색되는 연관어(자동완성)는 핵심어를 포함하면 그대로 한 조합이 된다
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '가짜피 스프레이', 'combo_tag' => 'related']);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'kind' => 'combo', 'keyword' => '가짜피 굳은 추천', 'combo_tag' => 'title_suffix']);
     }
 
     public function test_only_the_owner_can_rebuild(): void
