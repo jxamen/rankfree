@@ -499,13 +499,31 @@ class ShopKeywordExposureController extends Controller
         });
     }
 
-    /** "새로 조합" — 노출 실패분 감추고 새 조합 생성(노출 키워드는 유지). */
+    /**
+     * "새로 조합" — 그 분석의 조합(확인된 것 · 숨긴 것 · 미확인 모두)을 지우고 처음부터 다시 만든 뒤 수집 중으로 돌린다
+     * (대표님 10-27 17:31 「새로 조합이면 다 지우고 다시 만들어야지」). 지우기 전 JSON 백업은 분석기가 남긴다.
+     */
     public function regenerate(Request $request, ShopKeywordAnalysis $analysis)
     {
         abort_unless($analysis->user_id === $request->user()->id, 403);
         abort_if($analysis->refresh()->status === 'ad_ended', 409, '종료(광고 끝남)');
 
-        return response()->json($this->analyzer->regenerate($analysis));
+        $result = $this->analyzer->rebuild($analysis);
+        if (($result['added'] ?? 0) > 0) {
+            $this->resumeCollection($analysis);
+        }
+        \Illuminate\Support\Facades\Log::info('shop_keyword_combos_rebuilt', ['analysis' => $analysis->id, 'user' => $request->user()->id, 'added' => $result['added'] ?? 0, 'backup' => $result['backup'] ?? null, 'ip' => $request->ip()]);
+
+        return response()->json($result);
+    }
+
+    /** 수집 중으로 돌려 확장 대기열(check-queue)이 바로 이어받게 한다 — 「이어서 확인」과 같다(화면 활동 시각 · 병렬 상태 · 탭 닫힘 표시). */
+    private function resumeCollection(ShopKeywordAnalysis $analysis): void
+    {
+        \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+        Cache::forget('shop-exposure:tab-closed:'.$analysis->id);
+        ShopKeywordAnalysis::whereKey($analysis->id)->update(['collection_seen_at' => now()]);
+        $analysis->refresh();
     }
 
     public function storeShortLinks(Request $request, ShopKeywordAnalysis $analysis)

@@ -253,15 +253,16 @@ class ShopKeywordExposureTest extends TestCase
 
     public function test_regenerate_hides_nonexposed_and_adds_new(): void
     {
-        // "고함량" 조합만 노출, 나머지 미노출 → regenerate 가 미노출을 감추고 새 조합 추가
+        // "고함량" 조합만 노출, 나머지 미노출 → (상품정보 갱신이 부르는 자동 재편성) regenerate 가 미노출을 감추고 새 조합 추가.
+        // 「새 조합」 버튼은 이게 아니라 전부 지우고 다시 만드는 rebuild — ShopKeywordRebuildTest
         $u = User::factory()->create(['role' => 'operator']);
         $a = $this->store($u);
         $this->runChecks($u, $a);
         $a->refresh();
         $this->assertGreaterThan(0, $a->combos()->where('rank', '<=', 0)->count());   // 미노출 존재
 
-        $r = $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
-        $this->assertGreaterThan(0, (int) $r->json('added'));
+        $r = app(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::class)->regenerate($a);
+        $this->assertGreaterThan(0, (int) $r['added']);
         $a->refresh();
         $this->assertGreaterThan(0, $a->allCombos()->where('hidden', true)->count());   // 미노출 감춰짐
         $this->assertGreaterThan(0, $a->combos()->whereNull('rank')->count());          // 새 미확인 조합
@@ -508,7 +509,7 @@ class ShopKeywordExposureTest extends TestCase
                 'keyword' => '실패태그'.$i, 'combo_tag' => 'tag', 'rank' => 0, 'checked_at' => now()]);
         }
 
-        $this->actingAs($u)->post(route('admin.shop-keyword.regenerate', $a))->assertOk();
+        app(\App\Domain\Shopping\ShopKeywordExposureAnalyzer::class)->regenerate($a);   // 자동 재편성 경로(「새 조합」 버튼은 rebuild 로 패턴 제외 없이 처음부터)
 
         $this->assertGreaterThan(0, $a->combos()->whereNull('rank')->count());                                  // 새 조합은 생성
         $this->assertSame(0, $a->combos()->whereNull('rank')->where('combo_tag', 'tag')->count());              // 실패 유형은 스킵
