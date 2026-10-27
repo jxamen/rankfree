@@ -148,7 +148,7 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth.apikey:keyword_detail')->get('/keyword/detail', [KeywordController::class, 'detail']);
 
     Route::get('/keyword/products', [KeywordProductsController::class, 'index'])
-        ->middleware(['auth.apikey:keyword', 'throttle:60,1']);
+        ->middleware(['auth.apikey:keyword_products', 'throttle:60,1']);
 
     // 마케팅 상품 주문 (scope: order) — 상품 조회·주문 생성·상태 조회. 웹 주문과 동일 로직(OrderPlacer)
     Route::middleware('auth.apikey:order')->group(function (): void {

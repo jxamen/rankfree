@@ -966,21 +966,23 @@
 {{-- ============ 키워드분석 ============ --}}
 <div class="doc-panel" data-panel="keyword">
     <div class="ep">
-        <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/keyword/products</code><span class="ep-s">키워드별 수집 상품 목록 (scope: keyword)</span></div>
+        <div class="ep-h"><span class="doc-method m-get">GET</span><code class="ep-p">/keyword/products</code><span class="ep-s">수집 상품 목록 (scope: keyword_products)</span></div>
         <div class="ep-b">
-            <p class="ep-t">어드민 키워드 상세의 쇼핑 상품 목록을 순위순으로 조회합니다. 저장된 상품만 반환하며 새 수집을 시작하지 않습니다. 키와 회원 모두 keyword 권한이 필요합니다. 기존 키의 일일 한도와 분당 60회 제한을 적용하며 검색량 분석 월 한도는 차감하지 않습니다.</p>
+            <p class="ep-t">keyword를 생략하면 모든 키워드의 수집 상품을 조회합니다. 이때 수집 시각 내림차순 → 키워드 오름차순 → 순위 오름차순(동률은 매핑 ID)으로 정렬합니다. keyword를 지정하면 기존처럼 순위순으로 조회합니다. 저장된 상품만 반환하며 새 수집을 시작하지 않습니다. 키와 회원 모두 keyword_products(수집 상품 목록) 권한이 필요합니다. 콘솔 API 키 만들기·권한 수정에서 선택할 수 있으며, 회원 권한은 어드민 회원 관리에서 설정합니다. 기존 keyword 권한이 있던 키·회원은 배포 시 새 권한도 부여합니다. 이후 두 권한은 독립적입니다. 기존 키의 일일 한도와 분당 60회 제한을 적용하며 검색량 분석 월 한도는 차감하지 않습니다.</p>
             <table class="doc-table"><thead><tr><th>파라미터</th><th>설명</th></tr></thead><tbody>
-                <tr><td>keyword</td><td>필수 문자열, 최대 120자. 양끝 공백만 제거하고 어드민과 같은 키워드로 조회합니다.</td></tr>
-                <tr><td>month</td><td>선택, YYYYMM(예: 202610). 생략하면 해당 키워드의 최신 수집 월. 어드민과 동일한 월별 저장분이며 날짜별 이력·기간 조회는 제공하지 않습니다.</td></tr>
+                <tr><td>keyword</td><td>선택 문자열, 최대 120자. 생략·빈 문자열·공백은 전체 키워드 조회입니다. 지정하면 양끝 공백만 제거합니다.</td></tr>
+                <tr><td>month</td><td>선택, YYYYMM(예: 202610). 생략하면 keyword 지정 시 해당 키워드의 최신 수집 월, keyword 생략 시 전체 키워드 중 가장 최근 수집 월입니다(모든 과거 월을 합치지 않음). 어드민과 동일한 월별 저장분이며 날짜별 이력·기간 조회는 제공하지 않습니다.</td></tr>
                 <tr><td>page / limit</td><td>page 기본 1(1~1000000), limit 기본 20(1~100).</td></tr>
             </tbody></table>
             <div class="ep-l">요청 예시</div>
             <div class="doc-copy-wrap"><button type="button" class="doc-copy">복사</button><pre class="doc-pre">curl --get {{ url('/api/v1/keyword/products') }} \
   -H "Authorization: Bearer &lt;API_KEY&gt;" \
   --data-urlencode "keyword=경량패딩" --data "limit=10"</pre></div>
+            <div class="ep-l">키워드 없이 전체 조회</div>
+            <pre class="doc-pre">curl --get {{ url('/api/v1/keyword/products') }} -H "Authorization: Bearer &lt;API_KEY&gt;" --data "page=1" --data "limit=20"</pre>
             <div class="ep-l">응답 예시 (설명용 상품)</div>
-            <pre class="doc-pre">{"data":{"keyword":"경량패딩","status":"collected","month":202610,"available_months":[202610],"collected_at":"2026-10-26 17:00:00","items":[{"rnk":1,"collected_at":"2026-10-26 17:00:00","is_ad":0,"title":"경량패딩 예시","price":39000,"mall_name":"예시몰","store_id":null,"channel_uid":null,"channel_id":null,"channel_no":null,"talk_id":null,"link":"https://smartstore.naver.com/example/products/123","product_key":"pd123"}],"pagination":{"page":1,"limit":10,"total":1,"last_page":1,"has_more":false}}}</pre>
-            <p class="ep-t">items: rnk(원본 순위), title(상품명), price(원), mall_name(판매처), link(상품 링크), talk_id(톡톡 코드), is_ad(광고 여부), product_key(식별자), store_id·channel_uid·channel_id·channel_no(스토어 식별자), collected_at(해당 순위 수집 시각). 값이 없으면 null입니다. 이미지·리뷰는 현재 어드민 쇼핑 목록에 저장·표시되지 않아 반환하지 않습니다. 상품명·가격 등은 어드민과 같은 최신 상품 마스터 값이며 과거 월 당시 가격을 보장하지 않습니다. 시각은 앱 시간대 Asia/Seoul의 YYYY-MM-DD HH:mm:ss입니다.</p>
+            <pre class="doc-pre">{"data":{"keyword":"경량패딩","status":"collected","month":202610,"available_months":[202610],"collected_at":"2026-10-26 17:00:00","items":[{"keyword":"경량패딩","rnk":1,"collected_at":"2026-10-26 17:00:00","is_ad":0,"title":"경량패딩 예시","price":39000,"mall_name":"예시몰","store_id":null,"channel_uid":null,"channel_id":null,"channel_no":null,"talk_id":null,"link":"https://smartstore.naver.com/example/products/123","product_key":"pd123"}],"pagination":{"page":1,"limit":10,"total":1,"last_page":1,"has_more":false}}}</pre>
+            <p class="ep-t">전체 조회 시 data.keyword는 null이고, 각 items.keyword는 수집 출처 키워드입니다. 같은 상품이 여러 키워드에서 수집되면 각각 반환하며 pagination.total은 실제 조인된 키워드·상품 매핑 수입니다. items: keyword(수집 키워드), rnk(원본 순위), title(상품명), price(원), mall_name(판매처), link(상품 링크), talk_id(톡톡 코드), is_ad(광고 여부), product_key(식별자), store_id·channel_uid·channel_id·channel_no(스토어 식별자), collected_at(해당 순위 수집 시각). 값이 없으면 null입니다. 이미지·리뷰는 현재 어드민 쇼핑 목록에 저장·표시되지 않아 반환하지 않습니다. 상품명·가격 등은 어드민과 같은 최신 상품 마스터 값이며 과거 월 당시 가격을 보장하지 않습니다. 시각은 앱 시간대 Asia/Seoul의 YYYY-MM-DD HH:mm:ss입니다.</p>
             <p class="ep-t">미수집 키워드·월: 200, status=not_collected, items=[], collected_at=null, pagination.total=0. 존재하는 월의 페이지 범위 초과: status=collected와 빈 items. 키 없음·무효 401, 키 또는 회원 권한 없음 403, 파라미터 오류 422, 호출 한도 초과 429. 아래 검색량 분석의 정규화·월 한도·캐시 규칙은 이 목록 조회에 적용되지 않습니다.</p>
         </div>
     </div>

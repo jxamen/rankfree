@@ -11,18 +11,19 @@ class KeywordProductsController extends Controller
     public function index(Request $request, ShopSerpStore $store)
     {
         $input = $request->validate([
-            'keyword' => ['required', 'string', 'max:120'],
+            'keyword' => ['nullable', 'string', 'max:120'],
             'month' => ['nullable', 'date_format:Ym'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
             'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
-        $keyword = trim($input['keyword']);
+        $keyword = trim($input['keyword'] ?? '');
+        $keyword = $keyword === '' ? null : $keyword;
         $month = isset($input['month']) ? (int) $input['month'] : $store->latestMonth($keyword);
         $page = (int) ($input['page'] ?? 1);
         $limit = (int) ($input['limit'] ?? 20);
         $query = $store->itemsQuery($keyword, $month ?? 0);
         $products = (clone $query)->paginate($limit, ['*'], 'page', $page);
-        $collectedAt = (clone $query)->reorder()->max('r.collected_at');
+        $collectedAt = (clone $query)->reorder()->orderByDesc('r.collected_at')->select('r.collected_at')->value('r.collected_at');
 
         return response()->json(['data' => [
             'keyword' => $keyword,
