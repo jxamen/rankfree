@@ -22,7 +22,7 @@
 <div class="flex flex-wrap items-center gap-2 mb-3">
     <label for="sk-interval">간격(초)</label>
     <input id="sk-interval" class="input" style="width:90px" type="number" min="1" max="30" step="0.1" required value="{{ number_format(\App\Services\ShopExposureBlockAlert::baseInterval() / 1000, 1, '.', '') }}">
-    <label for="sk-parallel-tabs">동시 검색 탭 수</label>
+    <label for="sk-parallel-tabs">동시 검색 수</label>
     <input id="sk-parallel-tabs" class="input" style="width:75px" type="number" min="1" max="4" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'] }}">
     <span id="sk-parallel-notice" role="status"></span>
     <label for="sk-tab-open-seconds">탭 여는 간격(초)</label>
@@ -53,7 +53,7 @@
     // 조합 생성 유형(combo_tag) 라벨 — 패턴 카드(서버 렌더 + 실시간 갱신 공용)
     $tagLabel = ['title' => '핵심+제목 단어', 'phrase' => '제목 구절', 'tag' => 'SEO태그', 'brand' => '브랜드+제목',
         'brand_price' => '브랜드+가격', 'title_attr' => '핵심+제목+속성', 'title_suffix' => '핵심+제목+어미',
-        'brand_attr' => '브랜드+제목+속성', 'brand_suffix' => '브랜드+제목+어미',
+        'brand_attr' => '브랜드+제목+속성', 'brand_suffix' => '브랜드+제목+어미', 'related' => '검색 연관어',
         'attr' => '브랜드+속성(구)', 'suffix' => '핵심+어미(구)', 'etc' => '기타(이전 조합)'];
     $th = $analysis->threshold;
     $shopUrl = fn ($kw) => 'https://m.search.naver.com/search.naver?where=m&query='.urlencode($kw);
@@ -160,6 +160,7 @@
                 @elseif ($isPaused)순위 확인 중단됨 — {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 노출 {{ $analysis->exposed_count }} · "이어서"로 재개합니다
                 @else순위 확인 중… {{ $analysis->checked_count }}/{{ $analysis->combo_count }} · 상위 {{ $th }}위 노출 {{ $analysis->exposed_count }}@endif
             </span>
+            <span id="sk-prog-active" class="text-muted-soft" style="font-size:var(--fs-xs);" role="status" aria-live="off"></span>
             <div class="flex items-center gap-2">
                 <button type="button" id="sk-stop" class="btn btn-ghost btn-sm">{{ $isPaused ? '이어서' : '중단' }}</button>
             </div>
@@ -721,14 +722,33 @@ window.__SK = {
         if (fill && label) {
             const pct = d.total ? Math.round(d.checked / d.total * 100) : 100;
             fill.style.width = pct + '%';
-            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '진행 중 — 브라우저에서 순위 확인 중(확장) ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 노출 ' + d.exposed;
+            if (!stopped) label.textContent = (extMode && cfg.method !== 'api' ? '진행 중 — ' + collectingLabel() + ' ' : (cfg.method === 'api' ? '순위 확인 중(쇼핑 API) ' : '순위 확인 ')) + d.checked + '/' + d.total + ' · 상위 ' + (cfg.th || 5) + '위 노출 ' + d.exposed;
         }
         // 요약 숫자 실시간 갱신
         const se = document.getElementById('sk-sum-exposed');
         if (se) se.textContent = d.exposed;
         const sc = document.getElementById('sk-sum-checked');
         if (sc) sc.textContent = d.checked;
+        // 윗줄 「5위 이내 n / 목표」도 같은 값으로 — 카드(상위 5위 노출)와 어긋나 보이지 않게 진행 중에도 갱신한다(대표님 10-27 17:49 「0 / 150 인데 카드는 24」)
+        const top = document.getElementById('sk-top5');
+        if (top) top.textContent = d.top5 !== undefined ? d.top5 : d.exposed;
     }
+    // 진행 줄 문구는 실제 수집 방식 그대로 — 탭 없이(fetch) / 브라우저 탭(tab)
+    function collectingLabel() {
+        const mode = (typeof browserSettings !== 'undefined' && browserSettings && browserSettings.collection_mode) || '{{ \App\Services\ShopExposureBlockAlert::collectionModeFor(auth()->id()) }}';
+        return mode === 'fetch' ? '탭 없이 확장이 바로 확인 중' : '브라우저 탭으로 확인 중';
+    }
+    // 확장이 지금 실제로 처리 중인 개수(「동시 검색 수」만큼 도는지) — 확장 0.6.9.8 부터 알려 준다. 옛 확장이면 아무것도 보이지 않는다
+    (function () {
+        const activeEl = document.getElementById('sk-prog-active');
+        if (!activeEl) return;
+        async function tick() {
+            if (!extMode || document.hidden || stopped) { activeEl.textContent = ''; return; }
+            const r = await extCall('shopSerpStatus', {}, 2500);
+            activeEl.textContent = r && Number.isFinite(r.active) ? ' · 지금 동시 ' + r.active + '개 확인 중' : '';
+        }
+        setInterval(tick, 2000);
+    })();
 
     // ── 상태 필터 칩(전체 조합) ──
     let curFilter = 'all';

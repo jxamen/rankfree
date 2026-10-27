@@ -1145,7 +1145,8 @@ Object.assign(handlers, {
     }
     return {owned:false};
   },
-  async shopSerpStatus() { return globalThis.rfSerpCurrent || {}; },
+  // active = 지금 실제로 수집 레인을 쥐고 있는 개수(화면의 「지금 동시 n개 확인 중」, 0.6.9.8~)
+  async shopSerpStatus() { return {...(globalThis.rfSerpCurrent || {}), active: shopSerpPool.active.size}; },
   // Preferences belong to this extension profile, shared by its screen and worker.
   async getShopSettings() {
     return {ok:true, settings:(await chrome.storage.local.get('rfShopSettings')).rfShopSettings || null};
