@@ -182,13 +182,13 @@ class StoreBizInfoController extends Controller
             }],
             'observed_at' => ['sometimes', 'required', 'date', 'before_or_equal:now', 'regex:/T[0-9:]+(?:Z|[+-][0-9]{2}:[0-9]{2})$/'],
             'public_business_info' => ['sometimes', 'accepted'],
-            'biz_name' => ['sometimes', 'required', 'string', 'max:200'],
-            'representative' => ['sometimes', 'required', 'string', 'max:120'],
-            'biz_reg_no' => ['sometimes', 'required', 'string', 'regex:/^(?:[0-9]{10}|[0-9]{3}-[0-9]{2}-[0-9]{5})$/'],
-            'mail_order_no' => ['sometimes', 'required', 'string', 'max:80'],
-            'address' => ['sometimes', 'required', 'string', 'max:1000'],
-            'customer_phone' => ['sometimes', 'required', 'string', 'max:60'],
-            'email' => ['sometimes', 'required', 'email:rfc', 'max:190'],
+            'biz_name' => ['sometimes', 'required', 'string', 'max:1000'],
+            'representative' => ['sometimes', 'required', 'string', 'max:1000'],
+            'biz_reg_no' => ['sometimes', 'required', 'string', 'max:255'],
+            'mail_order_no' => ['sometimes', 'required', 'string', 'max:1000'],
+            'address' => ['sometimes', 'required', 'string', 'max:2000'],
+            'customer_phone' => ['sometimes', 'required', 'string', 'max:1000'],
+            'email' => ['sometimes', 'required', 'string', 'max:1000'],
             'status' => ['sometimes', 'required', 'string', Rule::in(self::STATUSES)],
             'message' => ['sometimes', 'required', 'string', 'max:2000'],
         ];
@@ -220,21 +220,21 @@ class StoreBizInfoController extends Controller
         }
         // Save what we can and report what we dropped. Only the store identity and the public-info declaration still reject the request.
         $skipped = [];
+        $extra = [];
         foreach (array_diff(array_keys($input), array_keys($rules)) as $key) {
-            // Fields we do not define are never stored.
-            $skipped[] = ['field' => (string) $key, 'reason' => 'unknown_field'];
+            // Fields we do not define are kept as received in raw.api_extra; only a very long one is left out.
+            if (mb_strlen((string) json_encode($input[$key], JSON_UNESCAPED_UNICODE)) > 2000) {
+                $skipped[] = ['field' => (string) $key, 'reason' => 'too_long'];
+            } else {
+                $extra[$key] = $input[$key];
+            }
             unset($input[$key]);
         }
         foreach (self::FIELDS as $field) {
             if (isset($input[$field]) && is_int($input[$field])) {
                 $input[$field] = (string) $input[$field];
-            }
-        }
-        if (isset($input['biz_reg_no']) && is_string($input['biz_reg_no'])) {
-            // Keep only the digits when they make a 10 digit number (any dash or space layout).
-            $digits = preg_replace('/\D/', '', $input['biz_reg_no']);
-            if (strlen($digits) === 10) {
-                $input['biz_reg_no'] = $digits;
+            } elseif (isset($input[$field]) && is_string($input[$field])) {
+                $input[$field] = trim($input[$field]);
             }
         }
         $validator = Validator::make($input, $rules);
@@ -252,6 +252,7 @@ class StoreBizInfoController extends Controller
         } else {
             $data = $validator->validated();
         }
+        $data['extra'] = $extra;
         $explicitObservation = array_key_exists('observed_at', $input);
         if (isset($data['message']) && ! isset($data['status'])) {
             throw ValidationException::withMessages(['message' => 'Send message together with status.']);
@@ -265,14 +266,17 @@ class StoreBizInfoController extends Controller
 
             throw ValidationException::withMessages($errors);
         }
+        if (! $fields) {
+            // A status-only report has no business record to keep undefined fields in.
+            foreach (array_keys($extra) as $key) {
+                $skipped[] = ['field' => (string) $key, 'reason' => 'unknown_field'];
+            }
+        }
         if ($skipped) {
             Log::info('shop_bizinfo_skipped', ['store_id' => $data['store_id'], 'fields' => array_column($skipped, 'reason', 'field')]);
         }
         foreach ($fields as $key => $value) {
             $fields[$key] = trim($value);
-        }
-        if (isset($fields['biz_reg_no'])) {
-            $fields['biz_reg_no'] = str_replace('-', '', $fields['biz_reg_no']);
         }
         $observed = CarbonImmutable::parse($data['observed_at'] ?? now())->setTimezone(config('app.timezone'))->startOfSecond();
 
@@ -320,19 +324,28 @@ class StoreBizInfoController extends Controller
         }
         $changes = [];
         foreach ($fields as $key => $value) {
-            $old = $row->$key;
-            if ($key === 'biz_reg_no' && $old !== null) {
-                $old = str_replace('-', '', $old);
-            }
-            if ($old !== $value) {
+            if ($value !== $row->$key) {
                 $changes[$key] = ['old' => $row->$key, 'new' => $value];
+            }
+        }
+        $rawNew = null;
+        if ($extra = $data['extra'] ?? []) {
+            // Undefined fields are merged into raw.api_extra (newest value wins); whatever else is in raw stays.
+            $raw = is_array($row->raw) ? $row->raw : [];
+            $merged = $extra + ($raw['api_extra'] ?? []);
+            if ($merged != ($raw['api_extra'] ?? null)) {
+                $changes['api_extra'] = ['old' => $raw['api_extra'] ?? null, 'new' => $merged];
+                $rawNew = [...$raw, 'api_extra' => $merged];
             }
         }
         if ($explicitObservation && $row->captured_at && ($observed->lt($row->captured_at) || ($observed->eq($row->captured_at) && $changes))) {
             return response()->json(['code' => 'stale_observation', 'message' => 'Observation predates the current record or conflicts at the same timestamp.'], 409);
         }
-        foreach ($changes as $key => $change) {
+        foreach (array_diff_key($changes, ['api_extra' => true]) as $key => $change) {
             $row->$key = $change['new'];
+        }
+        if ($rawNew !== null) {
+            $row->raw = $rawNew;
         }
         if ($created || ! $explicitObservation || ! $row->captured_at || $observed->gt($row->captured_at)) {
             $row->captured_at = $observed;

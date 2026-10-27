@@ -100,21 +100,21 @@
     새 관측 시각이면 내용이 같아도 수집 시각·출처만 갱신합니다. 실제 변경된 칸의 이전/이후 값·키 ID·회원 ID·관측 시각·공개 출처는 이력 테이블에 트랜잭션으로 기록됩니다.</p>
     <table class="doc-table"><tr><th>JSON 필드</th><th>검증</th></tr>
     <tr><td>profile_url / store_url / store_id</td><td>셋 중 하나 필수. URL 최대 2000자. store_id는 영문·숫자·밑줄·하이픈, 최대 100자</td></tr>
-    <tr><td>biz_name / representative / address</td><td>선택, 최대 200 / 120 / 1000자. 넘으면 그 칸만 빼고 나머지를 저장</td></tr>
-    <tr><td>biz_reg_no</td><td>선택, 숫자만 추려 10자리면 저장(1234567890 · 123-45-67890 · 123 45 67890 모두 가능). 10자리가 아니면 그 칸만 빼고 저장</td></tr>
-    <tr><td>mail_order_no / customer_phone / email</td><td>선택, 최대 80 / 60 / 190자. 전화는 프로필에 공개된 값을 그대로 저장(휴대폰 형태도 가능). 이메일은 형식 검사 — 맞지 않거나 길이를 넘으면 그 칸만 빼고 저장</td></tr>
+    <tr><td>biz_name / representative / address</td><td>선택, 받은 글을 그대로 저장(앞뒤 공백만 제거, 형식 검사 없음). 최대 1000 / 1000 / 2000자이고 넘으면 그 칸만 빼고 나머지를 저장(skipped_fields의 too_long)</td></tr>
+    <tr><td>biz_reg_no</td><td>선택, 보낸 모양 그대로 저장(1234567890 · 123-45-67890 · 123 45 67890 모두 가능, 형식 검사 없음). 최대 255자이고 넘으면 그 칸만 빼고 저장</td></tr>
+    <tr><td>mail_order_no / customer_phone / email</td><td>선택, 모두 최대 1000자. 받은 글을 그대로 저장합니다(앞뒤 공백만 제거). 전화는 프로필에 공개된 값 그대로(휴대폰 형태도 가능), 이메일 칸에 앞뒤 글이 함께 있어도 그대로 저장합니다. 길이를 넘으면 그 칸만 빼고 저장</td></tr>
     <tr><td>source_url</td><td>선택, 생략하면 정규화한 profile_url 사용. 공개 사업자 정보 출처 HTTPS URL, 최대 2000자. 사용자정보·쿼리·프래그먼트가 있으면 그 주소는 저장하지 않고 프로필 주소로 대신합니다. 서버는 이 URL을 요청하지 않습니다.</td></tr>
     <tr><td>observed_at</td><td>선택, 생략하면 API가 받은 시각 사용. 명시한 경우에만 오래된 관측 거절. 실제 확인 시각 ISO 8601(예: 2026-10-27T16:04:00+09:00). 형식이 틀리거나 미래면 받은 시각으로 대신합니다. 예시 시각을 그대로 재사용하지 마세요.</td></tr>
     <tr><td>status</td><td>선택, suspended(판매자 프로필에 「판매자의 사정에 따라 운영이 중지되었습니다.」가 나옴) 또는 active(다시 열림). 사업자 칸 없이 status만 보내도 받습니다. 그 밖의 값은 그 건만 invalid</td></tr>
     <tr><td>message</td><td>선택, status와 함께만. 화면에 나온 원문을 그대로, 최대 2000자. suspended일 때만 저장하고 active에서는 무시합니다. 넘으면 message만 빼고 status는 저장</td></tr>
     <tr><td>public_business_info</td><td>선택, 보내면 true만 허용. 생략 여부와 관계없이 공개 사업자 정보만 전송</td></tr>
-    <tr><td>그 밖의 필드</td><td>정해지지 않은 필드는 저장하지 않고 무시합니다(skipped_fields에 unknown_field로 표시). 원문 HTML·개인 정보는 보내지 마세요.</td></tr></table>
+    <tr><td>그 밖의 필드</td><td>정해지지 않은 필드는 버리지 않고 서버의 raw(JSON) 보관란 api_extra에 받은 그대로 저장합니다(같은 이름은 최신 값으로 바뀌고 changed_fields에 api_extra로 나옵니다). 사업자 칸과 함께 보낸 경우에만 저장하며(status만 보낸 요청은 보관할 곳이 없어 skipped_fields에 unknown_field로 알림), 한 필드가 JSON으로 2000자를 넘으면 그 필드만 too_long. 원문 HTML·개인 정보는 보내지 마세요.</td></tr></table>
     <pre class="doc-pre">curl https://rankfree.kr/api/v1/stores/bizinfo -H "Authorization: Bearer &lt;API_KEY&gt;" -H "Accept: application/json" -H "Content-Type: application/json" --data '{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"}'</pre>
     <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:04:00+09:00","skipped_fields":[]}}</pre>
-    <p class="ep-t">status: updated / unchanged (새 행도 updated). 예시 사업자 값은 설명용이며 운영 스토어에 그대로 보내지 마세요. 사업자번호는 형식만 검사하며 실제 등록 여부는 수집기가 공개 출처에서 확인해야 합니다.
+    <p class="ep-t">status: updated / unchanged (새 행도 updated). 예시 사업자 값은 설명용이며 운영 스토어에 그대로 보내지 마세요. 사업자번호는 형식도 검사하지 않고 받은 그대로 저장하며, 실제 등록 여부는 수집기가 공개 출처에서 확인해야 합니다.
     권한을 가진 수집기가 공용 스토어 세부 정보를 갱신하므로 신뢰하는 수집기에만 권한을 부여하세요.</p>
-    <p class="ep-t">받은 값은 정리해서 저장하고 거절하지 않습니다. 형식이 맞지 않거나 길이를 넘는 칸, 정해지지 않은 필드는 그 칸만 빼고 나머지를 저장하며, 뺀 칸과 이유는 응답의 skipped_fields로 알려 드립니다(이유: invalid_format / too_long / unknown_field). 저장할 수 있는 사업자 칸이 하나도 없을 때만 invalid(422)이고, 이때도 errors에 칸별 이유가 있습니다.</p>
-    <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["biz_name","customer_phone"],"captured_at":"2026-10-27T17:50:00+09:00","skipped_fields":[{"field":"email","reason":"invalid_format"},{"field":"memo","reason":"unknown_field"}]}}</pre>
+    <p class="ep-t">받은 값은 형식을 검사하지 않고 그대로 저장하며 거절하지 않습니다. 칸마다 정한 최대 길이를 넘는 칸(too_long)과 글이 아닌 값(invalid_format)만 그 칸만 빼고 나머지를 저장하며, 뺀 칸과 이유는 응답의 skipped_fields로 알려 드립니다. 저장할 수 있는 사업자 칸이 하나도 없을 때만 invalid(422)이고, 이때도 errors에 칸별 이유가 있습니다.</p>
+    <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["biz_name","customer_phone","api_extra"],"captured_at":"2026-10-27T17:50:00+09:00","skipped_fields":[{"field":"address","reason":"too_long"}]}}</pre>
     <p class="ep-t">배열 요청은 HTTP 200의 data.items에 입력 순서대로 index와 건별 결과 updated / unchanged / not_found / invalid를 반환합니다. 한 건의 검증 오류는 다른 건 저장을 취소하지 않습니다. 배열이 비었거나 100건을 넘으면 전체 요청은 422입니다.</p>
     <pre class="doc-pre">[{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"},{"store_url":"https://smartstore.naver.com/example","email":"office@example.com"}]</pre>
     <pre class="doc-pre">{"data":{"items":[{"index":0,"store_id":"helinox","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:40:00+09:00","skipped_fields":[]},{"index":1,"status":"not_found","code":"store_not_found","message":"Store not found in collected products."}]}}</pre>
