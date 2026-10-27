@@ -1,6 +1,6 @@
 @php
-    // 상세 화면(editStatus)에서만, 관리자에게만 — 목록 행은 글자만 보여 준다. 광고가 끝나 자동 종료된 분석은 바꿀 수 없다.
-    $canEditStatus = ($editStatus ?? false) && auth()->user()->isAdmin() && $a->status !== 'ad_ended';
+    // 상세 화면(editStatus)에서만, 관리자에게만 — 목록 행은 글자만 보여 준다. 조건 없이 고른 값을 저장한다.
+    $canEditStatus = ($editStatus ?? false) && auth()->user()->isAdmin();
 @endphp
 <div class="text-muted mt-2" style="font-size:var(--fs-xs);">
     수집 상태:

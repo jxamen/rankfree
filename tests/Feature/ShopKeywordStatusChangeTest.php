@@ -9,7 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
-/** 쇼핑 노출 키워드 분석 — 수집 상태를 화면에서 직접 바꾼다(대표님 10-27 16:59 「상태를 바꿀 수 있게해줘」). */
+/** 쇼핑 노출 키워드 분석 — 수집 상태를 화면에서 고른 값 그대로 저장한다(대표님 10-27 16:59 「상태를 바꿀 수 있게해줘」 · 17:12 「그냥 저장만 시키게」). */
 class ShopKeywordStatusChangeTest extends TestCase
 {
     use RefreshDatabase;
@@ -45,7 +45,7 @@ class ShopKeywordStatusChangeTest extends TestCase
         $u = $this->admin();
         [, $ext] = ExtToken::issue($u);
         $a = $this->analysis($u, 'done', [0, 3, null]);   // 확인 안 한 조합이 하나 남아 있다
-        $this->change($u, $a, 'checking')->assertOk()->assertJsonPath('data.status', 'checking')->assertJsonPath('data.changed', true)->assertJsonPath('data.remaining', 1);
+        $this->change($u, $a, 'checking')->assertOk()->assertJsonPath('data.status', 'checking')->assertJsonPath('data.changed', true);
         $fresh = $a->fresh();
         $this->assertSame('checking', $fresh->status);
         $this->assertTrue($fresh->collection_seen_at->gt(now()->subMinute()), '「이어서 확인」처럼 화면 활동 시각을 지금으로 찍는다');
@@ -65,34 +65,41 @@ class ShopKeywordStatusChangeTest extends TestCase
         $this->withToken($ext)->getJson('/api/ext/shop-keyword/check-queue')->assertOk()->assertJsonPath('data.analysis_id', $a->id);
     }
 
-    public function test_status_must_match_the_remaining_combos(): void
+    public function test_chosen_status_is_saved_as_is_regardless_of_remaining_combos(): void
     {
         $u = $this->admin();
+        // 모든 조합을 확인한 분석(125번 같은 경우)도 「수집 중」으로 그대로 저장된다(확인할 조합이 생기기 전까지 확장이 집어 갈 것이 없을 뿐)
         $allChecked = $this->analysis($u, 'done', [0, 2]);
-        $this->change($u, $allChecked, 'checking')->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, '확인할 조합이 없어요'));
-        $this->change($u, $allChecked, 'paused')->assertStatus(422);
+        $this->change($u, $allChecked, 'checking')->assertOk()->assertJsonPath('data.status', 'checking')->assertJsonPath('data.changed', true);
+        $this->assertSame('checking', $allChecked->fresh()->status);
+        $this->change($u, $allChecked, 'paused')->assertOk()->assertJsonPath('data.label', '일시정지');
+        $this->assertSame('paused', $allChecked->fresh()->status);
+        $this->change($u, $allChecked, 'done')->assertOk();
         $this->assertSame('done', $allChecked->fresh()->status);
         $this->change($u, $allChecked, 'done')->assertOk()->assertJsonPath('data.changed', false);
 
+        // 확인할 조합이 남아 있어도 「완료」로 저장된다
         $open = $this->analysis($u, 'checking', [null, 4, null]);
-        $this->change($u, $open, 'done')->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, '2개 남아'));
-        $this->assertSame('checking', $open->fresh()->status);
-
-        // 남은 조합이 없는데 「수집 중」으로 멈춰 있던 것은 완료로 바로잡을 수 있다
-        $stuck = $this->analysis($u, 'checking', [1, 0]);
-        $this->change($u, $stuck, 'done')->assertOk()->assertJsonPath('data.status', 'done')->assertJsonPath('data.label', '완료');
+        $this->change($u, $open, 'done')->assertOk()->assertJsonPath('data.status', 'done');
+        $this->assertSame('done', $open->fresh()->status);
+        // 조합 · 순위는 건드리지 않는다
+        $this->assertSame(3, $open->allCombos()->count());
+        $this->assertSame(2, $open->allCombos()->whereNull('rank')->count());
     }
 
-    public function test_ad_ended_and_target_reached_cannot_be_changed(): void
+    public function test_ad_ended_and_target_reached_are_saved_too(): void
     {
         $u = $this->admin();
+        [, $ext] = ExtToken::issue($u);
+        // 광고 끝남으로 멈춘 분석도 모델 이벤트(되살리기 방지)에 막히지 않고 고른 값이 저장된다
         $ended = $this->analysis($u, 'ad_ended', [null]);
-        $this->change($u, $ended, 'checking')->assertStatus(409);
-        $this->assertSame('ad_ended', $ended->fresh()->status);
+        $this->change($u, $ended, 'checking')->assertOk()->assertJsonPath('data.status', 'checking');
+        $this->assertSame('checking', $ended->fresh()->status);
+        $this->withToken($ext)->getJson('/api/ext/shop-keyword/check-queue')->assertOk()->assertJsonPath('data.analysis_id', $ended->id);
 
-        $reached = $this->analysis($u, 'checking', [1, null], ['keyword_target' => 1]);   // 5위 안 키워드가 목표(1)에 이미 도달
-        $this->change($u, $reached, 'paused')->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, '목표 키워드 수에 도달'));
-        $this->assertSame('checking', $reached->fresh()->status);
+        $reached = $this->analysis($u, 'target_reached', [1, null], ['keyword_target' => 1]);   // 5위 안 키워드가 목표(1)에 이미 도달
+        $this->change($u, $reached, 'paused')->assertOk()->assertJsonPath('data.status', 'paused');
+        $this->assertSame('paused', $reached->fresh()->status);
     }
 
     public function test_only_the_owning_admin_can_change_and_only_the_listed_values(): void
@@ -129,10 +136,10 @@ class ShopKeywordStatusChangeTest extends TestCase
         $this->assertMatchesRegularExpression('/<option value="done" selected>\s*완료\s*<\/option>/', $html);
         $this->assertStringContainsString('수집 중', $html);
         $this->assertStringContainsString('일시정지', $html);
-        // 광고가 끝난 분석은 글자만 보여 준다
+        // 광고가 끝난 분석도 고를 수 있다(현재 값은 맨 위 비활성 항목으로 보인다)
         $ended = $this->analysis($u, 'ad_ended', [0]);
         $page = $this->actingAs($u)->get(route('admin.shop-keyword.show', $ended))->assertOk()->getContent();
-        $this->assertStringNotContainsString('id="sk-status"', $page);
-        $this->assertStringContainsString('종료(광고 끝남)', $page);
+        $this->assertStringContainsString('id="sk-status"', $page);
+        $this->assertMatchesRegularExpression('/<option value="" selected disabled>\s*종료\(광고 끝남\)\s*<\/option>/', $page);
     }
 }
