@@ -66,6 +66,7 @@
 
 {{-- 주제 탭 --}}
 <div class="doc-tabs" id="doc-tabs">
+    <button type="button" class="doc-tab" data-tab="integrated_shop_rank">통합검색 쇼핑 순위</button>
     <button type="button" class="doc-tab on" data-tab="start">시작하기</button>
     <button type="button" class="doc-tab" data-tab="rank">순위추적</button>
     <button type="button" class="doc-tab" data-tab="compete">경쟁분석</button>
@@ -120,6 +121,8 @@
 </div>
 
 {{-- ============ 시작하기: 인증 · 오류 ============ --}}
+@include('partials.integrated-shop-rank-doc')
+
 <div class="doc-panel on" data-panel="start">
     <h2 class="font-display text-ink doc-h2">인증</h2>
     <p class="mt-3 text-body" style="font-size:var(--fs-sm);line-height:1.7;">
