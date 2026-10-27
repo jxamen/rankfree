@@ -33,6 +33,7 @@
       <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'tab')>브라우저 탭으로 열기</option>
       <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
     </select>
+    <span class="text-muted-soft">설정은 이 브라우저의 모든 분석에 적용됩니다.</span>
     <button id="sk-interval-save" type="button" disabled class="btn btn-secondary btn-sm">저장</button>
     <button id="sk-interval-reset" type="button" disabled class="btn btn-ghost btn-sm">간격 초기화</button>
     <span id="sk-interval-notice" role="status"></span>
@@ -1027,6 +1028,7 @@ window.__SK = {
                     if (label) label.textContent += ' · 지금: ' + it.keyword + ' · 통합검색';
                     const requestStartedAt = Date.now();
                     res = await extCall('fetchShopSerp', { keyword: it.keyword, target: d.target, collection_mode: d.collection_mode, collectorIp: d.collector_ip, interval_ms: d.interval_ms, interval_revision: d.interval_revision, analysisId: {{ (int) $analysis->id }}, parallel_revision: d.parallel_revision, parallel_tabs: d.parallel_tabs, tab_open_interval_ms: d.tab_open_interval_ms }, 330000);
+                    if (res?.fetch_stopped) { halt(res.message || '통합검색 수집이 제한되어 중단했습니다.', true); return; }
                     if (res?.tab_closed) {
                         captchaState(it.id, '', false, res);
                         if (res.paused) {
