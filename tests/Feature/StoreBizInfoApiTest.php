@@ -57,7 +57,7 @@ class StoreBizInfoApiTest extends TestCase
         $this->product();
         $h = $this->headers();
         $p = $this->payload(['email' => 'office@example.com']);
-        $this->postJson(self::URL, $p, $h)->assertOk()->assertJsonPath('data.status', 'created');
+        $this->postJson(self::URL, $p, $h)->assertOk()->assertJsonPath('data.status', 'updated');
         $before = ShopSellerInfo::first()->getAttributes();
         $this->postJson(self::URL, $p, $h)->assertOk()->assertJsonPath('data.status', 'unchanged')->assertJsonPath('data.changed_fields', []);
         $this->assertSame($before, ShopSellerInfo::first()->getAttributes());
@@ -118,7 +118,7 @@ class StoreBizInfoApiTest extends TestCase
         $h = $this->headers();
         $this->postJson(self::URL, $this->payload(), $h)->assertNotFound();
         $this->product();
-        foreach ([['biz_reg_no' => 'bad'], ['biz_name' => null], ['address' => str_repeat('x', 1001)],
+        foreach ([['biz_reg_no' => 'bad'], ['address' => str_repeat('x', 1001)],
             ['email' => 'bad'], ['customer_phone' => '010-1234-5678'], ['customer_phone' => '+82 10 1234 5678'],
             ['source_url' => 'http://example.com'], ['source_url' => 'https://example.com/?token=example'],
             ['source_url' => 'https://user:pass@example.com'], ['public_business_info' => false], ['raw' => ['private' => 'data']],
@@ -188,5 +188,78 @@ class StoreBizInfoApiTest extends TestCase
         }
         $this->assertDatabaseCount('shop_seller_infos', 0);
         $this->assertDatabaseCount('shop_seller_info_changes', 0);
+    }
+
+    public function test_store_list_exposes_brand_and_smart_profiles_without_product_fields(): void
+    {
+        $this->product('helinox', 'pd1');
+        $this->product('helinox', 'pd2');
+        $this->product('smartshop', 'pd3');
+        DB::table('shop_products')->where('product_key', 'pd2')->update(['link' => 'https://brand.naver.com/helinox/products/123?tracking=1', 'mall_name' => 'Helinox']);
+        $r = $this->getJson(self::URL, $this->headers())->assertOk()->assertJsonCount(2, 'data.items')
+            ->assertJsonPath('data.items.0.profile_url', 'https://brand.naver.com/helinox/profile')
+            ->assertJsonPath('data.items.0.store_name', 'Helinox')
+            ->assertJsonPath('data.items.1.store_url', 'https://smartstore.naver.com/smartshop');
+        $this->assertArrayNotHasKey('product_key', $r->json('data.items.0'));
+        $this->assertArrayNotHasKey('link', $r->json('data.items.0'));
+    }
+
+    public function test_addresses_defaults_partial_fields_and_empty_values(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $this->postJson(self::URL, ['profile_url' => 'https://brand.naver.com/teststore/profile', 'biz_name' => 'Public Company'], $h)
+            ->assertOk()->assertJsonPath('data.status', 'updated');
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_name' => 'Public Company', 'seller_info_url' => 'https://brand.naver.com/teststore/profile']);
+        foreach (['https://smartstore.naver.com/teststore', 'https://brand.naver.com/teststore/',
+            'https://m.smartstore.naver.com/teststore/products/123?tracking=1', 'https://smartstore.naver.com/teststore/profile'] as $url) {
+            $this->postJson(self::URL, ['store_url' => $url, 'biz_name' => null, 'address' => 'Public Address', 'email' => '   '], $h)
+                ->assertOk();
+        }
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_name' => 'Public Company', 'address' => 'Public Address']);
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Changed at same second'], $h)->assertOk();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Old', 'observed_at' => now()->subDay()->toIso8601String()], $h)
+            ->assertStatus(409)->assertJsonPath('code', 'stale_observation');
+        $this->postJson(self::URL, ['profile_url' => 'https://brand.naver.com/unknown/profile', 'biz_name' => 'Company'], $h)
+            ->assertNotFound()->assertJsonPath('code', 'store_not_found');
+    }
+
+    public function test_batch_preserves_order_and_each_result_without_rolling_back_other_stores(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $item = ['profile_url' => 'https://smartstore.naver.com/teststore/profile', 'biz_reg_no' => '123-45-67890'];
+        $this->postJson(self::URL, [$item, $item,
+            ['store_url' => 'https://brand.naver.com/missing', 'biz_name' => 'Missing'],
+            ['store_id' => 'teststore', 'biz_reg_no' => 'bad'], 'not an object'], $h)
+            ->assertOk()->assertJsonCount(5, 'data.items')
+            ->assertJsonPath('data.items.0.status', 'updated')
+            ->assertJsonPath('data.items.1.status', 'unchanged')
+            ->assertJsonPath('data.items.2.status', 'not_found')
+            ->assertJsonPath('data.items.2.code', 'store_not_found')
+            ->assertJsonPath('data.items.3.status', 'invalid')
+            ->assertJsonPath('data.items.4.index', 4)
+            ->assertJsonPath('data.items.4.status', 'invalid');
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '1234567890']);
+        $this->assertDatabaseCount('shop_seller_info_changes', 1);
+        $this->postJson(self::URL, array_fill(0, 100, $item), $h)->assertOk()->assertJsonCount(100, 'data.items');
+        $this->postJson(self::URL, array_fill(0, 101, $item), $h)->assertUnprocessable();
+        $this->postJson(self::URL, [], $h)->assertUnprocessable();
+    }
+
+    public function test_malformed_addresses_and_conflicting_identifiers_are_rejected(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        foreach (['https://evil.example/teststore', 'https://smartstore.naver.com.evil.example/teststore',
+            'https://user:pass@smartstore.naver.com/teststore', 'https://smartstore.naver.com/teststore/../another',
+            'https://smartstore.naver.com/teststore%2Fanother', 'https://smartstore.naver.com:8443/teststore',
+            'https://smartstore.naver.com/teststore/products/bad', ['not a URL']] as $url) {
+            $this->postJson(self::URL, ['profile_url' => $url, 'biz_name' => 'Company'], $h)->assertUnprocessable();
+        }
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'profile_url' => 'https://brand.naver.com/other/profile', 'biz_name' => 'Company'], $h)->assertUnprocessable();
+        $this->postJson(self::URL, ['store_url' => 'https://smartstore.naver.com/other', 'profile_url' => 'https://brand.naver.com/teststore/profile', 'biz_name' => 'Company'], $h)->assertUnprocessable();
+        $this->postJson(self::URL, ['biz_name' => 'Company'], $h)->assertUnprocessable();
+        $this->assertDatabaseCount('shop_seller_infos', 0);
     }
 }
