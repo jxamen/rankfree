@@ -162,19 +162,22 @@ class ShopSerpStore
         return $this->itemsQuery($keyword, $month)->get();
     }
 
-    public function latestMonth(string $keyword): ?int
+    public function latestMonth(?string $keyword): ?int
     {
-        $month = DB::table('keyword_shop_ranks')->where('keyword', $keyword)->max('collected_month');
+        $month = DB::table('keyword_shop_ranks')->when($keyword !== null, fn ($q) => $q->where('keyword', $keyword))->max('collected_month');
 
         return $month ? (int) $month : null;
     }
 
     /** 어드민과 외부 API가 같은 컬럼·순서로 조회한다. */
-    public function itemsQuery(string $keyword, int $month): Builder
+    public function itemsQuery(?string $keyword, int $month): Builder
     {
         return DB::table('keyword_shop_ranks as r')
             ->join('shop_products as p', 'p.product_key', '=', 'r.product_key')
-            ->where('r.keyword', $keyword)->where('r.collected_month', $month)
+            ->where('r.collected_month', $month)
+            ->when($keyword !== null,
+                fn ($q) => $q->where('r.keyword', $keyword),
+                fn ($q) => $q->orderByDesc('r.collected_at')->orderBy('r.keyword'))
             ->orderBy('r.rnk')->orderBy('r.id')
             ->select(
                 'r.rnk',
@@ -190,13 +193,14 @@ class ShopSerpStore
                 'p.talk_id',
                 'p.link',
                 'p.product_key',
+                'r.keyword',
             );
     }
 
     /** 수집된 월 목록(최신순). */
-    public function months(string $keyword): array
+    public function months(?string $keyword): array
     {
-        return DB::table('keyword_shop_ranks')->where('keyword', $keyword)
+        return DB::table('keyword_shop_ranks')->when($keyword !== null, fn ($q) => $q->where('keyword', $keyword))
             ->distinct()->orderByDesc('collected_month')->pluck('collected_month')->all();
     }
 

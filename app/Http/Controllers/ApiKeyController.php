@@ -55,8 +55,14 @@ class ApiKeyController extends Controller
     {
         abort_unless($key->user_id === $request->user()->id, 403);
 
+        // A products-only key must be able to turn off its last permission.
+        // Preserve the existing minimum for keys containing other API scopes.
+        $productsOnly = array_diff((array) $key->scopes, ['keyword_products']) === [];
+        if ($productsOnly && ! $request->has('scopes')) {
+            $request->merge(['scopes' => []]);
+        }
         $data = $request->validateWithBag('scopes_'.$key->id, [
-            'scopes' => ['required', 'array', 'min:1'],
+            'scopes' => $productsOnly ? ['present', 'array'] : ['required', 'array', 'min:1'],
             'scopes.*' => ['required', 'string', 'distinct', Rule::in($request->user()->allowedApiScopes())],
         ]);
         $before = $key->scopes;
@@ -92,7 +98,7 @@ class ApiKeyController extends Controller
         abort_unless($key->user_id === $request->user()->id, 403);
         $key->update(['is_active' => ! $key->is_active]);
 
-        return back()->with('status', "'{$key->name}' 키를 ".($key->is_active ? '활성화' : '비활성화')."했습니다.");
+        return back()->with('status', "'{$key->name}' 키를 ".($key->is_active ? '활성화' : '비활성화').'했습니다.');
     }
 
     /** 키 원문 재발급(회전) — 구 키(원문 미보관)를 복사 가능하게 만들 때 사용. 기존 키는 즉시 무효화. */

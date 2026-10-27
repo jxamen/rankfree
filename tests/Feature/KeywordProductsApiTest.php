@@ -13,7 +13,7 @@ class KeywordProductsApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function headers(array $scopes = ['keyword'], array $userScopes = ['keyword'], ?int $limit = null): array
+    private function headers(array $scopes = ['keyword_products'], array $userScopes = ['keyword_products'], ?int $limit = null): array
     {
         $user = User::factory()->create(['api_scopes' => $userScopes]);
         [, $plain] = ApiKey::issue($user, 'Products test', $scopes, null, $limit, null);
@@ -83,7 +83,7 @@ class KeywordProductsApiTest extends TestCase
 
     public function test_revoked_member_scope_is_forbidden(): void
     {
-        $this->getJson('/api/v1/keyword/products?keyword=test', $this->headers(['keyword'], []))->assertForbidden();
+        $this->getJson('/api/v1/keyword/products?keyword=test', $this->headers(['keyword_products'], []))->assertForbidden();
     }
 
     public function test_unknown_keyword_returns_empty_success(): void
@@ -97,7 +97,7 @@ class KeywordProductsApiTest extends TestCase
     public function test_invalid_parameters_return_validation_errors(): void
     {
         $headers = $this->headers();
-        foreach (['', 'keyword=', 'keyword[]=test', 'keyword=test&month=202613', 'keyword=test&month=20260230',
+        foreach (['keyword[]=test', 'keyword=test&month=202613', 'keyword=test&month=20260230',
             'keyword=test&page=0', 'keyword=test&limit=101', 'keyword=test&limit=0'] as $query) {
             $this->getJson('/api/v1/keyword/products?'.$query, $headers)->assertUnprocessable();
         }
