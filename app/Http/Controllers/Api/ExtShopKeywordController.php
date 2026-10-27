@@ -40,7 +40,7 @@ class ExtShopKeywordController extends Controller
             // Data only: the extension accepts 200..4000 and cannot widen the packaged rule.
             'captcha_rules' => ['max_page_text_chars' => max(200, min(4000, (int) \App\Models\AppSetting::read('shop.captcha.max_page_text_chars', '4000')))],
             'browser_default_interval_ms' => ShopExposureBlockAlert::baseInterval(),
-            'collection_mode' => ShopExposureBlockAlert::collectionMode(), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
+            'collection_mode' => ShopExposureBlockAlert::collectionModeFor($request->user()->id), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
             'interval_revision' => ShopExposureBlockAlert::revision($request->ip()),
         ] + ShopExposureBlockAlert::parallelSettings()]);
     }
@@ -429,7 +429,7 @@ class ExtShopKeywordController extends Controller
 
         return response()->json(['data' => [
             'collector_ip' => $request->ip(), 'interval_revision' => ShopExposureBlockAlert::revision($request->ip()),
-            'collection_mode' => ShopExposureBlockAlert::collectionMode(), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
+            'collection_mode' => ShopExposureBlockAlert::collectionModeFor($request->user()->id), 'interval_ms' => ShopExposureBlockAlert::interval($request->ip()),
             'target' => $this->analyzer->targetOf($analysis),
             'analysis_id' => (int) $analysis->id,
             'items' => $items->map(fn ($i) => ['item_id' => $i['id'], 'keyword' => $i['keyword'], 'claim_token' => $i['claim_token']])->all(),

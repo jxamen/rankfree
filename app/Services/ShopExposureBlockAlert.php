@@ -37,6 +37,23 @@ class ShopExposureBlockAlert
         return \App\Models\AppSetting::read('shop.exposure.collection_mode', 'tab') === 'fetch' ? 'fetch' : 'tab';
     }
 
+    /**
+     * 사용자가 화면에서 직접 고른 수집 방식(서버에 사용자별 저장) — 고른 적이 없으면 null.
+     * 확장 저장소는 확장을 새로 깔거나 다른 브라우저에서 열면 비어 기본값(tab)으로 돌아가므로, 고른 값은 서버에도 남긴다(대표님 10-27 17:21 「저장을 했는데 풀렸다」).
+     */
+    public static function savedCollectionMode(?int $userId): ?string
+    {
+        $value = $userId ? \App\Models\AppSetting::read('shop.exposure.collection_mode.user.'.$userId) : null;
+
+        return in_array($value, ['tab', 'fetch'], true) ? $value : null;
+    }
+
+    /** 이 사용자의 수집 방식 — 직접 고른 값이 있으면 그것, 없으면 전체 기본값 */
+    public static function collectionModeFor(?int $userId): string
+    {
+        return self::savedCollectionMode($userId) ?? self::collectionMode();
+    }
+
     public static function baseInterval(): int
     {
         try {

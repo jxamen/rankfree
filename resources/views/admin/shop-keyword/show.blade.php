@@ -30,10 +30,10 @@
     <label for="sk-keywords-per-day">하루 키워드 수</label>
     <input id="sk-keywords-per-day" class="input" style="width:80px" type="number" min="10" max="500" step="1" required value="{{ \App\Services\ShopExposureBlockAlert::keywordsPerDay() }}">
     <select id="sk-collection-mode" class="input" style="width:auto">
-      <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'tab')>브라우저 탭으로 열기</option>
-      <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionMode() === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
+      <option value="tab" @selected(\App\Services\ShopExposureBlockAlert::collectionModeFor(auth()->id()) === 'tab')>브라우저 탭으로 열기</option>
+      <option value="fetch" @selected(\App\Services\ShopExposureBlockAlert::collectionModeFor(auth()->id()) === 'fetch')>탭 없이 확장이 통합검색 바로 분석</option>
     </select>
-    <span class="text-muted-soft">설정은 이 브라우저의 모든 분석에 적용됩니다.</span>
+    <span class="text-muted-soft">설정은 이 브라우저의 모든 분석에 적용됩니다(수집 방식은 내 계정에 저장돼 다른 브라우저에서도 유지돼요).</span>
     <button id="sk-interval-save" type="button" disabled class="btn btn-secondary btn-sm">저장</button>
     <button id="sk-interval-reset" type="button" disabled class="btn btn-ghost btn-sm">간격 초기화</button>
     <span id="sk-interval-notice" role="status"></span>
@@ -900,14 +900,20 @@ window.__SK = {
             interval_ms: currentIntervalMs,
             parallel_tabs: {{ \App\Services\ShopExposureBlockAlert::parallelSettings()['parallel_tabs'] }},
             tab_open_interval_ms: {{ \App\Services\ShopExposureBlockAlert::parallelSettings()['tab_open_interval_ms'] }},
-            collection_mode: {{ \Illuminate\Support\Js::from(\App\Services\ShopExposureBlockAlert::collectionMode()) }}
+            collection_mode: {{ \Illuminate\Support\Js::from(\App\Services\ShopExposureBlockAlert::collectionModeFor(auth()->id())) }}
         };
+        // 내가 고른 수집 방식(서버에 계정별 저장, 고른 적이 없으면 null) — 확장 저장소가 비었거나 다른 브라우저여도 이 값이 우선이다(대표님 10-27 17:21 「저장을 했는데 풀렸다」)
+        const savedMode = {{ \Illuminate\Support\Js::from(\App\Services\ShopExposureBlockAlert::savedCollectionMode(auth()->id())) }};
         const r = extMode ? await extCall('getShopSettings', {}, 5000) : null;
         if (extMode && !r?.ok) throw new Error('확장을 업데이트하고 새로고침해 주세요.');
         settingsInExtension = !!r?.ok;
         browserSettings = r?.settings || JSON.parse(localStorage.getItem('rfShopSettings') || 'null') || defaults;
-        await persistBrowserSettings(browserSettings);
+        if (savedMode && browserSettings.collection_mode !== savedMode) browserSettings = {...browserSettings, collection_mode: savedMode};
+        let modeNotice = '';
+        try { await persistBrowserSettings(browserSettings); }
+        catch (e) { if (!savedMode) throw e; modeNotice = e.message; }   // 확장이 그 방식을 못 받으면(옛 버전) 멈추지 않고 안내만 한다
         showBrowserSettings();
+        if (modeNotice) { const notice = document.getElementById('sk-interval-notice'); if (notice) notice.textContent = modeNotice; }
         for (const id of ['sk-interval-save','sk-interval-reset']) { const button = document.getElementById(id); if (button) button.disabled = false; }
     }
     async function persistBrowserSettings(value, manual = false) {
@@ -916,7 +922,7 @@ window.__SK = {
         if (manual) { const r = await post(cfg.urls.collectorEvent, {kind:'parallel_reset'}); if (!r.ok) throw new Error('설정 적용에 실패했습니다.'); }
         if (settingsInExtension) {
             const r = await extCall('setShopSettings', {settings:value, analysisId:cfg.analysisId, manual:false}, 5000);
-            if (!r?.ok) throw new Error('이 브라우저에 설정을 저장하지 못했습니다.');
+            if (!r?.ok) throw new Error(value.collection_mode === 'fetch' ? '확장을 0.6.9.7 로 업데이트하세요 — 이 확장은 「탭 없이 통합검색」을 지원하지 않아요(고른 방식은 내 계정에 저장해 뒀어요).' : '이 브라우저에 설정을 저장하지 못했습니다.');
         } else {
             localStorage.setItem('rfShopSettings', JSON.stringify(value));
         }
@@ -944,10 +950,12 @@ window.__SK = {
         if (![intervalInput, ...['sk-parallel-tabs','sk-tab-open-seconds','sk-keywords-per-day'].map(id => document.getElementById(id))].every(input => input.reportValidity())) return;
         this.disabled = true;
         try {
-            await persistBrowserSettings({interval_ms:Math.round(Number(intervalInput.value)*1000),parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Math.round(Number(document.getElementById('sk-tab-open-seconds').value)*1000),collection_mode:document.getElementById('sk-collection-mode').value}, true);
-            const r = await post('{{ route('admin.shop-keyword.interval', $analysis) }}', {seconds:intervalInput.value, keywords_per_day:document.getElementById('sk-keywords-per-day').value});
+            // 수집 방식은 내 계정(서버)에 먼저 저장한다 — 확장 저장이 실패해도(옛 버전) 고른 값은 남는다
+            const mode = document.getElementById('sk-collection-mode').value;
+            const r = await post('{{ route('admin.shop-keyword.interval', $analysis) }}', {seconds:intervalInput.value, keywords_per_day:document.getElementById('sk-keywords-per-day').value, collection_mode:mode});
             if (r.status === 419) { location.reload(); return; }
             if (!r.ok) throw new Error('주문 목표 저장에 실패했습니다 (HTTP ' + r.status + ').');
+            await persistBrowserSettings({interval_ms:Math.round(Number(intervalInput.value)*1000),parallel_tabs:Number(document.getElementById('sk-parallel-tabs').value),tab_open_interval_ms:Math.round(Number(document.getElementById('sk-tab-open-seconds').value)*1000),collection_mode:mode}, true);
             notice.textContent = '저장했습니다 — 다음 키워드부터 적용됩니다.';
         } catch (e) { notice.textContent = e.message; }
         finally { this.disabled = false; }
