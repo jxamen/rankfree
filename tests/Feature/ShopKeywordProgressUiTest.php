@@ -72,6 +72,18 @@ class ShopKeywordProgressUiTest extends TestCase
             ->assertJsonPath('data.top5', 1)->assertJsonPath('data.exposed', 1);
     }
 
+    public function test_fetch_security_check_shows_a_notice_and_resumes_itself_when_the_extension_lifts_the_hold(): void
+    {
+        $u = $this->admin();
+        $html = $this->actingAs($u)->get(route('admin.shop-keyword.show', $this->analysis($u)))->assertOk()->getContent();
+
+        // 확장이 연 새 창에서 사람이 풀면(확장이 fetch_hold 를 false 로) 화면이 스스로 이어서 수집한다 — 사람이 직접 누른 중단 · 이어서가 우선
+        $this->assertStringContainsString('보안문자를 풀어 주세요 — 푼 뒤 이어서 수집', $html);
+        $this->assertStringContainsString('watchFetchHold();', $html);
+        $this->assertStringContainsString('r.fetch_hold === false', $html);
+        $this->assertStringContainsString('fetchHoldHalt = false;   // 사람이 직접 누른', $html);
+    }
+
     public function test_combo_tag_label_for_related_terms_exists(): void
     {
         $u = $this->admin();

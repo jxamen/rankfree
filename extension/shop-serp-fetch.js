@@ -63,15 +63,20 @@ class ShopSerpFetch {
     return 'naver.search.ext.newshopping.shopping._INITIAL_STATE = ' + JSON.stringify({areaCode:parsed.area_code || 'shp_empty',initProps:{pagedSlot:[{page:1,slots}]}}).replaceAll('<','\\u003c') + ';';
   }
   // 모바일 통합검색 한 번만 받는다(대표님 10-27 16:52 「PC 를 할 필요 없어. 모바일만 해」). 순위는 광고를 뺀 organic_rank 기준(rank() · html() 이 그대로 쓴다).
+  // A restriction response (403/429, security check, access limit) is not a zero rank. It is only detected — never read, solved or clicked.
+  static isRestricted(response) {
+    const text = String(response.text || '').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'');
+    const restricted = /https:\/\/(?:captcha|ncpt)\.naver\.com\//.test(response.url || '') || /<title[^>]*>[^<]*(?:보안 확인|접근 제한)/i.test(text) || /<(?:form|iframe)[^>]*(?:captcha|ncpt)/i.test(text);
+    return [403,429].includes(response.status) || restricted;
+  }
   static async collect(keyword, target, {read}) {
     const started = Date.now(), device = 'mobile';
-    const response = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword));
+    const searchUrl = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword);
+    const response = await read(searchUrl);
     if (response.fetch_stopped) return response;
     const raw = response.text || '';
-    // A restriction response is not a zero rank. Stop without fallback or solving it.
-    const text = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'');
-    const restricted = /https:\/\/(?:captcha|ncpt)\.naver\.com\//.test(response.url || '') || /<title[^>]*>[^<]*(?:보안 확인|접근 제한)/i.test(text) || /<(?:form|iframe)[^>]*(?:captcha|ncpt)/i.test(text);
-    if ([403,429].includes(response.status) || restricted) return {ok:false,blocked:true,fetch_stopped:true,status:response.status, message:'통합검색 보안 확인·요청 제한 — 수집을 중단했습니다.', device,elapsed_ms:Date.now()-started};
+    // Stop without fallback or solving it; the blocked address is handed back so a person can open and solve it in a window.
+    if (this.isRestricted(response)) return {ok:false,blocked:true,fetch_stopped:true,status:response.status, url:searchUrl, message:'보안문자를 풀어 주세요 — 푼 뒤 이어서 수집', device,elapsed_ms:Date.now()-started};
     if (!response.ok) return {ok:false,status:response.status,message:'통합검색 응답을 받지 못했습니다.',device};
     const parsed = this.parse(raw), results = {[device]: this.rank(parsed, target)};
     if (parsed.status === 'parse_failed') return {ok:false,status:response.status,message:'통합검색 구조를 읽지 못했습니다 — 순위를 저장하지 않습니다.',device,device_results:results};

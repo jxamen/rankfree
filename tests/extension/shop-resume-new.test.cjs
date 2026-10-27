@@ -30,6 +30,7 @@ for (const suspended of [false,true]) test('close → pause → resume opens fre
  c.wait=async ms=>{waits.push(ms);await new Promise(setImmediate);clock+=ms;};
  vm.runInContext(`const shopSerpPool=new ShopSerpPool({wait,tabFactory:slot=>new ShopSerpTab({slot,wait}),policyFactory:slot=>new ShopSerpPolicy({storage:shopSerpPool.laneStorage(slot),wait,cache:{get:async()=>null,put:async()=>{}},now:()=>Date.now()})});`,c);
  if(!suspended) vm.runInContext(`shopSerpPool.lanes.set(0,{tab:Object.assign(new ShopSerpTab(),{tabId:7}),policy:shopSerpPool.policyFactory(0)});shopSerpPool.started.add('42:0');shopSerpPool.gates.set('42',2);`,c);
+ c.releaseFetchHold=async()=>{};   // 보안 확인 멈춤 해제는 shop-fetch-hold.test.cjs 에서 따로 본다
  const resumeStart=source.indexOf('  async resumeShopSerp(');
  vm.runInContext('const handlers={'+source.slice(resumeStart,source.indexOf('  async __rfCollectionContext',resumeStart))+'};',c);
  assert.equal((await vm.runInContext('handlers.resumeShopSerp({analysisId:42})',c)).ok,true);
