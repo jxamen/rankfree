@@ -112,7 +112,9 @@ class ShopKeywordExposureController extends Controller
         $data = $request->validate(['seconds' => 'required|numeric|min:1|max:30', 'collection_mode' => 'sometimes|in:tab,fetch', 'parallel_tabs' => 'sometimes|integer|min:1|max:4', 'tab_open_seconds' => 'sometimes|numeric|min:0|max:60|decimal:0,1', 'keywords_per_day' => 'sometimes|integer|min:10|max:500']);
         // 브라우저 소수 오차(2.2999…초)로 저장이 막히지 않게 서버에서 0.1초 단위로 맞춘다(대표님 10/19 08:49 「주문 목표 저장에 실패」).
         $data['seconds'] = round((float) $data['seconds'], 1);
-        // Collection preferences live in the browser; only the order target is shared.
+        // 수집 방식은 사용자별로 서버에도 저장한다 — 확장을 새로 깔거나 다른 브라우저에서 열어도 고른 값이 유지된다(대표님 10-27 17:21 「저장을 했는데 풀렸다」). 간격 · 탭 수는 계속 브라우저별.
+        if (isset($data['collection_mode'])) \App\Models\AppSetting::write('shop.exposure.collection_mode.user.'.$request->user()->id, $data['collection_mode']);
+        // Other collection preferences live in the browser; only the order target is shared.
         if (isset($data['keywords_per_day'])) \App\Models\AppSetting::write('shop.exposure.keywords_per_day', (string) $data['keywords_per_day']);
         if (isset($data['keywords_per_day'])) {
             DB::transaction(function () use ($analysis, $data) {
