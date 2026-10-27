@@ -7,6 +7,7 @@ use App\Models\ShopSellerInfo;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class StoreBizInfoController extends Controller
@@ -26,6 +27,8 @@ class StoreBizInfoController extends Controller
         $cutoff = now()->subDays($days);
         // Select one product per store, and the same latest seller row the admin screen uses.
         $stores = DB::table('shop_products')->select('store_id')->selectRaw('MIN(product_key) as product_key')
+            ->selectRaw("MAX(NULLIF(mall_name, '')) as store_name")
+            ->selectRaw("MAX(CASE WHEN link LIKE 'https://brand.naver.com/%' OR link LIKE 'http://brand.naver.com/%' THEN link END) as brand_link")
             ->whereNotNull('store_id')->where('store_id', '<>', '')
             ->when(isset($input['store_id']), fn ($q) => $q->where('store_id', $input['store_id']))
             ->when(isset($input['after_store_id']), fn ($q) => $q->where('store_id', '>', $input['after_store_id']))
@@ -43,11 +46,18 @@ class StoreBizInfoController extends Controller
                 }
             })
             ->orderBy('stores.store_id')->limit($limit + 1)
-            ->get(['stores.store_id', 'p.product_key', 'p.channel_uid', 'p.channel_id', 'p.channel_no', 'p.mall_name', 'p.link',
+            ->get(['stores.store_id', 'stores.brand_link', 'stores.store_name', 'p.product_key', 'p.channel_uid', 'p.channel_id', 'p.channel_no', 'p.mall_name', 'p.link',
                 's.id as seller_info_id', 's.captured_at', 's.biz_name', 's.biz_reg_no', 's.representative', 's.address']);
         $hasMore = $rows->count() > $limit;
         $items = $rows->take($limit)->map(function ($row) {
             $missing = array_values(array_filter(['biz_name', 'biz_reg_no', 'representative', 'address'], fn ($f) => ! $row->$f));
+            $storeUrl = $this->normalizeStoreUrl($row->brand_link ?: ($row->link ?? ''));
+            if (! $storeUrl || $storeUrl['store_id'] !== $row->store_id) {
+                $storeUrl = ['store_url' => 'https://smartstore.naver.com/'.$row->store_id];
+            }
+            $row->store_url = $storeUrl['store_url'];
+            $row->profile_url = $row->store_url.'/profile';
+            unset($row->brand_link, $row->product_key, $row->channel_uid, $row->channel_id, $row->channel_no, $row->mall_name, $row->link);
             $row->reason = $missing ? 'missing' : 'stale';
             $row->missing_fields = $missing;
             $row->captured_at = $row->captured_at ? CarbonImmutable::parse($row->captured_at)->toIso8601String() : null;
@@ -62,21 +72,77 @@ class StoreBizInfoController extends Controller
 
     public function store(Request $request)
     {
+        $payload = $request->json()->all();
+        if (array_is_list($payload)) {
+            if (! $payload || count($payload) > 100) {
+                throw ValidationException::withMessages(['payload' => 'Send 1 to 100 store objects.']);
+            }
+            $results = [];
+            foreach ($payload as $index => $item) {
+                try {
+                    if (! is_array($item) || array_is_list($item)) {
+                        throw ValidationException::withMessages(['payload' => 'Each item must be a store object.']);
+                    }
+                    $response = $this->saveStore($request, $item);
+                    $body = $response->getData(true);
+                    $results[] = ['index' => $index] + ($body['data'] ?? [
+                        'status' => $response->getStatusCode() === 404 ? 'not_found' : 'invalid',
+                        'code' => $body['code'], 'message' => $body['message'],
+                    ]);
+                } catch (ValidationException $e) {
+                    $results[] = ['index' => $index, 'status' => 'invalid', 'errors' => $e->errors()];
+                }
+            }
+
+            return response()->json(['data' => ['items' => $results]]);
+        }
+
+        return $this->saveStore($request, $payload);
+    }
+
+    private function normalizeStoreUrl(string $url): ?array
+    {
+        $parts = parse_url(trim($url));
+        if (! $parts || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+            return null;
+        }
+        $host = strtolower($parts['host'] ?? '');
+        $host = $host === 'm.smartstore.naver.com' ? 'smartstore.naver.com' : $host;
+        if (! in_array($host, ['smartstore.naver.com', 'brand.naver.com'], true)
+            || ! preg_match('~^/([a-zA-Z0-9_-]{1,100})(?:/profile|/products/[0-9]+)?/?$~', $parts['path'] ?? '', $m)) {
+            return null;
+        }
+
+        return ['store_id' => $m[1], 'store_url' => 'https://'.$host.'/'.$m[1]];
+    }
+
+    private function saveStore(Request $request, array $input)
+    {
+        // Empty public fields mean "no new value", never deletion.
+        foreach (self::FIELDS as $field) {
+            if (array_key_exists($field, $input) && ($input[$field] === null || (is_string($input[$field]) && trim($input[$field]) === ''))) {
+                unset($input[$field]);
+            }
+        }
+        $explicitObservation = array_key_exists('observed_at', $input);
         $rules = [
-            'store_id' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_-]+$/'],
+            'store_id' => ['sometimes', 'required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_-]+$/'],
+            'profile_url' => ['sometimes', 'required', 'string', 'max:2000'],
+            'store_url' => ['sometimes', 'required', 'string', 'max:2000'],
             'source_url' => ['required', 'string', 'max:2000', 'url:https', function ($a, $v, $fail) {
                 $parts = parse_url($v);
                 if (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
                     $fail('Use a public HTTPS source URL without credentials, query or fragment.');
                 }
             }],
-            'observed_at' => ['required', 'date', 'before_or_equal:now', 'regex:/T[0-9:]+(?:Z|[+-][0-9]{2}:[0-9]{2})$/'],
-            'public_business_info' => ['required', 'accepted'],
-            'biz_name' => ['required', 'string', 'max:200'],
-            'representative' => ['required', 'string', 'max:120'],
-            'biz_reg_no' => ['required', 'string', 'regex:/^(?:[0-9]{10}|[0-9]{3}-[0-9]{2}-[0-9]{5})$/'],
+            'observed_at' => ['sometimes', 'required', 'date', 'before_or_equal:now', 'regex:/T[0-9:]+(?:Z|[+-][0-9]{2}:[0-9]{2})$/'],
+            'public_business_info' => ['sometimes', 'accepted'],
+            'biz_name' => ['sometimes', 'required', 'string', 'max:200'],
+            'representative' => ['sometimes', 'required', 'string', 'max:120'],
+            'biz_reg_no' => ['sometimes', 'required', 'string', 'regex:/^(?:[0-9]{10}|[0-9]{3}-[0-9]{2}-[0-9]{5})$/'],
             'mail_order_no' => ['sometimes', 'required', 'string', 'max:80'],
-            'address' => ['required', 'string', 'max:1000'],
+            'address' => ['sometimes', 'required', 'string', 'max:1000'],
             'customer_phone' => ['sometimes', 'required', 'string', 'max:60', 'regex:/^[+0-9() -]+$/', function ($a, $v, $fail) {
                 $digits = preg_replace('/\D/', '', $v);
                 if (preg_match('/^(?:0|82(?:0)?)1[016789]/', $digits) || strlen($digits) < 8) {
@@ -85,8 +151,31 @@ class StoreBizInfoController extends Controller
             }],
             'email' => ['sometimes', 'required', 'email:rfc', 'max:190'],
         ];
-        $data = $request->validate($rules);
-        if (array_diff(array_keys($request->all()), array_keys($rules))) {
+        $resolved = null;
+        foreach (['profile_url', 'store_url'] as $key) {
+            if (! isset($input[$key])) {
+                continue;
+            }
+            $url = is_string($input[$key]) ? $this->normalizeStoreUrl($input[$key]) : null;
+            if (! $url || ($resolved && $resolved['store_id'] !== $url['store_id'])
+                || (isset($input['store_id']) && $input['store_id'] !== $url['store_id'])) {
+                throw ValidationException::withMessages([$key => 'Use a matching Naver store, profile or product URL.']);
+            }
+            $resolved = $url;
+        }
+        if ($resolved) {
+            $input['store_id'] = $resolved['store_id'];
+            $input['source_url'] ??= $resolved['store_url'].'/profile';
+        } elseif (isset($input['store_id']) && is_string($input['store_id']) && preg_match('/^[a-zA-Z0-9_-]{1,100}$/', $input['store_id'])) {
+            $link = DB::table('shop_products')->where('store_id', $input['store_id'])->orderBy('product_key')->value('link');
+            $canonical = $this->normalizeStoreUrl($link ?? '');
+            $input['source_url'] ??= ($canonical['store_url'] ?? 'https://smartstore.naver.com/'.$input['store_id']).'/profile';
+        }
+        if (! isset($input['store_id'])) {
+            throw ValidationException::withMessages(['store_id' => 'Send profile_url, store_url or store_id.']);
+        }
+        $data = Validator::make($input, $rules)->validate();
+        if (array_diff(array_keys($input), array_keys($rules))) {
             throw ValidationException::withMessages(['payload' => 'Unknown fields are not accepted. Do not send raw pages or private data.']);
         }
         $fields = array_intersect_key($data, array_flip(self::FIELDS));
@@ -99,22 +188,19 @@ class StoreBizInfoController extends Controller
         if (isset($fields['biz_reg_no'])) {
             $fields['biz_reg_no'] = str_replace('-', '', $fields['biz_reg_no']);
         }
-        $observed = CarbonImmutable::parse($data['observed_at'])->setTimezone(config('app.timezone'))->startOfSecond();
+        $observed = CarbonImmutable::parse($data['observed_at'] ?? now())->setTimezone(config('app.timezone'))->startOfSecond();
 
-        return DB::transaction(function () use ($request, $data, $fields, $observed) {
+        return DB::transaction(function () use ($request, $data, $fields, $observed, $explicitObservation) {
             // Every API writer locks the same existing product, including first insert.
             $product = DB::table('shop_products')->where('store_id', $data['store_id'])
                 ->orderBy('product_key')->lockForUpdate()->first();
             if (! $product) {
-                return response()->json(['code' => 'unknown_store', 'message' => 'Store not found in collected products.'], 404);
+                return response()->json(['code' => 'store_not_found', 'message' => 'Store not found in collected products.'], 404);
             }
             $row = ShopSellerInfo::where('store_id', $product->store_id)
                 ->orderByDesc('captured_at')->orderByDesc('id')->lockForUpdate()->first();
             $created = ! $row;
             if (! $row) {
-                if (! isset($fields['biz_name'], $fields['biz_reg_no'])) {
-                    throw ValidationException::withMessages(['payload' => 'A new seller record requires biz_name and biz_reg_no.']);
-                }
                 // Legacy schema requires a channel UID; this internal key is NOT a Naver channel UID.
                 $uid = $product->channel_uid ?: 'store:'.$product->store_id;
                 if (ShopSellerInfo::where('channel_uid', $uid)->exists()) {
@@ -132,13 +218,13 @@ class StoreBizInfoController extends Controller
                     $changes[$key] = ['old' => $row->$key, 'new' => $value];
                 }
             }
-            if ($row->captured_at && ($observed->lt($row->captured_at) || ($observed->eq($row->captured_at) && $changes))) {
+            if ($explicitObservation && $row->captured_at && ($observed->lt($row->captured_at) || ($observed->eq($row->captured_at) && $changes))) {
                 return response()->json(['code' => 'stale_observation', 'message' => 'Observation predates the current record or conflicts at the same timestamp.'], 409);
             }
             foreach ($changes as $key => $change) {
                 $row->$key = $change['new'];
             }
-            if ($created || ! $row->captured_at || $observed->gt($row->captured_at)) {
+            if ($created || ! $explicitObservation || ! $row->captured_at || $observed->gt($row->captured_at)) {
                 $row->captured_at = $observed;
                 $row->seller_info_url = $data['source_url'];
             }
@@ -158,7 +244,7 @@ class StoreBizInfoController extends Controller
             }
 
             return response()->json(['data' => ['store_id' => $row->store_id, 'seller_info_id' => $row->id,
-                'status' => $created ? 'created' : ($changes ? 'updated' : 'unchanged'),
+                'status' => $changes ? 'updated' : 'unchanged',
                 'changed_fields' => array_keys($changes), 'captured_at' => $row->captured_at->toIso8601String()]]);
         }, 3);
     }

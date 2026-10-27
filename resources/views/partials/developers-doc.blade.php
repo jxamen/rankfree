@@ -77,41 +77,44 @@
 
 <div class="doc-panel" data-panel="store_bizinfo">
     <h2 class="font-display text-ink doc-h2">스토어 사업자 정보 (scope: store_bizinfo)</h2>
-    <p class="ep-t">상품 목록 → 미수집·오래된 스토어 조회 → 외부 수집기에서 공개 사업자 정보 확인 → 스토어별 POST 순서입니다.
+    <p class="ep-t">중복 없는 스토어 프로필 목록 조회 → 외부 수집기에서 공개 사업자 정보 확인 → 스토어별 POST 순서입니다.
     회원과 키 모두 store_bizinfo 권한이 필요합니다. 콘솔 → API 키 → 권한에서 스토어 사업자 정보를 선택하세요.
     기존 keyword_products 권한만으로는 사용할 수 없습니다. 회원 권한은 관리자가 부여합니다. 분당 60회와 키의 일일 한도가 적용됩니다.</p>
     <p class="ep-t">서버가 네이버를 직접 수집하지 않습니다. 캡차가 나오면 중단하고 해당 스토어를 건너뛰세요. 풀기·우회·자동 클릭은 금지합니다.
     공개 사업자 정보만 보내고 개인 휴대폰·비공개 이메일·원문 HTML·쿠키·토큰은 보내지 마세요. 휴대폰 번호는 공개 여부와 관계없이 이 API에서 받지 않습니다.</p>
     <div class="ep"><div class="ep-h"><span class="ep-m">GET</span><span class="ep-p">/api/v1/stores/bizinfo</span></div><div class="ep-b">
     <p class="ep-t">수집 상품에 store_id가 있는 스토어를 중복 없이 반환합니다. 최신 세부 정보의 상호·사업자번호·대표자·주소 중 하나가 없거나 captured_at이 stale_days일보다 오래된 경우 대상입니다.
-    store_id가 없는 상품은 제외합니다. channel_uid/channel_id/channel_no는 null일 수 있습니다.</p>
+    store_id가 없는 상품은 제외합니다. 각 스토어의 store_url, profile_url, store_name을 반환합니다. 브랜드스토어는 brand.naver.com, 스마트스토어는 smartstore.naver.com 프로필 주소입니다.</p>
     <table class="doc-table"><tr><th>파라미터</th><th>설명</th></tr>
     <tr><td>limit</td><td>1~100, 기본 20</td></tr><tr><td>stale_days</td><td>1~3650, 기본 30</td></tr>
     <tr><td>store_id</td><td>선택: 특정 스토어만 확인</td></tr><tr><td>after_store_id</td><td>선택: 직전 응답 pagination.next_after_store_id. 스토어 ID 오름차순 커서. POST 후에도 page 번호를 쓰지 않아 대상 누락을 방지합니다.</td></tr></table>
     <pre class="doc-pre">curl --get https://rankfree.kr/api/v1/stores/bizinfo -H "Authorization: Bearer &lt;API_KEY&gt;" -H "Accept: application/json" --data "limit=20" --data "stale_days=30"</pre>
-    <pre class="doc-pre">{"data":{"items":[{"store_id":"example","product_key":"pd123","channel_uid":null,"channel_id":null,"channel_no":null,"mall_name":"예시몰","link":"https://smartstore.naver.com/example/products/123","seller_info_id":null,"captured_at":null,"biz_name":null,"biz_reg_no":null,"representative":null,"address":null,"reason":"missing","missing_fields":["biz_name","biz_reg_no","representative","address"]}],"stale_days":30,"pagination":{"limit":20,"has_more":false,"next_after_store_id":null}}}</pre>
+    <pre class="doc-pre">{"data":{"items":[{"store_id":"helinox","store_url":"https://brand.naver.com/helinox","profile_url":"https://brand.naver.com/helinox/profile","store_name":"헬리녹스","seller_info_id":null,"captured_at":null,"biz_name":null,"biz_reg_no":null,"representative":null,"address":null,"reason":"missing","missing_fields":["biz_name","biz_reg_no","representative","address"]}],"stale_days":30,"pagination":{"limit":20,"has_more":false,"next_after_store_id":null}}}</pre>
     <p class="ep-t">reason은 missing 또는 stale. 누락이 우선입니다. captured_at은 시간대가 포함된 ISO 8601 또는 null.
     빈 목록도 200입니다. has_more=true면 커서를 그대로 사용하고, 완료 후 다음 수집 주기는 커서 없이 시작하세요. 조회 중 새로 생기거나 변경된 스토어는 다음 주기에서 확인하세요.</p>
     </div></div>
     <div class="ep"><div class="ep-h"><span class="ep-m">POST</span><span class="ep-p">/api/v1/stores/bizinfo</span></div><div class="ep-b">
-    <p class="ep-t">스토어 하나씩 JSON으로 전송합니다. store_id는 상품 목록 또는 위 GET 값입니다. 사업자번호·채널번호로 다른 스토어를 임의 연결하지 않습니다.
-    기본 네 칸을 함께 확인해 전송하고 선택 칸은 생략하면 보존합니다. null·빈 문자열로 삭제할 수 없습니다. 같은 내용 재전송은 unchanged이며 변경 이력을 늘리지 않습니다.
+    <p class="ep-t">JSON 객체 한 건 또는 JSON 배열 1~100건으로 전송합니다. profile_url 또는 store_url로 스토어를 찾으며 기존 store_id 입력도 지원합니다. GET의 프로필 주소, 스토어 기본 주소, 모바일 스마트스토어 주소, 상품 주소를 모두 정규화합니다. 식별자를 여러 개 보내면 같은 스토어여야 합니다. 사업자번호·채널번호로 다른 스토어를 임의 연결하지 않습니다.
+    확인한 사업자 칸을 한 개 이상 보내세요. 생략·null·빈 문자열·공백만 있는 값은 기존 값을 보존합니다. 일부 칸만 저장할 수도 있으며, 기본 네 칸이 모두 채워지기 전에는 GET의 missing 대상에 남습니다. 같은 내용 재전송은 unchanged이며 변경 이력을 늘리지 않습니다.
     새 관측 시각이면 내용이 같아도 수집 시각·출처만 갱신합니다. 실제 변경된 칸의 이전/이후 값·키 ID·회원 ID·관측 시각·공개 출처는 이력 테이블에 트랜잭션으로 기록됩니다.</p>
     <table class="doc-table"><tr><th>JSON 필드</th><th>검증</th></tr>
-    <tr><td>store_id</td><td>필수, 영문·숫자·밑줄·하이픈, 최대 100자</td></tr>
-    <tr><td>biz_name / representative / address</td><td>필수, 최대 200 / 120 / 1000자</td></tr>
-    <tr><td>biz_reg_no</td><td>필수, 10자리 또는 123-45-67890. 저장 시 하이픈 제거</td></tr>
+    <tr><td>profile_url / store_url / store_id</td><td>셋 중 하나 필수. URL 최대 2000자. store_id는 영문·숫자·밑줄·하이픈, 최대 100자</td></tr>
+    <tr><td>biz_name / representative / address</td><td>선택, 최대 200 / 120 / 1000자</td></tr>
+    <tr><td>biz_reg_no</td><td>선택, 10자리 또는 123-45-67890. 저장 시 하이픈 제거</td></tr>
     <tr><td>mail_order_no / customer_phone / email</td><td>선택, 최대 80 / 60 / 190자. 전화는 공개 고객센터·유선번호만, 이메일 형식 검사</td></tr>
-    <tr><td>source_url</td><td>필수, 공개 사업자 정보 출처 HTTPS URL, 최대 2000자. 사용자정보·쿼리·프래그먼트 금지. 서버는 이 URL을 요청하지 않습니다.</td></tr>
-    <tr><td>observed_at</td><td>필수, 실제 확인 시각 ISO 8601(예: 2026-10-27T16:04:00+09:00), 미래 금지. 예시 시각을 그대로 재사용하지 마세요.</td></tr>
-    <tr><td>public_business_info</td><td>필수 true: 공개 사업자 정보만 전송함을 확인</td></tr></table>
-    <pre class="doc-pre">curl https://rankfree.kr/api/v1/stores/bizinfo -H "Authorization: Bearer &lt;API_KEY&gt;" -H "Accept: application/json" -H "Content-Type: application/json" --data '{"store_id":"example","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소","source_url":"https://example.com/company","observed_at":"2026-10-27T16:04:00+09:00","public_business_info":true}'</pre>
+    <tr><td>source_url</td><td>선택, 생략하면 정규화한 profile_url 사용. 공개 사업자 정보 출처 HTTPS URL, 최대 2000자. 사용자정보·쿼리·프래그먼트 금지. 서버는 이 URL을 요청하지 않습니다.</td></tr>
+    <tr><td>observed_at</td><td>선택, 생략하면 API가 받은 시각 사용. 명시한 경우에만 오래된 관측 거절. 실제 확인 시각 ISO 8601(예: 2026-10-27T16:04:00+09:00), 미래 금지. 예시 시각을 그대로 재사용하지 마세요.</td></tr>
+    <tr><td>public_business_info</td><td>선택, 보내면 true만 허용. 생략 여부와 관계없이 공개 사업자 정보만 전송</td></tr></table>
+    <pre class="doc-pre">curl https://rankfree.kr/api/v1/stores/bizinfo -H "Authorization: Bearer &lt;API_KEY&gt;" -H "Accept: application/json" -H "Content-Type: application/json" --data '{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"}'</pre>
     <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:04:00+09:00"}}</pre>
-    <p class="ep-t">status: created / updated / unchanged. 사업자번호는 형식만 검사하며 실제 등록 여부는 수집기가 공개 출처에서 확인해야 합니다.
+    <p class="ep-t">status: updated / unchanged (새 행도 updated). 예시 사업자 값은 설명용이며 운영 스토어에 그대로 보내지 마세요. 사업자번호는 형식만 검사하며 실제 등록 여부는 수집기가 공개 출처에서 확인해야 합니다.
     권한을 가진 수집기가 공용 스토어 세부 정보를 갱신하므로 신뢰하는 수집기에만 권한을 부여하세요.</p>
+    <p class="ep-t">배열 요청은 HTTP 200의 data.items에 입력 순서대로 index와 건별 결과 updated / unchanged / not_found / invalid를 반환합니다. 한 건의 검증 오류는 다른 건 저장을 취소하지 않습니다. 배열이 비었거나 100건을 넘으면 전체 요청은 422입니다.</p>
+    <pre class="doc-pre">[{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"},{"store_url":"https://smartstore.naver.com/example","email":"office@example.com"}]</pre>
+    <pre class="doc-pre">{"data":{"items":[{"index":0,"store_id":"helinox","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:40:00+09:00"},{"index":1,"status":"not_found","code":"store_not_found","message":"Store not found in collected products."}]}}</pre>
     <table class="doc-table"><tr><th>HTTP / code</th><th>처리</th></tr>
     <tr><td>401</td><td>키 누락·무효·비활성·만료. 키 설정 확인</td></tr><tr><td>403</td><td>키 또는 회원 권한 부족·허용 IP 불일치</td></tr>
-    <tr><td>404 / unknown_store</td><td>수집 상품에 없는 store_id. 목록 값을 확인</td></tr>
+    <tr><td>404 / store_not_found</td><td>수집 상품에 없는 store_id. 목록 값을 확인</td></tr>
     <tr><td>409 / stale_observation</td><td>기존보다 오래된 관측 또는 같은 시각의 다른 값. 최신 공개 정보를 다시 확인</td></tr>
     <tr><td>409 / store_identity_conflict</td><td>채널이 다른 스토어와 연결됨. 관리자에게 매핑 확인 요청</td></tr>
     <tr><td>422</td><td>형식·필수 칸·미지원 필드·개인 휴대폰 오류. errors의 필드별 메시지 확인</td></tr>
