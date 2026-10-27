@@ -159,6 +159,34 @@ class ShopKeywordRebuildTest extends TestCase
         $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $a->id, 'keyword' => '굳은 피']);
     }
 
+    public function test_choosing_collecting_with_nothing_left_to_check_builds_new_combos_and_the_queue_picks_it_up(): void
+    {
+        Storage::fake('local');
+        $u = $this->admin();
+        [, $ext] = ExtToken::issue($u);
+        $a = $this->analysis($u, 'done', ['굳은 피' => 0, '진한 피' => 2]);   // 미확인 조합이 하나도 없다
+
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.status', $a), ['status' => 'checking'])
+            ->assertOk()->assertJsonPath('data.status', 'checking')->assertJsonPath('data.changed', true);
+
+        $this->assertGreaterThan(0, $a->combos()->whereNull('rank')->count());
+        $this->assertSame('checking', $a->fresh()->status, '고른 상태가 그대로 유지된다');
+        $this->withToken($ext)->getJson('/api/ext/shop-keyword/check-queue')->assertOk()->assertJsonPath('data.analysis_id', $a->id);
+    }
+
+    public function test_choosing_collecting_with_combos_left_does_not_rebuild_and_target_reached_is_untouched(): void
+    {
+        Storage::fake('local');
+        $u = $this->admin();
+        $left = $this->analysis($u, 'done', ['굳은 피' => 0, '진한 피' => null]);
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.status', $left), ['status' => 'checking'])->assertOk()->assertJsonPath('data.rebuilt', 0);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $left->id, 'keyword' => '굳은 피', 'rank' => 0]);
+
+        $reached = $this->analysis($u, 'target_reached', ['굳은 피' => 1], ['굳은'], ['keyword_target' => 1]);
+        $this->actingAs($u)->postJson(route('admin.shop-keyword.status', $reached), ['status' => 'checking'])->assertOk()->assertJsonPath('data.rebuilt', 0);
+        $this->assertDatabaseHas('shop_keyword_analysis_items', ['analysis_id' => $reached->id, 'keyword' => '굳은 피', 'rank' => 1]);
+    }
+
     public function test_auto_regenerate_with_no_new_combos_never_flips_the_chosen_status_to_done(): void
     {
         $u = $this->admin();
