@@ -23,7 +23,7 @@
     @else
         <b class="text-ink">{{ $a->collectionLabel() }}</b>
     @endif
-    · 5위 이내 <span class="font-mono">{{ $a->topFiveCount() }} / {{ $a->keyword_target ?? '상한 없음' }}</span>
+    · 5위 이내 <span class="font-mono"><span id="sk-top5">{{ $a->topFiveCount() }}</span> / {{ $a->keyword_target ?? '상한 없음' }}</span>
     · 주문 기간: {{ $a->order_days ? $a->order_days.'일' : '미지정' }}
     @if ($a->order_start_date) ({{ $a->order_start_date }} ~ {{ $a->order_end_date }}) @endif
 </div>

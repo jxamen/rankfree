@@ -304,7 +304,7 @@ class ShopKeywordExposureAnalyzer
                 $retryAt = (int) ceil(1000 * ($until > microtime(true) ? $until : microtime(true) + 180));
             }
 
-            return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
+            return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed, 'top5' => $analysis->topFiveCount(),
                 'total' => (int) $analysis->combo_count, 'blocked' => $stopped && $remaining > 0, 'status' => $status,
                 'interval_ms' => (int) (Cache::get(NaverShopExposureService::policyKey(), [])['gap'] ?? ShopExposureBlockAlert::baseInterval()), 'retry_at' => $retryAt, 'error' => $error,
                 'items' => $batchResults, 'judged_count' => count($batchResults), 'exposed_items' => $this->exposedItems($analysis)];
@@ -359,7 +359,7 @@ class ShopKeywordExposureAnalyzer
             }
             $this->saveCollectionProgress($analysis, ['checked_count' => $checked, 'exposed_count' => $exposed, 'status' => $status]);
 
-            return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed,
+            return ['remaining' => $remaining, 'checked' => $checked, 'exposed' => $exposed, 'top5' => $analysis->topFiveCount(),
                 'total' => (int) $analysis->combo_count, 'blocked' => false, 'status' => $status,
                 'rank' => (int) $item->rank, 'ad' => (bool) $item->ad_exposed,
                 'combo_tag' => (string) $item->combo_tag, 'result_source' => $item->result_source,
@@ -800,6 +800,7 @@ class ShopKeywordExposureAnalyzer
             'remaining' => $analysis->status === 'ad_ended' || $analysis->targetReached() ? 0 : (int) $analysis->combos()->whereNull('rank')->count(),
             'checked' => (int) $analysis->combos()->whereNotNull('rank')->count(),
             'exposed' => (int) $analysis->combos()->whereBetween('rank', [1, $threshold])->count(),
+            'top5' => $analysis->topFiveCount(),
             'total' => (int) $analysis->combo_count,
             'blocked' => $analysis->status === 'blocked',
             'status' => (string) $analysis->status,

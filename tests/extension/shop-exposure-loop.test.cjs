@@ -55,7 +55,7 @@ test('admin clears the old failure notice on the next successful progress respon
  const start=blade.indexOf('    function renderProgress(d)');
  const code=blade.slice(start,blade.indexOf('    // ── 상태 필터',start));
  let removed=0;
- const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:()=>{},stopped:false,label:{textContent:'보안문자 대기'},document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
+ const context=vm.createContext({applyBrowserSettings:d=>d,captchaState:()=>{},stopped:false,label:{textContent:'보안문자 대기'},setInterval:()=>0,document:{getElementById:id=>id==='sk-collection-error'?{remove:()=>removed++}:{classList:{add:()=>{}}}}});
  vm.runInContext(code+`;renderProgress({status:'blocked'});renderProgress({status:'error'});`,context);
  assert.equal(removed,0);
  vm.runInContext(`renderProgress({status:'checking'});`,context);
@@ -84,7 +84,7 @@ test('one lower toggle pauses and resumes; upper and captcha buttons removed', a
  const code=blade.slice(start,blade.indexOf('    // 상품정보 다시 수집',start));
  let click, runs=0;const actions=[];
  const button={addEventListener:(type,fn)=>click=fn};
- const context=vm.createContext({loadBrowserSettings:async()=>{},applyBrowserSettings:d=>d,captchaState:()=>{},captchaWaits:new Map(),stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,sleep:async()=>{},
+ const context=vm.createContext({loadBrowserSettings:async()=>{},applyBrowserSettings:d=>d,captchaState:()=>{},captchaWaits:new Map(),stopBtn:button,stopped:false,label:{},errCount:3,failedItems:new Map([[1,'failure']]),cfg:{urls:{pause:'/pause'},method:'search'},extMode:true,document:{getElementById:()=>null},sleep:async()=>{},
  extCall:async()=>({ok:true}),post:async(url,body)=>{actions.push(body.paused);return {ok:true};},runExtLoop:()=>runs++});
  vm.runInContext(code,context);
  await click(); assert.equal(context.stopped,true); assert.equal(button.textContent,'이어서');
