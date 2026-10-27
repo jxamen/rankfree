@@ -16,7 +16,7 @@
 @endif
 <div class="flex flex-wrap items-center gap-3 mb-3">
 <div>
-@include('admin.shop-keyword.collection', ['a' => $analysis])
+@include('admin.shop-keyword.collection', ['a' => $analysis, 'editStatus' => true])
 </div>
 @if(auth()->user()->isAdmin())
 <div class="flex flex-wrap items-center gap-2 mb-3">

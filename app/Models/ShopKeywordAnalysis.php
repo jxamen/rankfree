@@ -16,6 +16,9 @@ class ShopKeywordAnalysis extends Model
         'search' => '통합검색 크롤링 (실제 화면 기준 · 광고 판별)',
     ];
 
+    /** 화면에서 직접 고를 수 있는 수집 상태(관리자) — 대기 · 실패 · 목표 도달 · 광고 끝남은 시스템이 정한다. */
+    public const MANUAL_STATUSES = ['checking' => '수집 중', 'paused' => '일시정지', 'done' => '완료'];
+
     protected $fillable = [
         'user_id', 'marketing_order_id', 'core_keyword', 'product_url', 'product_id', 'mall_name', 'brand', 'product_title', 'product_price',
         'threshold', 'token_count', 'combo_count', 'checked_count', 'exposed_count', 'status', 'banned', 'check_method',
