@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ShopSellerInfo;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class StoreBizInfoController extends Controller
@@ -16,7 +18,9 @@ class StoreBizInfoController extends Controller
     private const FIELDS = ['biz_name', 'representative', 'biz_reg_no', 'mail_order_no', 'address', 'customer_phone', 'email'];
 
     /** A bad value in these only drops that field (reported in skipped_fields); the rest of the request is still saved. */
-    private const SOFT_FIELDS = [...self::FIELDS, 'source_url', 'observed_at'];
+    private const SOFT_FIELDS = [...self::FIELDS, 'source_url', 'observed_at', 'message'];
+
+    private const STATUSES = ['suspended', 'active'];
 
     public function index(Request $request)
     {
@@ -41,6 +45,8 @@ class StoreBizInfoController extends Controller
         $rows = DB::query()->fromSub($stores, 'stores')
             ->join('shop_products as p', 'p.product_key', '=', 'stores.product_key')
             ->leftJoin('shop_seller_infos as s', fn ($join) => $join->where('s.id', '=', $latest))
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('shop_store_statuses as ss')
+                ->whereColumn('ss.store_id', 'stores.store_id')->where('ss.status', 'suspended'))
             ->where(function ($q) use ($cutoff) {
                 $q->whereNull('s.id')->orWhereNull('s.captured_at')->orWhere('s.captured_at', '<', $cutoff);
                 foreach (['biz_name', 'biz_reg_no', 'representative', 'address'] as $field) {
@@ -159,7 +165,7 @@ class StoreBizInfoController extends Controller
     private function saveStore(Request $request, array $input)
     {
         // Empty public fields mean "no new value", never deletion.
-        foreach (self::FIELDS as $field) {
+        foreach ([...self::FIELDS, 'message'] as $field) {
             if (array_key_exists($field, $input) && ($input[$field] === null || (is_string($input[$field]) && trim($input[$field]) === ''))) {
                 unset($input[$field]);
             }
@@ -183,6 +189,8 @@ class StoreBizInfoController extends Controller
             'address' => ['sometimes', 'required', 'string', 'max:1000'],
             'customer_phone' => ['sometimes', 'required', 'string', 'max:60'],
             'email' => ['sometimes', 'required', 'email:rfc', 'max:190'],
+            'status' => ['sometimes', 'required', 'string', Rule::in(self::STATUSES)],
+            'message' => ['sometimes', 'required', 'string', 'max:2000'],
         ];
         $resolved = null;
         foreach (['profile_url', 'store_url'] as $key) {
@@ -245,8 +253,11 @@ class StoreBizInfoController extends Controller
             $data = $validator->validated();
         }
         $explicitObservation = array_key_exists('observed_at', $input);
+        if (isset($data['message']) && ! isset($data['status'])) {
+            throw ValidationException::withMessages(['message' => 'Send message together with status.']);
+        }
         $fields = array_intersect_key($data, array_flip(self::FIELDS));
-        if (! $fields) {
+        if (! $fields && ! isset($data['status'])) {
             $errors = ['payload' => 'At least one valid business field is required.'];
             foreach ($skipped as $item) {
                 $errors[$item['field']] = $item['reason'];
@@ -272,56 +283,118 @@ class StoreBizInfoController extends Controller
             if (! $product) {
                 return response()->json(['code' => 'store_not_found', 'message' => 'Store not found in collected products.'], 404);
             }
-            $row = ShopSellerInfo::where('store_id', $product->store_id)
-                ->orderByDesc('captured_at')->orderByDesc('id')->lockForUpdate()->first();
-            $created = ! $row;
-            if (! $row) {
-                // Legacy schema requires a channel UID; this internal key is NOT a Naver channel UID.
-                $uid = $product->channel_uid ?: 'store:'.$product->store_id;
-                if (ShopSellerInfo::where('channel_uid', $uid)->exists()) {
-                    return response()->json(['code' => 'store_identity_conflict', 'message' => 'Existing channel belongs to a different store; review mapping.'], 409);
-                }
-                $row = new ShopSellerInfo(['store_id' => $product->store_id, 'channel_uid' => $uid, 'channel_id' => $product->channel_id]);
-            }
-            $changes = [];
-            foreach ($fields as $key => $value) {
-                $old = $row->$key;
-                if ($key === 'biz_reg_no' && $old !== null) {
-                    $old = str_replace('-', '', $old);
-                }
-                if ($old !== $value) {
-                    $changes[$key] = ['old' => $row->$key, 'new' => $value];
+            $info = null;
+            if ($fields) {
+                $info = $this->saveBusinessFields($request, $product, $data, $fields, $observed, $explicitObservation);
+                if ($info instanceof JsonResponse) {
+                    return $info;
                 }
             }
-            if ($explicitObservation && $row->captured_at && ($observed->lt($row->captured_at) || ($observed->eq($row->captured_at) && $changes))) {
-                return response()->json(['code' => 'stale_observation', 'message' => 'Observation predates the current record or conflicts at the same timestamp.'], 409);
+            if (! isset($data['status'])) {
+                return response()->json(['data' => $info + ['skipped_fields' => $skipped]]);
             }
-            foreach ($changes as $key => $change) {
-                $row->$key = $change['new'];
-            }
-            if ($created || ! $explicitObservation || ! $row->captured_at || $observed->gt($row->captured_at)) {
-                $row->captured_at = $observed;
-                $row->seller_info_url = $data['source_url'];
-            }
-            if ($changes) {
-                $row->user_id = $request->user()->id;
-            }
-            if ($row->isDirty()) {
-                $row->save();
-            }
-            if ($changes) {
-                DB::table('shop_seller_info_changes')->insert([
-                    'shop_seller_info_id' => $row->id, 'store_id' => $row->store_id,
-                    'user_id' => $request->user()->id, 'api_key_id' => $request->attributes->get('api_key')->id,
-                    'changes' => json_encode($changes, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-                    'source_url' => $data['source_url'], 'observed_at' => $observed, 'created_at' => now(),
-                ]);
+            $state = $this->saveStatus($request, $product, $data, $observed);
+            if ($info) {
+                // Business fields were sent together with the status: report both, `status` stays the store state.
+                $state += ['seller_info_id' => $info['seller_info_id'], 'info_status' => $info['status'],
+                    'changed_fields' => $info['changed_fields'], 'captured_at' => $info['captured_at']];
             }
 
-            return response()->json(['data' => ['store_id' => $row->store_id, 'seller_info_id' => $row->id,
-                'status' => $changes ? 'updated' : 'unchanged',
-                'changed_fields' => array_keys($changes), 'captured_at' => $row->captured_at->toIso8601String(),
-                'skipped_fields' => $skipped]]);
+            return response()->json(['data' => $state + ['skipped_fields' => $skipped]]);
         }, 3);
+    }
+
+    /** Saves the business fields of one store. Returns the result array, or a JsonResponse for a 409. */
+    private function saveBusinessFields(Request $request, object $product, array $data, array $fields, CarbonImmutable $observed, bool $explicitObservation): array|JsonResponse
+    {
+        $row = ShopSellerInfo::where('store_id', $product->store_id)
+            ->orderByDesc('captured_at')->orderByDesc('id')->lockForUpdate()->first();
+        $created = ! $row;
+        if (! $row) {
+            // Legacy schema requires a channel UID; this internal key is NOT a Naver channel UID.
+            $uid = $product->channel_uid ?: 'store:'.$product->store_id;
+            if (ShopSellerInfo::where('channel_uid', $uid)->exists()) {
+                return response()->json(['code' => 'store_identity_conflict', 'message' => 'Existing channel belongs to a different store; review mapping.'], 409);
+            }
+            $row = new ShopSellerInfo(['store_id' => $product->store_id, 'channel_uid' => $uid, 'channel_id' => $product->channel_id]);
+        }
+        $changes = [];
+        foreach ($fields as $key => $value) {
+            $old = $row->$key;
+            if ($key === 'biz_reg_no' && $old !== null) {
+                $old = str_replace('-', '', $old);
+            }
+            if ($old !== $value) {
+                $changes[$key] = ['old' => $row->$key, 'new' => $value];
+            }
+        }
+        if ($explicitObservation && $row->captured_at && ($observed->lt($row->captured_at) || ($observed->eq($row->captured_at) && $changes))) {
+            return response()->json(['code' => 'stale_observation', 'message' => 'Observation predates the current record or conflicts at the same timestamp.'], 409);
+        }
+        foreach ($changes as $key => $change) {
+            $row->$key = $change['new'];
+        }
+        if ($created || ! $explicitObservation || ! $row->captured_at || $observed->gt($row->captured_at)) {
+            $row->captured_at = $observed;
+            $row->seller_info_url = $data['source_url'];
+        }
+        if ($changes) {
+            $row->user_id = $request->user()->id;
+        }
+        if ($row->isDirty()) {
+            $row->save();
+        }
+        if ($changes) {
+            DB::table('shop_seller_info_changes')->insert([
+                'shop_seller_info_id' => $row->id, 'store_id' => $row->store_id,
+                'user_id' => $request->user()->id, 'api_key_id' => $request->attributes->get('api_key')->id,
+                'changes' => json_encode($changes, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'source_url' => $data['source_url'], 'observed_at' => $observed, 'created_at' => now(),
+            ]);
+        }
+
+        return ['store_id' => $row->store_id, 'seller_info_id' => $row->id,
+            'status' => $changes ? 'updated' : 'unchanged',
+            'changed_fields' => array_keys($changes), 'captured_at' => $row->captured_at->toIso8601String()];
+    }
+
+    /**
+     * Marks a store suspended ("판매자의 사정에 따라 운영이 중지되었습니다.") or active again. The received message is stored as is.
+     * The observation time never rejects the report: the last report wins. Called inside the store's product lock.
+     */
+    private function saveStatus(Request $request, object $product, array $data, CarbonImmutable $observed): array
+    {
+        $now = now();
+        $table = DB::table('shop_store_statuses');
+        $current = (clone $table)->where('store_id', $product->store_id)->lockForUpdate()->first();
+        $message = $data['message'] ?? null;
+        $base = ['observed_at' => $observed, 'source_url' => $data['source_url'], 'user_id' => $request->user()->id,
+            'api_key_id' => $request->attributes->get('api_key')->id, 'updated_at' => $now];
+        $changed = false;
+        if ($data['status'] === 'suspended') {
+            if (! $current) {
+                $table->insert($base + ['store_id' => $product->store_id, 'status' => 'suspended', 'suspended_at' => $now,
+                    'suspended_message' => $message, 'released_at' => null, 'created_at' => $now]);
+                $changed = true;
+            } elseif ($current->status !== 'suspended') {
+                // A new suspension: restart the clock and keep only this report's message.
+                $table->where('id', $current->id)->update($base + ['status' => 'suspended', 'suspended_at' => $now,
+                    'suspended_message' => $message, 'released_at' => null]);
+                $changed = true;
+            } else {
+                $changed = $message !== null && $message !== $current->suspended_message;
+                $table->where('id', $current->id)->update($base + ($changed ? ['suspended_message' => $message] : []));
+            }
+        } elseif ($current && $current->status === 'suspended') {
+            // Released: the suspension time and message stay as the record of the last suspension.
+            $table->where('id', $current->id)->update($base + ['status' => 'active', 'released_at' => $now]);
+            $changed = true;
+        }
+        $row = DB::table('shop_store_statuses')->where('store_id', $product->store_id)->first();
+        $iso = fn ($value) => $value ? CarbonImmutable::parse($value)->toIso8601String() : null;
+
+        return ['store_id' => $product->store_id, 'status' => $data['status'], 'changed' => $changed,
+            'suspended_at' => $iso($row?->suspended_at), 'released_at' => $iso($row?->released_at),
+            'message' => $row?->suspended_message];
     }
 }

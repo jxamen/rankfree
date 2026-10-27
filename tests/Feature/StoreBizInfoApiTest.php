@@ -330,4 +330,109 @@ class StoreBizInfoApiTest extends TestCase
         Log::shouldHaveReceived('info')->withArgs(fn ($message, $context) => $message === 'shop_bizinfo_skipped'
             && $context['store_id'] === 'teststore' && $context['fields'] === ['email' => 'invalid_format'] && ! str_contains(json_encode($context), 'secret'))->once();
     }
+
+    public function test_status_only_marks_store_suspended_records_message_and_hides_it_from_the_list(): void
+    {
+        $this->product('teststore', 'pd1');
+        $this->product('otherstore', 'pd2');
+        $h = $this->headers();
+        $message = '판매자의 사정에 따라 운영이 중지되었습니다.';
+        $r = $this->postJson(self::URL, ['profile_url' => 'https://smartstore.naver.com/teststore/profile', 'status' => 'suspended', 'message' => $message], $h)
+            ->assertOk()->assertJsonPath('data.status', 'suspended')->assertJsonPath('data.changed', true)
+            ->assertJsonPath('data.message', $message)->assertJsonPath('data.suspended_at', now()->toIso8601String())
+            ->assertJsonPath('data.released_at', null)->assertJsonPath('data.skipped_fields', []);
+        $this->assertArrayNotHasKey('changed_fields', $r->json('data'));
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'teststore', 'status' => 'suspended', 'suspended_message' => $message]);
+        // No business row is created for a store that only reported its status.
+        $this->assertDatabaseCount('shop_seller_infos', 0);
+        $this->assertDatabaseCount('shop_seller_info_changes', 0);
+        $list = $this->getJson(self::URL, $h)->assertOk()->assertJsonCount(1, 'data.items')->assertJsonPath('data.items.0.store_id', 'otherstore');
+        $this->assertSame(1, count($list->json('data.items')));
+        $this->getJson(self::URL.'?store_id=teststore', $h)->assertOk()->assertJsonCount(0, 'data.items');
+        // The cursor still moves over the remaining stores.
+        $this->getJson(self::URL.'?limit=1', $h)->assertOk()->assertJsonPath('data.items.0.store_id', 'otherstore')->assertJsonPath('data.pagination.has_more', false);
+    }
+
+    public function test_same_report_is_unchanged_a_new_message_is_a_change_and_the_time_is_kept(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $body = ['store_id' => 'teststore', 'status' => 'suspended', 'message' => 'first text'];
+        $this->postJson(self::URL, $body, $h)->assertOk()->assertJsonPath('data.changed', true);
+        $firstAt = DB::table('shop_store_statuses')->value('suspended_at');
+        $this->travel(5)->minutes();
+        $this->postJson(self::URL, $body, $h)->assertOk()->assertJsonPath('data.changed', false)->assertJsonPath('data.message', 'first text');
+        // A report without a message keeps the stored text; a different text replaces it.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'suspended'], $h)->assertOk()->assertJsonPath('data.changed', false)->assertJsonPath('data.message', 'first text');
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'suspended', 'message' => '   '], $h)->assertOk()->assertJsonPath('data.message', 'first text');
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'suspended', 'message' => 'second text'], $h)
+            ->assertOk()->assertJsonPath('data.changed', true)->assertJsonPath('data.message', 'second text');
+        $this->assertSame($firstAt, DB::table('shop_store_statuses')->value('suspended_at'));
+        $this->assertDatabaseCount('shop_store_statuses', 1);
+    }
+
+    public function test_active_releases_the_store_keeps_the_record_and_it_returns_to_the_list(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        // Releasing a store that was never marked does nothing and creates no row.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'active'], $h)->assertOk()->assertJsonPath('data.status', 'active')->assertJsonPath('data.changed', false);
+        $this->assertDatabaseCount('shop_store_statuses', 0);
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'suspended', 'message' => 'closed'], $h)->assertOk();
+        $this->getJson(self::URL, $h)->assertOk()->assertJsonCount(0, 'data.items');
+        $this->travel(1)->hours();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'active'], $h)->assertOk()
+            ->assertJsonPath('data.status', 'active')->assertJsonPath('data.changed', true)->assertJsonPath('data.message', 'closed')
+            ->assertJsonPath('data.released_at', now()->toIso8601String());
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'teststore', 'status' => 'active', 'suspended_message' => 'closed']);
+        $this->getJson(self::URL, $h)->assertOk()->assertJsonPath('data.items.0.store_id', 'teststore');
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'active'], $h)->assertOk()->assertJsonPath('data.changed', false);
+        // A later suspension starts a new record and drops the old text.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'status' => 'suspended'], $h)->assertOk()->assertJsonPath('data.changed', true)
+            ->assertJsonPath('data.message', null)->assertJsonPath('data.released_at', null);
+    }
+
+    public function test_status_can_come_with_business_fields_and_both_are_saved(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $this->postJson(self::URL, $this->payload(['status' => 'suspended', 'message' => 'closed']), $h)->assertOk()
+            ->assertJsonPath('data.status', 'suspended')->assertJsonPath('data.info_status', 'updated')
+            ->assertJsonPath('data.changed_fields', ['biz_name', 'representative', 'biz_reg_no', 'address'])
+            ->assertJsonPath('data.message', 'closed');
+        $this->assertDatabaseHas('shop_seller_infos', ['store_id' => 'teststore', 'biz_name' => 'Test Company']);
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'teststore', 'status' => 'suspended']);
+        // A conflicting business report (409) saves nothing, not even the status.
+        $this->postJson(self::URL, $this->payload(['status' => 'active', 'observed_at' => now()->subDay()->toIso8601String()]), $h)
+            ->assertStatus(409)->assertJsonPath('code', 'stale_observation');
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'teststore', 'status' => 'suspended']);
+    }
+
+    public function test_status_is_never_blocked_by_observation_time_and_array_results_are_per_item(): void
+    {
+        $this->product('aaa', 'pd1');
+        $this->product('bbb', 'pd2');
+        $h = $this->headers();
+        $this->postJson(self::URL, ['store_id' => 'aaa', 'status' => 'suspended', 'observed_at' => now()->subDays(3)->toIso8601String()], $h)->assertOk();
+        $this->postJson(self::URL, ['store_id' => 'aaa', 'status' => 'suspended', 'observed_at' => now()->subDays(9)->toIso8601String()], $h)->assertOk();
+        $this->postJson(self::URL, [
+            ['store_url' => 'https://brand.naver.com/aaa', 'status' => 'active'],
+            ['profile_url' => 'https://smartstore.naver.com/bbb/profile', 'status' => 'suspended', 'message' => 'closed', 'unknown_note' => 'x'],
+            ['store_id' => 'zzz', 'status' => 'suspended'],
+            ['store_id' => 'bbb', 'status' => 'closed'],
+            ['store_id' => 'bbb', 'message' => 'no status'],
+            ['store_id' => 'bbb', 'status' => 'suspended', 'message' => str_repeat('x', 2001)],
+        ], $h)->assertOk()->assertJsonCount(6, 'data.items')
+            ->assertJsonPath('data.items.0.status', 'active')->assertJsonPath('data.items.0.changed', true)
+            ->assertJsonPath('data.items.1.status', 'suspended')->assertJsonPath('data.items.1.skipped_fields.0.field', 'unknown_note')
+            ->assertJsonPath('data.items.2.status', 'not_found')->assertJsonPath('data.items.2.code', 'store_not_found')
+            ->assertJsonPath('data.items.3.status', 'invalid')->assertJsonPath('data.items.4.status', 'invalid')
+            // Too long message: that text is dropped, the suspension itself is still recorded.
+            ->assertJsonPath('data.items.5.status', 'suspended')->assertJsonPath('data.items.5.skipped_fields.0.reason', 'too_long')
+            ->assertJsonPath('data.items.5.message', 'closed');
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'bbb', 'status' => 'suspended', 'suspended_message' => 'closed']);
+        $this->assertDatabaseHas('shop_store_statuses', ['store_id' => 'aaa', 'status' => 'active']);
+        $this->postJson(self::URL, ['store_id' => 'zzz', 'status' => 'suspended'], $h)->assertNotFound()->assertJsonPath('code', 'store_not_found');
+        $this->postJson(self::URL, ['store_id' => 'aaa', 'status' => null], $h)->assertUnprocessable();
+    }
 }
