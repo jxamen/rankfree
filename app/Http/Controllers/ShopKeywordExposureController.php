@@ -446,6 +446,54 @@ class ShopKeywordExposureController extends Controller
         return response()->json(['data' => ['status' => $analysis->status]]);
     }
 
+    /**
+     * 수집 상태를 화면에서 직접 바꾼다(관리자, 대표님 10-27 16:59 「상태를 바꿀 수 있게해줘」).
+     * 상태는 남은 조합(순위 없음)으로 시스템이 계산하는 값이라, 그 사실과 어긋나는 값은 받지 않는다 — 거짓 상태는 다음 처리에서 덮인다.
+     *   수집 중: 확인할 조합이 남아 있을 때. 「이어서 확인」과 같게 화면 활동 시각을 찍어 확장 대기열(check-queue)이 이어받게 한다.
+     *   일시정지: 확인할 조합이 남아 있을 때. 「중단」과 같다.
+     *   완료: 확인할 조합이 없을 때.
+     * 목표 도달 · 광고 끝남으로 멈춘 분석은 바꾸지 않는다. 바꾼 사람 · 시각은 로그(shop_keyword_status_changed)와 updated_at 에 남는다.
+     */
+    public function changeStatus(Request $request, ShopKeywordAnalysis $analysis)
+    {
+        abort_unless($request->user()->isAdmin() && $analysis->user_id === $request->user()->id, 403);
+        $new = $request->validate(['status' => ['required', \Illuminate\Validation\Rule::in(array_keys(ShopKeywordAnalysis::MANUAL_STATUSES))]])['status'];
+
+        return DB::transaction(function () use ($request, $analysis, $new) {
+            $analysis = ShopKeywordAnalysis::whereKey($analysis->id)->lockForUpdate()->firstOrFail();
+            $old = $analysis->status;
+            $remaining = $analysis->combos()->whereNull('rank')->count();
+            $reject = match (true) {
+                $old === 'ad_ended' => ['광고가 끝나 자동 종료된 분석은 상태를 바꿀 수 없어요', 409],
+                $analysis->targetReached() => ['목표 키워드 수에 도달해 멈춘 분석이에요 — 주문 목표를 늘리면 다시 수집돼요', 422],
+                $new === 'checking' && $remaining === 0 => ['확인할 조합이 없어요 — 「새 조합」으로 조합을 늘린 뒤 바꿔 주세요', 422],
+                $new === 'paused' && $remaining === 0 => ['확인할 조합이 남지 않아 일시정지로 바꿀 수 없어요(완료 상태예요)', 422],
+                $new === 'done' && $remaining > 0 => ['아직 확인할 조합이 '.$remaining.'개 남아 있어 완료로 바꿀 수 없어요 — 멈추려면 일시정지를 고르세요', 422],
+                default => null,
+            };
+            if ($reject) {
+                return response()->json(['message' => $reject[0]], $reject[1]);
+            }
+            if ($new === 'checking') {
+                \App\Services\ShopExposureBlockAlert::resetParallel((int) $analysis->id);
+                Cache::forget('shop-exposure:tab-closed:'.$analysis->id);
+                $analysis->forceFill(['collection_seen_at' => now()]);
+            } elseif ($new === 'paused') {
+                Cache::forget('shop-exposure:tab-closed:'.$analysis->id);
+                $lock = app(ShopExposureRunLock::class);   // 중단 — 다른 수집에 바로 양보
+                $lock->release('ip:'.$request->ip(), (int) $analysis->id);
+                $lock->release('server', (int) $analysis->id);
+            }
+            $analysis->status = $new;
+            $analysis->save();
+            if ($old !== $new) {
+                \Illuminate\Support\Facades\Log::info('shop_keyword_status_changed', ['analysis' => $analysis->id, 'user' => $request->user()->id, 'from' => $old, 'to' => $new, 'ip' => $request->ip()]);
+            }
+
+            return response()->json(['data' => ['status' => $analysis->status, 'label' => $analysis->collectionLabel(), 'changed' => $old !== $new, 'remaining' => $remaining]]);
+        });
+    }
+
     /** "노출 재확인" — 저장된 결과를 보존하고 미확인·수집 실패 항목만 이어서 확인한다. */
     public function recheckExposed(Request $request, ShopKeywordAnalysis $analysis)
     {

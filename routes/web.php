@@ -393,6 +393,7 @@ $__admin->group(function () {
     Route::post('/shop-keyword/{analysis}/supplement', [ShopKeywordExposureController::class, 'supplement'])->middleware('throttle:30,1')->name('shop-keyword.supplement');
     Route::post('/shop-keyword/{analysis}/product-info', [ShopKeywordExposureController::class, 'refreshProductInfo'])->middleware('throttle:30,1')->name('shop-keyword.product-info');
     Route::post('/shop-keyword/{analysis}/pause', [ShopKeywordExposureController::class, 'pause'])->middleware('throttle:60,1')->name('shop-keyword.pause');
+    Route::post('/shop-keyword/{analysis}/status', [ShopKeywordExposureController::class, 'changeStatus'])->middleware('throttle:30,1')->name('shop-keyword.status');
     Route::post('/shop-keyword/{analysis}/regenerate', [ShopKeywordExposureController::class, 'regenerate'])->middleware('throttle:30,1')->name('shop-keyword.regenerate');
     Route::post('/shop-keyword/{analysis}/recheck-exposed', [ShopKeywordExposureController::class, 'recheckExposed'])->middleware('throttle:30,1')->name('shop-keyword.recheck-exposed');
     Route::post('/shop-keyword/{analysis}/short-links', [ShopKeywordExposureController::class, 'storeShortLinks'])->name('shop-keyword.short-links.store');
