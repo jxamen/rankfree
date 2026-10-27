@@ -140,7 +140,7 @@ class NaverShopExposureService
                 'referer' => 'https://search.shopping.naver.com/',
             ])->withUserAgent(self::PC_UA)
                 ->timeout($timeout)
-                ->get('https://ns-portal.shopping.naver.com/api/v2/shopping-paged-slot', [
+                ->get('https://ns-portal.shopping.naver.com/api/v3/shopping-paged-slot', [
                     'query' => $kw,
                     'source' => 'shp_gui',
                     'page' => 1,
