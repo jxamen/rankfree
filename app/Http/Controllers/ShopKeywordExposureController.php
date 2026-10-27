@@ -474,8 +474,14 @@ class ShopKeywordExposureController extends Controller
         ShopKeywordAnalysis::whereKey($analysis->id)->update($changes);
         \Illuminate\Support\Facades\Log::info('shop_keyword_status_changed', ['analysis' => $analysis->id, 'user' => $request->user()->id, 'from' => $old, 'to' => $new, 'ip' => $request->ip()]);
         $analysis->refresh();
+        // 수집 중으로 바꿨는데 확인할 조합이 없으면 막지 않고 새 조합을 만들어 돌린다(대표님 10-27 17:31) — 목표 도달 분석은 건드리지 않는다
+        $rebuilt = 0;
+        if ($new === 'checking' && ! $analysis->combos()->whereNull('rank')->exists() && ! $analysis->targetReached()) {
+            $rebuilt = (int) ($this->analyzer->rebuild($analysis)['added'] ?? 0);
+            $analysis->refresh();
+        }
 
-        return response()->json(['data' => ['status' => $analysis->status, 'label' => $analysis->collectionLabel(), 'changed' => $old !== $new]]);
+        return response()->json(['data' => ['status' => $analysis->status, 'label' => $analysis->collectionLabel(), 'changed' => $old !== $new, 'rebuilt' => $rebuilt]]);
     }
 
     /** "노출 재확인" — 저장된 결과를 보존하고 미확인·수집 실패 항목만 이어서 확인한다. */

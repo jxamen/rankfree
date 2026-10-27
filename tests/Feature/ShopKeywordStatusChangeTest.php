@@ -156,9 +156,11 @@ class ShopKeywordStatusChangeTest extends TestCase
         $html = $this->page($u, $a);
         $this->assertMatchesRegularExpression('/<button[^>]*id="sk-run"[^>]*>\s*이어서 수집\s*<\/button>/', $html);
         $this->assertStringNotContainsString('id="sk-stop"', $html, '진행 카드(중단/이어서)는 확인할 조합이 있을 때만 있다');
-        // 눌렀을 때: 진행 카드가 없으면 막지 않고 안내만, 있으면 기존 「이어서」(sk-stop)로 재개
+        // 눌렀을 때: 진행 카드가 없으면 막지 않고 「새로 조합」과 같게 조합을 새로 만들어 이어서 돈다(대표님 10-27 17:31), 있으면 기존 「이어서」(sk-stop)로 재개
         $this->assertStringContainsString("document.getElementById('sk-run')", $html);
-        $this->assertStringContainsString("runNote.textContent = '확인할 조합이 없어요'", $html);
+        $this->assertStringContainsString("post(regenBtn.dataset.url, {})", $html);
+        $this->assertStringNotContainsString('확인할 조합이 없어요', $html);
+        $this->assertStringNotContainsString('더 만들 새 조합이 없습니다', $html);
         $this->assertStringContainsString('stopBtn.click()', $html);
     }
 

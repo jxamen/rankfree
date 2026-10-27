@@ -1223,11 +1223,24 @@ window.__SK = {
     });
 
     // 「이어서 수집 / 수집 시작」 — 수집 중 · 일시정지에서 늘 보이는 버튼(대표님 10-27 17:17). 멈춘 수집은 위 「이어서」와 같게 재개하고,
-    // 확인할 조합이 없으면(진행 카드가 없다) 막지 않고 안내만 한다.
+    // 확인할 조합이 없으면(진행 카드가 없다) 막지 않고 「새로 조합」과 같게 조합을 새로 만든 뒤 이어서 돈다(대표님 10-27 17:31).
     const runBtn = document.getElementById('sk-run');
     const runNote = document.getElementById('sk-run-note');
-    if (runBtn) runBtn.addEventListener('click', function () {
-        if (!stopBtn) { runNote.textContent = '확인할 조합이 없어요'; return; }
+    if (runBtn) runBtn.addEventListener('click', async function () {
+        if (!stopBtn) {
+            const regenBtn = document.getElementById('sk-regen');
+            runBtn.disabled = true; runNote.textContent = '새 조합을 만드는 중…';
+            try {
+                const r = await post(regenBtn.dataset.url, {});
+                if (r.status === 419) { location.reload(); return; }
+                if (!r.ok) throw new Error('새 조합을 만들지 못했어요 (HTTP ' + r.status + ')');
+                const d = await r.json();
+                if ((d.added || 0) > 0) { location.reload(); return; }
+                runNote.textContent = d.message || '재료가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요';
+            } catch (e) { runNote.textContent = e.message; }
+            runBtn.disabled = false;
+            return;
+        }
         if (stopped) { runNote.textContent = ''; stopBtn.click(); return; }
         runNote.textContent = '이미 수집 중이에요';
     });
