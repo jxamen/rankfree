@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\PlaceRankApiController;
 use App\Http\Controllers\Api\RankController;
 use App\Http\Controllers\Api\ShopKeywordApiController;
 use App\Http\Controllers\Api\ShopRankApiController;
+use App\Http\Controllers\Api\StoreBizInfoController;
 use App\Http\Controllers\Api\VendorMissionApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -123,6 +124,11 @@ Route::prefix('ext')->group(function (): void {
 |--------------------------------------------------------------------------
 */
 Route::prefix('v1')->group(function (): void {
+    Route::get('/stores/bizinfo', [StoreBizInfoController::class, 'index'])
+        ->middleware(['auth.apikey:store_bizinfo', 'throttle:60,1,store-bizinfo:']);
+    Route::post('/stores/bizinfo', [StoreBizInfoController::class, 'store'])
+        ->middleware(['auth.apikey:store_bizinfo', 'throttle:60,1,store-bizinfo:']);
+
     // 순위추적 (scope: rank)
     Route::middleware('auth.apikey:rank')->prefix('rank')->group(function (): void {
         Route::get('/slots', [RankController::class, 'slots']);

@@ -62,7 +62,7 @@
                                     @csrf
                                     @method('PATCH')
                                     <fieldset>
-                                        <legend class="text-muted mb-1" style="font-size:var(--fs-xs);">권한 (scope) · {{ array_diff((array) $key->scopes, ['keyword_products']) === [] ? '수집 상품 목록 해제 시 API 호출 차단' : '최소 1개 선택' }}</legend>
+                                        <legend class="text-muted mb-1" style="font-size:var(--fs-xs);">권한 (scope) · {{ array_diff((array) $key->scopes, ['keyword_products', 'store_bizinfo']) === [] ? '수집 권한 해제 시 API 호출 차단' : '최소 1개 선택' }}</legend>
                                         @forelse ($allowedScopes as $code)
                                             <label class="flex items-center gap-1.5 text-ink mb-1" style="font-size:var(--fs-xs);">
                                                 <input type="checkbox" name="scopes[]" value="{{ $code }}"
