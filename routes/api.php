@@ -32,80 +32,81 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::prefix('ext')->group(function (): void {
-    Route::post('/login', [ExtAuthController::class, 'login'])->middleware('throttle:10,1');
+    // Each extension endpoint owns its bucket; polling must not consume login/analysis attempts.
+    Route::post('/login', [ExtAuthController::class, 'login'])->middleware('throttle:10,1,ext-login');
 
     /*
      * 쇼핑 순위체크 워커(2026-08-03) — shop.json 종료로 서버가 순위를 직접 못 구한다.
      * **사용자 로그인과 무관하다**(서버가 시키는 일). 운영자 발급 워커 키 또는 확장 토큰으로 통과.
      */
     Route::group([], function (): void {
-        Route::post('/shop-rank/claim', [ExtShopRankController::class, 'claim'])->middleware('throttle:120,1');
-        Route::post('/shop-rank/{job}/result', [ExtShopRankController::class, 'result'])->whereNumber('job')->middleware('throttle:120,1');
-        Route::post('/shop-rank/{job}/fail', [ExtShopRankController::class, 'fail'])->whereNumber('job')->middleware('throttle:120,1');
+        Route::post('/shop-rank/claim', [ExtShopRankController::class, 'claim'])->middleware('throttle:120,1,ext-shop-rank-claim');
+        Route::post('/shop-rank/{job}/result', [ExtShopRankController::class, 'result'])->whereNumber('job')->middleware('throttle:120,1,ext-shop-rank-job-result');
+        Route::post('/shop-rank/{job}/fail', [ExtShopRankController::class, 'fail'])->whereNumber('job')->middleware('throttle:120,1,ext-shop-rank-job-fail');
     });
 
     Route::middleware('auth.ext')->group(function (): void {
         Route::get('/me', [ExtAuthController::class, 'me']);
         Route::post('/logout', [ExtAuthController::class, 'logout']);
         // 확장 패널(쇼핑 → 순위체크) 1회성 판정 — 확장이 수집한 목록에서 순위만 계산해 돌려준다(기록 없음)
-        Route::post('/shop-rank/check', [ExtShopRankController::class, 'check'])->middleware('throttle:30,1');
+        Route::post('/shop-rank/check', [ExtShopRankController::class, 'check'])->middleware('throttle:30,1,ext-shop-rank-check');
         // 대상 해석(조기중단 힌트용) — 확장이 URL 파싱을 따로 갖지 않게 서버가 해석해 준다
-        Route::post('/shop-rank/resolve', [ExtShopRankController::class, 'resolve'])->middleware('throttle:60,1');
-        Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1');
-        Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1');
+        Route::post('/shop-rank/resolve', [ExtShopRankController::class, 'resolve'])->middleware('throttle:60,1,ext-shop-rank-resolve');
+        Route::get('/keyword-analysis', [ExtKeywordController::class, 'show'])->middleware('throttle:30,1,ext-keyword-analysis');
+        Route::get('/keyword-analysis/detail', [KeywordController::class, 'detail'])->middleware('throttle:15,1,ext-keyword-analysis-detail');
         // '함께 많이 찾는'(SERP qra 모듈, badge 포함) — 확장이 서버에서 받아 표시(DOM scrape 대체)
-        Route::get('/keyword-together', [KeywordController::class, 'together'])->middleware('throttle:20,1');
+        Route::get('/keyword-together', [KeywordController::class, 'together'])->middleware('throttle:20,1,ext-keyword-together');
         // 확장이 수집한 쇼핑 노출 상품(상위 80) 저장 — 서버는 search.shopping 418 이라 직접 수집 불가
-        Route::post('/keyword-shop-serp', [ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1');
+        Route::post('/keyword-shop-serp', [ExtKeywordShopSerpController::class, 'store'])->middleware('throttle:120,1,ext-keyword-shop-serp');
         // 대량 자동 수집 대기열 — 미수집·오래된 키워드를 검색량 순으로(확장이 연속 수집)
-        Route::get('/keyword-shop-serp/queue', [ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1');
+        Route::get('/keyword-shop-serp/queue', [ExtKeywordShopSerpController::class, 'queue'])->middleware('throttle:60,1,ext-keyword-shop-serp-queue');
         // 판매자 정보 팝업의 수동 입력용 퀴즈 문구/이미지 저장. 정답 추론·제출은 하지 않는다.
-        Route::post('/seller-captchas', [ExtSellerCaptchaController::class, 'store'])->middleware('throttle:60,1');
+        Route::post('/seller-captchas', [ExtSellerCaptchaController::class, 'store'])->middleware('throttle:60,1,ext-seller-captchas');
         // 캡차 통과 후 표시되는 판매자(사업자) 정보 — 업체(채널) 기준 저장
-        Route::post('/seller-infos', [ExtSellerInfoController::class, 'store'])->middleware('throttle:60,1');
+        Route::post('/seller-infos', [ExtSellerInfoController::class, 'store'])->middleware('throttle:60,1,ext-seller-infos');
 
         // 플레이스 리스트 순위(map.naver 배지·시장분석) — 키워드 상위 오가닉 순위 + N1/N2/N3
-        Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1');
+        Route::get('/place-serp', [RankController::class, 'serp'])->middleware('throttle:20,1,ext-place-serp');
         // 단일 매장 정밀 분석(매장분석) — D7/D9/D10 포함 완전 지표(상세 수집으로 수 초 소요)
-        Route::get('/place-detail', [RankController::class, 'placeDetail'])->middleware('throttle:10,1');
+        Route::get('/place-detail', [RankController::class, 'placeDetail'])->middleware('throttle:10,1,ext-place-detail');
 
         // 플레이스 매장 분석 저장/내역
-        Route::post('/place-analyses', [ExtPlaceController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/place-analyses', [ExtPlaceController::class, 'store'])->middleware('throttle:20,1,ext-place-analyses');
         Route::get('/place-analyses', [ExtPlaceController::class, 'index']);
         Route::get('/place-analyses/{analysis}', [ExtPlaceController::class, 'show']);
 
         // 쇼핑 시장 분석 저장/내역
-        Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/market-analyses', [ExtMarketController::class, 'store'])->middleware('throttle:20,1,ext-market-analyses');
         Route::get('/market-analyses', [ExtMarketController::class, 'index']);
         Route::get('/market-analyses/{analysis}', [ExtMarketController::class, 'show']);
 
         // 상품정보(제목·업체명·가격·SEO태그) — 노출 키워드 분석 조합 재료(서버는 상품페이지 429라 확장 수집)
-        Route::post('/product-infos', [ExtProductInfoController::class, 'store'])->middleware('throttle:60,1');
+        Route::post('/product-infos', [ExtProductInfoController::class, 'store'])->middleware('throttle:60,1,ext-product-infos');
 
         // 쇼핑 유입키워드 상품정보 자동 수집(2026-07-29) — 외부 API 로 만든 분석도 화면 없이 채워진다.
         // 확장이 큐를 폴링 → 상품페이지 수집 → 반영(조합 재생성·순위확인 자동 시작). shop_keyword 권한자 전용.
-        Route::get('/shop-keyword/product-queue', [ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1');
-        Route::post('/shop-keyword/{analysis}/product-info', [ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1');
+        Route::get('/shop-keyword/product-queue', [ExtShopKeywordController::class, 'productQueue'])->middleware('throttle:60,1,ext-shop-keyword-product-queue');
+        Route::post('/shop-keyword/{analysis}/product-info', [ExtShopKeywordController::class, 'productInfo'])->middleware('throttle:60,1,ext-shop-keyword-analysis-product-info');
         // 순위 확인도 확장이 이어받는다(2026-07-29) — 서버 자동 체크 없음. 조합 1건당 1회 제출이라 한도를 넉넉히.
         Route::get('/shop-keyword/{analysis}/collector-state', [ExtShopKeywordController::class, 'collectorState'])->whereNumber('analysis');
-        Route::post('/shop-keyword/{analysis}/collector-event', [ExtShopKeywordController::class, 'collectorEvent'])->whereNumber('analysis')->middleware('throttle:120,1');
-        Route::get('/shop-keyword/interval-policy', [ExtShopKeywordController::class, 'intervalPolicy'])->middleware('throttle:240,1');
-        Route::get('/shop-keyword/check-queue', [ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1');
-        Route::post('/shop-keyword/{analysis}/check-html', [ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1');
+        Route::post('/shop-keyword/{analysis}/collector-event', [ExtShopKeywordController::class, 'collectorEvent'])->whereNumber('analysis')->middleware('throttle:120,1,ext-shop-keyword-analysis-collector-event');
+        Route::get('/shop-keyword/interval-policy', [ExtShopKeywordController::class, 'intervalPolicy'])->middleware('throttle:240,1,ext-shop-keyword-interval-policy');
+        Route::get('/shop-keyword/check-queue', [ExtShopKeywordController::class, 'checkQueue'])->middleware('throttle:60,1,ext-shop-keyword-check-queue');
+        Route::post('/shop-keyword/{analysis}/check-html', [ExtShopKeywordController::class, 'checkHtml'])->whereNumber('analysis')->middleware('throttle:240,1,ext-shop-keyword-analysis-check-html');
 
         // 상품 분석(리뷰 분석) 저장/내역
-        Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/product-analyses', [ExtProductController::class, 'store'])->middleware('throttle:20,1,ext-product-analyses');
         Route::get('/product-analyses', [ExtProductController::class, 'index']);
         Route::get('/product-analyses/{analysis}', [ExtProductController::class, 'show']);
 
         // 쇼핑 상품명 SEO 분석(제목 점수·공통단어·추천 상품명·노출 키워드)
-        Route::post('/shopping-seo', [ExtShoppingSeoController::class, 'analyze'])->middleware('throttle:20,1');
+        Route::post('/shopping-seo', [ExtShoppingSeoController::class, 'analyze'])->middleware('throttle:20,1,ext-shopping-seo');
 
         // 셀러력(상품 SEO·지수 경쟁 비교) 수집·계산·저장/내역
-        Route::get('/seller-power/competitors', [ExtSellerPowerController::class, 'competitors'])->middleware('throttle:30,1');
-        Route::post('/seller-power', [ExtSellerPowerController::class, 'store'])->middleware('throttle:15,1');
+        Route::get('/seller-power/competitors', [ExtSellerPowerController::class, 'competitors'])->middleware('throttle:30,1,ext-seller-power-competitors');
+        Route::post('/seller-power', [ExtSellerPowerController::class, 'store'])->middleware('throttle:15,1,ext-seller-power');
         Route::get('/seller-power', [ExtSellerPowerController::class, 'index']);
-        Route::post('/talk-contacts', [ExtSellerPowerController::class, 'harvestTalk'])->middleware('throttle:20,1');
+        Route::post('/talk-contacts', [ExtSellerPowerController::class, 'harvestTalk'])->middleware('throttle:20,1,ext-talk-contacts');
         Route::get('/seller-power/{analysis}', [ExtSellerPowerController::class, 'show']);
         // 운영자 본인이 인증 상태로 대량 수집에 쓰는 엔드포인트 — 서버측 요청 제한 없음
         // (폭주 방지는 확장 콘텐츠 스크립트의 호출 쿨다운으로 처리).
