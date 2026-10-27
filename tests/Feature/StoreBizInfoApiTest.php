@@ -66,7 +66,7 @@ class StoreBizInfoApiTest extends TestCase
         $this->assertDatabaseCount('shop_seller_info_changes', 1);
         $this->postJson(self::URL, $this->payload(['biz_name' => 'Changed Company', 'observed_at' => now()->toIso8601String()]), $h)
             ->assertOk()->assertJsonPath('data.changed_fields', ['biz_name']);
-        $this->assertDatabaseHas('shop_seller_infos', ['email' => 'office@example.com', 'biz_name' => 'Changed Company', 'biz_reg_no' => '1234567890']);
+        $this->assertDatabaseHas('shop_seller_infos', ['email' => 'office@example.com', 'biz_name' => 'Changed Company', 'biz_reg_no' => '123-45-67890']);
         $audit = json_decode(DB::table('shop_seller_info_changes')->orderByDesc('id')->value('changes'), true);
         $this->assertSame(['biz_name' => ['old' => 'Test Company', 'new' => 'Changed Company']], $audit);
     }
@@ -229,7 +229,7 @@ class StoreBizInfoApiTest extends TestCase
         $item = ['profile_url' => 'https://smartstore.naver.com/teststore/profile', 'biz_reg_no' => '123-45-67890'];
         $this->postJson(self::URL, [$item, $item,
             ['store_url' => 'https://brand.naver.com/missing', 'biz_name' => 'Missing'],
-            ['store_id' => 'teststore', 'biz_reg_no' => 'bad'], 'not an object'], $h)
+            ['store_id' => 'teststore', 'biz_reg_no' => str_repeat('9', 256)], 'not an object'], $h)
             ->assertOk()->assertJsonCount(5, 'data.items')
             ->assertJsonPath('data.items.0.status', 'updated')
             ->assertJsonPath('data.items.1.status', 'unchanged')
@@ -238,7 +238,7 @@ class StoreBizInfoApiTest extends TestCase
             ->assertJsonPath('data.items.3.status', 'invalid')
             ->assertJsonPath('data.items.4.index', 4)
             ->assertJsonPath('data.items.4.status', 'invalid');
-        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '1234567890']);
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '123-45-67890']);
         $this->assertDatabaseCount('shop_seller_info_changes', 1);
         $this->postJson(self::URL, array_fill(0, 100, $item), $h)->assertOk()->assertJsonCount(100, 'data.items');
         $this->postJson(self::URL, array_fill(0, 101, $item), $h)->assertUnprocessable();
@@ -261,45 +261,93 @@ class StoreBizInfoApiTest extends TestCase
         $this->assertDatabaseCount('shop_seller_infos', 0);
     }
 
-    public function test_bad_values_drop_only_that_field_and_the_rest_is_saved(): void
+    public function test_values_are_stored_as_received_and_only_over_long_fields_are_dropped(): void
     {
         $this->product();
         $h = $this->headers();
-        $r = $this->postJson(self::URL, $this->payload(['biz_reg_no' => 'bad', 'email' => 'bad', 'address' => str_repeat('x', 1001),
+        $mail = "이메일 : help@shop.co.kr 고객센터 1588-1234\n운영시간 09~18시";
+        $r = $this->postJson(self::URL, $this->payload(['biz_reg_no' => 'bad', 'email' => '  '.$mail.'  ', 'address' => str_repeat('x', 2001),
             'customer_phone' => '010-1234-5678', 'source_url' => 'http://example.com',
             'observed_at' => now()->addDay()->toIso8601String(), 'raw' => ['private' => 'data'], 'channel_uid' => 'untrusted']), $h)
             ->assertOk()->assertJsonPath('data.status', 'updated')
             ->assertJsonPath('data.captured_at', now()->toIso8601String());
         $skipped = collect($r->json('data.skipped_fields'))->pluck('reason', 'field')->sortKeys()->all();
-        $this->assertSame(['address' => 'too_long', 'biz_reg_no' => 'invalid_format', 'channel_uid' => 'unknown_field',
-            'email' => 'invalid_format', 'observed_at' => 'invalid_format', 'raw' => 'unknown_field', 'source_url' => 'invalid_format'], $skipped);
-        $this->assertEqualsCanonicalizing(['biz_name', 'customer_phone', 'representative'], $r->json('data.changed_fields'));
+        // Only what cannot be kept is reported: the over long address, and the two metadata fields that fall back to their defaults.
+        $this->assertSame(['address' => 'too_long', 'observed_at' => 'invalid_format', 'source_url' => 'invalid_format'], $skipped);
+        $this->assertEqualsCanonicalizing(['api_extra', 'biz_name', 'biz_reg_no', 'customer_phone', 'email', 'representative'], $r->json('data.changed_fields'));
         $row = ShopSellerInfo::firstOrFail();
-        // A mobile-looking customer number is stored as given; the dropped fields stay empty; a bad source falls back to the store profile.
+        // No format checks: a mobile number, an odd business number and a whole text around the e-mail address are stored as sent.
         $this->assertSame('010-1234-5678', $row->customer_phone);
-        $this->assertSame('Test Company', $row->biz_name);
-        $this->assertNull($row->biz_reg_no);
-        $this->assertNull($row->email);
+        $this->assertSame('bad', $row->biz_reg_no);
+        $this->assertSame($mail, $row->email);
         $this->assertNull($row->address);
         $this->assertSame('https://smartstore.naver.com/teststore/profile', $row->seller_info_url);
+        // Fields we do not define never reach the real columns; they are kept in raw.
         $this->assertNotSame('untrusted', $row->channel_uid);
+        $this->assertEquals(['raw' => ['private' => 'data'], 'channel_uid' => 'untrusted'], $row->raw['api_extra']);
     }
 
-    public function test_phone_is_stored_as_given_and_business_number_is_cleaned_to_digits(): void
+    public function test_phone_and_business_number_are_stored_as_given(): void
     {
         $this->product();
         $h = $this->headers();
         $this->postJson(self::URL, ['store_id' => 'teststore', 'customer_phone' => '1588-1234 (평일 09~18시)', 'biz_reg_no' => '123 456 7890'], $h)
             ->assertOk()->assertJsonPath('data.skipped_fields', []);
-        $this->assertDatabaseHas('shop_seller_infos', ['customer_phone' => '1588-1234 (평일 09~18시)', 'biz_reg_no' => '1234567890']);
-        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => '123.45.67890'], $h)->assertOk()->assertJsonPath('data.status', 'unchanged');
+        $this->assertDatabaseHas('shop_seller_infos', ['customer_phone' => '1588-1234 (평일 09~18시)', 'biz_reg_no' => '123 456 7890']);
+        // Another layout of the same number is another received value.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => '123.45.67890'], $h)
+            ->assertOk()->assertJsonPath('data.status', 'updated')->assertJsonPath('data.changed_fields', ['biz_reg_no']);
         $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => 9876543210, 'biz_name' => 'Number type'], $h)
             ->assertOk()->assertJsonPath('data.changed_fields', ['biz_name', 'biz_reg_no']);
         $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '9876543210']);
-        // Nine digits are not a business number: that field alone is dropped.
+        // Nine digits are stored too: there is no format check, only a length limit (255).
         $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => '123-45-6789', 'biz_name' => 'Still saved'], $h)
-            ->assertOk()->assertJsonPath('data.skipped_fields.0.field', 'biz_reg_no')->assertJsonPath('data.skipped_fields.0.reason', 'invalid_format');
-        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '9876543210', 'biz_name' => 'Still saved']);
+            ->assertOk()->assertJsonPath('data.skipped_fields', []);
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '123-45-6789', 'biz_name' => 'Still saved']);
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => str_repeat('9', 256), 'biz_name' => 'Long number'], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields.0.field', 'biz_reg_no')->assertJsonPath('data.skipped_fields.0.reason', 'too_long');
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '123-45-6789', 'biz_name' => 'Long number']);
+    }
+
+    public function test_text_up_to_the_limit_is_stored_and_only_the_longer_field_is_left_out(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $mail = '문의: '.str_repeat('a', 900).'@shop.co.kr '.str_repeat('가', 1000 - 4 - 900 - 11 - 1);
+        $this->assertSame(1000, mb_strlen($mail));
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'email' => $mail, 'address' => str_repeat('주', 2000), 'biz_name' => str_repeat('N', 1000)], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields', [])->assertJsonPath('data.changed_fields', ['biz_name', 'address', 'email']);
+        $row = ShopSellerInfo::firstOrFail();
+        $this->assertSame($mail, $row->email);
+        $this->assertSame(2000, mb_strlen($row->address));
+        $this->assertSame(1000, mb_strlen($row->biz_name));
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'email' => $mail.'x', 'representative' => 'Kept'], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields.0.field', 'email')->assertJsonPath('data.skipped_fields.0.reason', 'too_long');
+        $this->assertSame($mail, ShopSellerInfo::firstOrFail()->email);
+        $this->assertSame('Kept', ShopSellerInfo::firstOrFail()->representative);
+    }
+
+    public function test_undefined_fields_are_kept_in_raw_and_merged_with_what_is_already_there(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company'], $h)->assertOk();
+        ShopSellerInfo::firstOrFail()->update(['raw' => ['html' => 'from the extension']]);
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'badge' => 'power', 'grade' => ['a' => 1]], $h)->assertUnprocessable();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'badge' => 'power', 'grade' => ['a' => 1]], $h)
+            ->assertOk()->assertJsonPath('data.status', 'updated')->assertJsonPath('data.changed_fields', ['api_extra'])->assertJsonPath('data.skipped_fields', []);
+        $this->assertEquals(['html' => 'from the extension', 'api_extra' => ['badge' => 'power', 'grade' => ['a' => 1]]], ShopSellerInfo::firstOrFail()->raw);
+        // The same extra fields again change nothing; a new value for one name replaces only that name.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'grade' => ['a' => 1], 'badge' => 'power'], $h)
+            ->assertOk()->assertJsonPath('data.status', 'unchanged');
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'badge' => 'best'], $h)
+            ->assertOk()->assertJsonPath('data.changed_fields', ['api_extra']);
+        $this->assertEquals(['html' => 'from the extension', 'api_extra' => ['badge' => 'best', 'grade' => ['a' => 1]]], ShopSellerInfo::firstOrFail()->raw);
+        // One very long undefined field is the only thing left out.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'blob' => str_repeat('x', 2001), 'tag' => 'ok'], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields.0.field', 'blob')->assertJsonPath('data.skipped_fields.0.reason', 'too_long');
+        $this->assertSame('ok', ShopSellerInfo::firstOrFail()->raw['api_extra']['tag']);
+        $this->assertArrayNotHasKey('blob', ShopSellerInfo::firstOrFail()->raw['api_extra']);
     }
 
     public function test_request_with_no_valid_field_stays_invalid_and_is_logged_without_values(): void
@@ -308,14 +356,15 @@ class StoreBizInfoApiTest extends TestCase
         $h = $this->headers();
         Log::spy();
         $secret = 'secret-value-should-not-be-logged';
-        $this->postJson(self::URL, ['store_id' => '___abouttime_', 'biz_reg_no' => $secret, 'email' => $secret, 'weird' => $secret], $h)
-            ->assertUnprocessable()->assertJsonPath('errors.biz_reg_no.0', 'invalid_format')->assertJsonPath('errors.weird.0', 'unknown_field');
+        $long = str_repeat($secret, 40);
+        $this->postJson(self::URL, ['store_id' => '___abouttime_', 'biz_reg_no' => str_repeat($secret, 10), 'email' => $long, 'weird' => $secret], $h)
+            ->assertUnprocessable()->assertJsonPath('errors.biz_reg_no.0', 'too_long')->assertJsonPath('errors.email.0', 'too_long');
         Log::shouldHaveReceived('warning')->once()->withArgs(function ($message, $context) use ($secret) {
             return $message === 'shop_bizinfo_invalid' && $context['store_id'] === '___abouttime_' && $context['index'] === null
                 && isset($context['fields']['biz_reg_no'], $context['fields']['email']) && ! str_contains(json_encode($context), $secret);
         });
         // The same request inside an array is reported per item and logged with its index.
-        $this->postJson(self::URL, [['store_id' => '___abouttime_', 'biz_name' => 'Saved'], ['store_id' => '___abouttime_', 'email' => $secret]], $h)
+        $this->postJson(self::URL, [['store_id' => '___abouttime_', 'biz_name' => 'Saved'], ['store_id' => '___abouttime_', 'email' => $long]], $h)
             ->assertOk()->assertJsonPath('data.items.0.status', 'updated')->assertJsonPath('data.items.1.status', 'invalid');
         Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context) => $message === 'shop_bizinfo_invalid' && $context['index'] === 1 && ! str_contains(json_encode($context), $secret))->once();
         $this->assertDatabaseCount('shop_seller_infos', 1);
@@ -326,9 +375,9 @@ class StoreBizInfoApiTest extends TestCase
         $this->product();
         $h = $this->headers();
         Log::spy();
-        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'email' => 'secret@@bad'], $h)->assertOk();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'address' => str_repeat('secret', 400)], $h)->assertOk();
         Log::shouldHaveReceived('info')->withArgs(fn ($message, $context) => $message === 'shop_bizinfo_skipped'
-            && $context['store_id'] === 'teststore' && $context['fields'] === ['email' => 'invalid_format'] && ! str_contains(json_encode($context), 'secret'))->once();
+            && $context['store_id'] === 'teststore' && $context['fields'] === ['address' => 'too_long'] && ! str_contains(json_encode($context), 'secret'))->once();
     }
 
     public function test_status_only_marks_store_suspended_records_message_and_hides_it_from_the_list(): void
