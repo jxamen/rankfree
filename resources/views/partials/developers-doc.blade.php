@@ -82,7 +82,7 @@
     회원과 키 모두 store_bizinfo 권한이 필요합니다. 콘솔 → API 키 → 권한에서 스토어 사업자 정보를 선택하세요.
     기존 keyword_products 권한만으로는 사용할 수 없습니다. 회원 권한은 관리자가 부여합니다. 분당 60회와 키의 일일 한도가 적용됩니다.</p>
     <p class="ep-t">서버가 네이버를 직접 수집하지 않습니다. 캡차가 나오면 중단하고 해당 스토어를 건너뛰세요. 풀기·우회·자동 클릭은 금지합니다.
-    공개 사업자 정보만 보내고 개인 휴대폰·비공개 이메일·원문 HTML·쿠키·토큰은 보내지 마세요. 휴대폰 번호는 공개 여부와 관계없이 이 API에서 받지 않습니다.</p>
+    공개 사업자 정보만 보내고 개인 휴대폰·비공개 이메일·원문 HTML·쿠키·토큰은 보내지 마세요. 프로필에 공개된 고객센터 번호는 휴대폰 형태여도 받은 그대로 저장합니다.</p>
     <div class="ep"><div class="ep-h"><span class="ep-m">GET</span><span class="ep-p">/api/v1/stores/bizinfo</span></div><div class="ep-b">
     <p class="ep-t">수집 상품에 store_id가 있는 스토어를 중복 없이 반환합니다. 최신 세부 정보의 상호·사업자번호·대표자·주소 중 하나가 없거나 captured_at이 stale_days일보다 오래된 경우 대상입니다.
     store_id가 없는 상품은 제외합니다. 각 스토어의 store_url, profile_url, store_name을 반환합니다. 브랜드스토어는 brand.naver.com, 스마트스토어는 smartstore.naver.com 프로필 주소입니다.</p>
@@ -100,25 +100,28 @@
     새 관측 시각이면 내용이 같아도 수집 시각·출처만 갱신합니다. 실제 변경된 칸의 이전/이후 값·키 ID·회원 ID·관측 시각·공개 출처는 이력 테이블에 트랜잭션으로 기록됩니다.</p>
     <table class="doc-table"><tr><th>JSON 필드</th><th>검증</th></tr>
     <tr><td>profile_url / store_url / store_id</td><td>셋 중 하나 필수. URL 최대 2000자. store_id는 영문·숫자·밑줄·하이픈, 최대 100자</td></tr>
-    <tr><td>biz_name / representative / address</td><td>선택, 최대 200 / 120 / 1000자</td></tr>
-    <tr><td>biz_reg_no</td><td>선택, 10자리 또는 123-45-67890. 저장 시 하이픈 제거</td></tr>
-    <tr><td>mail_order_no / customer_phone / email</td><td>선택, 최대 80 / 60 / 190자. 전화는 공개 고객센터·유선번호만, 이메일 형식 검사</td></tr>
-    <tr><td>source_url</td><td>선택, 생략하면 정규화한 profile_url 사용. 공개 사업자 정보 출처 HTTPS URL, 최대 2000자. 사용자정보·쿼리·프래그먼트 금지. 서버는 이 URL을 요청하지 않습니다.</td></tr>
-    <tr><td>observed_at</td><td>선택, 생략하면 API가 받은 시각 사용. 명시한 경우에만 오래된 관측 거절. 실제 확인 시각 ISO 8601(예: 2026-10-27T16:04:00+09:00), 미래 금지. 예시 시각을 그대로 재사용하지 마세요.</td></tr>
-    <tr><td>public_business_info</td><td>선택, 보내면 true만 허용. 생략 여부와 관계없이 공개 사업자 정보만 전송</td></tr></table>
+    <tr><td>biz_name / representative / address</td><td>선택, 최대 200 / 120 / 1000자. 넘으면 그 칸만 빼고 나머지를 저장</td></tr>
+    <tr><td>biz_reg_no</td><td>선택, 숫자만 추려 10자리면 저장(1234567890 · 123-45-67890 · 123 45 67890 모두 가능). 10자리가 아니면 그 칸만 빼고 저장</td></tr>
+    <tr><td>mail_order_no / customer_phone / email</td><td>선택, 최대 80 / 60 / 190자. 전화는 프로필에 공개된 값을 그대로 저장(휴대폰 형태도 가능). 이메일은 형식 검사 — 맞지 않거나 길이를 넘으면 그 칸만 빼고 저장</td></tr>
+    <tr><td>source_url</td><td>선택, 생략하면 정규화한 profile_url 사용. 공개 사업자 정보 출처 HTTPS URL, 최대 2000자. 사용자정보·쿼리·프래그먼트가 있으면 그 주소는 저장하지 않고 프로필 주소로 대신합니다. 서버는 이 URL을 요청하지 않습니다.</td></tr>
+    <tr><td>observed_at</td><td>선택, 생략하면 API가 받은 시각 사용. 명시한 경우에만 오래된 관측 거절. 실제 확인 시각 ISO 8601(예: 2026-10-27T16:04:00+09:00). 형식이 틀리거나 미래면 받은 시각으로 대신합니다. 예시 시각을 그대로 재사용하지 마세요.</td></tr>
+    <tr><td>public_business_info</td><td>선택, 보내면 true만 허용. 생략 여부와 관계없이 공개 사업자 정보만 전송</td></tr>
+    <tr><td>그 밖의 필드</td><td>정해지지 않은 필드는 저장하지 않고 무시합니다(skipped_fields에 unknown_field로 표시). 원문 HTML·개인 정보는 보내지 마세요.</td></tr></table>
     <pre class="doc-pre">curl https://rankfree.kr/api/v1/stores/bizinfo -H "Authorization: Bearer &lt;API_KEY&gt;" -H "Accept: application/json" -H "Content-Type: application/json" --data '{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"}'</pre>
-    <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:04:00+09:00"}}</pre>
+    <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:04:00+09:00","skipped_fields":[]}}</pre>
     <p class="ep-t">status: updated / unchanged (새 행도 updated). 예시 사업자 값은 설명용이며 운영 스토어에 그대로 보내지 마세요. 사업자번호는 형식만 검사하며 실제 등록 여부는 수집기가 공개 출처에서 확인해야 합니다.
     권한을 가진 수집기가 공용 스토어 세부 정보를 갱신하므로 신뢰하는 수집기에만 권한을 부여하세요.</p>
+    <p class="ep-t">받은 값은 정리해서 저장하고 거절하지 않습니다. 형식이 맞지 않거나 길이를 넘는 칸, 정해지지 않은 필드는 그 칸만 빼고 나머지를 저장하며, 뺀 칸과 이유는 응답의 skipped_fields로 알려 드립니다(이유: invalid_format / too_long / unknown_field). 저장할 수 있는 사업자 칸이 하나도 없을 때만 invalid(422)이고, 이때도 errors에 칸별 이유가 있습니다.</p>
+    <pre class="doc-pre">{"data":{"store_id":"example","seller_info_id":1,"status":"updated","changed_fields":["biz_name","customer_phone"],"captured_at":"2026-10-27T17:50:00+09:00","skipped_fields":[{"field":"email","reason":"invalid_format"},{"field":"memo","reason":"unknown_field"}]}}</pre>
     <p class="ep-t">배열 요청은 HTTP 200의 data.items에 입력 순서대로 index와 건별 결과 updated / unchanged / not_found / invalid를 반환합니다. 한 건의 검증 오류는 다른 건 저장을 취소하지 않습니다. 배열이 비었거나 100건을 넘으면 전체 요청은 422입니다.</p>
     <pre class="doc-pre">[{"profile_url":"https://brand.naver.com/helinox/profile","biz_name":"예시 주식회사","representative":"예시 대표","biz_reg_no":"1234567890","address":"공개 사업장 주소"},{"store_url":"https://smartstore.naver.com/example","email":"office@example.com"}]</pre>
-    <pre class="doc-pre">{"data":{"items":[{"index":0,"store_id":"helinox","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:40:00+09:00"},{"index":1,"status":"not_found","code":"store_not_found","message":"Store not found in collected products."}]}}</pre>
+    <pre class="doc-pre">{"data":{"items":[{"index":0,"store_id":"helinox","seller_info_id":1,"status":"updated","changed_fields":["address"],"captured_at":"2026-10-27T16:40:00+09:00","skipped_fields":[]},{"index":1,"status":"not_found","code":"store_not_found","message":"Store not found in collected products."}]}}</pre>
     <table class="doc-table"><tr><th>HTTP / code</th><th>처리</th></tr>
     <tr><td>401</td><td>키 누락·무효·비활성·만료. 키 설정 확인</td></tr><tr><td>403</td><td>키 또는 회원 권한 부족·허용 IP 불일치</td></tr>
     <tr><td>404 / store_not_found</td><td>수집 상품에 없는 store_id. 목록 값을 확인</td></tr>
     <tr><td>409 / stale_observation</td><td>기존보다 오래된 관측 또는 같은 시각의 다른 값. 최신 공개 정보를 다시 확인</td></tr>
     <tr><td>409 / store_identity_conflict</td><td>채널이 다른 스토어와 연결됨. 관리자에게 매핑 확인 요청</td></tr>
-    <tr><td>422</td><td>형식·필수 칸·미지원 필드·개인 휴대폰 오류. errors의 필드별 메시지 확인</td></tr>
+    <tr><td>422</td><td>스토어를 찾을 수 없는 주소·store_id 형식, public_business_info=false, 저장할 수 있는 사업자 칸이 하나도 없는 경우. errors에 칸별 이유가 있고 서버 로그(shop_bizinfo_invalid)에도 남습니다.</td></tr>
     <tr><td>429</td><td>분당 또는 일일 한도 초과. 한도에 맞춰 재시도</td></tr></table>
     </div></div>
 </div>

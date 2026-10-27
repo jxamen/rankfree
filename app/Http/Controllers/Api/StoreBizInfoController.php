@@ -7,12 +7,16 @@ use App\Models\ShopSellerInfo;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class StoreBizInfoController extends Controller
 {
     private const FIELDS = ['biz_name', 'representative', 'biz_reg_no', 'mail_order_no', 'address', 'customer_phone', 'email'];
+
+    /** A bad value in these only drops that field (reported in skipped_fields); the rest of the request is still saved. */
+    private const SOFT_FIELDS = [...self::FIELDS, 'source_url', 'observed_at'];
 
     public function index(Request $request)
     {
@@ -97,6 +101,7 @@ class StoreBizInfoController extends Controller
                         'code' => $body['code'], 'message' => $body['message'],
                     ]);
                 } catch (ValidationException $e) {
+                    $this->logInvalid($request, is_array($item) ? $item : [], $e, $index);
                     $results[] = ['index' => $index, 'status' => 'invalid', 'errors' => $e->errors()];
                 }
             }
@@ -104,7 +109,34 @@ class StoreBizInfoController extends Controller
             return response()->json(['data' => ['items' => $results]]);
         }
 
-        return $this->saveStore($request, $payload);
+        try {
+            return $this->saveStore($request, $payload);
+        } catch (ValidationException $e) {
+            $this->logInvalid($request, $payload, $e);
+
+            throw $e;
+        }
+    }
+
+    /** Server log for a request that stayed invalid: store id, field names and reasons only, never the values. */
+    private function logInvalid(Request $request, array $input, ValidationException $e, ?int $index = null): void
+    {
+        $store = null;
+        if (isset($input['store_id']) && is_string($input['store_id']) && preg_match('/^[a-zA-Z0-9_-]{1,100}$/', $input['store_id'])) {
+            $store = $input['store_id'];
+        } else {
+            foreach (['profile_url', 'store_url'] as $key) {
+                if (! $store && isset($input[$key]) && is_string($input[$key])) {
+                    $store = $this->normalizeStoreUrl($input[$key])['store_id'] ?? null;
+                }
+            }
+        }
+        $reasons = [];
+        foreach ($e->errors() as $field => $messages) {
+            $reasons[(string) $field] = mb_substr((string) ($messages[0] ?? ''), 0, 200);
+        }
+        Log::warning('shop_bizinfo_invalid', ['store_id' => $store, 'index' => $index,
+            'api_key_id' => $request->attributes->get('api_key')?->id, 'fields' => $reasons]);
     }
 
     private function normalizeStoreUrl(string $url): ?array
@@ -132,7 +164,6 @@ class StoreBizInfoController extends Controller
                 unset($input[$field]);
             }
         }
-        $explicitObservation = array_key_exists('observed_at', $input);
         $rules = [
             'store_id' => ['sometimes', 'required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9_-]+$/'],
             'profile_url' => ['sometimes', 'required', 'string', 'max:2000'],
@@ -150,12 +181,7 @@ class StoreBizInfoController extends Controller
             'biz_reg_no' => ['sometimes', 'required', 'string', 'regex:/^(?:[0-9]{10}|[0-9]{3}-[0-9]{2}-[0-9]{5})$/'],
             'mail_order_no' => ['sometimes', 'required', 'string', 'max:80'],
             'address' => ['sometimes', 'required', 'string', 'max:1000'],
-            'customer_phone' => ['sometimes', 'required', 'string', 'max:60', 'regex:/^[+0-9() -]+$/', function ($a, $v, $fail) {
-                $digits = preg_replace('/\D/', '', $v);
-                if (preg_match('/^(?:0|82(?:0)?)1[016789]/', $digits) || strlen($digits) < 8) {
-                    $fail('Only public business landline/customer service numbers are accepted; omit mobile numbers.');
-                }
-            }],
+            'customer_phone' => ['sometimes', 'required', 'string', 'max:60'],
             'email' => ['sometimes', 'required', 'email:rfc', 'max:190'],
         ];
         $resolved = null;
@@ -170,24 +196,66 @@ class StoreBizInfoController extends Controller
             }
             $resolved = $url;
         }
+        $defaultSource = null;
         if ($resolved) {
             $input['store_id'] = $resolved['store_id'];
-            $input['source_url'] ??= $resolved['store_url'].'/profile';
+            $defaultSource = $resolved['store_url'].'/profile';
+            $input['source_url'] ??= $defaultSource;
         } elseif (isset($input['store_id']) && is_string($input['store_id']) && preg_match('/^[a-zA-Z0-9_-]{1,100}$/', $input['store_id'])) {
             $link = DB::table('shop_products')->where('store_id', $input['store_id'])->orderBy('product_key')->value('link');
             $canonical = $this->normalizeStoreUrl($link ?? '');
-            $input['source_url'] ??= ($canonical['store_url'] ?? 'https://smartstore.naver.com/'.$input['store_id']).'/profile';
+            $defaultSource = ($canonical['store_url'] ?? 'https://smartstore.naver.com/'.$input['store_id']).'/profile';
+            $input['source_url'] ??= $defaultSource;
         }
         if (! isset($input['store_id'])) {
             throw ValidationException::withMessages(['store_id' => 'Send profile_url, store_url or store_id.']);
         }
-        $data = Validator::make($input, $rules)->validate();
-        if (array_diff(array_keys($input), array_keys($rules))) {
-            throw ValidationException::withMessages(['payload' => 'Unknown fields are not accepted. Do not send raw pages or private data.']);
+        // Save what we can and report what we dropped. Only the store identity and the public-info declaration still reject the request.
+        $skipped = [];
+        foreach (array_diff(array_keys($input), array_keys($rules)) as $key) {
+            // Fields we do not define are never stored.
+            $skipped[] = ['field' => (string) $key, 'reason' => 'unknown_field'];
+            unset($input[$key]);
         }
+        foreach (self::FIELDS as $field) {
+            if (isset($input[$field]) && is_int($input[$field])) {
+                $input[$field] = (string) $input[$field];
+            }
+        }
+        if (isset($input['biz_reg_no']) && is_string($input['biz_reg_no'])) {
+            // Keep only the digits when they make a 10 digit number (any dash or space layout).
+            $digits = preg_replace('/\D/', '', $input['biz_reg_no']);
+            if (strlen($digits) === 10) {
+                $input['biz_reg_no'] = $digits;
+            }
+        }
+        $validator = Validator::make($input, $rules);
+        if ($validator->fails()) {
+            if (array_diff(array_keys($validator->errors()->toArray()), self::SOFT_FIELDS)) {
+                throw new ValidationException($validator);
+            }
+            foreach ($validator->failed() as $field => $failedRules) {
+                $skipped[] = ['field' => (string) $field, 'reason' => isset($failedRules['Max']) ? 'too_long' : 'invalid_format'];
+                unset($input[$field]);
+            }
+            // A bad source or observation time falls back to the defaults (the store profile address, the time we received it).
+            $input['source_url'] ??= $defaultSource;
+            $data = Validator::make($input, $rules)->validate();
+        } else {
+            $data = $validator->validated();
+        }
+        $explicitObservation = array_key_exists('observed_at', $input);
         $fields = array_intersect_key($data, array_flip(self::FIELDS));
         if (! $fields) {
-            throw ValidationException::withMessages(['payload' => 'At least one business field is required.']);
+            $errors = ['payload' => 'At least one valid business field is required.'];
+            foreach ($skipped as $item) {
+                $errors[$item['field']] = $item['reason'];
+            }
+
+            throw ValidationException::withMessages($errors);
+        }
+        if ($skipped) {
+            Log::info('shop_bizinfo_skipped', ['store_id' => $data['store_id'], 'fields' => array_column($skipped, 'reason', 'field')]);
         }
         foreach ($fields as $key => $value) {
             $fields[$key] = trim($value);
@@ -197,7 +265,7 @@ class StoreBizInfoController extends Controller
         }
         $observed = CarbonImmutable::parse($data['observed_at'] ?? now())->setTimezone(config('app.timezone'))->startOfSecond();
 
-        return DB::transaction(function () use ($request, $data, $fields, $observed, $explicitObservation) {
+        return DB::transaction(function () use ($request, $data, $fields, $observed, $explicitObservation, $skipped) {
             // Every API writer locks the same existing product, including first insert.
             $product = DB::table('shop_products')->where('store_id', $data['store_id'])
                 ->orderBy('product_key')->lockForUpdate()->first();
@@ -252,7 +320,8 @@ class StoreBizInfoController extends Controller
 
             return response()->json(['data' => ['store_id' => $row->store_id, 'seller_info_id' => $row->id,
                 'status' => $changes ? 'updated' : 'unchanged',
-                'changed_fields' => array_keys($changes), 'captured_at' => $row->captured_at->toIso8601String()]]);
+                'changed_fields' => array_keys($changes), 'captured_at' => $row->captured_at->toIso8601String(),
+                'skipped_fields' => $skipped]]);
         }, 3);
     }
 }

@@ -7,6 +7,7 @@ use App\Models\ShopSellerInfo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class StoreBizInfoApiTest extends TestCase
@@ -118,11 +119,8 @@ class StoreBizInfoApiTest extends TestCase
         $h = $this->headers();
         $this->postJson(self::URL, $this->payload(), $h)->assertNotFound();
         $this->product();
-        foreach ([['biz_reg_no' => 'bad'], ['address' => str_repeat('x', 1001)],
-            ['email' => 'bad'], ['customer_phone' => '010-1234-5678'], ['customer_phone' => '+82 10 1234 5678'],
-            ['source_url' => 'http://example.com'], ['source_url' => 'https://example.com/?token=example'],
-            ['source_url' => 'https://user:pass@example.com'], ['public_business_info' => false], ['raw' => ['private' => 'data']],
-            ['observed_at' => now()->addDay()->toIso8601String()], ['observed_at' => '2026-01-01'], ['channel_uid' => 'untrusted']] as $bad) {
+        // Only the store identity and the public-info declaration still reject a whole request; bad business values just drop that field.
+        foreach ([['public_business_info' => false], ['store_id' => 'bad id!'], ['store_id' => ['x']]] as $bad) {
             $this->postJson(self::URL, $this->payload($bad), $h)->assertUnprocessable();
         }
         foreach (['limit=101', 'stale_days=0', 'after_store_id[]=x', 'store_id=../x'] as $q) {
@@ -261,5 +259,75 @@ class StoreBizInfoApiTest extends TestCase
         $this->postJson(self::URL, ['store_url' => 'https://smartstore.naver.com/other', 'profile_url' => 'https://brand.naver.com/teststore/profile', 'biz_name' => 'Company'], $h)->assertUnprocessable();
         $this->postJson(self::URL, ['biz_name' => 'Company'], $h)->assertUnprocessable();
         $this->assertDatabaseCount('shop_seller_infos', 0);
+    }
+
+    public function test_bad_values_drop_only_that_field_and_the_rest_is_saved(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $r = $this->postJson(self::URL, $this->payload(['biz_reg_no' => 'bad', 'email' => 'bad', 'address' => str_repeat('x', 1001),
+            'customer_phone' => '010-1234-5678', 'source_url' => 'http://example.com',
+            'observed_at' => now()->addDay()->toIso8601String(), 'raw' => ['private' => 'data'], 'channel_uid' => 'untrusted']), $h)
+            ->assertOk()->assertJsonPath('data.status', 'updated')
+            ->assertJsonPath('data.captured_at', now()->toIso8601String());
+        $skipped = collect($r->json('data.skipped_fields'))->pluck('reason', 'field')->sortKeys()->all();
+        $this->assertSame(['address' => 'too_long', 'biz_reg_no' => 'invalid_format', 'channel_uid' => 'unknown_field',
+            'email' => 'invalid_format', 'observed_at' => 'invalid_format', 'raw' => 'unknown_field', 'source_url' => 'invalid_format'], $skipped);
+        $this->assertEqualsCanonicalizing(['biz_name', 'customer_phone', 'representative'], $r->json('data.changed_fields'));
+        $row = ShopSellerInfo::firstOrFail();
+        // A mobile-looking customer number is stored as given; the dropped fields stay empty; a bad source falls back to the store profile.
+        $this->assertSame('010-1234-5678', $row->customer_phone);
+        $this->assertSame('Test Company', $row->biz_name);
+        $this->assertNull($row->biz_reg_no);
+        $this->assertNull($row->email);
+        $this->assertNull($row->address);
+        $this->assertSame('https://smartstore.naver.com/teststore/profile', $row->seller_info_url);
+        $this->assertNotSame('untrusted', $row->channel_uid);
+    }
+
+    public function test_phone_is_stored_as_given_and_business_number_is_cleaned_to_digits(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'customer_phone' => '1588-1234 (평일 09~18시)', 'biz_reg_no' => '123 456 7890'], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields', []);
+        $this->assertDatabaseHas('shop_seller_infos', ['customer_phone' => '1588-1234 (평일 09~18시)', 'biz_reg_no' => '1234567890']);
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => '123.45.67890'], $h)->assertOk()->assertJsonPath('data.status', 'unchanged');
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => 9876543210, 'biz_name' => 'Number type'], $h)
+            ->assertOk()->assertJsonPath('data.changed_fields', ['biz_name', 'biz_reg_no']);
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '9876543210']);
+        // Nine digits are not a business number: that field alone is dropped.
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_reg_no' => '123-45-6789', 'biz_name' => 'Still saved'], $h)
+            ->assertOk()->assertJsonPath('data.skipped_fields.0.field', 'biz_reg_no')->assertJsonPath('data.skipped_fields.0.reason', 'invalid_format');
+        $this->assertDatabaseHas('shop_seller_infos', ['biz_reg_no' => '9876543210', 'biz_name' => 'Still saved']);
+    }
+
+    public function test_request_with_no_valid_field_stays_invalid_and_is_logged_without_values(): void
+    {
+        $this->product('___abouttime_', 'pd9');
+        $h = $this->headers();
+        Log::spy();
+        $secret = 'secret-value-should-not-be-logged';
+        $this->postJson(self::URL, ['store_id' => '___abouttime_', 'biz_reg_no' => $secret, 'email' => $secret, 'weird' => $secret], $h)
+            ->assertUnprocessable()->assertJsonPath('errors.biz_reg_no.0', 'invalid_format')->assertJsonPath('errors.weird.0', 'unknown_field');
+        Log::shouldHaveReceived('warning')->once()->withArgs(function ($message, $context) use ($secret) {
+            return $message === 'shop_bizinfo_invalid' && $context['store_id'] === '___abouttime_' && $context['index'] === null
+                && isset($context['fields']['biz_reg_no'], $context['fields']['email']) && ! str_contains(json_encode($context), $secret);
+        });
+        // The same request inside an array is reported per item and logged with its index.
+        $this->postJson(self::URL, [['store_id' => '___abouttime_', 'biz_name' => 'Saved'], ['store_id' => '___abouttime_', 'email' => $secret]], $h)
+            ->assertOk()->assertJsonPath('data.items.0.status', 'updated')->assertJsonPath('data.items.1.status', 'invalid');
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context) => $message === 'shop_bizinfo_invalid' && $context['index'] === 1 && ! str_contains(json_encode($context), $secret))->once();
+        $this->assertDatabaseCount('shop_seller_infos', 1);
+    }
+
+    public function test_dropped_fields_are_logged_by_name_and_reason_only(): void
+    {
+        $this->product();
+        $h = $this->headers();
+        Log::spy();
+        $this->postJson(self::URL, ['store_id' => 'teststore', 'biz_name' => 'Company', 'email' => 'secret@@bad'], $h)->assertOk();
+        Log::shouldHaveReceived('info')->withArgs(fn ($message, $context) => $message === 'shop_bizinfo_skipped'
+            && $context['store_id'] === 'teststore' && $context['fields'] === ['email' => 'invalid_format'] && ! str_contains(json_encode($context), 'secret'))->once();
     }
 }
