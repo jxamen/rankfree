@@ -142,4 +142,43 @@ class ShopKeywordStatusChangeTest extends TestCase
         $this->assertStringContainsString('id="sk-status"', $page);
         $this->assertMatchesRegularExpression('/<option value="" selected disabled>\s*종료\(광고 끝남\)\s*<\/option>/', $page);
     }
+
+    private function page(User $u, ShopKeywordAnalysis $a): string
+    {
+        return $this->actingAs($u)->get(route('admin.shop-keyword.show', $a))->assertOk()->getContent();
+    }
+
+    public function test_run_button_is_always_shown_while_collecting_even_with_nothing_left_to_check(): void
+    {
+        $u = $this->admin();
+        // 125번 같은 경우 — 수집 중인데 확인할 조합이 없다(진행 카드가 없다). 그래도 「이어서 수집」은 늘 보인다
+        $a = $this->analysis($u, 'checking', [0, 2]);
+        $html = $this->page($u, $a);
+        $this->assertMatchesRegularExpression('/<button[^>]*id="sk-run"[^>]*>\s*이어서 수집\s*<\/button>/', $html);
+        $this->assertStringNotContainsString('id="sk-stop"', $html, '진행 카드(중단/이어서)는 확인할 조합이 있을 때만 있다');
+        // 눌렀을 때: 진행 카드가 없으면 막지 않고 안내만, 있으면 기존 「이어서」(sk-stop)로 재개
+        $this->assertStringContainsString("document.getElementById('sk-run')", $html);
+        $this->assertStringContainsString("runNote.textContent = '확인할 조합이 없어요'", $html);
+        $this->assertStringContainsString('stopBtn.click()', $html);
+    }
+
+    public function test_run_button_says_start_when_paused_and_keeps_the_existing_resume_when_combos_remain(): void
+    {
+        $u = $this->admin();
+        $paused = $this->analysis($u, 'paused', [0, null]);
+        $html = $this->page($u, $paused);
+        $this->assertMatchesRegularExpression('/<button[^>]*id="sk-run"[^>]*>\s*수집 시작\s*<\/button>/', $html);
+        $this->assertMatchesRegularExpression('/<button[^>]*id="sk-stop"[^>]*>\s*이어서\s*<\/button>/', $html);   // 기존 진행 카드의 「이어서」는 그대로
+        $pausedEmpty = $this->analysis($u, 'paused', [0, 3]);
+        $this->assertMatchesRegularExpression('/<button[^>]*id="sk-run"[^>]*>\s*수집 시작\s*<\/button>/', $this->page($u, $pausedEmpty));
+    }
+
+    public function test_run_button_is_hidden_for_the_other_statuses(): void
+    {
+        $u = $this->admin();
+        foreach (['done', 'ad_ended', 'target_reached', 'failed', 'pending'] as $status) {
+            $a = $this->analysis($u, $status, [0, 2]);
+            $this->assertStringNotContainsString('id="sk-run"', $this->page($u, $a), $status);
+        }
+    }
 }
