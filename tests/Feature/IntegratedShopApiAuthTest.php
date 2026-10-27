@@ -39,10 +39,10 @@ class IntegratedShopApiAuthTest extends TestCase
     public function test_authorized_endpoint_and_daily_limit(): void
     {
         $this->mock(IntegratedShopCollector::class, function ($mock) {
-            $mock->shouldReceive('collect')->twice()->andReturn(['status' => 'ok', 'area_code' => 'shp_gui', 'cached' => false, 'fetched_at' => now()->toIso8601String(), 'items' => [['nvMid' => '123', 'rank' => 1, 'organic_rank' => 1, 'is_ad' => false]]]);
+            $mock->shouldReceive('collect')->once()->with('캠핑의자', 'mobile')->andReturn(['status' => 'ok', 'area_code' => 'shp_gui', 'cached' => false, 'fetched_at' => now()->toIso8601String(), 'items' => [['nvMid' => '123', 'rank' => 1, 'organic_rank' => 1, 'is_ad' => false]]]);
         });
         $headers = $this->headers(limit: 1);
-        $this->postJson('/api/v1/integrated-shop-rank', $this->input(), $headers)->assertOk()->assertJsonPath('data.0.pc.rank', 1)->assertJsonPath('data.0.mobile.rank', 1);
+        $this->postJson('/api/v1/integrated-shop-rank', $this->input(), $headers)->assertOk()->assertJsonMissingPath('data.0.pc')->assertJsonPath('data.0.mobile.rank', 1);
         $this->postJson('/api/v1/integrated-shop-rank', $this->input(), $headers)->assertStatus(429);
     }
 

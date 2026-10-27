@@ -62,24 +62,20 @@ class ShopSerpFetch {
     const slots = parsed.items.map(item => ({slotType:'CARD',data:{...item,sourceType:item.is_ad ? 'AD' : 'SAS',rank:item.organic_rank || 0}}));
     return 'naver.search.ext.newshopping.shopping._INITIAL_STATE = ' + JSON.stringify({areaCode:parsed.area_code || 'shp_empty',initProps:{pagedSlot:[{page:1,slots}]}}).replaceAll('<','\\u003c') + ';';
   }
-  static async collect(keyword, target, {read, wait, gap = 4000}) {
-    const started = Date.now(), results = {}, parsed = {};
-    for (const device of ['mobile','pc']) {
-      if (device === 'pc') await wait(Math.max(1000, Number(gap) || 4000));
-      const url = device === 'mobile' ? 'https://m.search.naver.com/search.naver?where=m&query=' : 'https://search.naver.com/search.naver?where=nexearch&query=';
-      const response = await read(url + encodeURIComponent(keyword));
-      if (response.fetch_stopped) return response;
-      const raw = response.text || '';
-      // A restriction response is not a zero rank. Stop without fallback or solving it.
-      const text = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'');
-      const restricted = /https:\/\/(?:captcha|ncpt)\.naver\.com\//.test(response.url || '') || /<title[^>]*>[^<]*(?:보안 확인|접근 제한)/i.test(text) || /<(?:form|iframe)[^>]*(?:captcha|ncpt)/i.test(text);
-      if ([403,429].includes(response.status) || restricted) return {ok:false,blocked:true,fetch_stopped:true,status:response.status, message:'통합검색 보안 확인·요청 제한 — 수집을 중단했습니다.', device,elapsed_ms:Date.now()-started};
-      if (!response.ok) return {ok:false,status:response.status,message:'통합검색 응답을 받지 못했습니다.',device};
-      parsed[device] = this.parse(raw);
-      results[device] = this.rank(parsed[device], target);
-      if (parsed[device].status === 'parse_failed') return {ok:false,status:response.status,message:'통합검색 구조를 읽지 못했습니다 — 순위를 저장하지 않습니다.',device,device_results:results};
-    }
-    return {ok:true,status:200,captcha:false,result_source:'integrated',html:this.html(parsed.mobile),device_results:results,elapsed_ms:Date.now()-started};
+  // 모바일 통합검색 한 번만 받는다(대표님 10-27 16:52 「PC 를 할 필요 없어. 모바일만 해」). 순위는 광고를 뺀 organic_rank 기준(rank() · html() 이 그대로 쓴다).
+  static async collect(keyword, target, {read}) {
+    const started = Date.now(), device = 'mobile';
+    const response = await read('https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword));
+    if (response.fetch_stopped) return response;
+    const raw = response.text || '';
+    // A restriction response is not a zero rank. Stop without fallback or solving it.
+    const text = raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'');
+    const restricted = /https:\/\/(?:captcha|ncpt)\.naver\.com\//.test(response.url || '') || /<title[^>]*>[^<]*(?:보안 확인|접근 제한)/i.test(text) || /<(?:form|iframe)[^>]*(?:captcha|ncpt)/i.test(text);
+    if ([403,429].includes(response.status) || restricted) return {ok:false,blocked:true,fetch_stopped:true,status:response.status, message:'통합검색 보안 확인·요청 제한 — 수집을 중단했습니다.', device,elapsed_ms:Date.now()-started};
+    if (!response.ok) return {ok:false,status:response.status,message:'통합검색 응답을 받지 못했습니다.',device};
+    const parsed = this.parse(raw), results = {[device]: this.rank(parsed, target)};
+    if (parsed.status === 'parse_failed') return {ok:false,status:response.status,message:'통합검색 구조를 읽지 못했습니다 — 순위를 저장하지 않습니다.',device,device_results:results};
+    return {ok:true,status:200,captcha:false,result_source:'integrated',html:this.html(parsed),device_results:results,elapsed_ms:Date.now()-started};
   }
 }
 if (typeof module !== 'undefined') module.exports = ShopSerpFetch;

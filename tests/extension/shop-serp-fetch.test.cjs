@@ -26,12 +26,19 @@ test('CARD, escaped braces, bracket marker and malformed inputs',()=>{
  assert.equal(F.parse('<html>no results</html>').status,'area_absent');
  assert.equal(F.parse('<html>newshopping</html>').status,'parse_failed');
 });
-test('mobile and PC remain separate; requests never use shopping search',async()=>{
+test('only mobile integrated search is requested (no PC); requests never use shopping search',async()=>{
  const urls=[];const r=await F.collect('keyword',{product_id:'70'},{wait:async()=>{},read:async u=>{urls.push(u);return {ok:true,status:200,text:html(state())}}});
- assert.equal(r.ok,true);assert.equal(r.device_results.mobile.rank,70);assert.equal(r.device_results.pc.rank,70);
- assert.equal(urls.length,2);assert.equal(new URL(urls[0]).host,'m.search.naver.com');assert.equal(new URL(urls[1]).host,'search.naver.com');
+ assert.equal(r.ok,true);assert.equal(r.device_results.mobile.rank,70);assert.equal(r.device_results.pc,undefined);
+ assert.equal(urls.length,1);assert.equal(new URL(urls[0]).host,'m.search.naver.com');assert.equal(r.html.includes('shp_gui'),true);
 });
-test('HTTP restriction and security page stop before PC without zero rank',async()=>{
+test('ads are excluded from the rank; an ad-only target has rank 0 and ad true',async()=>{
+ const s=state();s.initProps.pagedSlot[0].slots[0].data[0].sourceType='AD';
+ const r=await F.collect('keyword',{product_id:'1'},{read:async()=>({ok:true,status:200,text:html(s)})});
+ assert.equal(r.device_results.mobile.rank,0);assert.equal(r.device_results.mobile.ad,true);
+ const second=await F.collect('keyword',{product_id:'2'},{read:async()=>({ok:true,status:200,text:html(s)})});
+ assert.equal(second.device_results.mobile.rank,1);
+});
+test('HTTP restriction and security page stop after the single request without zero rank',async()=>{
  for(const response of [{ok:false,status:429,text:''},{ok:true,status:200,text:'<html><title>NAVER 보안 확인</title></html>'}]){
   let count=0;const r=await F.collect('k',{}, {wait:async()=>{},read:async()=>{count++;return response}});
   assert.equal(count,1);assert.equal(r.ok,false);assert.equal(r.fetch_stopped,true);assert.equal(r.html,undefined);

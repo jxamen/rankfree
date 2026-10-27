@@ -85,9 +85,9 @@ class IntegratedShopRankTest extends TestCase
     {
         Http::fake(['*' => Http::response('blocked', 429)]);
         $response = $this->postJson('/_integrated-test', ['keywords' => ['one', 'two'], 'target' => ['type' => 'nvMid', 'value' => '123'], 'top' => 5]);
-        $response->assertOk()->assertJsonCount(0, 'data')->assertJsonCount(4, 'errors')->assertJsonPath('errors.3.status', 'blocked');
+        $response->assertOk()->assertJsonCount(0, 'data')->assertJsonCount(2, 'errors')->assertJsonPath('errors.0.device', 'mobile')->assertJsonPath('errors.1.status', 'blocked');
         Http::assertSentCount(1);
-        $this->assertSame('blocked', app(IntegratedShopCollector::class)->collect('three', 'pc')['status']);
+        $this->assertSame('blocked', app(IntegratedShopCollector::class)->collect('three', 'mobile')['status']);
         Http::assertSentCount(1);
     }
 
@@ -103,26 +103,56 @@ class IntegratedShopRankTest extends TestCase
     {
         $lock = Cache::store('file')->lock('integrated-shop:collector', 30);
         $lock->get();
-        $this->assertSame('busy', app(IntegratedShopCollector::class)->collect('one', 'pc')['status']);
+        $this->assertSame('busy', app(IntegratedShopCollector::class)->collect('one', 'mobile')['status']);
         Http::assertNothingSent();
         $lock->release();
         Http::fake(['*' => Http::response('error', 500)]);
-        $this->postJson('/_integrated-test', ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '123']])->assertOk()->assertJsonPath('data.0.pc.rank', null)->assertJsonPath('data.0.pc.status', 'fetch_failed')->assertJsonPath('data.0.pc.received_count', null)->assertJsonPath('data.0.pc.rank_status', 'collection_failed')->assertJsonPath('data.0.pc.rank_label', null);
+        $this->postJson('/_integrated-test', ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '123']])->assertOk()->assertJsonPath('data.0.mobile.rank', null)->assertJsonPath('data.0.mobile.status', 'fetch_failed')->assertJsonPath('data.0.mobile.received_count', null)->assertJsonPath('data.0.mobile.organic_received_count', null)->assertJsonPath('data.0.mobile.rank_status', 'collection_failed')->assertJsonPath('data.0.mobile.rank_label', null);
     }
 
     public function test_successful_absence_reports_actual_count(): void
     {
         Http::fake(['*' => Http::response($this->html())]);
-        $this->postJson('/_integrated-test', ['keywords' => ['absent'], 'target' => ['type' => 'nvMid', 'value' => 'missing']])->assertOk()->assertJsonPath('data.0.mobile.received_count', 4)->assertJsonPath('data.0.mobile.rank_status', 'outside')->assertJsonPath('data.0.mobile.rank_label', '4위 밖')->assertJsonCount(0, 'errors');
+        // 기본 기준은 광고 제외 — 받은 4개 중 광고(AD · AITEMS_FORYOU_AD)를 뺀 2개가 「N위 밖」의 N
+        $this->postJson('/_integrated-test', ['keywords' => ['absent'], 'target' => ['type' => 'nvMid', 'value' => 'missing']])->assertOk()->assertJsonPath('data.0.mobile.received_count', 4)->assertJsonPath('data.0.mobile.organic_received_count', 2)->assertJsonPath('data.0.mobile.rank_status', 'outside')->assertJsonPath('data.0.mobile.rank_label', '2위 밖')->assertJsonCount(0, 'errors');
+        Cache::store('file')->flush();
+        $this->postJson('/_integrated-test', ['keywords' => ['absent'], 'target' => ['type' => 'nvMid', 'value' => 'missing'], 'rank_by' => 'rank'])->assertOk()->assertJsonPath('data.0.mobile.rank_label', '4위 밖');
+    }
+
+    public function test_mobile_only_one_request_per_keyword_and_no_pc_result(): void
+    {
+        Http::fake(['*' => Http::response($this->html())]);
+        $this->postJson('/_integrated-test', ['keywords' => ['one', 'two', 'three'], 'target' => ['type' => 'nvMid', 'value' => '456']])->assertOk()
+            ->assertJsonCount(3, 'data')->assertJsonMissingPath('data.0.pc')->assertJsonPath('data.0.mobile.status', 'ok')->assertJsonPath('rank_by', 'organic_rank');
+        Http::assertSentCount(3);
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://m.search.naver.com/'));
+        Http::assertNotSent(fn ($request) => str_starts_with($request->url(), 'https://search.naver.com/'));
+    }
+
+    public function test_default_basis_is_organic_and_ad_only_target_has_no_organic_rank(): void
+    {
+        Http::fake(['*' => Http::response($this->html())]);
+        // 789 는 광고(AITEMS_FORYOU_AD)로만 나온다 — 화면 순위는 4위지만 광고 제외 순위는 없다
+        $input = ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '789'], 'top' => 10];
+        $this->postJson('/_integrated-test', $input)->assertOk()->assertJsonCount(0, 'data');
+        $this->postJson('/_integrated-test', $input + ['rank_by' => 'rank'])->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.mobile.rank', 4)->assertJsonPath('data.0.mobile.is_ad', true)->assertJsonPath('data.0.mobile.rank_label', '4위');
+        // top 없이 부르면 모두 돌려주며, 기본 기준에서는 광고로만 노출된 대상이 순위 없이 표시된다
+        unset($input['top']);
+        $this->postJson('/_integrated-test', $input)->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.mobile.organic_rank', null)->assertJsonPath('data.0.mobile.is_ad', true)->assertJsonPath('data.0.mobile.rank_status', 'ad_only')->assertJsonPath('data.0.mobile.rank_label', '광고 노출만');
     }
 
     public function test_top_and_organic_matching_and_validation(): void
     {
         Http::fake(['*' => Http::response($this->html())]);
-        $input = ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '456'], 'top' => 2, 'rank_by' => 'organic_rank'];
-        $this->postJson('/_integrated-test', $input)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.pc.rank', 3)->assertJsonPath('data.0.pc.organic_rank', 2);
+        $input = ['keywords' => ['one'], 'target' => ['type' => 'nvMid', 'value' => '456'], 'top' => 2];
+        // rank_by 를 안 주면 광고 제외 기준 — 화면 3위(광고 포함)여도 광고 제외 2위라 top 2 안이다
+        $this->postJson('/_integrated-test', $input)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.mobile.rank', 3)->assertJsonPath('data.0.mobile.organic_rank', 2)->assertJsonPath('data.0.mobile.rank_label', '2위')->assertJsonPath('rank_by', 'organic_rank');
         $input['rank_by'] = 'rank';
         $this->postJson('/_integrated-test', $input)->assertJsonCount(0, 'data');
+        $input['rank_by'] = 'organic_rank';
+        $this->postJson('/_integrated-test', $input)->assertJsonCount(1, 'data');
         $input['keywords'] = range(1, 6);
         $this->postJson('/_integrated-test', $input)->assertUnprocessable();
         $input['keywords'] = ['one'];
