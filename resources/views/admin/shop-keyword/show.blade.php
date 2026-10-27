@@ -132,7 +132,7 @@
         <span id="sk-run-note" role="status" aria-live="polite" class="text-muted-soft" style="font-size:var(--fs-xs);"></span>
     @endif
     <button type="button" id="sk-regen" class="btn btn-primary btn-sm" data-url="{{ route('admin.shop-keyword.regenerate', $analysis) }}"
-        title="노출 안 된 조합을 접고 새 조합을 생성합니다(노출 키워드는 유지)">＋ 새로 조합</button>
+        title="이 분석의 조합을 전부 지우고 처음부터 다시 만들어 수집합니다(지우기 전 기존 조합 · 순위는 JSON 으로 백업)">＋ 새로 조합</button>
     <button type="button" id="sk-recheck" class="btn btn-secondary btn-sm" data-url="{{ route('admin.shop-keyword.recheck-exposed', $analysis) }}"
         title="기존 결과는 보존하고 미확인·수집 실패 항목만 이어서 확인합니다">노출 재확인</button>
     {{-- 상품정보 재수집(2026-07-22) — 자동 수집이 빠졌거나 실패했을 때 확장으로 상품페이지 다시 수집 --}}
@@ -561,14 +561,14 @@ window.__SK = {
             .catch(() => { recheck.disabled = false; recheck.textContent = '노출 재확인'; alert('노출 재확인에 실패했습니다.'); });
     });
 
-    // 새로 조합 — 노출 실패분 접고 새 조합 생성 후 재폴링(reload)
+    // 새로 조합 — 조합을 전부 지우고(JSON 백업) 처음부터 다시 만든 뒤 수집 중으로 재폴링(reload). 막는 안내는 없다(대표님 10-27 17:31)
     const regen = document.getElementById('sk-regen');
     if (regen) regen.addEventListener('click', function () {
         regen.disabled = true;
         regen.textContent = '조합 생성 중…';
         fetch(regen.dataset.url, { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } })
             .then((r) => r.ok ? r.json() : Promise.reject())
-            .then((d) => { if ((d.added || 0) === 0) { alert('더 만들 새 조합이 없습니다.'); regen.disabled = false; regen.textContent = '＋ 새로 조합'; } else { location.reload(); } })
+            .then((d) => { if ((d.added || 0) === 0) { alert(d.message || '재료가 부족해 조합을 만들지 못했어요 — 「상품정보 다시 수집」 뒤 다시 눌러 주세요.'); regen.disabled = false; regen.textContent = '＋ 새로 조합'; } else { location.reload(); } })
             .catch(() => { regen.disabled = false; regen.textContent = '＋ 새로 조합'; alert('새 조합 생성 실패'); });
     });
 })();
