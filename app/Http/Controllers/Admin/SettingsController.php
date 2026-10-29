@@ -114,6 +114,7 @@ class SettingsController extends Controller
             'seoulOpenapiKey' => AppSetting::read('seoul.openapi_key'),
             'jandiOrderWebhookUrl' => AppSetting::read('jandi.order_webhook_url'),
             'slackMissedOrderWebhookUrl' => AppSetting::read('slack.missed_order_webhook_url'),
+            'slackRankDoneWebhookUrl' => AppSetting::read('slack.rank_done_webhook_url'),
             'seoulKeyLive' => (string) config('rankfree.newbiz.seoul_key', 'sample'),
             // 구글 OAuth 연동 상태 (서치 콘솔·GA4 공용)
             'googleConnected' => GoogleToken::oauthConnected(),
@@ -143,6 +144,7 @@ class SettingsController extends Controller
         'ga.property_id' => 'ga_property_id',
         'seoul.openapi_key' => 'seoul_openapi_key',
         'jandi.order_webhook_url' => 'jandi_order_webhook_url',   // 주문 접수 알림 웹훅(잔디 Incoming Webhook)
+        'slack.rank_done_webhook_url' => 'slack_rank_done_webhook_url',   // 순위체크(플레이스·쇼핑) 완료 알림 슬랙 웹훅 — RankCheckSlack
         'slack.missed_order_webhook_url' => 'slack_missed_order_webhook_url',   // 놓친 주문(미주문) 알림 슬랙 웹훅 — orders:boosting-reminder
         'quiz.model' => 'quiz_model',   // 캡차(퀴즈) 이미지 분석 모델 → services.gemini.quiz_model
         'quiz.solve_timeout' => 'quiz_solve_timeout',   // 확장 정답 대기 시간(초) → services.gemini.quiz_timeout

@@ -38,7 +38,7 @@ class PlaceRankApiController extends Controller
             }
             if ($r['status'] !== 'exists') {
                 try {
-                    $this->service->run($r['slot']);   // 첫 순위(실패 허용 — 매일 11:30 · 16:30 자동 수집이 이어받는다)
+                    $this->service->run($r['slot']);   // 첫 순위(실패 허용 — 매일 11:00 · 16:00 자동 수집이 이어받는다)
                 } catch (\Throwable) {
                 }
             }

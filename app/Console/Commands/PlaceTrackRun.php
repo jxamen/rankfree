@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Place\RankSlotService;
 use App\Models\PlaceRankSlot;
+use App\Support\RankCheckSlack;
 use Illuminate\Console\Command;
 
 /** 활성 순위 추적 슬롯의 오늘 순위를 조회·기록 (일일 배치 / 스케줄러). */
@@ -25,19 +26,27 @@ class PlaceTrackRun extends Command
         $slots = $q->get();
         $this->info($slots->count().'개 슬롯 처리 시작');
 
+        $startedAt = now();
         $done = 0;
+        $found = 0;
+        $blocked = false;
         foreach ($slots as $slot) {
             $r = $service->run($slot);
             if ($r['blocked']) {
                 $this->warn('차단 감지 → 중단 (nCaptcha 토큰 재발급 필요)');
+                $blocked = true;
                 break;
             }
             $this->line($slot->keyword.' → '.($r['found'] ? $r['rank'].'위' : '300+'));
             $done++;
+            $found += $r['found'] ? 1 : 0;
             sleep(2);
         }
 
         $this->info("완료: {$done}건 기록");
+        if (! $this->option('slot') && ! $this->option('user')) {
+            RankCheckSlack::done('플레이스', $slots->count(), $done, $found, $startedAt, $blocked);
+        }
 
         return self::SUCCESS;
     }

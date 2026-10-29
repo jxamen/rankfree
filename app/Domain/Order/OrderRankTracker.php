@@ -116,7 +116,7 @@ class OrderRankTracker
 
         $order->forceFill(['place_rank_slot_id' => $slot->id])->saveQuietly();
 
-        // 첫 순위 1회(베스트 에포트) — nCaptcha 토큰 없으면 정기 수집(11:30·16:30)이 채운다. 응답 뒤에 돈다(위와 같은 이유)
+        // 첫 순위 1회(베스트 에포트) — nCaptcha 토큰 없으면 정기 수집(11:00·16:00)이 채운다. 응답 뒤에 돈다(위와 같은 이유)
         $placeSlots = $this->placeSlots;
         dispatch(function () use ($placeSlots, $slot) {
             try {
