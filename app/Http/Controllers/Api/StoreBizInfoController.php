@@ -53,6 +53,9 @@ class StoreBizInfoController extends Controller
                     $q->orWhereNull('s.'.$field)->orWhere('s.'.$field, '');
                 }
             })
+            // The collector skips a store saved within the window with a confirmed phone (8+ digits): do not send it again.
+            ->whereNot(fn ($q) => $q->whereNotNull('s.captured_at')->where('s.captured_at', '>=', $cutoff)
+                ->whereRaw("LENGTH(REGEXP_REPLACE(COALESCE(s.customer_phone, ''), '[^0-9]', '')) >= 8"))
             ->orderBy('stores.store_id')->limit($limit + 1)
             ->get(['stores.store_id', 'p.product_key', 'p.channel_uid', 'p.channel_id', 'p.channel_no', 'p.mall_name', 'p.link',
                 's.id as seller_info_id', 's.captured_at', 's.biz_name', 's.biz_reg_no', 's.representative', 's.address']);
