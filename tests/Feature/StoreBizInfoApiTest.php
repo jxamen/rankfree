@@ -18,6 +18,8 @@ class StoreBizInfoApiTest extends TestCase
     {
         parent::setUp();
         $this->freezeTime();
+        // Production MySQL has REGEXP_REPLACE (phone digit count in the index query); sqlite in tests does not.
+        DB::connection()->getPdo()->sqliteCreateFunction('REGEXP_REPLACE', fn ($s, $p, $r) => preg_replace('~'.$p.'~', $r, (string) $s), 3);
     }
 
     private const URL = '/api/v1/stores/bizinfo';
@@ -112,6 +114,19 @@ class StoreBizInfoApiTest extends TestCase
         $this->getJson(self::URL, $h)->assertOk()->assertJsonCount(0, 'data.items');
         ShopSellerInfo::create(['store_id' => 'teststore', 'channel_uid' => 'legacy-incomplete', 'captured_at' => now()]);
         $this->getJson(self::URL, $h)->assertOk()->assertJsonPath('data.items.0.reason', 'missing');
+    }
+
+    public function test_recently_saved_store_with_confirmed_phone_is_not_listed_again(): void
+    {
+        $this->product('phonestore', 'pd1');
+        $this->product('shortphone', 'pd2');
+        $this->product('oldphone', 'pd3');
+        $h = $this->headers();
+        ShopSellerInfo::create(['store_id' => 'phonestore', 'channel_uid' => 'store:phonestore', 'captured_at' => now(), 'customer_phone' => '010-1234-5678']);
+        ShopSellerInfo::create(['store_id' => 'shortphone', 'channel_uid' => 'store:shortphone', 'captured_at' => now(), 'customer_phone' => '02-123-45']);
+        ShopSellerInfo::create(['store_id' => 'oldphone', 'channel_uid' => 'store:oldphone', 'captured_at' => now()->subDays(40), 'customer_phone' => '010-1234-5678']);
+        $this->getJson(self::URL, $h)->assertOk()->assertJsonCount(2, 'data.items')
+            ->assertJsonPath('data.items.0.store_id', 'oldphone')->assertJsonPath('data.items.1.store_id', 'shortphone');
     }
 
     public function test_validation_unknown_store_and_privacy(): void
